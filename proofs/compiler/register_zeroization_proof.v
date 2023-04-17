@@ -1,3 +1,13 @@
+(* The proof of this pass is parameterized by a notion of zeroization.
+   It is modelled as a function from variables to values, meaning that after the
+   program runs, we will check if each variable holds that value.
+   This means that these variables don't leak secrets, since the zeroization
+   notion depends only on the name and type of the variable.
+   We need to take the name of the variable into consideration, and not only its
+   type, because setting flags to an arbitrary value is not always possible or
+   convenient.
+   Rather, we assert that after the program executes we will always get the same
+   pattern in the flags, for instance the result of [CMP 0, 0]. *)
 From mathcomp Require Import
   all_ssreflect
   all_algebra.
