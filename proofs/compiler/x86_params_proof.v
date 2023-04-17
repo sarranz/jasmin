@@ -8,6 +8,7 @@ Require Import
   fexpr
   fexpr_sem
   linear
+  linear_facts
   psem
   psem_facts
   one_varmap
@@ -141,16 +142,10 @@ Definition x86_lassign_eval_instr
      eval_instr lp li ls0 = ok ls1.
 Proof.
   move=> hseme hw hwritex.
-  rewrite /eval_instr /=.
-  rewrite /sem_sopn /=.
-  rewrite to_estate_of_estate.
-  rewrite hseme {hseme} /=.
-
-  case: ws w hw hwritex => /= w hw hwritex.
-  all: rewrite /exec_sopn /=.
-  all: rewrite hw {hw} /=.
-  all: rewrite hwritex {hwritex} /=.
-  all: by rewrite addn1.
+  rewrite (surj_estate s0) in hwritex.
+  case: ws w hw hwritex => w hw hwritex;
+    t_lopn;
+    by rewrite addn1.
 Qed.
 
 Definition x86_op_align_eval_instr (lp : lprog) ls ii xname vi ws al w :
@@ -763,73 +758,37 @@ Proof.
   move: h.
   move: x => [[|||ws] xname] //=.
   set x := {| vname := xname; |}.
-  rewrite /x86_zeroize_var /=.
-
-  case hws : (ws <= U64)%CMP;
-    move=> [?]; subst args.
-
-  - eexists; eexists; eexists; split.
-    + apply: LSem_step.
-      rewrite /lsem1 /step -{1}(addn0 (size pre)).
-      rewrite (find_instr_skip hbody) /=.
-
-      (* TODO: Abstract. *)
-      rewrite /eval_instr /=.
-      rewrite /of_estate /=.
-      subst x.
-      {
-        all: case: ws hws hbody => // _ _.
-        all: rewrite /= pword_of_wordE zero_extend_u addn1.
-        all: reflexivity.
-      }
-
-    (* TODO: This is the same as the wide register case. *)
-    split; first done; first done.
-    split=> y hy.
-
-    + move: hy => /sv_of_listP.
-      rewrite notin_cons.
-      move=> /andP [] /eqP hyx _.
-      rewrite /=.
-      by t_vm_get.
-
-    move: hy => /Sv_memP /sv_of_listP.
-    rewrite in_cons.
-    move=> /orP []; last done.
-    move=> /eqP ?; subst y.
-    rewrite /zeroized_on.
-    by rewrite get_var_eq /= wrepr0.
+  move=> h.
 
   eexists; eexists; eexists; split.
+
+  (* Set the register to zero. *)
   - apply: LSem_step.
     rewrite /lsem1 /step -{1}(addn0 (size pre)).
     rewrite (find_instr_skip hbody) /=.
-
-    (* TODO: Abstract. *)
-    rewrite /eval_instr /=.
-    rewrite /of_estate /=.
     subst x.
-    {
-      all: case: ws hws hbody => // _ _.
-      all: rewrite /= pword_of_wordE addn1.
-      all: reflexivity.
-    }
+    case: ws h hbody => // -[<-] _;
+      t_lopn;
+      rewrite addn1 ?wrepr0;
+      reflexivity.
 
   split; first done; first done.
   split=> y hy.
 
-  - move: hy => /sv_of_listP.
-    rewrite notin_cons.
-    move=> /andP [] /eqP hyx _.
-    rewrite /=.
-    by t_vm_get.
+  (* We don't change the other variables. *)
+  move: hy => /sv_of_listP.
+  rewrite notin_cons.
+  move=> /andP [] /eqP hyx _.
+  rewrite /=.
+  by t_vm_get.
 
+  (* We zeroize [x]. *)
   move: hy => /Sv_memP /sv_of_listP.
   rewrite in_cons.
   move=> /orP []; last done.
   move=> /eqP ?; subst y.
   rewrite /zeroized_on.
-  by rewrite get_var_eq /=.
+  by rewrite get_var_eq /= ?wrepr0.
 Qed.
 
 Lemma x86_zeroize_flagsP :
@@ -838,23 +797,19 @@ Proof.
   move=> lp scs vm m err_flags fn ii xname P Q args.
   move=> [?]; subst args.
   set lflags := LLvar _ :: _.
-  move=> hx hbody.
+  rewrite /zeroized_on.
+  case hgetx: get_var => [v | //].
+  case hv: x86_h_rz_zeroized => [v' | //] ?; subst v'.
+  move: hv => [?]; subst v.
+  move=> hbody.
 
   eexists.
 
   - apply: LSem_step.
     rewrite /lsem1 /step -{1}(addn0 (size P)).
     rewrite (find_instr_skip hbody) /=.
-    rewrite /eval_instr /=.
-    rewrite /sem_sopn /=.
-    rewrite /get_gvar /=.
-    move: hx.
-    rewrite /zeroized_on.
-    case: get_var => //= v.
-    move: v => [|||[]|] // w [?]; subst w.
-    rewrite /exec_sopn /=.
-    rewrite /of_estate /with_vm addn1 /=.
-    reflexivity.
+    t_lopn.
+    by rewrite addn1.
 
   split=> y; first last.
 

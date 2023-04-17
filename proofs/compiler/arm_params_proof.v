@@ -10,6 +10,7 @@ Require Import
   compiler_util
   expr
   linear
+  linear_facts
   fexpr
   fexpr_sem
   one_varmap
@@ -170,33 +171,12 @@ Notation x :=
     v_info := vi;
   |}.
 
-(* Try to rewrite and clear all equalities in the context. *)
-Ltac t_rewrite_eqs :=
-  repeat
-    match goal with
-    | [ h : _ = _ |- _ ] => rewrite !h /=; clear h
-    end.
-
-(* Most ARM instructions with default options are executed as follows:
-   1. Unfold instruction execution definitions, e.g. [eval_instr].
-   2. Rewrite argument hypotheses, i.e. [sem_pexpr].
-   3. Unfold casting definitions in result, e.g. [zero_extend] and
-      [pword_of_word].
-   4. Rewrite result hypotheses, i.e. [write_lval].
- *)
-Ltac t_arm_op :=
-  rewrite /eval_instr /= /sem_sopn /= /get_gvar /=;
-  t_rewrite_eqs;
-  rewrite /of_estate /= /with_vm /=;
-  rewrite ?zero_extend_u ?pword_of_wordE;
-  t_rewrite_eqs.
-
 Lemma arm_op_movi_eval_instr lp ls ii imm :
   let: li := li_of_lopn_args ii (arm_op_movi x imm) in
   let: wx := (wrepr reg_size imm)%R in
   let: vm' := (lvm ls).[v_var x <- ok (pword_of_word wx)]%vmap in
   eval_instr lp li ls = ok (next_vm_ls ls vm').
-Proof. t_arm_op. by rewrite addn1. Qed.
+Proof. t_lopn. by rewrite addn1. Qed.
 
 Lemma arm_op_subi_eval_instr lp ls ii y imm wy :
   get_var (lvm ls) (v_var y) = ok (Vword wy)
@@ -204,7 +184,7 @@ Lemma arm_op_subi_eval_instr lp ls ii y imm wy :
      let: wx' := (wy - wrepr reg_size imm)%R in
      let: vm' := (lvm ls).[v_var x <- ok (pword_of_word wx')]%vmap in
      eval_instr lp li ls = ok (next_vm_ls ls vm').
-Proof. move=> hgety. t_arm_op. by rewrite wsub_wnot1 addn1. Qed.
+Proof. move=> hgety. t_lopn. by rewrite wsub_wnot1 addn1. Qed.
 
 Lemma arm_op_align_eval_instr lp ls ii y al wy :
   get_var (lvm ls) (v_var y) = ok (Vword wy)
@@ -212,14 +192,14 @@ Lemma arm_op_align_eval_instr lp ls ii y al wy :
      let: wx' := align_word al wy in
      let: vm' := (lvm ls).[v_var x <- ok (pword_of_word wx')]%vmap in
      eval_instr lp li ls = ok (next_vm_ls ls vm').
-Proof. move=> hgety. t_arm_op. by rewrite addn1. Qed.
+Proof. move=> hgety. t_lopn. by rewrite addn1. Qed.
 
 Lemma arm_op_mov_eval_instr lp ls ii y wy :
   get_var (lvm ls) (v_var y) = ok (Vword wy)
   -> let: li := li_of_lopn_args ii (arm_op_mov x y) in
      let: vm' := (lvm ls).[v_var x <- ok (pword_of_word wy)]%vmap in
      eval_instr lp li ls = ok (next_vm_ls ls vm').
-Proof. move=> hgety. t_arm_op. by rewrite addn1. Qed.
+Proof. move=> hgety. t_lopn. by rewrite addn1. Qed.
 
 Lemma arm_op_str_off_eval_instr lp ls m' ii y off wx (wy : word reg_size) :
   get_var (lvm ls) (v_var x) = ok (Vword wx)
@@ -227,7 +207,7 @@ Lemma arm_op_str_off_eval_instr lp ls m' ii y off wx (wy : word reg_size) :
   -> write (lmem ls) (wx + wrepr Uptr off)%R wy = ok m'
   -> let: li := li_of_lopn_args ii (arm_op_str_off y x off) in
      eval_instr lp li ls = ok (next_mem_ls ls m').
-Proof. move=> hgety hgetx hwrite. t_arm_op. by rewrite addn1. Qed.
+Proof. move=> hgety hgetx hwrite. t_lopn. by rewrite addn1. Qed.
 
 End ARM_OP.
 

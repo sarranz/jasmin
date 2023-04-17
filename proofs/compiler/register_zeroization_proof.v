@@ -10,6 +10,7 @@ Require Import
   linear
   linear_sem
   linear_util
+  linear_facts
   one_varmap
   psem
   word.

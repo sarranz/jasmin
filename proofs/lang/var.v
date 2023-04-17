@@ -737,17 +737,6 @@ Proof.
   by apply/xseq.InP.
 Qed.
 
-Lemma sv_of_list_elements s :
-  Sv.Equal (sv_of_list id (Sv.elements s)) s.
-Proof.
-  apply: SvP.MP.subset_antisym.
-  - move=> x /sv_of_listP. rewrite map_id. by move=> /Sv_elemsP.
-  move=> x hx.
-  apply/sv_of_listP.
-  rewrite map_id.
-  by apply/Sv_elemsP.
-Qed.
-
 End SExtra.
 
 Module SvExtra := SExtra CmpVar.

@@ -4,6 +4,7 @@ From mathcomp Require Import
 
 Require Import
   linear
+  linear_facts
   linear_sem
   one_varmap
   psem
@@ -100,15 +101,8 @@ Lemma zeroize_varsP err_register xs :
   map_get_lopn_invariant (zeroize_var_cmd err_register) invariant xs.
 Proof.
   apply: map_get_lopn_invariantP;
-    first done.
-
-  - clear.
-    move=> xs ys s0 s1 s2 [hscs0 hm0 hzero0] [hscs1 hm1 hzero1].
-    split;
-      first (by rewrite hscs0);
-      first by rewrite hm0.
-    rewrite sv_of_list_cat.
-    exact: (zeroized_on_varsT hzero0 hzero1).
+    first done;
+    first exact: invariant_cat.
 
   move=> x _.
   exact: zeroize_varP.
