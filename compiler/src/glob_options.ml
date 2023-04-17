@@ -34,6 +34,10 @@ let introduce_array_copy = ref true
 let print_dependencies = ref false 
 let lazy_regalloc = ref false
 
+let register_zeroization = ref None
+let set_register_zeroization s =
+  register_zeroization := Some (List.assoc s rzmodes)
+
 type architecture =
   | X86_64
   | ARM_M4
@@ -139,6 +143,7 @@ let print_strings = function
   | Compiler.RegAllocation               -> "ralloc"   , "register allocation"
   | Compiler.DeadCode_RegAllocation      -> "rallocd"  , "dead code after register allocation"
   | Compiler.Linearization               -> "linear"   , "linearization"
+  | Compiler.RegisterZeroization         -> "regzero"  , "register zeroization"
   | Compiler.Tunneling                   -> "tunnel"   , "tunneling"
   | Compiler.Assembly                    -> "asm"      , "generation of assembly"
 
@@ -150,7 +155,12 @@ let stop_after_option p =
   let s, msg = print_strings p in
   ("-until_"^s, Arg.Unit (set_stop_after p), "stop after "^msg)
 
-let options = [
+let options =
+  let rzm_args =
+    let opts = (List.map (fun (s, _) -> s) rzmodes) in
+    Arg.Symbol (opts, set_register_zeroization)
+  in
+  [
     "-version" , Arg.Set help_version  , "display version information about this compiler (and exits)";
     "-o"       , Arg.Set_string outfile, "[filename]: name of the output file";
     "-debug"   , Arg.Set debug         , ": print debug information";
@@ -196,6 +206,9 @@ let options = [
     "-ATT", Arg.Unit (set_syntax `ATT), "use AT&T syntax (default is AT&T)"; 
     "-call-conv", Arg.Symbol (["windows"; "linux"], set_cc), ": select calling convention (default depend on host architecture)";
     "-arch", Arg.Symbol (["x86-64"; "arm-m4"], set_target_arch), ": select target arch (default is x86-64)";
+    "-register-zeroization",
+      rzm_args,
+      ": override register zeroization mode for export functions";
   ] @  List.map print_option Compiler.compiler_step_list @ List.map stop_after_option Compiler.compiler_step_list
 
 let usage_msg = "Usage : jasminc [option] filename"

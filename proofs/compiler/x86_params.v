@@ -5,8 +5,11 @@ Require Import
   arch_params
   compiler_util
   expr
-  fexpr.
+  fexpr
+  one_varmap.
 Require Import
+  register_zeroization
+  register_zeroization_utils
   linearization
   lowering
   stack_alloc.
@@ -225,6 +228,46 @@ Definition x86_agparams : asm_gen_params :=
 
 
 (* ------------------------------------------------------------------------ *)
+(* Register zeroization parameters. *)
+
+Section REGISTER_ZEROIZATION.
+
+Context {ovmi : one_varmap_info}.
+
+Definition x86_zeroize_var
+  (err_register : var -> pp_error_loc) (x : var) : cexec lopn_args :=
+  if vtype x is sword ws
+  then
+    let xi := {| v_var := x; v_info := dummy_var_info; |} in
+    if (ws <= U64)%CMP
+    then ok ([:: LLvar xi ], Ox86 (MOV ws), [:: Rexpr (fconst ws 0) ])
+    else ok ([:: LLvar xi ], Oasm (ExtOp (Oset0 ws)), [::])
+  else
+    Error (err_register x).
+
+Definition x86_zeroize_flags
+  (err_flags : pp_error_loc) (ox : option var) : cexec (seq lopn_args) :=
+  if ox is Some x
+  then
+    let xi := {| v_var := x; v_info := dummy_var_info; |} in
+    let e := Rexpr (Fvar xi) in
+    let
+      to_lflag f := LLvar {| v_var := to_var f; v_info := dummy_var_info; |}
+    in
+    let lflags := map to_lflag [:: OF; CF; SF; PF; ZF ] in
+    ok [:: (lflags, Ox86 (CMP reg_size), [:: e; e ]) ]
+  else
+    Error (err_flags).
+
+Definition x86_rzparams : register_zeroization_params :=
+  {|
+    rz_cmd_args := naive_rz_cmd_args x86_zeroize_var x86_zeroize_flags;
+  |}.
+
+End REGISTER_ZEROIZATION.
+
+
+(* ------------------------------------------------------------------------ *)
 (* Shared parameters. *)
 
 Definition x86_is_move_op (o : asm_op_t) :=
@@ -237,11 +280,13 @@ Definition x86_is_move_op (o : asm_op_t) :=
 
 (* ------------------------------------------------------------------------ *)
 
-Definition x86_params : architecture_params fresh_vars lowering_options :=
+Definition x86_params {ovmi : one_varmap_info} :
+  architecture_params fresh_vars lowering_options :=
   {|
     ap_sap := x86_saparams;
     ap_lip := x86_liparams;
     ap_lop := x86_loparams;
     ap_agp := x86_agparams;
+    ap_rzp := x86_rzparams;
     ap_is_move_op := x86_is_move_op;
   |}.

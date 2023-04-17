@@ -6,8 +6,11 @@ Require Import
   arch_params
   compiler_util
   expr
-  fexpr.
+  fexpr
+  one_varmap.
 Require Import
+  register_zeroization
+  register_zeroization_utils
   linearization
   lowering
   stack_alloc.
@@ -294,6 +297,45 @@ Definition arm_agparams : asm_gen_params :=
     agp_assemble_cond := assemble_cond;
   |}.
 
+
+(* ------------------------------------------------------------------------ *)
+(* Register zeroization parameters. *)
+
+Section REGISTER_ZEROIZATION.
+
+Context {ovmi : one_varmap_info}.
+
+Definition arm_zeroize_var
+  (err_register : var -> pp_error_loc) (x : var) : cexec lopn_args :=
+  if vtype x is sword U32
+  then
+    let xi := {| v_var := x; v_info := dummy_var_info; |} in
+    ok (arm_op_movi xi 0)
+  else
+    Error (err_register x).
+
+Definition arm_zeroize_flags
+  (err_flags : pp_error_loc) (ox : option var) : cexec (seq lopn_args) :=
+  if ox is Some x
+  then
+    let xi := {| v_var := x; v_info := dummy_var_info; |} in
+    let e := Rexpr (Fvar xi) in
+    let to_lflag f :=
+      LLvar {| v_var := to_var f; v_info := dummy_var_info; |}
+    in
+    let lflags := map to_lflag [:: NF; ZF; CF; VF ] in
+    ok [:: (lflags, Oarm (ARM_op CMP default_opts), [:: e; e ]) ]
+  else
+    Error (err_flags).
+
+Definition arm_rzparams : register_zeroization_params :=
+  {|
+    rz_cmd_args := naive_rz_cmd_args arm_zeroize_var arm_zeroize_flags;
+  |}.
+
+End REGISTER_ZEROIZATION.
+
+
 (* ------------------------------------------------------------------------ *)
 (* Shared parameters. *)
 
@@ -309,11 +351,13 @@ Definition arm_is_move_op (o : asm_op_t) : bool :=
       false
   end.
 
-Definition arm_params : architecture_params fresh_vars lowering_options :=
+Definition arm_params {ovmi : one_varmap_info} :
+  architecture_params fresh_vars lowering_options :=
   {|
     ap_sap := (fun _ => arm_saparams);
     ap_lip := arm_liparams;
     ap_lop := arm_loparams;
     ap_agp := arm_agparams;
+    ap_rzp := arm_rzparams;
     ap_is_move_op := arm_is_move_op;
   |}.

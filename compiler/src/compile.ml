@@ -57,6 +57,7 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
        and type extra_op = extra_op) visit_prog_after_pass prog tbl cprog =
   let module Regalloc = Regalloc.Regalloc (Arch) in
   let module StackAlloc = StackAlloc.StackAlloc (Arch) in
+  let fname_of_cfname fn = Conv.fun_of_cfun tbl fn in
   let fdef_of_cufdef fn cfd = Conv.fdef_of_cufdef tbl (fn, cfd) in
   let cufdef_of_fdef fd = snd (Conv.cufdef_of_fdef tbl fd) in
 
@@ -217,6 +218,30 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
       List.iter (warn_extra_fd Arch.asmOp) fds
   in
 
+  let tbl_annot : Annotations.f_annot Hf.t = Hf.create 17 in
+  let () =
+    let add (cfn, cfd) =
+      let fn = fname_of_cfname cfn in
+      let fd = fdef_of_cufdef cfn cfd in
+      Hf.add tbl_annot fn fd.f_annot
+    in
+    List.iter add cprog.Expr.p_funcs
+  in
+
+  let rzm_of_fn cfn =
+    match (Hf.find tbl_annot (fname_of_cfname cfn)).annot_rzm with
+    | Some b -> b
+    | None -> rzm_none
+    | exception Not_found ->
+        let fn = Conv.string_of_funname tbl cfn in
+        hierror
+          ~loc:Lnone
+          ~funname:fn
+          ~kind:"compiler error"
+          ~internal:true
+          "Invalid annotation table."
+  in
+
   let cparams =
     {
       Compiler.rename_fd;
@@ -264,6 +289,7 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
       Compiler.is_ptr;
       Compiler.is_reg_array;
       Compiler.is_regx = is_regx tbl;
+      Compiler.cp_rzm_of_fn = rzm_of_fn;
     }
   in
 

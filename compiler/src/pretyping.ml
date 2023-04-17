@@ -1923,12 +1923,22 @@ let process_f_annot annot =
   let open A in
 
   let mk_ra = Annot.filter_string_list None ["stack", OnStack; "reg", OnReg] in
- 
+
+  let parse_rz_annot =
+    match !Glob_options.register_zeroization with
+    | Some rzm -> Some rzm
+    | None ->
+        let mk_rzm = Annot.filter_string_list None rzmodes in
+        Annot.ensure_uniq1 "registerzeroization" mk_rzm annot
+  in
+
   { retaddr_kind          = Annot.ensure_uniq1 "returnaddress"  mk_ra                annot;
     stack_allocation_size = Annot.ensure_uniq1 "stackallocsize" (Annot.pos_int None) annot;
     stack_size            = Annot.ensure_uniq1 "stacksize"      (Annot.pos_int None) annot;
     stack_align           = Annot.ensure_uniq1 "stackalign"     (Annot.wsize None)   annot;
-    max_call_depth        = Annot.ensure_uniq1 "calldepth"      (Annot.pos_int None) annot}
+    max_call_depth        = Annot.ensure_uniq1 "calldepth"      (Annot.pos_int None) annot;
+    annot_rzm             = parse_rz_annot;
+  }
 
 
 (* -------------------------------------------------------------------- *)

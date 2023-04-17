@@ -519,6 +519,18 @@ Proof.
   by exists b.
 Qed.
 
+Lemma mapM_singleton eT xT yT (f : xT -> result eT yT) xs ys :
+  mapM f xs = ok ys
+  -> mapM (fun x => Let y := f x in ok [:: y ]) xs
+      = ok (map (fun x => [:: x ]) ys).
+Proof.
+  elim: xs ys => [|x xs hind] /= ys.
+  - by move=> [?]; subst ys.
+
+  t_xrbindP=> ? -> ? h ?; subst ys.
+  by rewrite /= (hind _ h).
+Qed.
+
 Section FOLDM.
 
   Context (eT aT bT:Type) (f:aT -> bT -> result eT bT).
@@ -1148,6 +1160,11 @@ Qed.
 Definition conc_map aT bT (f : aT -> seq bT) (l : seq aT) :=
   flatten (map f l).
 
+Lemma conc_map_singleton X Y (f : X -> Y) xs :
+  conc_map (map f) (map (fun x => [:: x ]) xs) = map f xs.
+Proof. rewrite /conc_map. elim: xs => [// | x xs hind]. by rewrite /= hind. Qed.
+
+
 (* -------------------------------------------------------------------------- *)
 (* Operators to build comparison                                              *)
 (* ---------------------------------------------------------------------------*)
@@ -1708,6 +1725,15 @@ Lemma notin_cons (T : eqType) (x y : T) (s : seq T) :
   (x \notin y :: s) = (x != y) && (x \notin s).
 Proof. by rewrite in_cons negb_or. Qed.
 
+Lemma filter_nil (X : eqType) p (xs : seq X) :
+  filter p xs = [::]
+  -> forall x, x \in xs -> ~~ p x.
+Proof.
+  move=> /eqP /negPn.
+  rewrite -has_filter.
+  by move=> /hasPn.
+Qed.
+
 (* Convert [ C |- uniq xs -> P ] into
    [ C, ? : x0 <> x1, ? : x0 <> x2, ... |- P ]. *)
 Ltac t_elim_uniq :=
@@ -1721,8 +1747,14 @@ Ltac t_elim_uniq :=
 Inductive and6 (P1 P2 P3 P4 P5 P6 : Prop) : Prop :=
   And6 of P1 & P2 & P3 & P4 & P5 & P6.
 
+Inductive and7 (P1 P2 P3 P4 P5 P6 P7 : Prop) : Prop :=
+  And7 of P1 & P2 & P3 & P4 & P5 & P6 & P7.
+
 Notation "[ /\ P1 , P2 , P3 , P4 , P5 & P6 ]" :=
   (and6 P1 P2 P3 P4 P5 P6) : type_scope.
+
+Notation "[ /\ P1 , P2 , P3 , P4 , P5 , P6 & P7 ]" :=
+  (and7 P1 P2 P3 P4 P5 P6 P7) : type_scope.
 
 Tactic Notation "have!" ":= " constr(x) :=
   let h := fresh "h" in

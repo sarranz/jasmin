@@ -29,6 +29,7 @@ type f_annot = {
     stack_size            : Z.t option;
     stack_align           : wsize option;
     max_call_depth        : Z.t option;
+    annot_rzm             : Register_zeroization_mode.rzmode option;
 }
 
 let f_annot_empty = {
@@ -37,4 +38,5 @@ let f_annot_empty = {
     stack_size            = None;
     stack_align           = None;
     max_call_depth        = None;
+    annot_rzm             = None;
   }
