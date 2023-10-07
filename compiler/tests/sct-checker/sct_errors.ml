@@ -4,7 +4,7 @@ open Common
 let path = "error-messages"
 
 let check p fn =
-  match Sct_checker_forward.ty_prog p [ fn ] with
+  match ty_prog p [ fn ] with
   | exception Annot.AnnotationError (loc, msg) ->
       Format.printf "Annotation error in %s: %a %t@." fn Location.pp_loc loc msg
   | exception Utils.HiError e ->

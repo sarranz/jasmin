@@ -1,85 +1,82 @@
 File assign_msf.jazz:
 Failed as expected assign_msf: "error-messages/assign_msf.jazz", line 3 (4-10):
-                               speculative constant type checker: assignment operation not permitted on a msf variable: x
+                               SCT checker: assignment operation not permitted on a msf variable: x
 File at_least_transient.jazz:
 Failed as expected at_least_transient: "error-messages/at_least_transient.jazz", line 1 (45-46):
-                                       speculative constant type checker: security annotation for p should be at least transient
+                                       SCT checker: security annotation for p should be at least transient
 File bad_modmsf.jazz:
 Failed as expected bad_modmsf: "error-messages/bad_modmsf.jazz", line 1 (0) to line 2 (25):
-                               speculative constant type checker: annotation modmsf should be nomodmsf
+                               SCT checker: annotation modmsf should be nomodmsf
 File bad_nomodmsf.jazz:
 Failed as expected bad_nomodmsf: "error-messages/bad_nomodmsf.jazz", line 1 (0) to line 4 (1):
-                                 speculative constant type checker: annotation nomodmsf should be modmsf
+                                 SCT checker: annotation nomodmsf should be modmsf
 File bad_poly_annot.jazz:
-Annotation error in bad_poly_annot: "error-messages/bad_poly_annot.jazz", line 1 (31-37) public not allowed as argument of poly
+Failed as expected bad_poly_annot: "error-messages/bad_poly_annot.jazz", line 1 (31-37):
+                                   SCT checker: public not allowed as argument of poly
 File call_bad_nomodmsf.jazz:
 Failed as expected call_bad_nomodmsf: "error-messages/call_bad_nomodmsf.jazz", line 1 (0) to line 7 (1):
-                                      speculative constant type checker: annotation nomodmsf should be modmsf
+                                      SCT checker: annotation nomodmsf should be modmsf
 File call_bad_nomodmsf2.jazz:
 Failed as expected call_bad_nomodmsf2: "error-messages/call_bad_nomodmsf2.jazz", line 1 (0) to line 9 (1):
-                                       speculative constant type checker: annotation nomodmsf should be modmsf
+                                       SCT checker: annotation nomodmsf should be modmsf
 File call_bad_nomodmsf3.jazz:
 Failed as expected call_bad_nomodmsf3: "error-messages/call_bad_nomodmsf3.jazz", line 1 (0) to line 10 (1):
-                                       speculative constant type checker: annotation nomodmsf should be modmsf
+                                       SCT checker: annotation nomodmsf should be modmsf
 File call_modmsf_destroys.jazz:
 Failed as expected call_modmsf_destroys: "error-messages/call_modmsf_destroys.jazz", line 11 (4-27):
-                                         speculative constant type checker: 
-                                         this function call destroys MSFs and { msf } are required.
+                                         SCT checker: this function call destroys MSFs and { msf } are required.
                                          Trace:
                                            the function modmsf_destroys destroys MSFs at "error-messages/call_modmsf_destroys.jazz", line 2 (4) to line 4 (5)
 File inconsistent_constraint.jazz:
 Failed as expected inconsistent_constraint: "error-messages/inconsistent_constraint.jazz", line 1 (0) to line 2 (38):
-                                            speculative constant type checker: cannot add constraint secret <= public, it is inconsistent
+                                            SCT checker: cannot add constraint secret <= public, it is inconsistent
 File msf_in_export.jazz:
 Failed as expected msf_in_export: "error-messages/msf_in_export.jazz", line 1 (0) to line 3 (1):
-                                  speculative constant type checker: 
-                                  The arguments { p } need to be MSFs, this is not allowed for export functions.
+                                  SCT checker: The arguments { p } need to be MSFs, this is not allowed for export functions.
 File msf_trans.jazz:
 Failed as expected msf_trans: "error-messages/msf_trans.jazz", line 5 (24-25):
-                              speculative constant type checker: MSF is Trans
+                              SCT checker: MSF is Trans
                               (x ==64u ((64u) 0))
 File must_not_be_msf.jazz:
 Failed as expected must_not_be_msf: "error-messages/must_not_be_msf.jazz", line 1 (36-37):
-                                    speculative constant type checker: p must not be a msf
+                                    SCT checker: p must not be a msf
 File need_declassify.jazz:
 Failed as expected need_declassify: "error-messages/need_declassify.jazz", line 6 (11-12):
-                                    speculative constant type checker: return type for x is #secret it should be less than #public
+                                    SCT checker: return type for x is #secret it should be less than #public
 File not_known_as_msf.jazz:
 Failed as expected not_known_as_msf: "error-messages/not_known_as_msf.jazz", line 1 (0) to line 9 (1):
-                                     speculative constant type checker: 
-                                     The variables { x } need to be MSFs.
+                                     SCT checker: The variables { x } need to be MSFs.
 File public_arg.jazz:
 Failed as expected public_arg: "error-messages/public_arg.jazz", line 1 (37-38):
-                               speculative constant type checker: security annotation for x should be at least transient
+                               SCT checker: security annotation for x should be at least transient
 File ret_high.jazz:
 Failed as expected ret_high: "error-messages/ret_high.jazz", line 4 (11-12):
-                             speculative constant type checker: return type for p is #secret it should be less than #public
+                             SCT checker: return type for p is #secret it should be less than #public
 File ret_msf.jazz:
 Failed as expected ret_msf: "error-messages/ret_msf.jazz", line 4 (11-14):
-                            speculative constant type checker: return annotation for msf should be msf
+                            SCT checker: return annotation for msf should be msf
 File ret_transient.jazz:
 Failed as expected ret_transient: "error-messages/ret_transient.jazz", line 2 (11-12):
-                                  speculative constant type checker: return type for p is #transient it should be less than #public
+                                  SCT checker: return type for p is #transient it should be less than #public
 File should_be_msf.jazz:
 Failed as expected should_be_msf: "error-messages/should_be_msf.jazz", line 1 (37-38):
-                                  speculative constant type checker: p should be a msf
+                                  SCT checker: p should be a msf
 File syscall.jazz:
 Failed as expected syscall: "error-messages/syscall.jazz", line 5 (4-24):
-                            speculative constant type checker: syscalls destroy msf variables, 
+                            SCT checker: syscalls destroy msf variables, 
                             { x } are required
 File unbound_level.jazz:
 Failed as expected unbound_level: "error-messages/unbound_level.jazz", line 1 (0) to line 6 (1):
-                                  speculative constant type checker: unbound security level hello
+                                  SCT checker: unbound security level hello
 File unknown_function.jazz:
-Failed as expected unknown_function: speculative constant type checker: unknown function unknown_function
+Failed as expected unknown_function: SCT checker: unknown function unknown_function
 File update_msf_not_msf.jazz:
 Failed as expected update_msf_not_msf: "error-messages/update_msf_not_msf.jazz", line 1 (0) to line 4 (1):
-                                       speculative constant type checker: 
-                                       The variables { x } need to be MSFs.
+                                       SCT checker: The variables { x } need to be MSFs.
 File update_msf_not_trans.jazz:
 Failed as expected update_msf_not_trans: "error-messages/update_msf_not_trans.jazz", line 4 (27-28):
-                                         speculative constant type checker: MSF is not Trans
+                                         SCT checker: MSF is not Trans
 File update_msf_wrong_expr.jazz:
 Failed as expected update_msf_wrong_expr: "error-messages/update_msf_wrong_expr.jazz", line 5 (35-36):
-                                          speculative constant type checker: the expression false need to be equal to
+                                          SCT checker: the expression false need to be equal to
                                           (x ==64u ((64u) 0))

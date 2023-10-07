@@ -468,6 +468,14 @@ let has_annot a { i_annot ; _ } =
 
 
 (* -------------------------------------------------------------------- *)
+let get_fun prog fn =
+  List.find (fun f -> F.equal f.f_name fn) (snd prog)
+
+let get_fun_s prog fn =
+  List.find (fun f -> String.equal f.f_name.fn_name fn) (snd prog)
+
+
+(* -------------------------------------------------------------------- *)
 let clamp (sz : wsize) (z : Z.t) =
   Z.erem z (Z.shift_left Z.one (int_of_ws sz))
 
