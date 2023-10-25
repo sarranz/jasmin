@@ -149,7 +149,7 @@ let rec modmsf_i fenv i =
     | Update_msf  -> true (* not sure it is needed *)
     | Mov_msf | Protect | Other -> false
     end
-  | Cfor(_, _, c) -> modmsf_c fenv c
+  | Cfor(_, c) -> modmsf_c fenv c
   | Ccall (_, _, f, _) -> (FEnv.get_fty fenv f).modmsf
 
 and modmsf_c fenv c =
@@ -208,6 +208,12 @@ let rec infer_msf_i ~withcheck fenv (tbl:(L.i_loc, Sv.t) Hashtbl.t) i ms =
     | Lvar x -> check_x ms x
     | _ -> () in
 
+  let check_fi ms fi =
+    match fi with
+    | FIrange(x, _, _, _) -> check_x ms x
+    | FIrepeat _ -> ()
+  in
+
   let checks ms xs = List.iter (check ms) xs in
 
   match i.i_desc with
@@ -222,8 +228,8 @@ let rec infer_msf_i ~withcheck fenv (tbl:(L.i_loc, Sv.t) Hashtbl.t) i ms =
     let ms2 = infer_msf_c ~withcheck fenv tbl c2 ms in
     Sv.union ms1 ms2
 
-  | Cfor(x, _, c) ->
-    check_x ms x;
+  | Cfor(fi, c) ->
+    check_fi ms fi;
     let rec loop ms =
       let ms' = infer_msf_c ~withcheck fenv tbl c ms in
       if Sv.subset ms' ms then (Hashtbl.add tbl i.i_loc ms'; ms')
@@ -648,7 +654,9 @@ let expr_equal a b =
     let open Glob_options in
     match !target_arch with
     | X86_64 -> X86_decl.x86_fcp
-    | ARM_M4 -> Arm_decl.arm_fcp in
+    | ARM_M4 -> Arm_decl.arm_fcp
+    | OTBN -> Otbn_decl.otbn_fcp
+  in
   let normalize e =
     e |> Conv.cexpr_of_expr |> Constant_prop.(const_prop_e fcp None empty_cpm) in
   Expr.eq_expr (normalize a) (normalize b)
@@ -874,6 +882,13 @@ let ensure_public_address_expr env venv loc e =
 (* --------------------------------------------------------------- *)
 (* [ty_instr env msf i] return msf' such that env, msf |- i : msf' *)
 
+let ensure_public_fi env venv loc fi =
+  match fi with
+  | FIrange(_, _, elo, ehi) ->
+      ensure_public env venv loc elo;
+      ensure_public env venv loc ehi
+  | FIrepeat(e) -> ensure_public env venv loc e
+
 let rec ty_instr fenv env ((msf,venv) as msf_e :msf_e) i =
   let loc = i.i_loc.L.base_loc in
   match i.i_desc with
@@ -950,14 +965,18 @@ let rec ty_instr fenv env ((msf,venv) as msf_e :msf_e) i =
       MSF.max msf1 msf2, Env.max env venv1 venv2
     end
 
-  | Cfor(x, (_, e1, e2), c) ->
-      ensure_public env venv loc e1;
-      ensure_public env venv loc e2;
-
+  | Cfor(fi, c) ->
+      ensure_public_fi env venv loc fi;
+      let lv =
+        (* The arguments of [Lnone] will get ignored. *)
+        match fi with
+        | FIrange(x, _, _, _) -> Lvar x
+        | FIrepeat _ -> Lnone(L._dummy, tbool)
+      in
       let msf = MSF.loop env i.i_loc msf in
       (* let w, _ = written_vars [i] in *)
       let venv1 = Env.freshen env venv in (* venv <= venv1 *)
-      let msf_e = ty_lval env (msf, venv1) (Lvar x) (Env.dpublic env) in
+      let msf_e = ty_lval env (msf, venv1) lv (Env.dpublic env) in
       let (msf', venv') = ty_cmd fenv env msf_e c in
       let msf' = MSF.end_loop loc msf msf' in
       Env.ensure_le loc venv' venv1; (* venv' <= venv1 *)

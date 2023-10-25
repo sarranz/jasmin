@@ -1,0 +1,13 @@
+export
+fn sra(reg u32 arg0, reg u32 arg1) {
+    reg u32 x;
+
+    x = arg0 >>s arg1;
+    x >>s= arg0;
+    [x] = x;
+
+    x = arg0 >>s 1;
+    x >>s= 1;
+    x >>s= 31;
+    [x] = x;
+}

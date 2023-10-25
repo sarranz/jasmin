@@ -93,8 +93,7 @@ Section REMOVE.
     | Cwhile _ c1 _ c2 =>
       Let gd := foldM extend_glob_i gd c1 in
       foldM extend_glob_i gd c2
-    | Cfor _ _ c =>
-        (* FIXME: there are no for loops at this point *)
+    | Cfor _ c =>
       foldM extend_glob_i gd c
     end.
 
@@ -297,15 +296,16 @@ Section REMOVE.
           Let lr := loop2 check_c Loop.nb env in
           let: (Loop2_r e c1 c2 env) := lr in
           ok (env, [::MkI ii (Cwhile a c1 e c2)])
-        | Cfor xi (d,e1,e2) c =>
-          if is_glob_var xi.(v_var) then Error (rm_glob_error ii xi)
-          else
-            Let e1 := remove_glob_e ii env e1 in
-            Let e2 := remove_glob_e ii env e2 in
-            let check_c env := remove_glob remove_glob_i env c in
-            Let envc := loop check_c Loop.nb env in
-            let: (env, c) := envc in
-            ok (env, [::MkI ii (Cfor xi (d,e1,e2) c)])
+        | Cfor fi c =>
+          Let _ :=
+            if iterator_of_fi fi is Some xi
+            then assert (is_glob_var (v_var xi)) (rm_glob_error ii xi)
+            else ok tt
+          in
+          Let fi := mapM_pexpr_fi (remove_glob_e ii env) fi in
+          let check_c env := remove_glob remove_glob_i env c in
+          Let: (env, c) := loop check_c Loop.nb env in
+          ok (env, [:: MkI ii (Cfor fi c) ])
         | Ccall i lvs fn es =>
           Let lvs := mapM (remove_glob_lv ii env) lvs in
           Let es  := mapM (remove_glob_e ii env) es in

@@ -34,12 +34,22 @@ let of_val_z ii v : coq_Z =
 let of_val_b ii v : bool = 
   Obj.magic (exn_exec ii (of_val Coq_sbool v))
 
+let of_val_word ii ws v : coq_Z =
+  let ty = Coq_sword(ws) in
+  Obj.magic (exn_exec ii (of_val ty v))
+
 (* ----------------------------------------------------------------- *)
 type 'asm stack = 
   | Sempty of instr_info * 'asm fundef
   | Scall of 
       instr_info * 'asm fundef * lval list * Vm.t * 'asm instr list * 'asm stack
-  | Sfor of instr_info * var_i * coq_Z list * 'asm instr list * 'asm instr list * 'asm stack
+  | Sfor of
+      instr_info *
+      var_i option *
+      coq_Z list *
+      'asm instr list *
+      'asm instr list *
+      'asm stack
 
 type ('syscall_state, 'asm) state =
   { s_prog : 'asm prog;
@@ -73,14 +83,24 @@ let return ep spp s =
       s_estate = s1;
       s_stk = stk }
 
-  | Sfor(ii,i,ws,body,c,stk) ->
+  | Sfor(ii, oi, ws, body, c, stk) ->
     match ws with
     | [] -> { s with s_cmd = c; s_stk = stk }
     | w::ws ->
-      let s1 = exn_exec ii (write_var nosubword ep true i (Vint w) s.s_estate) in
-      { s with s_cmd = body;
-               s_estate = s1;
-               s_stk = Sfor(ii, i, ws, body, c, stk) }
+      let st = exn_exec ii (init_iteration nosubword ep true s.s_estate oi w) in
+      let stk = Sfor(ii, oi, ws, body, c, stk) in
+      { s with s_cmd = body; s_estate = st; s_stk = stk; }
+
+let sem_fi ii ep spp gd st fi =
+  let seme e = exn_exec ii (sem_pexpr nosubword ep spp true gd st e) in
+  match fi with
+  | FIrange(i, d, elo, ehi) ->
+    let vlo = of_val_z ii (seme elo) in
+    let vhi = of_val_z ii (seme ehi) in
+    wrange d vlo vhi
+  | FIrepeat(e) ->
+    let v = of_val_z ii (seme e) in
+    wrange Expr.UpTo Z0 v
 
 let small_step1 ep spp sip s =
   match s.s_cmd with
@@ -113,13 +133,10 @@ let small_step1 ep spp sip s =
       let c = (if b then c1 else c2) @ c in
       { s with s_cmd = c }
 
-    | Cfor (i,((d,lo),hi), body) ->
-      let vlo = of_val_z ii (exn_exec ii (sem_pexpr nosubword ep spp true gd s1 lo)) in
-      let vhi = of_val_z ii (exn_exec ii (sem_pexpr nosubword ep spp true gd s1 hi)) in
-      let rng = wrange d vlo vhi in
-      let s =
-        {s with s_cmd = []; s_stk = Sfor(ii, i, rng, body, c, s.s_stk) } in
-      return ep spp s
+    | Cfor (fi, body) ->
+      let rn = sem_fi ii ep spp gd s.s_estate fi in
+      let stk = Sfor(ii, iterator_of_fi fi, rn, body, c, s.s_stk) in
+      return ep spp { s with s_cmd = []; s_stk = stk; }
  
     | Cwhile (_, c1, e, c2) ->
       { s with s_cmd = c1 @ MkI(ii, Cif(e, c2@[i],[])) :: c }

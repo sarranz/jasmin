@@ -229,7 +229,7 @@ Lemma write_c_recE s c : Sv.Equal (write_c_rec s c) (Sv.union s (write_c c)).
 Proof.
   apply: (cmd_rect (Pr := Pr) (Pi := Pi) (Pc := Pc)) => /= {c s}
     [ i ii Hi | | i c Hi Hc | x tg ty e | xs t o es | p x e | e c1 c2 Hc1 Hc2
-    | v dir lo hi c Hc | a c e c' Hc Hc' | ii xs f es ] s;
+    | [???? | ?] c Hc | a c e c' Hc Hc' | ii xs f es ] s;
     rewrite /write_I /write_I_rec /write_i /write_i_rec -/write_i_rec -/write_I_rec /write_c /=
     ?Hc1 ?Hc2 /write_c_rec ?Hc ?Hc' ?Hi -?vrv_recE -?vrvs_recE //;
     by clear; SvD.fsetdec.
@@ -267,11 +267,12 @@ Proof.
     clear; SvD.fsetdec.
 Qed.
 
-Lemma write_i_for x rn c :
-  Sv.Equal (write_i (Cfor x rn c)) (Sv.union (Sv.singleton x) (write_c c)).
+Lemma write_i_for fi c :
+  Sv.Equal (write_i (Cfor fi c)) (Sv.union (write_fi fi) (write_c c)).
 Proof.
   rewrite /write_i /write_i_rec -/write_I_rec -/(write_c_rec _ c) write_c_recE;
-    clear; SvD.fsetdec.
+    clear;
+    SvD.fsetdec.
 Qed.
 
 Lemma write_i_while a c e c' :
@@ -287,6 +288,10 @@ Proof. done. Qed.
 
 Lemma write_Ii ii i: write_I (MkI ii i) = write_i i.
 Proof. by done. Qed.
+
+Lemma write_fi_iterator fi :
+  Sv.Equal (write_fi fi) (sv_of_ovar_i (iterator_of_fi fi)).
+Proof. by case: fi. Qed.
 
 End WRITE.
 
@@ -382,7 +387,7 @@ Lemma read_cE s c : Sv.Equal (read_c_rec s c) (Sv.union s (read_c c)).
 Proof.
   apply (cmd_rect (Pr := Pr) (Pi := Pi) (Pc := Pc)) => /= {c s}
    [ i ii Hi | | i c Hi Hc | x tg ty e | xs t o es | p x e | e c1 c2 Hc1 Hc2
-    | v dir lo hi c Hc | a c e c' Hc Hc' | ii xs f es ] s;
+    | [???? | ?] c Hc | a c e c' Hc Hc' | ii xs f es ] s;
     rewrite /read_I /read_I_rec /read_i /read_i_rec -/read_i_rec -/read_I_rec /read_c /=
      ?read_rvE ?read_eE ?read_esE ?read_rvE ?read_rvsE ?Hc2 ?Hc1 /read_c_rec ?Hc' ?Hc ?Hi //;
     by clear; SvD.fsetdec.
@@ -418,11 +423,13 @@ Proof.
   rewrite /read_i /read_i_rec -/read_c_rec read_eE !read_cE; clear; SvD.fsetdec.
 Qed.
 
-Lemma read_i_for x dir lo hi c :
-   Sv.Equal (read_i (Cfor x (dir, lo, hi) c))
-            (Sv.union (read_e lo) (Sv.union (read_e hi) (read_c c))).
+Lemma read_i_for fi c :
+  Sv.Equal (read_i (Cfor fi c)) (Sv.union (read_fi fi) (read_c c)).
 Proof.
-  rewrite /read_i /read_i_rec -/read_c_rec !read_eE read_cE; clear; SvD.fsetdec.
+  case: fi => [???? | ?];
+    rewrite /= /read_i /read_i_rec /= -/read_c_rec !read_eE read_cE;
+    clear;
+    SvD.fsetdec.
 Qed.
 
 Lemma read_i_while a c e c' :
@@ -486,10 +493,15 @@ Proof.
   clear; SvD.fsetdec.
 Qed.
 
-Lemma vars_I_for ii i d lo hi c:
-  Sv.Equal (vars_I (MkI ii (Cfor i (d, lo, hi) c)))
-           (Sv.union (Sv.union (vars_c c) (Sv.singleton i)) (Sv.union (read_e lo) (read_e hi))).
-Proof. rewrite /vars_I read_Ii write_Ii read_i_for write_i_for /vars_c; clear; SvD.fsetdec. Qed.
+Lemma vars_I_for ii fi c:
+  Sv.Equal
+    (vars_I (MkI ii (Cfor fi c)))
+    (Sv.union (vars_c c) (Sv.union (read_fi fi) (write_fi fi))).
+Proof.
+  rewrite /vars_I read_Ii write_Ii read_i_for write_i_for /vars_c;
+    clear;
+    SvD.fsetdec.
+Qed.
 
 Lemma vars_I_call ii ii' xs fn args:
   Sv.Equal (vars_I (MkI ii (Ccall ii' xs fn args))) (Sv.union (vars_lvals xs) (read_es args)).
@@ -503,10 +515,7 @@ Qed.
 
 Lemma vars_lval_Lvar i :
   Sv.Equal (vars_lval (Lvar i)) (Sv.singleton i).
-Proof.
-  rewrite /vars_lval /=.
-  SvD.fsetdec.
-Qed.
+Proof. rewrite /vars_lval /=. SvD.fsetdec. Qed.
 
 Lemma get_lvar_to_lvals xs :
   mapM get_lvar (to_lvals xs) = ok xs.

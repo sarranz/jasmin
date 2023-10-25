@@ -508,12 +508,11 @@ Fixpoint const_prop_ir (m:cpm) ii (ir:instr_r) : cpm * cmd :=
       (merge_cpm m1 m2, [:: MkI ii (Cif b c1 c2) ])
     end
 
-  | Cfor x (dir, e1, e2) c =>
-    let e1 := const_prop_e without_globals m e1 in
-    let e2 := const_prop_e without_globals m e2 in
+  | Cfor fi c =>
+    let fi := map_pexpr_fi (const_prop_e without_globals m) fi in
     let m := remove_cpm m (write_i ir) in
     let (_,c) := const_prop const_prop_i m c in
-    (m, [:: MkI ii (Cfor x (dir, e1, e2) c) ])
+    (m, [:: MkI ii (Cfor fi c) ])
 
   | Cwhile a c e c' =>
     let m := remove_cpm m (write_i ir) in

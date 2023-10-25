@@ -35,7 +35,7 @@ let fill_in_missing_names (f: ('info, 'asm) func) : ('info, 'asm) func =
     | Copn (lvs, tg, op, es) -> Copn (fill_lvs lvs, tg, op, es)
     | Csyscall (lvs, op, es) -> Csyscall(fill_lvs lvs, op, es)
     | Cif (e, s1, s2) -> Cif (e, fill_stmt s1, fill_stmt s2)
-    | Cfor (i, r, s) -> Cfor (i, r, fill_stmt s)
+    | Cfor (fi, s) -> Cfor (fi, fill_stmt s)
     | Cwhile (a, s, e, s') -> Cwhile (a, fill_stmt s, e, fill_stmt s')
     | Ccall (i, lvs, f, es) -> Ccall (i, fill_lvs lvs, f, es)
   and fill_instr i = { i with i_desc = fill_instr_r i.i_desc }
@@ -214,7 +214,7 @@ let collect_equality_constraints_in_func
   let addf i j = s.cac_friends <- set_friend i j s.cac_friends in
   let rec collect_instr_r ii =
     function
-    | Cfor (_, _, s) -> collect_stmt s
+    | Cfor (_, s) -> collect_stmt s
     | Copn (lvs, _, op, es) ->
         copn_constraints
           ~loc:(Lmore ii.i_loc)
@@ -377,7 +377,7 @@ let collect_conflicts pd reg_size asmOp
   in
   let rec collect_instr_r c =
     function
-    | Cfor (_, _, s)
+    | Cfor (_, s)
       -> collect_stmt c s
     | Cassgn _
     | Copn _
@@ -403,7 +403,8 @@ let iter_variables (cb: var -> unit) (f: ('info, 'asm) func) : unit =
     | Cassgn (lv, _, _, e) -> iter_lv lv; iter_expr e
     | (Ccall (_, lvs, _, es) | Copn (lvs, _, _, es)) | Csyscall(lvs, _ , es) -> iter_lvs lvs; iter_exprs es
     | (Cwhile (_, s1, e, s2) | Cif (e, s1, s2)) -> iter_expr e; iter_stmt s1; iter_stmt s2
-    | Cfor _ -> assert false
+    | Cfor (FIrange _, _) -> assert false
+    | Cfor (FIrepeat e, c) -> iter_expr e; iter_stmt c
   and iter_instr { i_desc } = iter_instr_r i_desc
   and iter_stmt s = List.iter iter_instr s in
   iter_stmt f.f_body;
@@ -615,7 +616,7 @@ let allocate_forced_registers return_addresses translate_var nv (vars: int Hv.t)
   let alloc_ret loc get = alloc_from_list loc ~ctxt:"return values" Arch.ret_vars Arch.xmm_ret_vars get in
   let rec alloc_instr_r loc =
     function
-    | Cfor (_, _, s)
+    | Cfor (_, s)
       -> alloc_stmt s
     | Copn (lvs, _, op, es) -> forced_registers translate_var loc nv vars cnf lvs op es a
     | Csyscall(lvs, _, es) ->

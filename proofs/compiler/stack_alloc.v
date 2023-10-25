@@ -941,18 +941,32 @@ Definition alloc_lvals rmap rs tys :=
 
 Section LOOP.
 
- Variable ii:instr_info.
+Context
+  (ii : instr_info)
+  (check_c : region_map -> cexec (region_map * pexpr * seq cmd))
+  (check_c2 :
+    region_map ->
+    cexec ((region_map * region_map) * (pexpr * (seq cmd * seq cmd))))
+  .
 
- Variable check_c2 : region_map -> cexec ((region_map * region_map) * (pexpr * (seq cmd * seq cmd)) ).
+Fixpoint loop_for
+  (fuel : nat) (m : region_map) : cexec (region_map * pexpr * cmd) :=
+  if fuel is S n
+  then
+    Let: (m', e', cs) := check_c m in
+    if incl m m'
+    then ok (m, e', flatten cs)
+    else loop_for n (merge m m')
+  else Error (ii_loop_iterator E.pass ii).
 
- Fixpoint loop2 (n:nat) (m:region_map) := 
-    match n with
-    | O => Error (pp_at_ii ii (stk_ierror_no_var "loop2"))
-    | S n =>
-      Let m' := check_c2 m in
-      if incl m m'.1.2 then ok (m'.1.1, m'.2)
-      else loop2 n (merge m m'.1.2)
-    end.
+Fixpoint loop2 (n:nat) (m:region_map) :=
+   match n with
+   | O => Error (ii_loop_iterator E.pass ii)
+   | S n =>
+     Let m' := check_c2 m in
+     if incl m m'.1.2 then ok (m'.1.1, m'.2)
+     else loop2 n (merge m m'.1.2)
+   end.
 
 End LOOP.
 
@@ -1207,6 +1221,18 @@ Fixpoint alloc_i sao (rmap:region_map) (i: instr) : cexec (region_map * cmd) :=
       let rmap:= merge c1.1 c2.1 in
       ok (rmap, [:: MkI ii (Cif e (flatten c1.2) (flatten c2.2))])
 
+    | Cfor (FIrange _ _ _ _) _ =>
+      Error (pp_at_ii ii (stk_ierror_no_var "don't deal with for loop"))
+
+    | Cfor (FIrepeat e) c =>
+      let check_c rm :=
+        Let: (rm', c') := fmapM (alloc_i sao) rmap c in
+        Let e' := add_iinfo ii (alloc_e rm' e) in
+        ok (rm', e', c')
+      in
+      Let: (rm, e', c') := loop_for ii check_c Loop.nb rmap in
+      ok (rm, [:: MkI ii (Cfor (FIrepeat e') c') ])
+
     | Cwhile a c1 e c2 => 
       let check_c rmap := 
         Let c1 := fmapM (alloc_i sao) rmap c1 in
@@ -1220,8 +1246,6 @@ Fixpoint alloc_i sao (rmap:region_map) (i: instr) : cexec (region_map * cmd) :=
     | Ccall ini rs fn es =>
       Let ri := add_iinfo ii (alloc_call sao rmap ini rs fn es) in
       ok (ri.1, [::MkI ii ri.2])                            
-
-    | Cfor _ _ _  => Error (pp_at_ii ii (stk_ierror_no_var "don't deal with for loop"))
 
     end.
 

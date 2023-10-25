@@ -274,7 +274,8 @@ let pp_instr fn _ i =
       [ LInstr ("bl", [ pp_remote_label lbl ]) ]
 
   | CALL _
-  | JAL _ -> assert false
+  | JAL _
+  | REPEATCALL _ -> assert false
 
   | POPPC ->
       [ LInstr ("pop", [ "{pc}" ]) ]

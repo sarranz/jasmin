@@ -1241,27 +1241,38 @@ let default_suffix =
 
 let tt_prim asmOp id =
   let { L.pl_loc = loc ; L.pl_desc = s } = id in
+  let exn_unknown = tyerror ~loc (UnknownPrim s) in
   let name, sz = extract_size s in
-  let c =
-    match List.assoc name (prim_string asmOp) with
-    | PrimX86 (valid_suffixes, preop) ->
-      begin match match sz with
-          | None -> default_suffix valid_suffixes |> preop
-       | Some sfx ->
-              let rec loop sfx =
-                if List.mem sfx valid_suffixes then preop sfx else
-                  begin match simplify_suffix ~loc sfx with
+  let ps = prim_string asmOp in
+  (* TODO_OTBN: We need to match on [ps] first for the pseudo-operators.
+     These have [PrimX86].
+     Maybe these should go in a different list? *)
+  match List.assoc name ps with
+  | PrimX86 (valid_suffixes, preop) ->
+    let x =
+      match sz with
+      | None -> default_suffix valid_suffixes |> preop
+      | Some sfx ->
+          let rec loop sfx =
+            if List.mem sfx valid_suffixes then preop sfx
+            else
+              begin match simplify_suffix ~loc sfx with
               | Some (sfx, w) -> w (); loop sfx
-              | None -> None end
-              in loop sfx
-        with | Some d -> d
-            | None -> rs_tyerror ~loc (PrimWrongSuffix (name, valid_suffixes))
+              | None -> None
+              end
+          in
+          loop sfx
+    in
+    begin match x with
+    | Some d -> d
+    | None -> rs_tyerror ~loc (PrimWrongSuffix (name, valid_suffixes))
     end
-    | PrimARM _ | exception Not_found ->
-        oget
-          ~exn:(tyerror ~loc (UnknownPrim s))
-          (Tt_arm_m4.tt_prim (prim_string asmOp) name sz)
-  in c
+  | _ | exception Not_found ->
+    begin match !Glob_options.target_arch with
+    | ARM_M4 -> Tt_arm_m4.tt_prim ~unknown:exn_unknown ps name sz
+    | OTBN -> Tt_otbn.tt_prim ~unknown:exn_unknown ps name sz
+    | _ -> raise exn_unknown
+    end
 
 let prim_of_op exn loc o =
   (* TODO: use context typing information when the operator is not annotated *)
@@ -1711,7 +1722,14 @@ let rec tt_instr arch_info (env : 'asm Env.env) ((annot,pi) : S.pinstr) : 'asm E
       check_ty_eq ~loc:lx ~from:vx.P.v_ty ~to_:P.tint;
       let s    = tt_block arch_info env s in
       let d    = match d with `Down -> E.DownTo | `Up -> E.UpTo in
-      env, [mk_i (P.Cfor (L.mk_loc lx vx, (d, i1, i2), s))]
+      let fi = P.FIrange(L.mk_loc lx vx, d, i1, i2) in
+      env, [mk_i (P.Cfor (fi, s))]
+
+  | PIRepeat (e, s) ->
+      let e = tt_expr_int arch_info.pd env e in
+      let s = tt_block arch_info env s in
+      let fi = P.FIrepeat e in
+      env, [mk_i (P.Cfor (fi, s))]
 
   | PIWhile (s1, c, s2) ->
       let c  = tt_expr_bool arch_info.pd env c in
@@ -1829,6 +1847,7 @@ let rec add_reserved_i env (_,i) =
   | PIArrayInit _ | PIAssign _ -> env
   | PIIf(_, c, oc) -> add_reserved_oc (add_reserved_c' env c) oc
   | PIFor(_, _, c) -> add_reserved_c' env c
+  | PIRepeat(_, c) -> add_reserved_c' env c
   | PIWhile(oc1, _, oc2) -> add_reserved_oc (add_reserved_oc env oc1) oc2
  
 and add_reserved_c env c = 

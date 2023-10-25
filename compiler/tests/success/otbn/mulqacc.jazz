@@ -1,0 +1,75 @@
+export
+fn mulqacc(reg u256 x y) -> reg u256 {
+    reg u256 a b acc;
+
+    acc = #BN_MULQACC_Z(x, 0, y, 0, 0);
+    acc = #BN_MULQACC(x, 0, y, 1, acc, 64);
+    acc = #BN_MULQACC(x, 2, y, 3, acc, 128);
+    b = #BN_ACCR(acc); // Prevent dead code.
+
+    _, _, _, a, acc = #BN_MULQACC_WO_Z(x, 0, y, 0, 192);
+    ?{}, a = #BN_MULQACC_WO(x, 0, y, 0, acc, 0);
+
+    reg bool mf, lf, zf;
+    _, mf, lf, zf, b = #BN_ADD(b, a); // Avoid dead code.
+
+    ?{ MF0 = mf, LF0 = lf, ZF0 = zf, acc }, a =
+        #BN_MULQACC_SO_Z_L(mf, lf, zf, a, x, 0, y, 0, 0);
+
+    ?{ MF0 = mf, LF0 = lf, ZF0 = zf }, a =
+        #BN_MULQACC_SO_L(mf, lf, zf, a, x, 0, y, 0, acc, 0);
+
+    mf, lf, zf, a, acc = #BN_MULQACC_SO_Z_U(mf, lf, zf, a, x, 0, y, 0, 0);
+    _, _, _, a, acc = #BN_MULQACC_SO_U(mf, lf, zf, a, x, 0, y, 0, acc, 0);
+
+    b += a; // Avoid dead code.
+
+    return b;
+}
+
+export
+fn mulqacc_fg0(reg u256 x y) -> reg u256 {
+    reg u256 a b acc;
+
+    ?{}, a = #set0();
+    acc = #BN_ACCW(a);
+
+    reg bool mf, lf, zf;
+    _, _, _, _, acc = #BN_MULQACC_WO_Z_FG0(x, 0, y, 1, 0);
+    _, _, _, a, _ = #BN_MULQACC_WO_FG0(x, 2, y, 3, acc, 64);
+    _, mf, lf, zf, b = #BN_ADD_FG0(b, a); // Prevent dead code.
+
+    mf, lf, zf, a, acc = #BN_MULQACC_SO_Z_L_FG0(mf, lf, zf, a, x, 0, y, 0, 128);
+    mf, lf, zf, a, _ = #BN_MULQACC_SO_L_FG0(mf, lf, zf, a, x, 0, y, 0, acc, 0);
+
+    mf, lf, zf, a, acc = #BN_MULQACC_SO_Z_U_FG0(mf, lf, zf, a, x, 0, y, 0, 192);
+    _, _, _, a, acc = #BN_MULQACC_SO_U_FG0(mf, lf, zf, a, x, 0, y, 0, acc, 0);
+
+    b += a; // Prevent dead code.
+
+    return b;
+}
+
+export
+fn mulqacc_fg1(reg u256 x y) -> reg u256 {
+    reg u256 a b acc;
+
+    ?{}, a = #set0();
+    acc = #BN_ACCW(a);
+
+    reg bool mf, lf, zf;
+    _, _, _, _, acc = #BN_MULQACC_WO_Z_FG1(x, 0, y, 1, 0);
+    _, _, _, a, _ = #BN_MULQACC_WO_FG1(x, 2, y, 3, acc, 64);
+    _, mf, lf, zf, b = #BN_ADD_FG1(b, a); // Prevent dead code.
+
+    ?{ MF1 = mf, LF1 = lf, ZF1 = zf, acc }, a =
+        #BN_MULQACC_SO_Z_L_FG1(mf, lf, zf, a, x, 0, y, 0, 128);
+    mf, lf, zf, a, _ = #BN_MULQACC_SO_L_FG1(mf, lf, zf, a, x, 0, y, 0, acc, 0);
+
+    mf, lf, zf, a, acc = #BN_MULQACC_SO_Z_U_FG1(mf, lf, zf, a, x, 0, y, 0, 192);
+    _, _, _, a, acc = #BN_MULQACC_SO_U_FG1(mf, lf, zf, a, x, 0, y, 0, acc, 0);
+
+    b += a; // Prevent dead code.
+
+    return b;
+}

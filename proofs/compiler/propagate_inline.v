@@ -127,13 +127,13 @@ Section LOOP.
   Definition pi_c := fmapM pi_i.
 
   Context (ii:instr_info).
-  Context (x:var) (c:cmd).
+  Context (ox : option var_i) (c:cmd).
 
   Fixpoint loop_for (n:nat) (pi:pimap)  :=
     match n with
     | O => Error (E.ii_loop_iterator ii)
     | S n =>
-      let pii := remove pi x in
+      let pii := if ox is Some x then remove pi x else pi in
       Let pic := pi_c pii c in
       if incl pi pic.1 then ok (pi, pic.2)
       else loop_for n (merge pi pic.1)
@@ -182,12 +182,11 @@ Fixpoint pi_i (pi:pimap) (i:instr) :=
     let pi := merge pic1.1 pic2.1 in
     ok (pi, MkI ii (Cif e pic1.2 pic2.2))
 
-  | Cfor x (d,e1,e2) c => 
-    let e1 := pi_e pi e1 in
-    let e2 := pi_e pi e2 in
-    Let pic := loop_for pi_i ii x c Loop.nb pi in
-    ok (pic.1, MkI ii (Cfor x (d,e1,e2) pic.2))
-    
+  | Cfor fi c =>
+    let fi := map_pexpr_fi (pi_e pi) fi in
+    Let pic := loop_for pi_i ii (iterator_of_fi fi) c Loop.nb pi in
+    ok (pic.1, MkI ii (Cfor fi pic.2))
+
   | Cwhile a c1 e c2 => 
     Let pic := loop_while pi_i ii c1 e c2 Loop.nb pi in
     let:(pi, c1, e, c2) := pic in

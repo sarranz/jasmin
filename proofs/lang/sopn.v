@@ -2,6 +2,7 @@
 From mathcomp Require Import all_ssreflect all_algebra.
 
 Require Import
+  otbn_options
   pseudo_operator
   sem_type
   shift_kind
@@ -65,7 +66,14 @@ Variant prim_constructor (asm_op:Type) :=
   | PrimARM of
     (bool                 (* set_flags *)
      -> bool              (* is_conditional *)
-     -> asm_op).
+     -> asm_op)
+  | PrimOTBN_none of asm_op
+  | PrimOTBN_fg of bn_flag_group -> asm_op
+  | PrimOTBN_mulqacc_so of
+      bn_flag_group ->
+      bn_halfword_writeback ->
+      asm_op
+.
 
 Class asmOp (asm_op : Type) := {
   _eqT           : eqTypeC asm_op
@@ -326,6 +334,9 @@ Definition map_prim_constructor {A B} (f: A -> B) (p : prim_constructor A) : pri
   match p with
   | PrimX86 a k => PrimX86 a (fun x => Option.bind (olift f) (k x))
   | PrimARM x => PrimARM (fun sf ic => f (x sf ic))
+  | PrimOTBN_none x => PrimOTBN_none (f x)
+  | PrimOTBN_fg pr => PrimOTBN_fg (fun fg => f (pr fg))
+  | PrimOTBN_mulqacc_so pr => PrimOTBN_mulqacc_so (fun fg wb => f (pr fg wb))
   end.
 
 Definition primM {A: Type} f  := @PrimX86 A [::] (fun _ => Some f).

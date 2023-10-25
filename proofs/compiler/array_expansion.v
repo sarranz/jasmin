@@ -35,15 +35,21 @@ Module Import E.
     pel_internal := false
   |}.
 
-  Definition reg_ierror (x:var_i) msg := {|
-    pel_msg := pp_box [:: pp_s msg; pp_nobox [:: pp_s "("; pp_var x; pp_s ")"]];
-    pel_fn := None;
-    pel_fi := None;
-    pel_ii := None;
-    pel_vi := Some x.(v_info);
-    pel_pass := Some pass;
-    pel_internal := true
-  |}.
+  Definition oreg_ierror (ox : option var_i) msg :=
+    let rest :=
+      if ox is Some x then [:: pp_s "("; pp_var x; pp_s ")"] else [::]
+    in
+    {|
+      pel_msg := pp_box [:: pp_s msg; pp_nobox rest ];
+      pel_fn := None;
+      pel_fi := None;
+      pel_ii := None;
+      pel_vi := omap v_info ox;
+      pel_pass := Some pass;
+      pel_internal := true
+    |}.
+
+  Definition reg_ierror x := oreg_ierror (Some x).
 
   Definition length_mismatch := pp_internal_error_s pass "length mismatch".
 
@@ -296,12 +302,15 @@ Fixpoint expand_i (m : t) (i : instr) : cexec instr :=
     Let c2 := mapM (expand_i m) c2 in 
     ok (MkI ii (Cif b c1 c2))
 
-  | Cfor x (dir, e1, e2) c =>
-    Let _  := add_iinfo ii (assert (Sv.mem x m.(svars)) (reg_ierror x "reg array as a variable of a for loop")) in
-    Let e1 := add_iinfo ii (expand_e m e1) in
-    Let e2 := add_iinfo ii (expand_e m e2) in
-    Let c  := mapM (expand_i m) c in 
-    ok (MkI ii (Cfor x (dir, e1, e2) c))
+  | Cfor fi c =>
+    Let _  :=
+      let i := iterator_of_fi fi in
+      let err := oreg_ierror i "reg array as a variable of a for loop" in
+      add_iinfo ii (assert (Sv.subset (sv_of_ovar_i i) (svars m)) err)
+    in
+    Let fi := mapM_pexpr_fi (fun e => add_iinfo ii (expand_e m e)) fi in
+    Let c := mapM (expand_i m) c in
+    ok (MkI ii (Cfor fi c))
 
   | Cwhile a c e c' =>
     Let e  := add_iinfo ii (expand_e m e) in

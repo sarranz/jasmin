@@ -1,0 +1,6 @@
+export
+fn sra(reg u32 arg0 arg1) {
+    reg u32 x;
+    x = #SRA(arg0, arg1);
+    [x] = x;
+}

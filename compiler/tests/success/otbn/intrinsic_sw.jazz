@@ -1,0 +1,8 @@
+export
+fn store(reg u32 arg0) {
+    [arg0] = #SW(arg0);
+    [arg0 + 1] = #SW(arg0);
+    [arg0 - 1] = #SW(arg0);
+    [arg0 + 2047] = #SW(arg0);
+    [arg0 - 2048] = #SW(arg0);
+}

@@ -13,6 +13,9 @@ let show_intrinsics asmOp fmt =
       | PVvv _ :: _ -> 4
       end
     | PrimARM _ -> 5
+    | PrimOTBN_none _ -> 0
+    | PrimOTBN_fg _ -> 6
+    | PrimOTBN_mulqacc_so _ -> 7
   in
   let headers = [|
       "no size suffix";
@@ -20,9 +23,11 @@ let show_intrinsics asmOp fmt =
       "a zero/sign extend suffix, e.g., “_u32u16”";
       "one vector description suffix, e.g., “_4u64”";
       "two vector description suffixes, e.g., “_2u16_2u64”";
-      "a flag setting suffix (i.e. “S”) and a condition suffix (i.e. “cc”)"
+      "a flag setting suffix (i.e. “S”) and a condition suffix (i.e. “cc”)";
+      "a flag group (i.e. \"_FG0\" or \"_FG1\")";
+      "a halfword selector (i.e. \"_L\" or \"_U\") and then a flag group";
     |] in
-  let intrinsics = Array.make 6 [] in
+  let intrinsics = Array.make (Array.length headers) [] in
   List.iter (fun (n, i) ->
       let j = index i in
       intrinsics.(j) <- n :: intrinsics.(j))

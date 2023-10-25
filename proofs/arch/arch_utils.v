@@ -169,4 +169,87 @@ Definition idt_drop2 : instr_desc_t -> instr_desc_t := idt_dropn semi_drop2.
 Definition idt_drop3 : instr_desc_t -> instr_desc_t := idt_dropn semi_drop3.
 Definition idt_drop4 : instr_desc_t -> instr_desc_t := idt_dropn semi_drop4.
 
+(* -------------------------------------------------------------------- *)
+(* Shift transformations.
+   The following transformation adds a shift argument to an instruction
+   and updates the semantics and the rest of the fields accordingly. *)
+
+Section SHIFTED_SEMI.
+
+  Context
+    (shift_op : forall ws, word ws -> Z -> exec (word ws))
+    {ws : wsize}
+    {oT : Type}
+    {ty0 ty1 : stype}
+  .
+
+  Definition mk_shifted_semi_unop
+    (semi : sem_prod [:: sword ws ] (exec oT)) :
+    sem_prod [:: sword ws; sword8 ] (exec oT) :=
+    fun wx shift_amount =>
+      let sham := wunsigned shift_amount in
+      Let x := shift_op wx sham in
+      semi x.
+
+  Definition mk_shifted_semi_binop_2
+    (semi : sem_prod [:: ty0; sword ws ] (exec oT)) :
+    sem_prod [:: ty0; sword ws; sword8 ] (exec oT) :=
+    fun x wy shift_amount =>
+      let sham := wunsigned shift_amount in
+      Let y := shift_op wy sham in
+      semi x y.
+
+  Definition mk_shifted_semi_terop_2
+    (semi : sem_prod [:: ty0; sword ws; ty1 ] (exec oT)) :
+    sem_prod [:: ty0; sword ws; ty1; sword8 ] (exec oT) :=
+    fun x wy z shift_amount =>
+      let sham := wunsigned shift_amount in
+      Let y := shift_op wy sham in
+      semi x y z.
+
+End SHIFTED_SEMI.
+
+Section SHIFTED_IDT.
+
+  #[local]
+  Lemma mk_shifted_eq_size {A B} {x y} {xs0 : seq A} {ys0 : seq B} {p} :
+    (size xs0 == size ys0) && p ->
+    (size (xs0 ++ [:: x ]) == size (ys0 ++ [:: y ])) && p.
+  Proof. rewrite !size_cat => /andP [] /eqP -> ->. by apply/andP. Qed.
+
+  #[local]
+  Lemma mk_shifted_tin_narr {A} {p : A -> bool} {x} {xs : seq A} :
+    p x ->
+    all p xs ->
+    all p (xs ++ [:: x ]).
+  Proof. by rewrite all_cat /= => -> ->. Qed.
+
+  Definition mk_shifted
+    (idt : instr_desc_t)
+    (semi : semi_type (id_tin idt ++ [:: sword8 ]) (id_tout idt)) :
+    instr_desc_t :=
+    {|
+      id_msb_flag := MSB_MERGE;
+      id_tin := id_tin idt ++ [:: sword8 ];
+      id_in := id_in idt ++ [:: E (id_nargs idt) ];
+      id_tout := id_tout idt;
+      id_out := id_out idt;
+      id_semi := semi;
+      id_nargs := (id_nargs idt).+1;
+      id_args_kinds :=
+        map (fun x => x ++ [:: [:: CAimm reg_size] ]) (id_args_kinds idt);
+      id_eq_size := mk_shifted_eq_size (id_eq_size idt);
+      id_tin_narr :=
+        mk_shifted_tin_narr
+          (is_true_true : is_not_sarr sword8)
+          (id_tin_narr idt);
+      id_tout_narr := id_tout_narr idt;
+      id_check_dest := id_check_dest idt;
+      id_str_jas := id_str_jas idt;
+      id_safe := id_safe idt;
+      id_pp_asm := id_pp_asm idt;
+  |}.
+
+End SHIFTED_IDT.
+
 End WITH_ARCH.

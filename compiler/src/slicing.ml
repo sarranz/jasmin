@@ -26,6 +26,11 @@ let inspect_lv k = function
 
 let inspect_lvs k xs = List.fold_left inspect_lv k xs
 
+let inspect_fi k fi =
+  match fi with
+  | FIrange(_, _, elo, ehi) -> inspect_es k [elo; ehi]
+  | FIrepeat(e) -> inspect_e k e
+
 let rec inspect_stmt k stmt = List.fold_left inspect_instr k stmt
 and inspect_instr k i = inspect_instr_r k i.i_desc
 
@@ -35,7 +40,7 @@ and inspect_instr_r k = function
       inspect_lvs (inspect_es k es) xs
   | Cif (g, a, b) | Cwhile (_, a, g, b) ->
       inspect_stmt (inspect_stmt (inspect_e k g) a) b
-  | Cfor (_, (_, e1, e2), s) -> inspect_stmt (inspect_es k [ e1; e2 ]) s
+  | Cfor (fi, s) -> inspect_stmt (inspect_fi k fi) s
   | Ccall (_, xs, fn, es) -> with_fun (inspect_lvs (inspect_es k es) xs) fn
 
 let slice fs (gd, fds) =

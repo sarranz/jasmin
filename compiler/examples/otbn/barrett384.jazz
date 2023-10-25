@@ -1,0 +1,259 @@
+/*
+// The compiler should print labels for each of these.
+
+u256[3] a = { 0, 0, 0 };
+u256[3] b = { 0, 0, 0 };
+u256[3] m = { 0, 0, 0 };
+u256[3] u = { 0, 0, 0 };
+*/
+
+/* Unrolled 768=384x384 bit multiplication.
+
+   Returns c = a x b.
+
+   Flags: Last instruction performs a dummy addition on the highest limb of c.
+   Therefore the routine is left with the flags being set based on this
+   operation:
+      - M: MSb of the result (and the highest limb of the result)
+      - L: LSb of the highest limb of result
+      - Z: Indicates if highest limb of result is zero
+      - C: Never set
+
+   Clobbered registers: ACC. */
+fn mul384(
+    reg u256 ahi alo,     // a, first operand, max. length 384 bit.
+    reg u256 bhi blo,     // b, second operand, max. length 384 bit.
+    reg u256 z,           // All-zero.
+    reg u256 c2 c1 c0,    // Output registers.
+    reg bool mf0 lf0 zf0) // FG0.
+    ->
+    reg u256, reg u256, reg u256, // c, result, max. length 768 bit.
+    reg bool, reg bool, reg bool // FG0.M, FG0.L, FG0.Z flags
+{
+    reg u256 acc;
+
+    acc = #BN_MULQACC_Z(alo, 0, blo, 0, 0);
+    acc = #BN_MULQACC(alo, 0, blo, 1, acc, 64);
+    ?{ mf0, lf0, zf0, acc }, c0
+         = #BN_MULQACC_SO_L(mf0, lf0, zf0, c0, alo, 1, blo, 0, acc, 64);
+    acc = #BN_MULQACC(alo, 0, blo, 2, acc,  0);
+    acc = #BN_MULQACC(alo, 1, blo, 1, acc,  0);
+    acc = #BN_MULQACC(alo, 2, blo, 0, acc,  0);
+    acc = #BN_MULQACC(alo, 0, blo, 3, acc, 64);
+    acc = #BN_MULQACC(alo, 1, blo, 2, acc, 64);
+    acc = #BN_MULQACC(alo, 2, blo, 1, acc, 64);
+    ?{ mf0, lf0, zf0, acc }, c0
+         = #BN_MULQACC_SO_U(mf0, lf0, zf0, c0, alo, 3, blo, 0, acc, 64);
+
+    acc = #BN_MULQACC(alo, 0, bhi, 0, acc,  0);
+    acc = #BN_MULQACC(alo, 1, blo, 3, acc,  0);
+    acc = #BN_MULQACC(alo, 2, blo, 2, acc,  0);
+    acc = #BN_MULQACC(alo, 3, blo, 1, acc,  0);
+    acc = #BN_MULQACC(ahi, 0, blo, 0, acc,  0);
+    acc = #BN_MULQACC(alo, 0, bhi, 1, acc, 64);
+    acc = #BN_MULQACC(alo, 1, bhi, 0, acc, 64);
+    acc = #BN_MULQACC(alo, 2, blo, 3, acc, 64);
+    acc = #BN_MULQACC(alo, 3, blo, 2, acc, 64);
+    acc = #BN_MULQACC(ahi, 0, blo, 1, acc, 64);
+    ?{ mf0, lf0, zf0, acc }, c1
+         = #BN_MULQACC_SO_L(mf0, lf0, zf0, c1, ahi, 1, blo, 0, acc, 64);
+    acc = #BN_MULQACC(alo, 1, bhi, 1, acc,  0);
+    acc = #BN_MULQACC(alo, 2, bhi, 0, acc,  0);
+    acc = #BN_MULQACC(alo, 3, blo, 3, acc,  0);
+    acc = #BN_MULQACC(ahi, 0, blo, 2, acc,  0);
+    acc = #BN_MULQACC(ahi, 1, blo, 1, acc,  0);
+    acc = #BN_MULQACC(alo, 2, bhi, 1, acc, 64);
+    acc = #BN_MULQACC(alo, 3, bhi, 0, acc, 64);
+    acc = #BN_MULQACC(ahi, 0, blo, 3, acc, 64);
+    ?{ mf0, lf0, zf0, acc }, c1
+         = #BN_MULQACC_SO_U(mf0, lf0, zf0, c1, ahi, 1, blo, 2, acc, 64);
+
+    acc = #BN_MULQACC(alo, 3, bhi, 1, acc,  0);
+    acc = #BN_MULQACC(ahi, 0, bhi, 0, acc,  0);
+    acc = #BN_MULQACC(ahi, 1, blo, 3, acc,  0);
+    acc = #BN_MULQACC(ahi, 0, bhi, 1, acc, 64);
+    ?{ mf0, lf0, zf0, acc }, c2
+         = #BN_MULQACC_SO_L(mf0, lf0, zf0, c2, ahi, 1, bhi, 0, acc, 64);
+    ?{ acc }, c2 = #BN_MULQACC_SO_U(mf0, lf0, zf0, c2, ahi, 1, bhi, 1, acc, 0);
+
+    ?{ mf0, lf0, zf0 }, c2 = #BN_ADD(c2, z);
+
+    return c2, c1, c0, mf0, lf0, zf0;
+}
+
+/* 384-bit modular multiplication based on Barrett reduction algorithm.
+   Returns c = a x b % m.
+   Clobbered flag groups: FG0 */
+fn barrett384(
+    reg u256 ahi alo,     // a, first operand, max. length 384 bit, a < m.
+    reg u256 bhi blo,     // b, second operand, max. length 384 bit, b < m.
+    reg u256 mhi mlo,     // m, modulus, max. length 384 bit, 2^384 > m > 2^383.
+    reg u256 uhi ulo,     // u, pre-computed Barrett constant (without u[384]/MSb.
+    reg u256 z,           // All-zero.
+    reg u256 x_2 x_1 x_0, // Output registers.
+    reg bool mf0 lf0 zf0) // Flags.
+    -> reg u256, reg u256 // c, result, max. length 384 bit.
+{
+    // x = [x_2, x_1, x_0]
+    x_2, x_1, x_0, mf0, lf0, zf0 = mul384(
+        ahi, alo,
+        bhi, blo,
+        z,
+        x_2, x_1, x_0,
+        mf0, lf0, zf0
+    );
+
+    // u0 = M ? u : 0
+    //    = M ? [uhi, ulo] : 0
+    reg u256 u0hi u0lo;
+    u0lo = #BN_SEL(ulo, z, mf0);
+    u0hi = #BN_SEL(uhi, z, mf0);
+
+    // Save the two lower limbs of x.
+    reg u256 s_x_0 s_x_1;
+    s_x_0 = x_0;
+    s_x_1 = x_1;
+
+    // q1 = x >> 383
+    //    = [x_2, x_1, x_0] >> 383
+    //    = [x_2, x_0] >> 127
+    reg u256 q1hi q1lo;
+    q1hi = #BN_RSHI(z, x_2, 127);
+    q1lo = #BN_RSHI(x_2, x_1, 127);
+
+    // q2' = q1[383:0] * u[383:0]
+    //     = [q1hi, q1lo] * [uhi, ulo]
+    reg u256 q2phi q2plo __q2dummy;
+    ulo = ulo;
+    uhi = uhi;
+    q2phi, q2plo, __q2dummy, _, _, _ = mul384(
+        q1hi, q1lo,
+        uhi, ulo,
+        z,
+        x_2, x_1, x_0,
+        mf0, lf0, zf0
+    );
+
+    // q2'' = q2' >> 384
+    reg u256 q2pphi q2pplo;
+    q2pphi = #BN_RSHI(z, q2phi, 128);
+    q2pplo = #BN_RSHI(q2phi, q2plo, 128);
+
+    // q2''' = q2'' + q1
+    reg bool cf;
+    reg u256 q2ppphi q2ppplo;
+    cf, q2ppplo = q2pplo +256u q1lo;
+    _, q2ppphi = q2pphi +256u q1hi + cf;
+
+    // q2'''' = x[767] ? (q2''' + u[383:0]) : q2'''
+    reg u256 q2pppphi q2pppplo;
+    cf, q2pppplo = q2ppplo +256u u0lo;
+    ?{ mf0, lf0, zf0 }, q2pppphi = #BN_ADDC(q2ppphi, u0hi, cf);
+
+    // q3 = q2 >> 385
+    //    = q2'''' >> 1
+    reg u256 q3hi q3lo;
+    q3hi = #BN_RSHI(z, q2pppphi, 1);
+    q3lo = #BN_RSHI(q2pppphi, q2pppplo, 1);
+
+    // r2 = q3 * m
+    reg u256 r2_2 r2_1 r2_0;
+    mlo = mlo;
+    mhi = mhi;
+    r2_2, r2_1, r2_0, _, _, _ = mul384(
+        q3hi, q3lo,
+        mhi, mlo,
+        z,
+        q2phi, q2plo, __q2dummy,
+        mf0, lf0, zf0
+    );
+
+    // r = x - q3 * m
+    //   = x - r2
+    reg bool bf;
+    reg u256 rhi rlo;
+    bf, rhi = s_x_0 -256u r2_0;
+    _, rlo = s_x_1 -256u r2_1 - bf;
+
+    // c = a * b % m
+    //   = ??
+    reg u256 chi clo;
+    bf, clo = s_x_0 -256u mlo;
+    bf, chi = s_x_1 -256u mhi - bf;
+
+    s_x_0 = #BN_SEL(s_x_0, clo, bf);
+    s_x_1 = #BN_SEL(s_x_1, chi, bf);
+
+    bf, clo = s_x_0 -256u mlo;
+    bf, chi = s_x_1 -256u mhi - bf;
+
+    clo = #BN_SEL(s_x_0, clo, bf);
+    chi = #BN_SEL(s_x_1, chi, bf);
+
+    return chi, clo;
+}
+
+/* Externally callable wrapper for modular multiplication with Barrett
+   reduction.
+   Returns c = a x b % m.
+   Clobbered flag groups: FG0 */
+inline
+fn _main(reg u256 ahi alo bhi blo mhi mlo uhi ulo) -> reg u256, reg u256 {
+    reg u256 c2 c1 c0 z;
+    reg bool mf0 lf0 zf0;
+    ?{}, c2 = #set0();
+    ?{}, c1 = #set0();
+    ?{}, c0 = #set0();
+    ?{ mf0, lf0, zf0 }, z = #set0();
+
+    reg u256 clo chi;
+    chi, clo = barrett384(
+        ahi, alo,
+        bhi, blo,
+        mhi, mlo,
+        uhi, ulo,
+        c2, c1, c0,
+        z,
+        mf0, lf0, zf0
+    );
+
+    chi = chi;
+    clo = clo;
+
+    return chi, clo;
+}
+
+export
+fn main(reg u256 ahi alo bhi blo mhi mlo uhi ulo) -> reg u256, reg u256 {
+    // Here we should load the arguments from DMEM, but indirect addressing is
+    // not supported yet.
+    reg u256 chi clo;
+    chi, clo = _main(ahi, alo, bhi, blo, mhi, mlo, uhi, ulo);
+    return chi, clo;
+}
+
+export
+fn mock() -> reg u256, reg u256 {
+    reg u256 ahi alo; // a, first operand, max. length 384 bit.
+    ?{}, ahi = #set0();
+    ?{}, alo = #set0();
+
+    reg u256 bhi blo; // b, second operand, max. length 384 bit.
+    ?{}, bhi = #set0();
+    ?{}, blo = #set0();
+
+    reg u256 mhi mlo; // m, modulus, max. length 384 bit with 2^384 > m > 2^383.
+    ?{}, mhi = #set0();
+    ?{}, mlo = #set0();
+
+    reg u256 uhi ulo; // u, pre-computed Barrett constant (without u[384]/MSb.
+    ?{}, uhi = #set0();
+    ?{}, ulo = #set0();
+
+    reg u256 chi clo;
+    chi, clo = _main(ahi, alo, bhi, blo, mhi, mlo, uhi, ulo);
+
+    return chi, clo;
+}
+
+// exec mock()

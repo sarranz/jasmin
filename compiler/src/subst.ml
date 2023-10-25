@@ -49,6 +49,15 @@ let gsubst_lval flen f lv =
 let gsubst_lvals flen f  = List.map (gsubst_lval flen f)
 let gsubst_es flen f = List.map (gsubst_e flen f)
 
+let gsubst_fi flen f fi =
+  match fi with
+  | FIrange(x, d, e1, e2) ->
+      let e1 = gsubst_e flen f e1 in
+      let e2 = gsubst_e flen f e2 in
+      let x = gsubst_vdest f x in
+      FIrange(x, d, e1, e2)
+  | FIrepeat e -> FIrepeat(gsubst_e flen f e)
+
 let rec gsubst_i flen f i =
   let i_desc =
     match i.i_desc with
@@ -56,8 +65,10 @@ let rec gsubst_i flen f i =
     | Copn(x,t,o,e)   -> Copn(gsubst_lvals flen f x, t, o, gsubst_es flen f e)
     | Csyscall(x,o,e)   -> Csyscall(gsubst_lvals flen f x, o, gsubst_es flen f e)
     | Cif(e,c1,c2)  -> Cif(gsubst_e flen f e, gsubst_c flen f c1, gsubst_c flen f c2)
-    | Cfor(x,(d,e1,e2),c) ->
-        Cfor(gsubst_vdest f x, (d, gsubst_e flen f e1, gsubst_e flen f e2), gsubst_c flen f c)
+    | Cfor(fi, c) ->
+      let fi = gsubst_fi flen f fi in
+      let c = gsubst_c flen f c in
+      Cfor(fi, c)
     | Cwhile(a, c, e, c') -> 
       Cwhile(a, gsubst_c flen f c, gsubst_e flen f e, gsubst_c flen f c')
     | Ccall(ii,x,fn,e) -> Ccall(ii, gsubst_lvals flen f x, fn, gsubst_es flen f e) in
@@ -357,8 +368,7 @@ let rec extend_iinfo_i pre i =
     | Cassgn _ | Copn _ | Csyscall _ | Ccall _ -> i.i_desc
     | Cif(e,c1,c2) -> 
       Cif(e, extend_iinfo_c pre c1, extend_iinfo_c pre c2)
-    | Cfor(x,r,c) -> 
-      Cfor(x,r, extend_iinfo_c pre c)
+    | Cfor(fi, c) -> Cfor(fi, extend_iinfo_c pre c)
     | Cwhile (a, c1, e, c2) -> 
       Cwhile(a, extend_iinfo_c pre c1, e, extend_iinfo_c pre c2) in
   let {L.base_loc = ii; L.stack_loc = l} = i.i_loc in

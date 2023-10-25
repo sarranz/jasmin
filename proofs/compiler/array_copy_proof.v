@@ -69,12 +69,12 @@ Let Pc s1 (c1:cmd) s2 :=
   exists2 vm2, evm s2 <=[X] vm2  & 
     sem p2 ev (with_vm s1 vm1) c2 (with_vm s2 vm2).
 
-Let Pfor (i:var_i) vs s1 c1 s2 :=
-  Sv.Subset (Sv.add i (vars_c c1)) X ->
+Let Pfor oi rn s1 c1 s2 :=
+  Sv.Subset (Sv.union (sv_of_ovar_i oi) (vars_c c1)) X ->
   forall c2, array_copy_c (array_copy_i fresh_counter) c1 = ok c2 ->
   forall vm1, evm s1 <=[X] vm1  ->
   exists2 vm2, evm s2 <=[X] vm2 & 
-    sem_for p2 ev i vs (with_vm s1 vm1) c2 (with_vm s2 vm2).
+    sem_for p2 ev oi rn (with_vm s1 vm1) c2 (with_vm s2 vm2).
 
 Let Pfun sc1 m1 fn vargs sc2 m2 vres :=
   forall vargs', List.Forall2 value_uincl vargs vargs' ->
@@ -170,7 +170,7 @@ Proof.
       WArray.fcopy ws ty tx0 (Zpos n - j) j = ok tx' ->
       exists2 vm2,
         (vm1 <=[Sv.union (read_e y) (Sv.remove x X)]  vm2 /\ vm2.[x] = Varr tx') &
-        sem_for p2 ev i (ziota (Zpos n - j) j) (with_vm s1 vm1') c (with_vm s1 vm2).
+        sem_for p2 ev (Some i) (ziota (Zpos n - j) j) (with_vm s1 vm1') c (with_vm s1 vm2).
   + move=> {hy vm1' hvm1' htx0 hipre hcopy hutx tx0 tx hw}.
     apply: natlike_ind => [ | j hj hrec] hjn vm1' tx hvm1' hx.
     + by rewrite /WArray.fcopy ziota0 /= => -[?]; subst tx; exists vm1' => //; apply: EForDone.
@@ -198,7 +198,7 @@ Proof.
     + by rewrite Vm.setP_eq /= eqxx.
     move=> vm2 h1 h2; exists vm2 => //.
     apply: (EForOne (s1' := with_vm s1 vm1'.[i <- Vint (n - Z.succ j)])) h2.
-    + by rewrite write_var_eq_type.
+    + by rewrite /= write_var_eq_type.
     apply sem_seq1; constructor.
     apply: Eassgn.
     + rewrite /= get_gvar_neq; last first.
@@ -277,15 +277,24 @@ Proof.
   subst v; exists vm2 => //=; apply sem_seq1; constructor; apply: Ewhile_false; rewrite -?eq_globs; eauto.
 Qed.
 
+Lemma write_fiE fi :
+  Sv.Equal (write_fi fi) (sv_of_ovar_i (iterator_of_fi fi)).
+Proof. by case: fi. Qed.
+
 Local Lemma Hfor : sem_Ind_for p1 ev Pi_r Pfor.
 Proof.
-  move => s1 s2 i d lo hi c vlo vhi hlo hhi _ hfor ii.
+  move => s1 s2 fi c rn hfi _ hfor ii.
   rewrite /Pi vars_I_for => hsub c2 /=.
   t_xrbindP => c' hc <- vm1 hvm1 /=.
-  have [|vlo' hlo' /value_uinclE ?]:= sem_pexpr_uincl_on (uincl_onI _ hvm1) hlo; first by SvD.fsetdec.
-  have [|vhi' hhi' /value_uinclE ?]:= sem_pexpr_uincl_on (uincl_onI _ hvm1) hhi; first by SvD.fsetdec.
-  subst vlo' vhi'; have [|vm2 hvm2 hfor']:= hfor _ _ hc vm1 hvm1; first by SvD.fsetdec.
-  exists vm2 => //; apply sem_seq1; constructor; econstructor; rewrite -?eq_globs; eauto.
+  have [|vm2 hvm2 hfor'] := hfor _ _ hc vm1 hvm1.
+  - rewrite -write_fiE. SvD.fsetdec.
+  eexists; first exact: hvm2.
+  apply: sem_seq_ir.
+  econstructor; last eassumption.
+  rewrite -?eq_globs.
+  apply: sem_fi_uincl_on => //.
+  apply: uincl_onI; last eassumption.
+  SvD.fsetdec.
 Qed.
 
 Local Lemma Hfor_nil : sem_Ind_for_nil Pfor.
@@ -293,9 +302,9 @@ Proof. move=> s i c hsub ?? vm1 hvm1; exists vm1 => //; constructor. Qed.
 
 Local Lemma Hfor_cons : sem_Ind_for_cons p1 ev Pc Pfor.
 Proof.
-  move=> s1 s1' s2 s3 i w ws c hi _ hc _ hfor hsub ? heq vm1 hvm1.
-  have [vm2 hi' hvm2]:= write_var_uincl_on (value_uincl_refl w) hi hvm1.
-  have [||vm3 hvm3 hc']:= hc _ _ heq vm2 (uincl_onI _ hvm2).
+  move=> s1 s1' s2 s3 oi w ws c hinit _ hc _ hfor hsub ? heq vm1 hvm1.
+  have [vm2 hinit' hvm2]:= init_iteration_uincl_on hvm1 hinit.
+  have [||vm3 hvm3 hc'] := hc _ _ heq vm2 (uincl_onI _ hvm2).
   + by SvD.fsetdec. + by SvD.fsetdec.
   have [vm4 hvm4 hfor']:= hfor hsub _ heq _ hvm3.
   exists vm4 => //=; econstructor; eauto.

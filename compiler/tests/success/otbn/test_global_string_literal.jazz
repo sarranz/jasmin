@@ -1,0 +1,17 @@
+u8[10] test = "Teststring";
+
+export
+fn main() -> reg u32 {
+    reg u32 res tmp;
+    res = 0x54;
+
+    reg ptr u32[2] p;
+    p = test[0:8];
+
+    tmp = p[0];
+    res ^= tmp;
+    tmp = p[1];
+    res ^= tmp;
+
+    return res;
+}

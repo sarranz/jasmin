@@ -1,0 +1,16 @@
+export
+fn mov(reg u32 arg0) {
+    reg u32 x;
+
+    x = arg0;
+    [x] = x;
+
+    x = 1;
+    [x] = x;
+
+    x = -1;
+    [x] = x;
+
+    x = 0xabcdef01;
+    [x] = arg0;
+}

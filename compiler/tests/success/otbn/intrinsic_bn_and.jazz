@@ -1,0 +1,18 @@
+export
+fn bn_and(reg u256 arg0 arg1) -> reg u256 {
+    reg u256 x;
+    ?{}, x = #BN_AND(arg0, arg1);
+    ?{}, x = #BN_AND(x, arg1 << 0);
+    ?{}, x = #BN_AND(x, arg1 << 8);
+    ?{}, x = #BN_AND(x, arg1 << 16);
+    ?{}, x = #BN_AND(x, arg1 << 248);
+
+    ?{}, x = #BN_AND_FG0(x, arg1);
+
+    ?{}, x = #BN_AND_FG1(x, arg1);
+    ?{}, x = #BN_AND_FG1(x, arg1 << 0);
+    ?{}, x = #BN_AND_FG1(x, arg1 << 8);
+    ?{}, x = #BN_AND_FG1(x, arg1 << 16);
+    ?{}, x = #BN_AND_FG1(x, arg1 << 248);
+    return x;
+}

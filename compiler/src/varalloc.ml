@@ -100,7 +100,8 @@ let rec live_ranges_instr_r d_acc =
      let d_acc = live_ranges_stmt d_acc s1 in
      let d_acc = live_ranges_stmt d_acc s2 in
      d_acc
-  | Cfor _ -> assert false
+  | Cfor (FIrange _, _) -> assert false
+  | Cfor (FIrepeat _, c) -> live_ranges_stmt d_acc c
 and live_ranges_instr (d, acc) { i_desc ; i_info = before, after } =
   let acc = process_live_info d acc before in
   let d, acc = live_ranges_instr_r (d + 1, acc) i_desc in
@@ -177,7 +178,8 @@ let classes_alignment (onfun : funname -> param_info option list) (gtbl: alignme
     | Copn(xs,_,_,es) | Csyscall(xs,_,es) -> add_lvs xs; add_es es
     | Cif(e,c1,c2) | Cwhile (_,c1,e,c2) -> 
       add_e e; add_c c1; add_c c2
-    | Cfor _ -> assert false 
+    | Cfor(FIrange _, _) -> assert false
+    | Cfor(FIrepeat e, c) -> add_e e; add_c c
     | Ccall(_, xs, fn, es) -> 
       add_lvs xs;
       calls := Sf.add fn !calls; 

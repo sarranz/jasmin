@@ -1,0 +1,8 @@
+export
+fn bn_addi(reg u256 arg0) -> reg u256 {
+    reg u256 x;
+    x = arg0 +256u 0;
+    x = x +256u 1;
+    x = x +256u 1023;
+    return x;
+}

@@ -125,6 +125,18 @@ let pp_align fmt = function
   | E.Align -> Format.fprintf fmt "#[align]@ "
   | E.NoAlign -> ()
 
+let pp_fi pp_len pp_var fmt fi =
+  match fi with
+  | FIrange(i, d, lo, hi) ->
+    let sd, e1, e2 = if d = UpTo then "to", lo, hi else "downto", hi, lo in
+    F.fprintf fmt "for %a = @[%a %s@ %a@]"
+      (pp_gvar_i pp_var) i
+      (pp_ge pp_len pp_var) e1
+      sd
+      (pp_ge pp_len pp_var) e2
+  | FIrepeat(e) ->
+    F.fprintf fmt "repeat %a" (pp_ge pp_len pp_var) e
+
 let rec pp_gi pp_info pp_len pp_opn pp_var fmt i =
   F.fprintf fmt "%a" pp_info i.i_info;
   F.fprintf fmt "%a" pp_annotations i.i_annot;
@@ -166,11 +178,9 @@ let rec pp_gi pp_info pp_len pp_opn pp_var fmt i =
       (pp_ge pp_len pp_var) e (pp_cblock pp_info pp_len pp_opn pp_var) c1
       (pp_cblock pp_info pp_len pp_opn pp_var) c2
 
-  | Cfor(i, (dir, lo, hi), c) ->
-    let dir, e1, e2 =
-      if dir = UpTo then "to", lo, hi else "downto", hi, lo in
-    F.fprintf fmt "@[<v>for %a = @[%a %s@ %a@] %a@]"
-      (pp_gvar_i pp_var) i (pp_ge pp_len pp_var) e1 dir (pp_ge pp_len pp_var) e2
+  | Cfor(fi, c) ->
+    F.fprintf fmt "@[<v>%a %a@]"
+      (pp_fi pp_len pp_var) fi
       (pp_cblock pp_info pp_len pp_opn pp_var) c
 
   | Cwhile(a, [], e, c) ->

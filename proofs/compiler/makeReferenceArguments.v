@@ -141,9 +141,9 @@ Fixpoint update_i (X:Sv.t) (i:instr) : cexec cmd :=
     Let c1 := update_c (update_i X) c1 in
     Let c2 := update_c (update_i X) c2 in
     ok [::MkI ii (Cif b c1 c2)]
-  | Cfor x r c =>
+  | Cfor fi c =>
     Let c := update_c (update_i X) c in
-    ok [::MkI ii (Cfor x r c)]
+    ok [:: MkI ii (Cfor fi c) ]
   | Cwhile a c e c' =>
     Let c  := update_c (update_i X) c in
     Let c' := update_c (update_i X) c' in

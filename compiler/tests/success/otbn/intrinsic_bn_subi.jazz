@@ -1,0 +1,8 @@
+export
+fn bn_subi(reg u256 arg0) -> reg u256 {
+    reg u256 x;
+    ?{}, x = #BN_SUBI(arg0, 0);
+    ?{}, x = #BN_SUBI_FG0(x, 1);
+    ?{}, x = #BN_SUBI_FG1(x, 1023);
+    return x;
+}

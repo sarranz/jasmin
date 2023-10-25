@@ -17,11 +17,9 @@ let get_arm_prim s =
   let set_flags, s = get_set_flags s in
   (s, set_flags, is_conditional)
 
-let tt_prim ps s sa =
+let tt_prim ~unknown ps s sa =
+  if Option.is_some sa then raise unknown;
   let name, set_flags, is_conditional = get_arm_prim s in
-  match List.assoc_opt name ps with
-  | Some (Sopn.PrimARM pr) ->
-    if sa == None
-    then Some (pr set_flags is_conditional)
-    else None
-  | _ -> None
+  match List.assoc name ps with
+  | Sopn.PrimARM pr -> pr set_flags is_conditional
+  | _ | exception Not_found -> raise unknown

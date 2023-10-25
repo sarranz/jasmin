@@ -505,6 +505,11 @@ let declassify_lvls annot lvls =
   if is_declasify annot then List.map (fun _ -> Public) lvls
   else lvls
 
+let ty_fi env fi =
+  match fi with
+  | FIrange(x, _, elo, ehi) -> fst (ty_exprs ~public:true env [elo; ehi])
+  | FIrepeat e -> fst (ty_expr ~public:true env e)
+
 (* [ty_instr env i] return env' such that env |- i : env' *)
 
 let rec ty_instr fenv env i =
@@ -528,10 +533,11 @@ let rec ty_instr fenv env i =
     let env2 = ty_cmd fenv env c2 in
     Env.max env1 env2
 
-  | Cfor(x, (_, e1, e2), c) ->
-    let env, _ = ty_exprs ~public:true env [e1; e2] in
+  | Cfor(fi, c) ->
+    let set_public x = Env.set env x Public in
+    let env = ty_fi env fi in
     let rec loop env =
-      let env1 = Env.set env x Public in
+      let env1 = Option.map_default set_public env (iterator_of_fi fi) in
       let env1 = ty_cmd fenv env1 c in (*  env |- x = p; c : env1 <= env  *)
       if Env.le env1 env then env      (* G <= G'  G' |- c : G''   G |- c : G'' *)
       else loop (Env.max env1 env) in  (* le env/env1 (max env1 env) Check *)

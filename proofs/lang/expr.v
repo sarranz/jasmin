@@ -311,8 +311,6 @@ Qed.
 Definition dir_eqMixin     := Equality.Mixin dir_eq_axiom.
 Canonical  dir_eqType      := Eval hnf in EqType dir dir_eqMixin.
 
-Definition range := (dir * pexpr * pexpr)%type.
-
 Definition wrange d (n1 n2 : Z) :=
   let n := Z.to_nat (n2 - n1) in
   match d with
@@ -371,7 +369,41 @@ Variant align :=
 
 (* -------------------------------------------------------------------- *)
 
-(* ----------------------------------------------------------------------------- *)
+Variant for_iteration :=
+  | FIrange of var_i & dir & pexpr & pexpr
+  | FIrepeat of pexpr
+.
+
+Definition map_pexpr_fi
+  (f : pexpr -> pexpr) (fi : for_iteration) : for_iteration :=
+  match fi with
+  | FIrange x d elo ehi => FIrange x d (f elo) (f ehi)
+  | FIrepeat e => FIrepeat (f e)
+  end.
+
+Definition mapM_pexpr_fi
+  {eT : Type}
+  (f : pexpr -> result eT pexpr)
+  (fi : for_iteration) :
+  result eT for_iteration :=
+  match fi with
+  | FIrange x d elo ehi =>
+      Let elo' := f elo in
+      Let ehi' := f ehi in
+      ok (FIrange x d elo' ehi')
+  | FIrepeat e =>
+      Let e' := f e in
+      ok (FIrepeat e')
+  end.
+
+Definition iterator_of_fi (fi : for_iteration) : option var_i :=
+  match fi with
+  | FIrange i _ _ _ => Some i
+  | FIrepeat _ => None
+  end.
+
+
+(* -------------------------------------------------------------------- *)
 
 Section ASM_OP.
 
@@ -380,9 +412,9 @@ Context `{asmop:asmOp}.
 Inductive instr_r :=
 | Cassgn   : lval -> assgn_tag -> stype -> pexpr -> instr_r
 | Copn     : lvals -> assgn_tag -> sopn -> pexprs -> instr_r
-| Csyscall : lvals -> syscall_t -> pexprs -> instr_r 
+| Csyscall : lvals -> syscall_t -> pexprs -> instr_r
 | Cif      : pexpr -> seq instr -> seq instr  -> instr_r
-| Cfor     : var_i -> range -> seq instr -> instr_r
+| Cfor     : for_iteration -> seq instr -> instr_r
 | Cwhile   : align -> seq instr -> pexpr -> seq instr -> instr_r
 | Ccall    : inline_info -> lvals -> funname -> pexprs -> instr_r
 
@@ -404,7 +436,7 @@ Section CMD_RECT.
   Hypothesis Hopn : forall xs t o es, Pr (Copn xs t o es).
   Hypothesis Hsyscall : forall xs o es, Pr (Csyscall xs o es).
   Hypothesis Hif  : forall e c1 c2, Pc c1 -> Pc c2 -> Pr (Cif e c1 c2).
-  Hypothesis Hfor : forall v dir lo hi c, Pc c -> Pr (Cfor v (dir,lo,hi) c).
+  Hypothesis Hfor : forall fi c, Pc c -> Pr (Cfor fi c).
   Hypothesis Hwhile : forall a c e c', Pc c -> Pc c' -> Pr (Cwhile a c e c').
   Hypothesis Hcall: forall i xs f es, Pr (Ccall i xs f es).
 
@@ -428,7 +460,7 @@ Section CMD_RECT.
     | Copn xs t o es => Hopn xs t o es
     | Csyscall xs o es => Hsyscall xs o es
     | Cif e c1 c2  => @Hif e c1 c2 (cmd_rect_aux instr_Rect c1) (cmd_rect_aux instr_Rect c2)
-    | Cfor i (dir,lo,hi) c => @Hfor i dir lo hi c (cmd_rect_aux instr_Rect c)
+    | Cfor fi c => @Hfor fi c (cmd_rect_aux instr_Rect c)
     | Cwhile a c e c'   => @Hwhile a c e c' (cmd_rect_aux instr_Rect c) (cmd_rect_aux instr_Rect c')
     | Ccall ii xs f es => @Hcall ii xs f es
     end.
@@ -737,13 +769,21 @@ Definition vrvs := (vrvs_rec Sv.empty).
 Definition lv_write_mem (r:lval) : bool :=
   if r is Lmem _ _ _ then true else false.
 
+Definition write_fi_rec (s : Sv.t) (fi : for_iteration) : Sv.t :=
+  match fi with
+  | FIrange x _ _ _ => Sv.add x s
+  | FIrepeat _ => s
+  end.
+
+Definition write_fi := write_fi_rec Sv.empty.
+
 Fixpoint write_i_rec s (i:instr_r) :=
   match i with
   | Cassgn x _ _ _  => vrv_rec s x
   | Copn xs _ _ _   => vrvs_rec s xs
-  | Csyscall xs _ _ => vrvs_rec s xs 
+  | Csyscall xs _ _ => vrvs_rec s xs
   | Cif   _ c1 c2   => foldl write_I_rec (foldl write_I_rec s c2) c1
-  | Cfor  x _ c     => foldl write_I_rec (Sv.add x s) c
+  | Cfor fi c => foldl write_I_rec (write_fi_rec s fi) c
   | Cwhile _ c _ c' => foldl write_I_rec (foldl write_I_rec s c') c
   | Ccall _ x _ _   => vrvs_rec s x
   end
@@ -812,6 +852,14 @@ Definition read_rv := read_rv_rec Sv.empty.
 Definition read_rvs_rec := foldl read_rv_rec.
 Definition read_rvs := read_rvs_rec Sv.empty.
 
+Definition read_fi_rec (s : Sv.t) (fi : for_iteration) : Sv.t :=
+  match fi with
+  | FIrange _ _ elo ehi => read_e_rec (read_e_rec s ehi) elo
+  | FIrepeat e => read_e_rec s e
+  end.
+
+Definition read_fi := read_fi_rec Sv.empty.
+
 Fixpoint read_i_rec (s:Sv.t) (i:instr_r) : Sv.t :=
   match i with
   | Cassgn x _ _ e => read_rv_rec (read_e_rec s e) x
@@ -821,9 +869,9 @@ Fixpoint read_i_rec (s:Sv.t) (i:instr_r) : Sv.t :=
     let s := foldl read_I_rec s c1 in
     let s := foldl read_I_rec s c2 in
     read_e_rec s b
-  | Cfor x (dir, e1, e2) c =>
+  | Cfor fi c =>
     let s := foldl read_I_rec s c in
-    read_e_rec (read_e_rec s e2) e1
+    read_fi_rec s fi
   | Cwhile a c e c' =>
     let s := foldl read_I_rec s c in
     let s := foldl read_I_rec s c' in
@@ -912,3 +960,14 @@ Definition instr_of_copn_args
   : instr_r :=
   Copn args.1.1 tg args.1.2 args.2.
 
+Module COPN_ARGS.
+  Definition lval := lval.
+  Definition rval := pexpr.
+  Definition lvar := Lvar.
+  Definition lmem ws x z := Lmem ws x (Pconst z).
+  Definition rvar x := Pvar (mk_lvar x).
+  Definition rconst ws z := cast_w ws (Pconst z).
+End COPN_ARGS.
+
+Definition sv_of_ovar_i (oi : option var_i) : Sv.t :=
+  sv_of_option (Option.map v_var oi).

@@ -47,12 +47,13 @@ Section REMOVE_INIT.
         sem p' ev (with_vm s1 vm1) (remove_init_c is_reg_array c) (with_vm s2 vm2) &
         evm s2 <=1 vm2.
 
-  Let Pfor (i:var_i) vs s1 c s2 :=
+  Let Pfor oi rn s1 c s2 :=
     forall vm1,
       evm s1 <=1 vm1 ->
       exists2 vm2,
-        sem_for p' ev i vs (with_vm s1 vm1) (remove_init_c is_reg_array c) (with_vm s2 vm2) &
-        evm s2 <=1 vm2.
+        let: c' := remove_init_c is_reg_array c in
+        sem_for p' ev oi rn (with_vm s1 vm1) c' (with_vm s2 vm2)
+        & evm s2 <=1 vm2.
 
   Let Pfun scs m fn vargs scs' m' vres :=
     forall vargs',
@@ -174,11 +175,11 @@ Section REMOVE_INIT.
 
   Local Lemma Rfor : sem_Ind_for p ev Pi_r Pfor.
   Proof.
-    move=> s1 s2 i d lo hi c vlo vhi H H' _ Hfor ii vm1 Hvm1.
-    have [? H1 /value_uinclE H2]:= sem_pexpr_uincl Hvm1 H; subst.
-    have [? H3 /value_uinclE H4]:= sem_pexpr_uincl Hvm1 H'; subst.
-    have [vm2 ??]:= Hfor _ Hvm1; exists vm2 => //=.
-    by apply sem_seq1;constructor; econstructor; eauto; rewrite ?H1 ?H3.
+    move=> s1 s2 fi rn c hfi _ Hfor ii vm1 Hvm1.
+    have [???] := Hfor _ Hvm1.
+    eexists; last eassumption.
+    apply: sem_seq_ir.
+    econstructor; by eauto using sem_fi_uincl.
   Qed.
 
   Local Lemma Rfor_nil : sem_Ind_for_nil Pfor.
@@ -186,9 +187,10 @@ Section REMOVE_INIT.
 
   Local Lemma Rfor_cons : sem_Ind_for_cons p ev Pc Pfor.
   Proof.
-    move=> s1 s1' s2 s3 i w ws c Hi _ Hc _ Hf vm1 Hvm1.
-    have [vm1' Hi' /Hc [vm2 Hsc /Hf [vm3 Hsf Hvm3]]] := write_var_uincl Hvm1 (value_uincl_refl _) Hi.
-    exists vm3 => //; econstructor; eauto.
+    move=> s1 s1' s2 s3 oi w ws c hinit _ Hc _ Hf vm1 Hvm1.
+    have [?? /Hc [?? /Hf [???]]] := init_iteration_uincl Hvm1 hinit.
+    eexists; last eassumption.
+    econstructor; by eauto.
   Qed.
 
   Local Lemma Rcall : sem_Ind_call p ev Pi_r Pfun.
@@ -451,11 +453,11 @@ Section ADD_INIT.
 
   Local Lemma RAfor : sem_Ind_for p ev Pi_r Pfor.
   Proof.
-    move=> s1 s2 i d lo hi c vlo vhi H H' hsf hf ii.
+    move=> s1 s2 fi c rn hfi hsf hf ii.
     apply aux.
     + by constructor; econstructor; eauto.
     move=> vm1 /dup [] heq /hf [vm2] ? hs'; exists vm2 => //.
-    by constructor; econstructor; eauto; rewrite -(sem_pexpr_ext_eq _ _ _ heq).
+    constructor; econstructor; eauto; by rewrite sem_fi_ext_eq.
   Qed.
 
   Local Lemma RAfor_nil : sem_Ind_for_nil Pfor.
@@ -463,9 +465,10 @@ Section ADD_INIT.
 
   Local Lemma RAfor_cons : sem_Ind_for_cons p ev Pc Pfor.
   Proof.
-    move=> s1 s1' s2 s3 i w ws c Hi _ [] Hc _ _ Hf vm1 Hvm1.
-    have [vm2 /Hc [vm3] /Hf [vm4] *]:= write_lvar_ext_eq Hvm1 (Hi : write_lval true gd i w s1 = ok s1').
-    exists vm4 => //; by econstructor; eauto.
+    move=> s1 s1' s2 s3 oi w ws c hinit _ [Hc _] _ Hf vm1 Hvm1.
+    have [vm2 hinit' /Hc [? /Hf [???] ?]] := init_iteration_ext_eq hinit Hvm1.
+    eexists; first eassumption.
+    econstructor; by eauto.
   Qed.
 
   Local Lemma RAcall : sem_Ind_call p ev Pi_r Pfun.

@@ -2,5 +2,6 @@
 Require compiler.
 Require psem_defs.
 Require arm_params.
+Require otbn_params.
 Require x86_params.
 Require sem_params_of_arch_extra.

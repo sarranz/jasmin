@@ -222,6 +222,7 @@ type pinstr_r =
   | PIAssign    of plvals * peqop * pexpr * pexpr option
   | PIIf        of pexpr * pblock * pblock option
   | PIFor       of pident * (fordir * pexpr * pexpr) * pblock
+  | PIRepeat    of pexpr * pblock
   | PIWhile     of pblock option * pexpr * pblock option
   | PIdecl      of vardecls
 

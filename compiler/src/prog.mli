@@ -51,7 +51,9 @@ type 'len glval =
 
 type 'len glvals = 'len glval list
 
-type 'len grange = E.dir * 'len gexpr * 'len gexpr
+type 'len gfor_iteration =
+  | FIrange of 'len gvar_i * E.dir * 'len gexpr * 'len gexpr
+  | FIrepeat of 'len gexpr
 
 (* Warning E.sopn (E.Ocopy) contain a 'len without being polymorphic.
    Before instr this information is dummy ...
@@ -62,7 +64,7 @@ type ('len,'info,'asm) ginstr_r =
   | Copn   of 'len glvals * E.assgn_tag * 'asm Sopn.sopn * 'len gexprs
   | Csyscall of 'len glvals * BinNums.positive Syscall_t.syscall_t * 'len gexprs
   | Cif    of 'len gexpr * ('len,'info,'asm) gstmt * ('len,'info,'asm) gstmt
-  | Cfor   of 'len gvar_i * 'len grange * ('len,'info,'asm) gstmt
+  | Cfor   of 'len gfor_iteration * ('len,'info,'asm) gstmt
   | Cwhile of E.align * ('len,'info,'asm) gstmt * 'len gexpr * ('len,'info,'asm) gstmt
   | Ccall  of E.inline_info * 'len glvals * funname * 'len gexprs
 
@@ -264,6 +266,7 @@ val expr_of_lval : 'len glval -> 'len gexpr option
 (* -------------------------------------------------------------------- *)
 (* Functions over instruction                                           *)
 
+val iterator_of_fi : 'len gfor_iteration -> 'len gvar_i option
 val has_syscall : ('len, 'info, 'asm) gstmt -> bool
 val has_call_or_syscall : ('len, 'info, 'asm) gstmt -> bool
 val has_annot : Annotations.symbol -> ('len, 'info, 'asm) ginstr -> bool
@@ -275,7 +278,3 @@ val clamp_pe : pelem -> Z.t -> Z.t
 (* -------------------------------------------------------------------- *)
 type ('info,'asm) sfundef = Expr.stk_fun_extra * ('info,'asm) func 
 type ('info,'asm) sprog   = ('info,'asm) sfundef list * Expr.sprog_extra
-
-
-
-

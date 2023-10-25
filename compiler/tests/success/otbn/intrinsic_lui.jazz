@@ -1,0 +1,9 @@
+export
+fn lui(reg u32 x) {
+    x = #LUI(0);
+    [x] = x;
+    x = #LUI(1);
+    [x] = x;
+    x = #LUI(1048575);
+    [x] = x;
+}

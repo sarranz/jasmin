@@ -1,0 +1,10 @@
+export
+fn ori(reg u32 arg0) {
+    reg u32 x;
+    x = #ORI(arg0, 0);
+    x = #ORI(x, 1);
+    x = #ORI(x, -1);
+    x = #ORI(x, -2048);
+    x = #ORI(x, 2047);
+    [x] = x;
+}

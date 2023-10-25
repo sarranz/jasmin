@@ -1,0 +1,8 @@
+export
+fn main(reg u256 x y) -> reg u256 {
+    reg u256 r;
+    r = #BN_RSHI(x, y, 0);
+    r = #BN_RSHI(r, y, 1);
+    r = #BN_RSHI(x, r, 255);
+    return r;
+}

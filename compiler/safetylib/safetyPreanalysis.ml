@@ -68,7 +68,11 @@ end = struct
     | Laset (acc,ws,v,e) -> Laset (acc,ws, mk_v_loc fn v, mk_expr fn e)
     | Lasub (acc,ws,len,v,e) -> Lasub (acc,ws,len, mk_v_loc fn v, mk_expr fn e)
 
-  and mk_range fn (dir, e1, e2) = (dir, mk_expr fn e1, mk_expr fn e2)
+  and mk_fi fn fi =
+    match fi with
+    | FIrange (i, d, elo, ehi) ->
+        FIrange (mk_v_loc fn i, d, mk_expr fn elo, mk_expr fn ehi)
+    | FIrepeat e -> FIrepeat (mk_expr fn e)
 
   and mk_lvals fn lvs = List.map (mk_lval fn) lvs
 
@@ -87,8 +91,8 @@ end = struct
         Csyscall(mk_lvals fn lvls, o, mk_exprs fn exprs)
     | Cif (e, st, st') ->
       Cif (mk_expr fn e, mk_stmt fn st, mk_stmt fn st')
-    | Cfor (v, r, st) ->
-      Cfor (mk_v_loc fn v, mk_range fn r, mk_stmt fn st)
+    | Cfor (fi, st) ->
+      Cfor (mk_fi fn fi, mk_stmt fn st)
     | Ccall (inlinf, lvs, c_fn, es) ->
       Ccall (inlinf, mk_lvals fn lvs, c_fn, mk_exprs fn es)
     | Cwhile (a, st1, e, st2) ->
@@ -335,7 +339,7 @@ end = struct
           if r1 = r2 then Some r1 else raise Flag_set_from_failure
         | None, Some _ | Some _, None -> raise Flag_set_from_failure end
 
-    | Cfor (_, _, c) ->
+    | Cfor (_, c) ->
       pa_flag_setfrom v (List.rev c)
 
     | Cwhile (_, c1, _, c2) ->
@@ -363,7 +367,7 @@ end = struct
       (* Note that we reset the context after the merge *)
       st_merge (pa_stmt fn prog st' c1) (pa_stmt fn prog st' c2) st.ct
 
-    | Cfor (_, _, c) ->
+    | Cfor (_, c) ->
       (* We ignore the loop index, since we do not use widening for loops. *)
       pa_stmt fn prog st c
 
@@ -507,9 +511,12 @@ end = struct
       let sv = collect_vars_is sv st1 in
       let sv = collect_vars_is sv st2 in
       collect_vars_e sv e
-    | Cfor (v,(_,e1,e2),st) ->
+    | Cfor (FIrange (v, _, e1, e2), st) ->
       let sv = collect_vars_is (Sv.add (L.unloc v) sv) st in
       collect_vars_es sv [e1;e2]
+    | Cfor (FIrepeat e, st) ->
+      let sv = collect_vars_is sv st in
+      collect_vars_e sv e
     | Copn (lvs, _, _, es) | Csyscall(lvs, _, es) ->
       let sv = collect_vars_lvs sv lvs in
       collect_vars_es sv es

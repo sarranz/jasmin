@@ -1,0 +1,20 @@
+export
+fn bn_sub(reg u256 arg0 arg1) -> reg u256 {
+    reg u256 x;
+
+    ?{}, x = #BN_SUB(arg0, arg1);
+    ?{}, x = #BN_SUB(x, arg1 << 0);
+    ?{}, x = #BN_SUB(x, arg1 << 8);
+    ?{}, x = #BN_SUB(x, arg1 << 16);
+    ?{}, x = #BN_SUB(x, arg1 << 248);
+
+    ?{}, x = #BN_SUB_FG0(x, arg1);
+
+    ?{}, x = #BN_SUB_FG1(x, arg1);
+    ?{}, x = #BN_SUB_FG1(x, arg1 << 0);
+    ?{}, x = #BN_SUB_FG1(x, arg1 << 8);
+    ?{}, x = #BN_SUB_FG1(x, arg1 << 16);
+    ?{}, x = #BN_SUB_FG1(x, arg1 << 248);
+
+    return x;
+}

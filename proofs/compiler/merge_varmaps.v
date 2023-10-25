@@ -69,7 +69,7 @@ Section WRITE1.
     | Copn xs _ _ _   => vrvs_rec s xs
     | Csyscall xs o _  => vrvs_rec (Sv.union s syscall_kill) (to_lvals (syscall_sig o).(scs_vout))
     | Cif   _ c1 c2   => foldl write_I_rec (foldl write_I_rec s c2) c1
-    | Cfor  x _ c     => foldl write_I_rec (Sv.add x s) c
+    | Cfor fi c => foldl write_I_rec (write_fi_rec s fi) c
     | Cwhile _ c _ c' => foldl write_I_rec (foldl write_I_rec s c') c
     | Ccall _ _ fn _  => Sv.union s (writefun_ra fn)
     end
@@ -128,6 +128,16 @@ Section CHECK.
 
     Context (ii: instr_info) (c1: cmd) (efv: Sv.t) (c2: cmd).
 
+    Fixpoint loop_for (fuel : nat) (D : Sv.t) : cexec Sv.t :=
+      if fuel is S n
+      then
+        Let _ := check_fv ii D efv in
+        Let D' := check_c D c1 in
+        if Sv.subset D' D
+        then ok D
+        else loop_for n (Sv.union D D')
+      else Error (E.ii_loop_iterator ii).
+
     Fixpoint wloop (n: nat) (D: Sv.t) :=
       if n is S n' then
         (* while c1 e c2 = c1; while e do c2; c1 *)
@@ -179,8 +189,12 @@ Section CHECK.
       Let D1 := check_c (check_i sz) D c1 in
       Let D2 := check_c (check_i sz) D c2 in
       ok (Sv.union D1 D2)
-    | Cfor _ _ _ =>
-      Error (E.internal_error ii "for loop should be unrolled")
+    | Cfor fi c =>
+      match fi with
+      | FIrange _ _ _ _ =>
+          Error (E.internal_error ii "for loop should be unrolled")
+      | FIrepeat e => loop_for (check_i sz) ii c (read_e e) Loop.nb D
+      end
     | Cwhile _ c e c' =>
       if is_false e then check_c (check_i sz) D c
       else wloop (check_i sz) ii c (read_e e) c' Loop.nb D

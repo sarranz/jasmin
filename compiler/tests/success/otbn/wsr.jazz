@@ -1,0 +1,7 @@
+export
+fn wsr(reg u256 x) -> reg u256 {
+    reg u256 acc;
+    acc = #BN_ACCW(x);
+    x = #BN_ACCR(acc);
+    return x;
+}

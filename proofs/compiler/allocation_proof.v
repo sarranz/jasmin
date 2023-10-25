@@ -325,6 +325,54 @@ Proof.
     /h{h} [vm2' /= -> ?] <-; eexists.
 Qed.
 
+Lemma rewrite_sem_FIrange {wdb gd s i d elo ehi zlo zhi} :
+  sem_pexpr wdb gd s elo = ok (Vint zlo) ->
+  sem_pexpr wdb gd s ehi = ok (Vint zhi) ->
+  sem_fi wdb gd s (FIrange i d elo ehi) = ok (wrange d zlo zhi).
+Proof. by rewrite /sem_fi /sem_pexpr_int => -> ->. Qed.
+
+Lemma rewrite_sem_FIrepeat {wdb gd s e ws w'} {w : word ws} :
+  sem_pexpr wdb gd s e = ok (Vword w) ->
+  truncate_word Uptr w = ok w' ->
+  sem_fi wdb gd s (FIrepeat e) = ok (ziota 0 (wunsigned w')).
+Proof. by rewrite /sem_fi /sem_pexpr_word => -> /= ->. Qed.
+
+Opaque sem_fi.
+
+#[local]
+Lemma check_fiP {wdb gd fi1 fi2 oi1 oi2 rhi rhi' vm1 vm2} :
+  check_fi fi1 fi2 rhi = ok (oi1, oi2, rhi') ->
+  eq_alloc rhi vm1 vm2 ->
+  [/\ eq_alloc rhi' vm1 vm2
+    , forall s rn1,
+        sem_fi wdb gd (with_vm s vm1) fi1 = ok rn1 ->
+        sem_fi wdb gd (with_vm s vm2) fi2 = ok rn1
+    , iterator_of_fi fi1 = oi1
+    & iterator_of_fi fi2 = oi2
+  ].
+Proof.
+  case: fi1 => [i1 d1 elo1 ehi1 | e1];
+    case: fi2 => [i2 d2 elo2 ehi2 | e2] //=;
+    t_xrbindP.
+  - move=> /eqP ? rhi0 hchklo rhi1 hchkhi ??? heq; subst oi1 oi2 d1 rhi1.
+    have [heq0 h0] := check_eP wdb gd hchklo heq.
+    have [heq1 h1] := check_eP wdb gd hchkhi heq0.
+    split=> //.
+    move=> s rn /sem_fiI [lo1 [hi1 [hlo1 hhi1 ?]]]; subst rn.
+    move: hlo1 => /h0 [x [? /value_uinclE ?]]; subst x.
+    move: hhi1 => /h1 [x [? /value_uinclE ?]]; subst x.
+    exact: rewrite_sem_FIrange.
+
+  move=> rhi0 hchk ??? heq; subst oi1 oi2 rhi0.
+  have [heq' h] := check_eP wdb gd hchk heq.
+  split=> //.
+  move=> s rn /sem_fiI [ws [w [w' [hw ??]]]]; subst rn.
+  move: hw => /h [x [hsem /value_uinclE [? [? [??]]]]]; subst x.
+  apply: (rewrite_sem_FIrepeat hsem).
+  apply: word_uincl_truncate; eassumption.
+Qed.
+
+
 Section PROG.
 
 Context
@@ -400,12 +448,12 @@ Section PROOF.
     exists2 vm2, eq_alloc r2 (evm s2) vm2 &
       sem p2 ev (with_vm s1 vm1) c2 (with_vm s2 vm2).
 
-  Let Pfor (i1:var_i) vs s1 c1 s2 :=
-    forall i2 r1 r1' c2 r2 vm1, eq_alloc r1 (evm s1) vm1 ->
-    check_var i1 i2 r1 = ok r1' ->
+  Let Pfor oi1 vs s1 c1 s2 :=
+    forall oi2 r1 r1' c2 r2 vm1, eq_alloc r1 (evm s1) vm1 ->
+    check_iteration_var oi1 oi2 r1 = ok r1' ->
     check_cmd c1 c2 r1' = ok r2 -> M.incl r1 r2 ->
     exists2 vm2, eq_alloc r1 (evm s2) vm2 &
-      sem_for p2 ev i2 vs (with_vm s1 vm1) c2 (with_vm s2 vm2).
+      sem_for p2 ev oi2 vs (with_vm s1 vm1) c2 (with_vm s2 vm2).
 
   Let Pfun scs m fn vargs1 scs' m' vres :=
     forall vargs2, List.Forall2 value_uincl vargs1 vargs2 ->
@@ -574,15 +622,14 @@ Section PROOF.
 
   Local Lemma Hfor : sem_Ind_for p1 ev Pi_r Pfor.
   Proof.
-    move => s1 s2 i d lo hi c vlo vhi.
-    case: s1 => scs1 sm1 svm1 Hlo Hhi Hc Hfor r1 [] //= i2 [[d2 lo2] hi2] c2 r2 vm1 Hvm1.
+    move=> s1 s2 fi1 c1 rn.
+    case: s1 => scs1 sm1 svm1 hfi Hc Hfor r1 [] //= fi2 c2 r2 vm1 Hvm1.
     rewrite /check_i -/check_I.
-    case: eqP => //= ?;subst d2.
-    t_xrbindP => r1' r1'' /check_eP -/(_ true gd _ _ Hvm1) [Hr1'' Heqlo].
-    have [vlo'' [Hlo2 /value_uinclE Hvlo']] := Heqlo _ _ _ Hlo.
-    subst vlo'' => /check_eP -/(_ true gd _ _ Hr1'') [Hr1' Heqhi].
-    have [vhi'' [Hhi2 /value_uinclE Hhi']] := Heqhi _ _ _ Hhi.
-    subst vhi'' => /loopP [r2'] []; t_xrbindP=> r2'' Hcv Hcc Hr2r1 Hr2r2.
+    t_xrbindP=> -[[oi1 oi2] r1'].
+    move=>
+      /check_fiP -/(_ true gd _ _ Hvm1) []
+      Hr1'' /(_ {| evm := svm1; |} _ hfi) hfi' hoi1 hoi2
+      /loopP [r2'] []; t_xrbindP=> r2'' Hcv Hcc Hr2r1 Hr2r2.
     have := Hfor _ _ _ _ _ _ (eq_alloc_incl Hr2r1 Hr1') Hcv Hcc Hr2r2.
     move=> [vm2 Hvm2 Hsem2];exists vm2 => //.
     econstructor; rewrite -?eq_globs ?Hlo2 ?Hhi2 /= ;eauto.

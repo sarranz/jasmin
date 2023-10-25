@@ -1088,6 +1088,14 @@ Qed.
 Definition conc_map aT bT (f : aT -> seq bT) (l : seq aT) :=
   flatten (map f l).
 
+Definition conc_mapM
+  (eT aT bT : Type)
+  (f : aT -> result eT (seq bT))
+  (s : seq aT) :
+  result eT (seq bT) :=
+  Let x := mapM f s in ok (flatten x).
+
+
 (* -------------------------------------------------------------------------- *)
 (* Operators to build comparison                                              *)
 (* ---------------------------------------------------------------------------*)

@@ -1,0 +1,10 @@
+export
+fn andi(reg u32 arg0) {
+    reg u32 x;
+    x = #ANDI(arg0, 0);
+    x = #ANDI(x, 1);
+    x = #ANDI(x, -1);
+    x = #ANDI(x, -2048);
+    x = #ANDI(x, 2047);
+    [x] = x;
+}

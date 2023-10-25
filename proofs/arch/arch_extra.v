@@ -236,8 +236,10 @@ Proof. move=> [] hsize _; apply/eqP/reg_size_neq_xreg_size:hsize. Qed.
 
 Definition var_of_implicit_arg (i : implicit_arg) : var :=
   match i with
-  | IArflag r => to_var r
-  | IAreg r => to_var r
+  | IArflag r
+  | IAreg r
+  | IAxreg r
+      => to_var r
   end.
 
 Definition sopn_arg_desc (ad:arg_desc) :=
@@ -325,3 +327,7 @@ Global Instance asm_opI : asmOp extended_op :=
     sopn.prim_string := get_prime_op }.
 
 End AsmOpI.
+
+Definition get_flag
+  `{arch_decl} (get : asm_typed_reg -> value) (f : rflag) : exec bool :=
+  to_bool (get (ABReg f)).

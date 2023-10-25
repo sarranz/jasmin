@@ -1,0 +1,13 @@
+export
+fn srl(reg u32 arg0, reg u32 arg1) {
+    reg u32 x;
+
+    x = arg0 >> arg1;
+    x >>= arg0;
+    [x] = x;
+
+    x = arg0 >> 1;
+    x >>= 1;
+    x >>= 31;
+    [x] = x;
+}

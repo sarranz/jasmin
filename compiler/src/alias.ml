@@ -194,7 +194,6 @@ let opn_cc o =
 
 let rec analyze_instr_r params cc a =
   function
-  | Cfor _ -> assert false
   | Ccall (_, xs, fn, es) -> link_array_return params a xs es (cc fn)
   | Csyscall (xs, o, es) -> link_array_return params a xs es (syscall_cc o)
   | Cassgn (x, _, ty, e) -> if is_ty_arr ty then assign_arr params a x e else a
@@ -208,6 +207,16 @@ let rec analyze_instr_r params cc a =
      let a1 = analyze_stmt params cc a s1 |> normalize_map in
      let a2 = analyze_stmt params cc a s2 |> normalize_map in
      merge params a1 a2
+  | Cfor (FIrange _, _) -> assert false
+  | Cfor (FIrepeat _, c) ->
+     (* Precondition: a is in normal form *)
+     let rec loop a =
+       let a' = analyze_stmt params cc a c |> normalize_map in
+       if incl a' a
+       then a'
+       else loop (merge params a' a |> normalize_map)
+     in
+     loop (normalize_map a)
   | Cwhile (_, s1, _, s2) ->
      (* Precondition: a is in normal form *)
      let rec loop a =

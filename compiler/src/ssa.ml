@@ -32,8 +32,8 @@ let written_vars_lvars allvars = List.fold_left (written_vars_lvar allvars)
 
 let rec written_vars_instr_r allvars w =
   function
-  | Cfor (_, _, s)
-    -> written_vars_stmt allvars w s
+  | Cfor (FIrepeat _, s) -> written_vars_stmt allvars w s
+  | Cfor (FIrange _, _) -> assert false
   | Cassgn (x, _, _, _) -> written_vars_lvar allvars w x
   | Copn (xs, _, _, _)
   | Csyscall(xs,_,_)
@@ -51,6 +51,15 @@ let ir (m: names) (x: var) (y: var) : (unit, 'asm) instr =
   let v u = L.mk_loc L._dummy u in
   let i_desc = Cassgn (Lvar (v y), AT_phinode, y.v_ty, Pvar (gkvar (v x))) in
   { i_desc ; i_info = () ; i_loc = L.i_dummy ; i_annot = [] }
+
+(* Issue assignments [x = m[x]] for each [x] in both [written] and [needed]. *)
+let slr_tail written needed m m' =
+  let f x acc =
+    if Sv.mem x needed
+    then let y = Mv.find_default x x m in ir m' x y :: acc
+    else acc
+  in
+  Sv.fold f written []
 
 let split_live_ranges (allvars: bool) (f: ('info, 'asm) func) : (unit, 'asm) func =
   let f = Liveness.live_fd false f in
@@ -72,7 +81,6 @@ let split_live_ranges (allvars: bool) (f: ('info, 'asm) func) : (unit, 'asm) fun
       let es = List.map (rename_expr m) es in
       let m, ys = rename_lvals allvars m xs in
       m, Ccall (ii, ys, n, es)
-    | Cfor _ -> assert false
     | Cif (e, s1, s2) ->
       let os = written_vars_stmt allvars (written_vars_stmt allvars Sv.empty s1) s2 in
       let e = rename_expr m e in
@@ -88,18 +96,19 @@ let split_live_ranges (allvars: bool) (f: ('info, 'asm) func) : (unit, 'asm) fun
           ) os (m, [], [])
       in
       m, Cif (e, s1 @ tl1, s2 @ tl2)
+    | Cfor (FIrepeat e, c) ->
+      let os = written_vars_stmt allvars Sv.empty c in
+      let e = rename_expr m e in
+      let m', c = stmt m c in
+      let tl = slr_tail os li m m' in
+      m, Cfor (FIrepeat e, c @ tl)
+    | Cfor (FIrange _, _) -> assert false
     | Cwhile (a, s1, e, s2) ->
       let os = written_vars_stmt allvars (written_vars_stmt allvars Sv.empty s1) s2 in
       let m1, s1 = stmt m s1 in
       let e = rename_expr m1 e in
       let m2, s2 = stmt m1 s2 in
-      let tl2 =
-        Sv.fold (fun x tl2 ->
-            if Sv.mem x li
-            then let y = Mv.find_default x x m in ir m2 x y :: tl2
-            else tl2
-          ) os []
-      in
+      let tl2 = slr_tail os li m m2 in
       m1, Cwhile (a, s1, e, s2 @ tl2)
   and instr (m, tl) i =
     let { i_desc ; i_info = (li, lo) ; i_loc ; _ } = i in
@@ -130,7 +139,8 @@ let remove_phi_nodes (f: ('info, 'asm) func) : ('info, 'asm) func =
        | _ -> Some i)
     | Cif (b, s1, s2) -> Some (Cif (b, stmt s1, stmt s2))
     | Cwhile (a, s1, b, s2) -> Some (Cwhile (a, stmt s1, b, stmt s2))
-    | (Copn _ | Csyscall _ | Cfor _ | Ccall _) as i -> Some i
+    | Cfor (fi, c) -> Some (Cfor (fi, stmt c))
+    | (Copn _ | Csyscall _ | Ccall _) as i -> Some i
   and instr i =
     try Option.map (fun i_desc -> { i with i_desc }) (instr_r i.i_desc)
     with HiError e -> raise (HiError (add_iloc e i.i_loc))

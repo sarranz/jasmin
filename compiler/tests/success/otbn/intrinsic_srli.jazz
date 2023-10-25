@@ -1,0 +1,9 @@
+export
+fn srli(reg u32 arg0) {
+    reg u32 x;
+    x = #SRLI(arg0, 0);
+    x = #SRLI(x, 1);
+    x = #SRLI(x, 31);
+    [x] = x;
+}
+

@@ -536,6 +536,18 @@ Definition assemble_i (rip : var) (i : linstr) : cexec (seq asm_i) :=
       else Error (E.verror true "Not a register" ii r) in
       ok [:: JAL r l ]
 
+  | Lrepeat_call cnt fn =>
+      Let cnt' :=
+        match cnt with
+        | inl x =>
+            if to_reg x is Some r
+            then ok (inl r)
+            else Error (E.verror true "Not a register" ii x)
+        | inr z => ok (inr z)
+        end : cexec (reg_t + Z)
+      in
+      ok [:: REPEATCALL cnt' fn ]
+
   | Lret =>
       ok [:: POPPC ]
 

@@ -1,0 +1,10 @@
+export
+fn addi(reg u32 arg0) {
+    reg u32 x;
+    x = #ADDI(arg0, 0);
+    x = #ADDI(x, 1);
+    x = #ADDI(x, -1);
+    x = #ADDI(x, -2048);
+    x = #ADDI(x, 2047);
+    [x] = x;
+}

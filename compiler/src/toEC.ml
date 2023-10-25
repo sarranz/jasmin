@@ -67,6 +67,11 @@ let write_mem_lval = function
 let read_mem_lvals = List.exists read_mem_lval
 let write_mem_lvals = List.exists write_mem_lval
 
+let read_mem_fi fi =
+  match fi with
+  | FIrange(_, _, elo, ehi) -> read_mem_e elo || read_mem_e ehi
+  | FIrepeat e -> read_mem_e e
+
 let rec read_mem_i s i =
   match i.i_desc with
   | Cassgn (x, _, _, e) -> read_mem_lval x || read_mem_e e
@@ -74,7 +79,7 @@ let rec read_mem_i s i =
   | Cif (e, c1, c2)     -> read_mem_e e || read_mem_c s c1 || read_mem_c s c2
   | Cwhile (_, c1, e, c2)  -> read_mem_c s c1 || read_mem_e e || read_mem_c s c2
   | Ccall (_, xs, fn, es) -> read_mem_lvals xs || Sf.mem fn s || read_mem_es es
-  | Cfor (_, (_, e1, e2), c) -> read_mem_e e1 || read_mem_e e2 || read_mem_c s c
+  | Cfor (fi, c) -> read_mem_fi fi || read_mem_c s c
 
 and read_mem_c s = List.exists (read_mem_i s)
 
@@ -87,7 +92,7 @@ let rec write_mem_i s i =
   | Cif (_, c1, c2)      -> write_mem_c s c1 ||write_mem_c s c2
   | Cwhile (_, c1, _, c2)   -> write_mem_c s c1 ||write_mem_c s c2
   | Ccall (_, xs, fn, _) -> write_mem_lvals xs || Sf.mem fn s 
-  | Cfor (_, _, c)       -> write_mem_c s c 
+  | Cfor (_, c) -> write_mem_c s c
 
 and write_mem_c s = List.exists (write_mem_i s)
 
@@ -808,8 +813,9 @@ let rec is_write_i x i =
     is_write_lvs x lvs
   | Cif(_, c1, c2) | Cwhile(_, c1, _, c2) -> 
     is_write_c x c1 || is_write_c x c2 
-  | Cfor(x',_,c) -> 
+  | Cfor(FIrange(x',_, _, _), c) -> 
     V.equal x x'.L.pl_desc || is_write_c x c
+  | Cfor(FIrepeat _, c) -> is_write_c x c
 
 and is_write_c x c = List.exists (is_write_i x) c
   
@@ -819,15 +825,16 @@ let rec remove_for_i i =
     | Cassgn _ | Copn _ | Ccall _ | Csyscall _ -> i.i_desc
     | Cif(e, c1, c2) -> Cif(e, remove_for c1, remove_for c2)
     | Cwhile(a, c1, e, c2) -> Cwhile(a, remove_for c1, e, remove_for c2)
-    | Cfor(j,r,c) -> 
+    | Cfor(FIrange(j, elo, ehi, d), c) ->
       let jd = j.pl_desc in
-      if not (is_write_c jd c) then Cfor(j, r, remove_for c)
+      if not (is_write_c jd c) then Cfor(FIrange(j, elo, ehi, d), remove_for c)
       else 
         let jd' = V.clone jd in
         let j' = { j with pl_desc = jd' } in
         let ii' = Cassgn (Lvar j, E.AT_inline, jd.v_ty, Pvar (gkvar j')) in
         let ii' = { i with i_desc = ii' } in
-        Cfor (j', r, ii' :: remove_for c)
+        Cfor (FIrange(j', elo, ehi, d), ii' :: remove_for c)
+    | Cfor(FIrepeat e, c) -> Cfor(FIrepeat e, remove_for c)
   in
   { i with i_desc }   
 and remove_for c = List.map remove_for_i c
@@ -847,7 +854,7 @@ module Normal = struct
     | Cif(_, c1, c2)
     | Cwhile(_, c1, _, c2) ->
         init_aux pd asmOp (init_aux pd asmOp env c1) c2
-    | Cfor(_,_,c) -> init_aux pd asmOp (add_aux env [tint]) c
+    | Cfor(_, c) -> init_aux pd asmOp (add_aux env [tint]) c
     | Copn (lvs, _, op, _) -> 
       if List.length lvs = 1 then env 
       else
@@ -887,6 +894,40 @@ module Normal = struct
       Format.fprintf fmt "@[%a %a;@]" pp_aux_lvs auxs pp a;
       let tyauxs = List.combine (List.combine etyso etysi) auxs in
       List.iter2 (pp_assgn_i pd env fmt) lvs tyauxs
+
+  (* Return printers for:
+     - The iterator variable.
+     - The initialization of the end value.
+     - The start value.
+     - The end value.
+     And a boolean for whether to increment or decrement the iterator. *)
+  let get_pp_fi pd env fi =
+    let pp_i, is_inc, estart, eend =
+      match fi with
+      | FIrange(i, d, elo, ehi) ->
+          let pp_i fmt () = pp_var env fmt (L.unloc i) in
+          (* Decreasing for loops have swapped bounds. *)
+          if d = UpTo
+          then pp_i, true, elo, ehi
+          else pp_i, false, ehi, elo
+      | FIrepeat e ->
+          let i = List.hd (get_aux env [tint]) in
+          let pp_i = fun fmt () -> pp_string fmt i in
+          pp_i, true, Pconst Z.zero, e
+    in
+    let pp_start fmt () = pp_expr pd env fmt estart in
+    let pp_end_init, pp_end =
+      match eend with
+      (* Can be generalized to the case where e2 is not modified by c and i *)
+      | Pconst _ -> (fun _ () -> ()), fun fmt () -> pp_expr pd env fmt eend
+      | _ ->
+          let aux = List.hd (get_aux env [tint]) in
+          let pp_end_init fmt () =
+            Format.fprintf fmt "@[%s <-@ %a@];@ " aux (pp_expr pd env) eend
+          in
+          pp_end_init, (fun fmt () -> pp_string fmt aux)
+    in
+    pp_i, pp_end_init, pp_start, pp_end, is_inc
 
   let rec pp_cmd pd asmOp env fmt c =
     Format.fprintf fmt "@[<v>%a@]" (pp_list "@ " (pp_instr pd asmOp env)) c
@@ -954,37 +995,25 @@ module Normal = struct
     | Cwhile(_, c1, e,c2) ->
       Format.fprintf fmt "@[<v>%a@ while (%a) {@   %a@ }@]"
         (pp_cmd pd asmOp env) c1 (pp_expr pd env) e (pp_cmd pd asmOp env) (c2@c1)
-      
-    | Cfor(i, (d,e1,e2), c) ->
-      (* decreasing for loops have bounds swaped *)
-      let e1, e2 = if d = UpTo then e1, e2 else e2, e1 in 
-      let pp_init, pp_e2 = 
-        match e2 with
-        (* Can be generalized to the case where e2 is not modified by c and i *)
-        | Pconst _ -> (fun _fmt () -> ()), (fun fmt () -> pp_expr pd env fmt e2)
-        | _ -> 
-          let aux = List.hd (get_aux env [tint]) in
-          let pp_init fmt () = 
-            Format.fprintf fmt "@[%s <-@ %a@];@ " aux (pp_expr pd env) e2 in
-          let pp_e2 fmt () = pp_string fmt aux in
-          pp_init, pp_e2 in
-      let pp_i fmt () = pp_var env fmt (L.unloc i) in
-      let pp_i1, pp_i2 = 
-        if d = UpTo then pp_i , pp_e2
-        else pp_e2, pp_i in
-      Format.fprintf fmt 
+
+    | Cfor(fi, c) ->
+      let pp_i, pp_end_init, pp_start, pp_end, is_inc = get_pp_fi pd env fi in
+      let pp_condl = if is_inc then pp_i else pp_end in
+      let pp_condr = if is_inc then pp_end else pp_i in
+      Format.fprintf fmt
         "@[<v>%a%a <- %a;@ while (%a < %a) {@   @[<v>%a@ %a <- %a %s 1;@]@ }@]"
-        pp_init () 
-        pp_i () (pp_expr pd env) e1 
-        pp_i1 () pp_i2 ()
+        pp_end_init ()
+        pp_i () pp_start ()
+        pp_condl () pp_condr ()
         (pp_cmd pd asmOp env) c
-        pp_i () pp_i () (if d = UpTo then "+" else "-")
+        pp_i () pp_i () (if is_inc then "+" else "-")
 
 end
 
 module Leak = struct 
 
-  type safe_cond = 
+  type safe_cond =
+ 
     | Initv of var 
     | Initai of wsize * var * expr 
     | Inita of var * int
@@ -1160,7 +1189,7 @@ module Leak = struct
       if lvs = [] then env 
       else add_aux env (List.map ty_lval lvs)
     | Cif(_, c1, c2) | Cwhile(_, c1, _, c2) -> init_aux pd asmOp (init_aux pd asmOp env c1) c2
-    | Cfor(_,_,c) -> 
+    | Cfor(_, c) ->
       if for_safety env then
         init_aux pd asmOp (add_aux env [tint; tint]) c
       else
@@ -1272,7 +1301,7 @@ module Leak = struct
         (pp_cmd pd asmOp env) c1 pp_leak e (pp_expr pd env) e
         (pp_cmd pd asmOp env) (c2@c1) pp_leak e
 
-    | Cfor(i, (d,e1,e2), c) ->
+    | Cfor(FIrange(i, d, e1, e2), c) ->
       pp_leaks_for pd env fmt e1 e2;
       let aux, env1 = 
         if for_safety env then 
@@ -1305,6 +1334,8 @@ module Leak = struct
         pp_i () pp_i () (if d = UpTo then "+" else "-")
         pp_restore ()
 
+    (* TODO: Implement this. *)
+    | Cfor (FIrepeat _, _) -> assert false
 end 
 
 let pp_aux fmt env = 
@@ -1406,14 +1437,18 @@ let jmodel () =
   match !target_arch with
   | X86_64 -> "JModel_x86"
   | ARM_M4 -> "JModel_m4"
+  | OTBN -> "JModel_otbn"
 
 let require_lib_slh () =
-  let s =
+  let libname =
     match !Glob_options.target_arch with
-    | X86_64 -> "SLH64"
-    | ARM_M4 -> "SLH32"
+    | X86_64 -> Some "SLH64"
+    | ARM_M4 -> Some "SLH32"
+    | OTBN -> None
   in
-  Format.sprintf "import %s." s
+  match libname with
+  | Some s -> Format.sprintf "import %s." s
+  | None -> ""
 
 let pp_prog pd asmOp fmt model globs funcs arrsz warrsz randombytes =
 
@@ -1489,7 +1524,7 @@ and used_func_i used i =
   match i.i_desc with
   | Cassgn _ | Copn _ | Csyscall _ -> used
   | Cif (_,c1,c2)     -> used_func_c (used_func_c used c1) c2
-  | Cfor(_,_,c)       -> used_func_c used c
+  | Cfor(_, c)       -> used_func_c used c
   | Cwhile(_,c1,_,c2)   -> used_func_c (used_func_c used c1) c2
   | Ccall (_,_,f,_)   -> Ss.add f.fn_name used
 

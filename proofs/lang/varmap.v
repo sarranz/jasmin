@@ -1031,6 +1031,11 @@ Section REL_EQUIV.
     move => hxY; rewrite -!(t1, t2) //; apply out; SvD.fsetdec.
   Qed.
 
+  Lemma eq_on_unionI s0 s1 vm vm' :
+    vm =[ Sv.union s0 s1 ] vm' ->
+    vm =[ s0 ] vm' /\ vm =[ s1 ] vm'.
+  Proof. move=> h. split=> z hz; apply: h; SvD.fsetdec. Qed.
+
   Lemma uincl_on_union vm1 vm2 vm1' vm2' X Y :
     vm1  <=[X]  vm2 →
     vm1' <=[Y]  vm2' →

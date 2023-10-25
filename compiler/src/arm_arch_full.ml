@@ -26,6 +26,8 @@ module Arm_core = struct
 
   let known_implicits = ["NF", "_nf_"; "ZF", "_zf_"; "CF", "_cf_"; "VF", "_vf_"]
 
+  let reg_unallocatable = []
+  let xreg_unallocatable = []
 end
 
 module Arm (Lowering_params : Arm_input) : Arch_full.Core_arch = struct

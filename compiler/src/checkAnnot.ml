@@ -72,9 +72,11 @@ and check_no_for_loop_i_r ~funname ~loc = function
   | Cif (_, a, b) | Cwhile (_, a, _, b) ->
       check_no_for_loop ~funname a;
       check_no_for_loop ~funname b
-  | Cfor _ ->
+  | Cfor (FIrange _, _) ->
       hierror ~funname ~loc:(Lmore loc) ~kind:"compilation error"
         ~sub_kind:"loop unrolling" ~internal:false "for loops remain"
+  | Cfor (FIrepeat _, c) ->
+      check_no_for_loop ~funname c
 
 let check_no_for_loop (_, fds) =
   List.iter

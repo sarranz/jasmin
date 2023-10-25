@@ -54,6 +54,13 @@ let pp_instr pd asmOp fmt i =
   | Ligoto e -> F.fprintf fmt "IGoto %a" pp_rexpr e
   | LstoreLabel (x, lbl) -> F.fprintf fmt "%a = Label %a" pp_var x pp_label lbl
   | Lcond (e, lbl) -> F.fprintf fmt "If %a goto %a" pp_fexpr e pp_label lbl
+  | Lrepeat_call (count, fn) ->
+      let pp_count fmt c =
+        match c with
+        | Datatypes.Coq_inl v -> pp_var_i fmt v
+        | Datatypes.Coq_inr cz -> Z.pp_print fmt (Conv.z_of_cz cz)
+      in
+      Format.fprintf fmt "Call %s %a times" fn.P.fn_name pp_count count
 
 let pp_param fmt x =
   let y = Conv.var_of_cvar x.E.v_var in

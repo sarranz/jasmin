@@ -1,0 +1,23 @@
+export
+fn bn_cmpb(reg u256 arg0 arg1) -> reg u256 {
+    // TODO_OTBN: Do something with the flags so that this isn't dead code.
+    reg bool cf0 cf1;
+
+    ?{ cf0 } = #BN_CMP(arg0, arg1);
+    ?{ cf0 } = #BN_CMPB(arg0, arg1, cf0);
+    ?{ cf0 } = #BN_CMPB(arg0, arg1 << 0, cf0);
+    ?{ cf0 } = #BN_CMPB(arg0, arg1 << 8, cf0);
+    ?{ cf0 } = #BN_CMPB(arg0, arg1 << 16, cf0);
+    ?{ cf0 } = #BN_CMPB(arg0, arg1 << 248, cf0);
+
+    ?{} = #BN_CMPB_FG0(arg0, arg1, cf0);
+
+    ?{ cf1 } = #BN_CMP_FG1(arg0, arg1);
+    ?{ cf1 } = #BN_CMPB_FG1(arg0, arg1, cf1);
+    ?{ cf1 } = #BN_CMPB_FG1(arg0, arg1 << 0, cf1);
+    ?{ cf1 } = #BN_CMPB_FG1(arg0, arg1 << 8, cf1);
+    ?{ cf1 } = #BN_CMPB_FG1(arg0, arg1 << 16, cf1);
+    ?{} = #BN_CMPB_FG1(arg0, arg1 << 248, cf1);
+
+    return arg0;
+}

@@ -1,0 +1,6 @@
+export
+fn xor(reg u32 arg0 arg1) {
+    reg u32 x;
+    x = #XOR(arg0, arg1);
+    [x] = x;
+}

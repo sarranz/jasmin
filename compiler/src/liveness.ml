@@ -47,7 +47,11 @@ and live_d weak d (s_o: Sv.t) =
     let s2, c2 = live_c weak c2 s_o in
     Sv.union (vars_e e) (Sv.union s1 s2), s_o, Cif(e, c1, c2)
 
-  | Cfor _ -> assert false (* Should have been removed before *)
+  | Cfor(FIrange _, _) -> assert false
+
+  | Cfor(FIrepeat e, c) ->
+    let s_i, c = live_c weak c s_o in
+    Sv.union s_o (Sv.union (vars_e e) s_i), s_o, Cfor(FIrepeat e, c)
 
   | Cwhile(a,c,e,c') ->
     let ve = (vars_e e) in
@@ -93,7 +97,7 @@ let iter_call_sites (cbf: L.i_loc -> funname -> lvals -> Sv.t * Sv.t -> unit)
     function
     | (Cassgn _ | Copn _) -> ()
     | (Cif (_, s1, s2) | Cwhile (_, s1, _, s2)) -> iter_stmt s1; iter_stmt s2
-    | Cfor (_, _, s) -> iter_stmt s
+    | Cfor (_, s) -> iter_stmt s
     | Ccall (_, xs, fn, _) ->
        cbf loc fn xs ii
     | Csyscall (xs, op, _) ->
@@ -120,7 +124,7 @@ let rec conflicts_i cf i =
   match i.i_desc with
   | Cassgn _ | Copn _ | Csyscall _ | Ccall _ ->
     merge_class cf s2
-  | Cfor( _, _, c) ->
+  | Cfor(_, c) ->
     conflicts_c (merge_class cf s2) c
   | Cif(_, c1, c2) | Cwhile(_, c1, _, c2) ->
     conflicts_c (conflicts_c (merge_class cf s2) c1) c2

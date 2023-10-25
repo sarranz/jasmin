@@ -41,16 +41,16 @@ Definition array_copy ii (x: var_i) (ws: wsize) (n: positive) (y: gvar) :=
   let i := {| v_var := {| vtype := sint ; vname := i_name |}; v_info := v_info x |} in
   let ei := Pvar (mk_lvar i) in
   let sz := Z.to_pos (wsize_size ws * n) in
-  let pre := 
-    if eq_gvar (mk_lvar x) y
-    || is_ptr x
+  let pre :=
+    if eq_gvar (mk_lvar x) y || is_ptr x
     then Copn [::] AT_none sopn_nop [::]
-    else Cassgn (Lvar x) AT_none (sarr sz) (Parr_init sz) in
-  [:: MkI ii pre;
-      MkI ii 
-        (Cfor i (UpTo, Pconst 0, Pconst n) 
-           [:: MkI ii (Cassgn (Laset AAscale ws x ei) AT_none (sword ws) (Pget AAscale ws y ei))])
-    ].
+    else Cassgn (Lvar x) AT_none (sarr sz) (Parr_init sz)
+  in
+  let fi := FIrange i UpTo (Pconst 0) (Pconst n) in
+  let i :=
+    Cassgn (Laset AAscale ws x ei) AT_none (sword ws) (Pget AAscale ws y ei)
+  in
+  [:: MkI ii pre; MkI ii (Cfor fi [:: MkI ii i ]) ].
 
 Definition array_copy_c (array_copy_i : instr -> cexec cmd) (c:cmd) : cexec cmd := 
   Let cs := mapM array_copy_i c in 
@@ -105,9 +105,9 @@ Fixpoint array_copy_i (i:instr) : cexec cmd :=
       Let c1 := array_copy_c array_copy_i c1 in
       Let c2 := array_copy_c array_copy_i c2 in
       ok [:: MkI ii (Cif e c1 c2)]
-  | Cfor i r c => 
+  | Cfor fi c => 
       Let c := array_copy_c array_copy_i c in
-      ok [:: MkI ii (Cfor i r c)]
+      ok [:: MkI ii (Cfor fi c)]
   | Cwhile a c1 e c2 => 
       Let c1 := array_copy_c array_copy_i c1 in
       Let c2 := array_copy_c array_copy_i c2 in
@@ -133,6 +133,3 @@ Definition array_copy_prog (p:prog) :=
         p_extra := p_extra p|}.
 
 End Section.
-
-
-

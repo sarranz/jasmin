@@ -312,6 +312,12 @@ let rec pp_instr depth fmt (annot, p) =
       pp_expr limit
       (pp_inbraces depth (pp_list eol (pp_instr (depth + 1)))) (L.unloc body)
 
+  | PIRepeat (e, body) ->
+    F.fprintf fmt "%a %a %a"
+      kw "repeat"
+      pp_expr e
+      (pp_inbraces depth (pp_list eol (pp_instr (depth + 1)))) (L.unloc body)
+
   | PIWhile (pre, b, body) ->
     F.fprintf fmt "%a %a (%a) %a"
       kw "while"

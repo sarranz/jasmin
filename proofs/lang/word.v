@@ -195,6 +195,9 @@ Definition word := fun sz =>
 
 Global Opaque word.
 
+Definition wneg {ws : wsize} (x : word ws) : word ws := - x.
+Definition wadd {ws : wsize} (x y : word ws) : word ws := x + y.
+Definition wsub {ws : wsize} (x y : word ws) : word ws := x - y.
 Definition wand {s} (x y: word s) : word s := wand x y.
 Definition wor {s} (x y: word s) : word s := wor x y.
 Definition wxor {s} (x y: word s) : word s := wxor x y.

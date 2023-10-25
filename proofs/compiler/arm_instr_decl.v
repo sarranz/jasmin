@@ -483,86 +483,6 @@ Arguments mk_cond : clear implicits.
 
 
 (* -------------------------------------------------------------------- *)
-(* Shift transformations.
-   Instruction descriptions are defined without optionally shifted registers.
-   The following transformation adds a shift argument to an instruction
-   and updates the semantics and the rest of the fields accordingly. *)
-
-Definition mk_semi1_shifted
-  {A} (sk : shift_kind) (semi : sem_prod [:: sreg ] (exec A)) :
-  sem_prod [:: sreg; sword8 ] (exec A) :=
-  fun wn shift_amount =>
-    let sham := wunsigned shift_amount in
-    semi (shift_op sk wn sham).
-
-Definition mk_semi2_2_shifted
-  {A} {o : stype} (sk : shift_kind) (semi : sem_prod [:: o; sreg ] (exec A)) :
-  sem_prod [:: o; sreg; sword8 ] (exec A) :=
-  fun x wm shift_amount =>
-    let sham := wunsigned shift_amount in
-    semi x (shift_op sk wm sham).
-
-Definition mk_semi3_2_shifted
-  {A}
-  {o0 o1 : stype}
-  (sk : shift_kind)
-  (semi : sem_prod [:: o0; sreg; o1 ] (exec A)) :
-  sem_prod [:: o0; sreg; o1; sword8 ] (exec A) :=
-  fun x wm y shift_amount =>
-    let sham := wunsigned shift_amount in
-    semi x (shift_op sk wm sham) y.
-
-#[ local ]
-Lemma mk_shifted_eq_size {A B} {x y} {xs0 : seq A} {ys0 : seq B} {p} :
-  (size xs0 == size ys0) && p
-  -> (size (xs0 ++ [:: x ]) == size (ys0 ++ [:: y ])) && p.
-Proof.
-  move=> /andP [] /eqP H0 Hp.
-  rewrite 2!size_cat H0.
-  by apply/andP.
-Qed.
-
-#[ local ]
-Lemma mk_shifted_tin_narr {A} {p : A -> bool} {x} {xs : seq A} :
-  p x
-  -> all p xs
-  -> all p (xs ++ [:: x ]).
-Proof.
-  move=> hx hxs.
-  rewrite all_cat.
-  apply/andP.
-  split; first exact: hxs.
-  rewrite /= andbT.
-  exact: hx.
-Qed.
-
-Definition mk_shifted
-  (sk : shift_kind) (idt : instr_desc_t) semi' : instr_desc_t :=
-  {|
-    id_msb_flag := MSB_MERGE;
-    id_tin := (id_tin idt) ++ [:: sword8 ];
-    id_in := (id_in idt) ++ [:: E (id_nargs idt) ];
-    id_tout := id_tout idt;
-    id_out := id_out idt;
-    id_semi := semi';
-    id_nargs := (id_nargs idt).+1;
-    id_args_kinds :=
-      map (fun x => x ++ [:: [:: CAimm reg_size] ]) (id_args_kinds idt);
-    id_eq_size := mk_shifted_eq_size (id_eq_size idt);
-    id_tin_narr :=
-      mk_shifted_tin_narr
-        (is_true_true: is_not_sarr sword8)
-        (id_tin_narr idt);
-    id_tout_narr := id_tout_narr idt;
-    id_check_dest := id_check_dest idt;
-    id_str_jas := id_str_jas idt;
-    id_safe := id_safe idt;
-    id_pp_asm := id_pp_asm idt;
-  |}.
-Arguments mk_shifted : clear implicits.
-
-
-(* -------------------------------------------------------------------- *)
 (* Printing. *)
 
 Definition pp_arm_op
@@ -596,6 +516,16 @@ Section ARM_INSTR.
 
 Context
   (opts : arm_options).
+
+Let shift_op' sk ws (w : word ws) (sham : Z) : exec (word ws) :=
+  ok (shift_op sk w sham).
+
+Notation mk_shifted_un sk x :=
+  (mk_shifted (mk_shifted_semi_unop (shift_op' sk) (id_semi x))).
+Notation mk_shifted_bin sk x :=
+  (mk_shifted (mk_shifted_semi_binop_2 (shift_op' sk) (id_semi x))).
+Notation mk_shifted_ter sk x :=
+  (mk_shifted (mk_shifted_semi_terop_2 (shift_op' sk) (id_semi x))).
 
 Let string_of_arm_mnemonic mn :=
       (string_of_arm_mnemonic mn
@@ -634,7 +564,7 @@ Definition arm_ADD_instr : instr_desc_t :=
   in
   let x :=
     if has_shift opts is Some sk
-    then mk_shifted sk x (mk_semi2_2_shifted sk (id_semi x))
+    then mk_shifted_bin sk x
     else x
   in
   if set_flags opts
@@ -674,8 +604,7 @@ Definition arm_ADC_instr : instr_desc_t :=
   in
   let x :=
     if has_shift opts is Some sk
-    then
-      mk_shifted sk x (mk_semi3_2_shifted sk (id_semi x))
+    then mk_shifted_ter sk x
     else x
   in
   if set_flags opts
@@ -813,7 +742,7 @@ Definition arm_SUB_instr : instr_desc_t :=
   in
   let x :=
     if has_shift opts is Some sk
-    then mk_shifted sk x (mk_semi2_2_shifted sk (id_semi x))
+    then mk_shifted_bin sk x
     else x
   in
   if set_flags opts
@@ -844,7 +773,7 @@ Definition arm_RSB_instr : instr_desc_t :=
   in
   let x :=
     if has_shift opts is Some sk
-    then mk_shifted sk x (mk_semi2_2_shifted sk (id_semi x))
+    then mk_shifted_bin sk x
     else x
   in
   if set_flags opts
@@ -1077,7 +1006,7 @@ Definition arm_AND_instr : instr_desc_t :=
   in
   let x :=
     if has_shift opts is Some sk
-    then mk_shifted sk x (mk_semi2_2_shifted sk (id_semi x))
+    then mk_shifted_bin sk x
     else x
   in
   if set_flags opts
@@ -1107,7 +1036,7 @@ Definition arm_BIC_instr : instr_desc_t :=
   in
   let x :=
     if has_shift opts is Some sk
-    then mk_shifted sk x (mk_semi2_2_shifted sk (id_semi x))
+    then mk_shifted_bin sk x
     else x
   in
   if set_flags opts
@@ -1137,7 +1066,7 @@ Definition arm_EOR_instr : instr_desc_t :=
   in
   let x :=
     if has_shift opts is Some sk
-    then mk_shifted sk x (mk_semi2_2_shifted sk (id_semi x))
+    then mk_shifted_bin sk x
     else x
   in
   if set_flags opts
@@ -1175,7 +1104,7 @@ Definition arm_MVN_instr : instr_desc_t :=
   in
   let x :=
     if has_shift opts is Some sk
-    then mk_shifted sk x (mk_semi1_shifted sk (id_semi x))
+    then mk_shifted_un sk x
     else x
   in
   if set_flags opts
@@ -1205,7 +1134,7 @@ Definition arm_ORR_instr : instr_desc_t :=
   in
   let x :=
     if has_shift opts is Some sk
-    then mk_shifted sk x (mk_semi2_2_shifted sk (id_semi x))
+    then mk_shifted_bin sk x
     else x
   in
   if set_flags opts
@@ -1591,7 +1520,7 @@ Definition arm_CMP_instr : instr_desc_t :=
     |}
   in
   if has_shift opts is Some sk
-  then mk_shifted sk x (mk_semi2_2_shifted sk (id_semi x))
+  then mk_shifted_bin sk x
   else x.
 
 Definition arm_TST_semi (wn wm : ty_r) : exec ty_nzc :=
@@ -1624,7 +1553,7 @@ Definition arm_TST_instr : instr_desc_t :=
     |}
   in
   if has_shift opts is Some sk
-  then mk_shifted sk x (mk_semi2_2_shifted sk (id_semi x))
+  then mk_shifted_bin sk x
   else x.
 
 Definition arm_extend_semi

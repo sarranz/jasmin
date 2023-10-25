@@ -445,6 +445,8 @@ module Printer (BP:BPrinter) = struct
       let name = pp_name_ext pp in
       let args = pp_asm_args pp.pp_aop_args in
       `Instr(name, args)
+
+    | REPEATCALL _ -> assert false
   
   (* -------------------------------------------------------------------- *)
   let pp_instr name (fmt : Format.formatter) (i : (_, _, _, _, _, _) Arch_decl.asm_i) =

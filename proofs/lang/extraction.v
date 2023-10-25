@@ -53,6 +53,8 @@ Extract Constant ident.Cident.id_kind => "CoreIdent.Cident.id_kind".
 Extract Constant ident.Cident.name_of_string => "CoreIdent.Cident.name_of_string".
 Extract Constant ident.Cident.string_of_name => "CoreIdent.Cident.string_of_name".
 
+Extract Constant otbn_decl.TODO_OTBN =>
+  "(fun msg -> failwith (""TODO_OTBN: "" ^ Conv.string_of_cstring msg))".
 
 Cd  "lang/ocaml".
 
@@ -65,19 +67,31 @@ Separate Extraction
   sopn
   expr
   psem_defs
+  psem_defs.init_iteration
+  psem_defs.sem_fi
   sem_params_of_arch_extra
   arch_decl
   arch_extra
+
   x86_decl_core
   x86_decl
   x86_instr_decl
   x86_extra
   x86_params
+
   arm_decl_core
   arm_decl
   arm_instr_decl
   arm_extra
   arm_params
+
+  otbn_decl_core
+  otbn_decl
+  otbn_instr_decl
+  otbn_lowering.fresh_vars
+  otbn_extra
+  otbn_params
+
   compiler.
 
 Cd  "../..".

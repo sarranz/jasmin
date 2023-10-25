@@ -34,6 +34,8 @@ module type Core_arch = sig
 
   val known_implicits : (Name.t * string) list
 
+  val reg_unallocatable : reg list
+  val xreg_unallocatable : xreg list
 end
 
 module type Arch = sig

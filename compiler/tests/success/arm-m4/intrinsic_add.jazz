@@ -98,6 +98,8 @@ fn add(reg u32 arg0, reg u32 arg1) -> reg u32 {
     x = #ADDcc(x, arg0 >>s 3, zf, x);
     x = #ADDcc(x, arg0 >>r 3, zf, x);
 
+    nf, zf, cf, vf, x = #ADDScc(x, arg0 >>r 3, cf, nf, zf, cf, vf, x);
+
     reg u32 res;
     res = x;
     return res;

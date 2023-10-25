@@ -15,6 +15,7 @@ Require Import
   syscall
   utils
   word.
+Require values.
 Require Import
   sopn
   flag_combination
@@ -218,12 +219,15 @@ Canonical msb_flag_eqType := EqType msb_flag msb_flag_eqMixin.
  *)
 Variant implicit_arg : Type :=
 | IArflag of rflag_t  (* Implicit flag. *)
-| IAreg   of reg_t.   (* Implicit register. *)
+| IAreg   of reg_t    (* Implicit register. *)
+| IAxreg  of xreg_t   (* Implicit extra register. *)
+.
 
 Definition implicit_arg_beq (i1 i2 : implicit_arg) :=
   match i1, i2 with
   | IArflag f1, IArflag f2 => f1 == f2 ::>
   | IAreg r1, IAreg r2 => r1 == r2 ::>
+  | IAxreg xr1, IAxreg xr2 => xr1 == xr2 ::>
   | _, _ => false
   end.
 
@@ -258,6 +262,7 @@ Variant arg_desc :=
 
 Definition F  f   := ADImplicit (IArflag f).
 Definition R  r   := ADImplicit (IAreg   r).
+Definition Xreg r := ADImplicit (IAxreg r).
 Definition E  n   := ADExplicit AK_mem n None.
 Definition Ec n   := ADExplicit AK_compute n None.
 Definition Ef n r := ADExplicit AK_mem n (Some  r).
@@ -360,6 +365,10 @@ Record pp_asm_op := mk_pp_asm_op {
 
 (* -------------------------------------------------------------------- *)
 (* Instruction descriptions. *)
+
+Definition semi_type (tin tout : seq stype) : Type :=
+  sem_prod tin (exec (sem_tuple tout)).
+
 Record instr_desc_t := {
   (* Info for architecture semantics. *)
   (* When writing a smaller value to a register, keep or clear old bits? *)
@@ -373,7 +382,7 @@ Record instr_desc_t := {
   (* Description of output arguments. *)
   id_out        : seq arg_desc;
   (* Semantics (only deals with values). *)
-  id_semi       : sem_prod id_tin (exec (sem_tuple id_tout));
+  id_semi       : semi_type id_tin id_tout;
   (* Possible signatures for an instruction. *)
   id_args_kinds : i_args_kinds;
   (* Number of explicit arguments in assembly syntax. *)
@@ -533,6 +542,7 @@ Variant asm_i : Type :=
   | JAL of reg_t & remote_label (* Direct jump; return address is saved in a register *)
   | CALL of remote_label (* Direct jump; return address is saved at the top of the stack *)
   | POPPC (* Pop a destination from the stack and jump there, arm : POP PC, x86 : RET *)
+  | REPEATCALL of (reg + Z) & funname
   (* Instructions exposed at source-level *)
   | AsmOp  of asm_op_t' & asm_args
   | SysCall of syscall_t.
@@ -660,7 +670,7 @@ Canonical rflagv_eqType := EqType _ rflagv_eqMixin.
 Class asm (reg regx xreg rflag cond asm_op: Type) :=
   { _arch_decl   : arch_decl reg regx xreg rflag cond
   ; _asm_op_decl : asm_op_decl asm_op
-  ; eval_cond   : (rflag_t -> exec bool) -> cond_t -> exec bool
+  ; eval_cond    : (asm_typed_reg -> values.value) -> cond_t -> exec bool
   }.
 
 #[global]

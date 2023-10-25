@@ -27,6 +27,7 @@ Variant linstr_r :=
   | Ligoto : rexpr -> linstr_r (* Absolute indirect jump *)
   | LstoreLabel : var -> label -> linstr_r
   | Lcond  : fexpr -> label -> linstr_r
+  | Lrepeat_call : (var_i + Z) -> funname -> linstr_r
 .
 
 Record linstr : Type := MkLI { li_ii : instr_info; li_i : linstr_r }.

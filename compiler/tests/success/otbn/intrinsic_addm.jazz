@@ -1,0 +1,8 @@
+export
+fn addm(reg u256 x y) -> reg u256 {
+    reg u256 mod z;
+    ?{}, z = #set0();
+    mod = #BN_MODW(z);
+    z = #BN_ADDM(x, y, mod);
+    return z;
+}

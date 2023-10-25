@@ -277,6 +277,34 @@ Section EXPR.
 
 End EXPR.
 
+Definition repeat_call_count
+  (ii : instr_info) (e : pexpr) : cexec (var_i + Z) :=
+  match e with
+  | Pconst z => ok (inr z)
+  | Pvar x => ok (inl (gv x))
+  | Papp1 (Oint_of_word Uptr) (Pvar x) => ok (inl (gv x))
+  | _ => Error (E.ii_error ii "invalid repeat loop count")
+  end.
+
+Definition is_repeat_call
+  (ii : instr_info) (c : cmd) : cexec (lvals * funname * pexprs) :=
+  if c is [:: MkI _ (Ccall _ xs fn es) ]
+  then ok (xs, fn, es)
+  else Error (E.ii_error ii "invalid repeat loop body").
+
+Definition linearize_for
+  (ii : instr_info)
+  (fi : for_iteration)
+  (c : cmd) :
+  cexec ((var_i + Z) * funname) :=
+  match fi with
+  | FIrange _ _ _ _ => Error (E.ii_error ii "for loop found in linear")
+  | FIrepeat e =>
+      Let count := repeat_call_count ii e in
+      Let: (lvs, fn, es) := is_repeat_call ii c in
+      ok (count, fn)
+  end.
+
 Section PROG.
 
 Context
@@ -318,8 +346,9 @@ Definition stack_frame_allocation_size (e: stk_fun_extra) : Z :=
       ok tt
     | Cif b c1 c2 =>
       check_fexpr ii b >> check_c check_i c1 >> check_c check_i c2
-    | Cfor _ _ _ =>
-      Error (E.ii_error ii "for found in linear")
+    | Cfor fi c =>
+        Let _ := linearize_for ii fi c in
+        check_c check_i c
     | Cwhile _ c e c' =>
       match is_bool e with
       | Some false => check_c check_i c
@@ -594,6 +623,11 @@ Fixpoint linear_i (i:instr) (lbl:label) (lc:lcmd) :=
     MkLI ii (Llabel L1) >; linear_c linear_i c1 lbl
    (MkLI ii (Llabel L2) :: lc)
 
+  | Cfor fi c =>
+      if linearize_for ii fi c is Ok (count, fn)
+      then (lbl, MkLI ii (Lrepeat_call count fn) :: lc)
+      else (xH, [::]) (* Never happens. *)
+
   | Cwhile a c e c' =>
     match is_bool e with
     | Some true =>
@@ -654,7 +688,6 @@ Fixpoint linear_i (i:instr) (lbl:label) (lc:lcmd) :=
               ++ lc
           )
     else (lbl, lc )
-  | Cfor _ _ _ => (lbl, lc)
   end.
 
 Definition linear_body (e: stk_fun_extra) (body: cmd) : label * lcmd :=

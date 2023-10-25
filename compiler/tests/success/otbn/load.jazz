@@ -1,0 +1,29 @@
+export
+fn load(reg u32 arg0) {
+    reg u32 x;
+
+    x = [arg0];
+    [x] = x;
+
+    x = [arg0 + 1];
+    [x] = x;
+
+    x = [x - 1];
+    [x] = x;
+
+    x = [x + 2047];
+    [x] = x;
+
+    x = [x - 2048];
+    [x] = x;
+
+    stack u32 s;
+    s = x;
+    x = s;
+    [x] = x;
+
+    stack u32[1] s;
+    s[0] = x;
+    x = s[0];
+    [x] = x;
+}

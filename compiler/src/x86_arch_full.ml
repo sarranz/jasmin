@@ -41,6 +41,8 @@ module X86_core = struct
 
   let known_implicits = ["OF","_of_"; "CF", "_cf_"; "SF", "_sf_"; "ZF", "_zf_"]
 
+  let reg_unallocatable = []
+  let xreg_unallocatable = []
 end
 
 

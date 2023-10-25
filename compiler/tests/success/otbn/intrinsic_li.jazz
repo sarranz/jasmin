@@ -1,0 +1,13 @@
+export
+fn li() {
+    reg u32 x;
+
+    x = #LI(1);
+    [x] = x;
+
+    x = #LI(-1);
+    [x] = x;
+
+    x = #LI(0xabcdef01);
+    [x] = x;
+}

@@ -1,0 +1,6 @@
+export
+fn bn_mov(reg u256 arg0) -> reg u256 {
+    reg u256 x;
+    x = #BN_MOV(arg0);
+    return x;
+}

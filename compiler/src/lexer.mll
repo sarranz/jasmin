@@ -43,6 +43,7 @@
     "param" , PARAM  ;
     "ptr"   , POINTER;
     "reg"   , REG    ;
+    "repeat", REPEAT ;
     "require", REQUIRE;
     "return", RETURN ;
     "stack" , STACK  ;

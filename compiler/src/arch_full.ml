@@ -33,6 +33,8 @@ module type Core_arch = sig
 
   val known_implicits : (Name.t * string) list
 
+  val reg_unallocatable : reg list
+  val xreg_unallocatable : xreg list
 end
 
 module type Arch = sig
@@ -120,21 +122,27 @@ module Arch_from_Core_arch (A : Core_arch) :
 
   let rsp = arch_decl.ad_rsp
 
-  let mk_allocatable regs callee_save = 
-     List.filter (fun r -> not (List.mem r callee_save)) regs
-     @
-     callee_save
+  let mk_allocatable xs unallocatable callee_saved =
+     let not_mem rs r = not (List.mem r rs) in
+     let not_saved = List.filter (not_mem callee_saved) xs in
+     let ordered = not_saved @ callee_saved in
+     List.filter (not_mem unallocatable) ordered
 
-  let allocatable = 
-    let good_order = mk_allocatable (Arch_decl.registers arch_decl) callee_save_reg in
-    (* be sure that rsp is not used *)
-    List.filter (fun r -> r <> rsp) good_order  
+  (* Make sure that rsp is not used. *)
+  let allocatable =
+    mk_allocatable
+      (Arch_decl.registers arch_decl)
+      (rsp :: reg_unallocatable)
+      callee_save_reg
 
-  let extra_allocatable = 
-    mk_allocatable (Arch_decl.registerxs arch_decl) callee_save_regx
+  let extra_allocatable =
+    mk_allocatable (Arch_decl.registerxs arch_decl) [] callee_save_regx
 
-  let xmm_allocatable = 
-    mk_allocatable (Arch_decl.xregisters arch_decl) callee_save_xreg
+  let xmm_allocatable =
+    mk_allocatable
+      (Arch_decl.xregisters arch_decl)
+      xreg_unallocatable
+      callee_save_xreg
 
   let arguments = call_conv.call_reg_args
 

@@ -1,0 +1,6 @@
+export
+fn add(reg u32 arg0 arg1) {
+    reg u32 x;
+    x = #ADD(arg0, arg1);
+    [x] = x;
+}

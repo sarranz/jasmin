@@ -130,13 +130,23 @@ Notation asm_result := (result error asmmem).
 Notation asm_result_state := (result error asm_state).
 
 (* -------------------------------------------------------------------- *)
+
 Definition st_get_rflag (s : asmmem) (rf : rflag_t) :=
   if s.(asm_flag) rf is Def b then ok b else undef_error.
 
-(* -------------------------------------------------------------------- *)
+Definition of_rbool (v : rflagv) : value :=
+  if v is Def b then Vbool b else undef_b.
+
+Definition get_typed_reg_value (xm : asmmem) (tr : asm_typed_reg) : value :=
+  match tr with
+  | ARReg r => Vword (asm_reg xm r)
+  | ARegX rx => Vword (asm_regx xm rx)
+  | AXReg xr => Vword (asm_xreg xm xr)
+  | ABReg f => of_rbool (asm_flag xm f)
+  end.
 
 Definition eval_cond_mem (s : asmmem) (c : cond_t) :=
-  eval_cond (st_get_rflag s) c.
+  eval_cond (get_typed_reg_value s) c.
 
 (* -------------------------------------------------------------------- *)
 Definition st_write_ip (ip : nat) (s : asm_state) :=
@@ -230,10 +240,16 @@ Definition eval_asm_arg k (s: asmmem) (a: asm_arg) (ty: stype) : exec value :=
   | XReg x     => ok (Vword (s.(asm_xreg) x))
   end.
 
+Definition eval_iarg_in_v (s : asmmem) (ia : implicit_arg) : exec value :=
+  match ia with
+  | IAreg r => ok (Vword (s.(asm_reg) r))
+  | IAxreg xr => ok (Vword (s.(asm_xreg) xr))
+  | IArflag f => Let b := st_get_rflag s f in ok (Vbool b)
+  end.
+
 Definition eval_arg_in_v (s:asmmem) (args:asm_args) (a:arg_desc) (ty:stype) : exec value :=
   match a with
-  | ADImplicit (IAreg r)   => ok (Vword (s.(asm_reg) r))
-  | ADImplicit (IArflag f) => Let b := st_get_rflag s f in ok (Vbool b)
+  | ADImplicit ia => eval_iarg_in_v s ia
   | ADExplicit k i or =>
     match onth args i with
     | None => type_error
@@ -330,6 +346,7 @@ Definition mem_write_xreg (f: msb_flag) (r: xreg_t) sz (w: word sz) (m: asmmem) 
 Definition mem_write_word (f:msb_flag) (s:asmmem) (args:asm_args) (ad:arg_desc) (sz:wsize) (w: word sz) : exec asmmem :=
   match ad with
   | ADImplicit (IAreg r)   => ok (mem_write_reg f r w s)
+  | ADImplicit (IAxreg xr) => ok (mem_write_xreg f xr w s)
   | ADImplicit (IArflag f) => type_error
   | ADExplicit _ i or    =>
     match onth args i with
@@ -513,7 +530,7 @@ Proof.
   case: d.2 => //; t_xrbindP => /=.
   - by move => ? _; case: d.1 => // - [] // ? /ok_inj <-.
   move => ? ? _; case: d.1 => [ [] | ] //=.
-  - by move => ? /ok_inj <-.
+  1,2: by move => ? /ok_inj <-.
   move => _ ? ?; case: onth => //; t_xrbindP => - [] // ? _.
   - by move=> /ok_inj <-.
   - by move=> /ok_inj <-.

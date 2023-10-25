@@ -1,0 +1,56 @@
+fn mul256(reg u256 x y) -> reg u256, reg u256 {
+    reg u256 acc rlo rhi;
+    reg bool mf0 lf0 zf0;
+
+    ?{ mf0, lf0, zf0 }, rlo = #set0();
+
+    acc = #BN_MULQACC_Z(x, 0, y, 0, 0);                        /* a0b0 */
+    acc = #BN_MULQACC(x, 0, y, 1, acc, 64);                    /* a0b1 */
+    ?{ mf0, lf0, zf0, acc }, rlo =                             /* a1b0 */
+        #BN_MULQACC_SO_L(mf0, lf0, zf0, rlo, x, 1, y, 0, acc, 64);
+    acc = #BN_MULQACC(x, 0, y, 2, acc, 0);                     /* a0b2 */
+    acc = #BN_MULQACC(x, 1, y, 1, acc, 0);                     /* a1b1 */
+    acc = #BN_MULQACC(x, 2, y, 0, acc, 0);                     /* a2b0 */
+    acc = #BN_MULQACC(x, 0, y, 3, acc, 64);                    /* a0b3 */
+    acc = #BN_MULQACC(x, 1, y, 2, acc, 64);                    /* a1b2 */
+    acc = #BN_MULQACC(x, 2, y, 1, acc, 64);                    /* a2b1 */
+                                                               /* a3b0 */
+    ?{ acc }, rlo = #BN_MULQACC_SO_U(mf0, lf0, zf0, rlo, x, 3, y, 0, acc, 64);
+    acc = #BN_MULQACC(x, 1, y, 3, acc, 0);                     /* a1b3 */
+    acc = #BN_MULQACC(x, 2, y, 2, acc, 0);                     /* a2b2 */
+    acc = #BN_MULQACC(x, 3, y, 1, acc, 0);                     /* a3b1 */
+    acc = #BN_MULQACC(x, 2, y, 3, acc, 64);                    /* a2b3 */
+    acc = #BN_MULQACC(x, 3, y, 2, acc, 64);                    /* a3b2 */
+    ?{}, rhi = #BN_MULQACC_WO(x, 3, y, 3, acc, 128);           /* a3b3 */
+
+    return rlo, rhi;
+}
+
+export
+fn main(reg u256 x y) -> reg u256, reg u256 {
+    // Here we should load the arguments from DMEM, but indirect addressing is
+    // not supported yet.
+
+    reg u256 rlo rhi;
+
+    #inline
+    rlo, rhi = mul256(x, y);
+
+    rlo = rlo;
+    rhi = rhi;
+    return rlo, rhi;
+}
+
+export
+fn mock() -> reg u256, reg u256 {
+    reg u256 x y;
+
+    ?{}, x = #set0();
+    y = !x;
+    x += 2;
+
+    x, y = mul256(x, y);
+    return x, y;
+}
+
+// exec mock()

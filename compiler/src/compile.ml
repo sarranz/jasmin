@@ -37,9 +37,10 @@ let rec warn_extra_i pd asmOp i =
   | Cif (_, c1, c2) | Cwhile (_, c1, _, c2) ->
       List.iter (warn_extra_i pd asmOp) c1;
       List.iter (warn_extra_i pd asmOp) c2
-  | Cfor _ ->
+  | Cfor (FIrange _, _) ->
       hierror ~loc:(Lmore i.i_loc) ~kind:"compilation error" ~internal:true
         "for loop remains"
+  | Cfor (FIrepeat _, c) -> List.iter (warn_extra_i pd asmOp) c
   | Ccall _ | Csyscall _ -> ()
 
 let warn_extra_fd pd asmOp (_, fd) = List.iter (warn_extra_i pd asmOp) fd.f_body

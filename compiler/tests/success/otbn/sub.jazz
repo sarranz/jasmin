@@ -1,0 +1,19 @@
+export
+fn sub(reg u32 arg0, reg u32 arg1) {
+    reg u32 x;
+
+    x = arg0 - arg1;
+    x -= arg0;
+    [x] = x;
+
+    x = arg0 - 1;
+    x -= 1;
+    [x] = x;
+
+    x = arg0 - -1;
+    x -= -1;
+    x -= 2048;
+    x -= -2047;
+
+    [x] = x;
+}

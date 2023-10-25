@@ -382,13 +382,18 @@ let safe_opn safe opn es =
           (List.init (Conv.int_of_pos p) (fun i -> init_get y Warray_.AAscale ws (Pconst (Z.of_int i)) 1)))
      id.i_safe) @ safe
 
+let safe_fi fi =
+  match fi with
+  | FIrange (_, _, elo, ehi) -> safe_es [elo; ehi]
+  | FIrepeat e -> safe_e e
+
 let safe_instr ginstr = match ginstr.i_desc with
   | Cassgn (lv, _, _, e) -> safe_e_rec (safe_lval lv) e
   | Copn (lvs,_,opn,es) -> safe_opn (safe_lvals lvs @ safe_es es) opn es
   | Cif(e, _, _) -> safe_e e
   | Cwhile(_,_, _, _) -> []       (* We check the while condition later. *)
   | Ccall(_, lvs, _, es) | Csyscall(lvs, _, es) -> safe_lvals lvs @ safe_es es
-  | Cfor (_, (_, e1, e2), _) -> safe_es [e1;e2]
+  | Cfor (fi, _) -> safe_fi fi
 
 let safe_return main_decl =
   List.fold_left (fun acc v -> safe_var v @ acc) [] main_decl.f_ret
@@ -1486,7 +1491,8 @@ end = struct
       | Csyscall(lvs, _ ,es)    -> nm_lvs vs_for lvs && nm_es vs_for es
       | Cif (e, st, st')        -> 
         nm_e vs_for e && nm_stmt vs_for st && nm_stmt vs_for st'
-      | Cfor (i, _, st)         -> nm_stmt (i :: vs_for) st
+      | Cfor (FIrange(i, _, _, _ ), st) -> nm_stmt (i :: vs_for) st
+      | Cfor (FIrepeat _, st) -> nm_stmt vs_for st
       | Cwhile (_, st1, e, st2) -> 
         nm_e vs_for e && nm_stmt vs_for st1 && nm_stmt vs_for st2
       | Ccall (_, lvs, fn, es)  -> 
@@ -1941,7 +1947,7 @@ end = struct
 
         return_call state callsite fstate lvs
 
-      | Cfor(i, (d,e1,e2), c) ->
+      | Cfor(FIrange(i, d, e1, e2), c) ->
         let prog_pt = ginstr.i_loc in
         (match AbsExpr.aeval_cst_int state.abs e1, 
               AbsExpr.aeval_cst_int state.abs e2 with
@@ -1987,6 +1993,9 @@ end = struct
             (Printer.pp_expr ~debug:true) e2;
           assert false
         )
+
+     (* TODO: Implement this. *)
+     | Cfor(FIrepeat _, _) -> assert false
 
   and aeval_call pd asmOp : funname -> (minfo, 'asm) func -> L.i_loc -> astate -> astate =
     fun f f_decl callsite st_in ->

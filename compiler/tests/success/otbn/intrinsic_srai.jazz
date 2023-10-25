@@ -1,0 +1,8 @@
+export
+fn srai(reg u32 arg0) {
+    reg u32 x;
+    x = #SRAI(arg0, 0);
+    x = #SRAI(x, 1);
+    x = #SRAI(x, 31);
+    [x] = x;
+}
