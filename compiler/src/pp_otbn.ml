@@ -310,7 +310,11 @@ let pp_instr fn i =
       | Datatypes.Coq_inr cz -> (Z.to_string (Conv.z_of_cz cz), "loopi")
     in
     let lbl = (fn, Conv.pos_of_int 1) in
-    [ LInstr(name, [scount; "1"]); LInstr("jal", [ra; pp_remote_label lbl]) ]
+    [
+      LInstr(name, [scount; "2"]);
+      LInstr("  jal", [ra; pp_remote_label lbl]);
+      LInstr("  nop", []);
+    ]
 
   | POPPC ->
       [ LInstr ("lw", [ ra; pp_address (Areg addr_rsp) ])

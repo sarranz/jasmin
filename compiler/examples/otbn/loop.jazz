@@ -1,0 +1,45 @@
+fn body1(reg u32 x) -> reg u32 {
+    x += 2;
+    x -= 1;
+    return x;
+}
+
+fn body2(reg u32 x) -> reg u32 {
+    x -= 3;
+    return x;
+}
+
+fn body4(reg u32 x) -> reg u32 {
+    x += 2;
+    return x;
+}
+
+fn body3(reg u32 x) -> reg u32 {
+    repeat 4 {
+        x = body4(x);
+    }
+    return x;
+}
+
+export
+fn main() -> reg u32 {
+    reg u32 x k3;
+    k3 = 3;
+    x = 0;
+
+    repeat k3 {
+        x = body1(x);
+    }
+
+    repeat 5 {
+        x = body2(x);
+    }
+
+    repeat k3 {
+        x = body3(x);
+    }
+
+    return x;
+}
+
+exec main()
