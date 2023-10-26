@@ -2,11 +2,11 @@ fn mul256(reg u256 x y) -> reg u256, reg u256 {
     reg u256 acc rlo rhi;
     reg bool mf0 lf0 zf0;
 
-    ?{ mf0, lf0, zf0 }, rlo = #set0();
+    ?{mf0, lf0, zf0}, rlo = #set0();
 
     acc = #BN_MULQACC_Z(x, 0, y, 0, 0);                        /* a0b0 */
     acc = #BN_MULQACC(x, 0, y, 1, acc, 64);                    /* a0b1 */
-    ?{ mf0, lf0, zf0, acc }, rlo =                             /* a1b0 */
+    ?{mf0, lf0, zf0, acc}, rlo =                               /* a1b0 */
         #BN_MULQACC_SO_L(mf0, lf0, zf0, rlo, x, 1, y, 0, acc, 64);
     acc = #BN_MULQACC(x, 0, y, 2, acc, 0);                     /* a0b2 */
     acc = #BN_MULQACC(x, 1, y, 1, acc, 0);                     /* a1b1 */
@@ -15,7 +15,7 @@ fn mul256(reg u256 x y) -> reg u256, reg u256 {
     acc = #BN_MULQACC(x, 1, y, 2, acc, 64);                    /* a1b2 */
     acc = #BN_MULQACC(x, 2, y, 1, acc, 64);                    /* a2b1 */
                                                                /* a3b0 */
-    ?{ acc }, rlo = #BN_MULQACC_SO_U(mf0, lf0, zf0, rlo, x, 3, y, 0, acc, 64);
+    ?{acc}, rlo = #BN_MULQACC_SO_U(mf0, lf0, zf0, rlo, x, 3, y, 0, acc, 64);
     acc = #BN_MULQACC(x, 1, y, 3, acc, 0);                     /* a1b3 */
     acc = #BN_MULQACC(x, 2, y, 2, acc, 0);                     /* a2b2 */
     acc = #BN_MULQACC(x, 3, y, 1, acc, 0);                     /* a3b1 */
@@ -32,12 +32,9 @@ fn main(reg u256 x y) -> reg u256, reg u256 {
     // not supported yet.
 
     reg u256 rlo rhi;
-
-    #inline
+    x = x;
     rlo, rhi = mul256(x, y);
 
-    rlo = rlo;
-    rhi = rhi;
     return rlo, rhi;
 }
 
