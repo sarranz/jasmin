@@ -1,8 +1,8 @@
 /* -------------------------------------------------------------------------- */
 /* Module parameters. */
 
-param int N = 3;
-param int M = 3;
+param int NBITS = 128;
+param int MBITS = 256;
 
 
 /* -------------------------------------------------------------------------- */
@@ -25,176 +25,260 @@ fn max(inline int x y) -> inline int {
 
 /* -------------------------------------------------------------------------- */
 
-param int T = N + M;
+param int WORD_SIZE = 256;
+param int LIMB_SIZE = 64;
+param int LIMBS_PER_WORD = WORD_SIZE / LIMB_SIZE;
+
+param int NWORDS = (NBITS - 1) / WORD_SIZE + 1; // ceil(NBITS / WORD_SIZE)
+param int NLIMBS = (NBITS - 1) / LIMB_SIZE + 1; // ceil(NBITS / LIMB_SIZE)
+
+param int MWORDS = (MBITS - 1) / WORD_SIZE + 1; // ceil(MBITS / WORD_SIZE)
+param int MLIMBS = (MBITS - 1) / LIMB_SIZE + 1; // ceil(MBITS / LIMB_SIZE)
+
+param int RWORDS = (NBITS + MBITS - 1) / WORD_SIZE + 1;
+param int RTERMS = NLIMBS + MLIMBS - 1;
 
 inline
-fn loop_body(
-    reg u256[N] a,
-    reg u256[M] b,
-    reg u256[T] out,
-    reg u256 z acc,
+fn bn_mulqacc_so(
+    inline bool is_L,
     reg bool mf0 lf0 zf0,
-    inline int i j k)
-    -> reg u256, reg bool, reg bool, reg bool, reg u256[T]
+    reg u256 r,
+    reg u256 a,
+    inline int aq,
+    reg u256 b,
+    inline int bq,
+    reg u256 acc,
+    inline int sham
+) ->
+    reg bool, reg bool, reg bool,
+    reg u256,
+    reg u256
 {
-    inline int sham;
-    sham = k * 64;
-
-    // In the last word, since we don't do half-word writeback
-    // we need to shift 0, 64, 128, and 192.
-    // So if we're on the second 128-bit part we have an offset of
-    // 128.
-    if (i == T - 1 && j == 1) {
-        sham += 128;
+    if (is_L) {
+        ?{mf0, lf0, zf0, acc}, r = #BN_MULQACC_SO_L(
+            mf0, lf0, zf0,
+            r,
+            a, aq,
+            b, bq,
+            acc,
+            sham
+        );
+    } else {
+        ?{mf0, lf0, zf0, acc}, r = #BN_MULQACC_SO_U(
+            mf0, lf0, zf0,
+            r,
+            a, aq,
+            b, bq,
+            acc,
+            sham
+        );
     }
 
-    // Current 64-bit part.
+    return mf0, lf0, zf0, acc, r;
+}
+
+// Performs MULQACC with
+// - L writeback if processing limb 1.
+// - U writeback if processing limb 3.
+// - No writeback (just accumulate) otherwise.
+inline
+fn partial_bn_mulqacc(
+    inline int j, // Index within word.
+    inline int k, // Index within half-word.
+    reg bool mf0 lf0 zf0,
+    reg u256 r,
+    reg u256 a,
+    inline int aq,
+    reg u256 b,
+    inline int bq,
+    reg u256 acc,
+    inline int sham
+) ->
+    reg bool, reg bool, reg bool,
+    reg u256,
+    reg u256
+{
+    if (k == 1) {
+        mf0, lf0, zf0, acc, r = bn_mulqacc_so(
+            j == 0,
+            mf0, lf0, zf0,
+            r,
+            a, aq,
+            b, bq,
+            acc,
+            sham
+        );
+    } else {
+        acc = #BN_MULQACC(a, aq, b, bq, acc, sham);
+    }
+
+    return mf0, lf0, zf0, acc, r;
+}
+
+inline
+fn last_step(
+    inline int i j k,
+    reg bool mf0 lf0 zf0,
+    reg u256 r,
+    reg u256[NWORDS] a,
+    reg u256[MWORDS] b,
+    reg u256 acc,
+    inline int sham
+) ->
+    reg bool, reg bool, reg bool,
+    reg u256,
+    reg u256
+{
     inline int t;
-    t = 4 * i + 2 * j + k;
+    t = LIMBS_PER_WORD * i + 2 * j + k;
 
-    // [k] and [t - k] are the indexes for multiplicating 64-bit
-    // chunks of the arguments.
-    // idx indexes a so 0 <= idx < N
-    // t - idx indexes b so 0 <= t - idx < M
-    inline int idx_min idx_max;
-    idx_min = max(0, t - M + 1);
-    idx_max = min(N - 1, t);
+    inline int idx_max;
+    idx_max = min(NLIMBS - 1, t);
 
-    inline int idx a_w b_w a_q b_q;
-    for idx = idx_min to idx_max {
-        a_w = idx / 4;
-        b_w = (t - idx) / 4;
-        a_q = idx % 4;
-        b_q = (t - idx) % 4;
+    inline int aw bw aq bq;
+    aw = idx_max / 4;
+    bw = (t - idx_max) / 4;
+    aq = idx_max % 4;
+    bq = (t - idx_max) % 4;
 
-        if (t == 0 && idx == idx_min) {
-            acc = #BN_MULQACC_Z(a[a_w], a_q, b[b_w], b_q, sham);
-        } else {
-            acc = #BN_MULQACC(a[a_w], a_q, b[b_w], b_q, acc, sham);
-        }
-    }
-
-    idx = idx_max;
-    a_w = idx / 4;
-    b_w = (t - idx) / 4;
-    a_q = idx % 4;
-    b_q = (t - idx) % 4;
-
-    // In the last iteration, we have two special cases to consider.
-    // When the last partial product spills into the last word
-    // (i.e. no partial product starts on the last word),
-    // we need to get the leftover bits from the accumulator
-    // using mulqacc.wo ..., w31, w31, 0
-    // For instance when N = 1 and M = 4.
-    // Else, we need to skip half-word writebacks and do a whole
-    // word writeback at the very end.
+    // In the last word, need to skip half-word writebacks and do a whole word
+    // writeback at the very end.
     // For instance,
     // mulqacc         w8.0, w10.0, 0
     // mulqacc.wo w14, w8.0, w10.1, 64
     // otherwise we lose the upper 128 bits.
-    if (i == T - 1) {
-        if (idx_max < idx_min) {
-            if (j == 1 && k == 1) {
-                ?{acc}, out[i] = #BN_MULQACC_WO(z, 0, z, 0, acc, 0);
-            }
+    if (i == RWORDS - 1) {
+        if (j == 1 && k == 1) {
+            ?{acc}, r = #BN_MULQACC_WO(a[aw], aq, b[bw], bq, acc, sham);
         } else {
-            if (j == 1 && k == 1) {
-                // Whole word writeback.
-                ?{acc}, out[i] = #BN_MULQACC_WO(a[a_w], a_q, b[b_w], b_q, acc, sham);
-            } else {
-                // No writeback.
-                acc = #BN_MULQACC(a[a_w], a_q, b[b_w], b_q, acc, sham);
-            }
-        }
-    } else if (k == 1) {
-        // Half-word writeback.
-        if (j == 0) {
-            ?{mf0, lf0, zf0, acc}, out[i / 2] = #BN_MULQACC_SO_L(
-                mf0, lf0, zf0,
-                out[i / 2],
-                a[a_w], a_q,
-                b[b_w], b_q,
-                acc,
-                sham
-            );
-        } else {
-            ?{mf0, lf0, zf0, acc}, out[i / 2] = #BN_MULQACC_SO_U(
-                mf0, lf0, zf0,
-                out[i / 2],
-                a[a_w], a_q,
-                b[b_w], b_q,
-                acc,
-                sham
-            );
+            acc = #BN_MULQACC(a[aw], aq, b[bw], bq, acc, sham);
         }
     } else {
-        // No writeback.
-        acc = #BN_MULQACC(a[a_w], a_q, b[b_w], b_q, acc, sham);
+        mf0, lf0, zf0, acc, r = partial_bn_mulqacc(
+            j, k,
+            mf0, lf0, zf0,
+            r,
+            a[aw], aq,
+            b[bw], bq,
+            acc,
+            sham
+        );
     }
 
-    return acc, mf0, lf0, zf0, out;
+    return mf0, lf0, zf0, acc, r;
+}
+
+// Precondition: This is not the first iteration, so ACC has be set.
+inline
+fn loop_body(
+    inline int i j k,
+    reg bool mf0 lf0 zf0,
+    reg u256[RWORDS] r,
+    reg u256[NWORDS] a,
+    reg u256[MWORDS] b,
+    reg u256 z acc
+) ->
+    reg bool, reg bool, reg bool,
+    reg u256,
+    reg u256[RWORDS]
+{
+    inline int sham;
+    sham = k * LIMB_SIZE;
+
+    // In the last word, since we don't do half-word writeback we need to shift
+    // 0, 64, 128, and 192.
+    // So if we're on the higher 128-bit part we have an offset of 128.
+    if (i == RWORDS - 1 && j == 1) {
+        sham += 2 * LIMB_SIZE;
+    }
+
+    // Current limb.
+    inline int t;
+    t = LIMBS_PER_WORD * i + 2 * j + k;
+
+    // idx indexes a so we need 0 <= idx < NLIMBS
+    // t - idx indexes b so we need 0 <= t - idx < MLIMBS
+    inline int idx_min idx_max;
+    idx_min = max(0, t - MLIMBS + 1);
+    idx_max = min(NLIMBS - 1, t);
+
+    inline int idx;
+    for idx = idx_min to idx_max {
+        inline int aw bw aq bq;
+        aw = idx / 4;
+        bw = (t - idx) / 4;
+        aq = idx % 4;
+        bq = (t - idx) % 4;
+        acc = #BN_MULQACC(a[aw], aq, b[bw], bq, acc, sham);
+    }
+
+    // When the last partial product spills into the last word (i.e. no partial
+    // product starts on the last word), we need to get the leftover bits from
+    // the accumulator using MULQACC.WO r, z.0, z.0, 0 (for instance when
+    // NWORDS is 1 and MWORDS is 4.
+    if (t < RTERMS) {
+        mf0, lf0, zf0, acc, r[i]
+            = last_step(i, j, k, mf0, lf0, zf0, r[i], a, b, acc, sham);
+    } else if (t == RTERMS) {
+        ?{mf0, lf0, zf0, acc}, r[i] = #BN_MULQACC_WO(z, 0, z, 0, acc, 0);
+    }
+
+    return mf0, lf0, zf0, acc, r;
 }
 
 inline
-fn widemul(reg u256[N] a, reg u256[M] b, reg u256[T] out) -> reg u256[T] {
-    reg u256 acc z;
-    reg bool mf0, lf0, zf0;
+fn widemul(reg u256[NWORDS] a, reg u256[MWORDS] b) -> reg u256[RWORDS] {
+    inline int i;
 
+    reg u256[RWORDS] r;
+    for i = 0 to RWORDS {
+        ?{}, r[i] = #set0();
+    }
+
+    reg u256 z;
+    reg bool mf0, lf0, zf0;
     ?{mf0, lf0, zf0}, z = #set0();
 
-    inline int i;
-    for i = 0 to T {
-
+    reg u256 acc;
+    for i = 0 to RWORDS {
         inline int j;
-        for j = 0 to 2 { // Iterate over 128-bit parts.
-
+        for j = 0 to 2 { // Iterate over half-words.
             inline int k;
-            for k = 0 to 2 { // Iterate over 64-bit parts.
-
-                acc, mf0, lf0, zf0, out = loop_body(
-                    a, b,
-                    out,
-                    z,
-                    acc,
-                    mf0, lf0, zf0,
-                    i, j, k
-                );
-
+            for k = 0 to 2 { // Iterate over limbs.
+                if (i == 0 && j == 0 && k == 0) {
+                    acc = #BN_MULQACC_Z(a[0], 0, b[0], 0, 0);
+                } else {
+                    mf0, lf0, zf0, acc, r
+                        = loop_body(i, j, k, mf0, lf0, zf0, r, a, b, z, acc);
+                }
             }
         }
     }
 
-    return out;
+    return r;
 }
 
 export
 fn mock() -> reg u256, reg u256 {
+    inline int i;
 
-    reg u256[N] a;
-    reg u256[M] b;
-    reg u256[T] out;
+    reg u256[NWORDS] a;
+    for i = 0 to NWORDS {
+        ?{}, a[i] = #set0();
+    }
 
-    ?{}, a[0] = #set0();
-    ?{}, a[1] = #set0();
-    ?{}, a[2] = #set0();
+    reg u256[MWORDS] b;
+    for i = 0 to MWORDS {
+        ?{}, b[i] = #set0();
+    }
 
-    ?{}, b[0] = #set0();
-    ?{}, b[1] = #set0();
-    ?{}, b[2] = #set0();
-
-    ?{}, out[0] = #set0();
-    ?{}, out[1] = #set0();
-    ?{}, out[2] = #set0();
-    ?{}, out[3] = #set0();
-    ?{}, out[4] = #set0();
-    ?{}, out[5] = #set0();
-
-    out = widemul(a, b, out);
+    reg u256[RWORDS] r;
+    r = widemul(a, b);
 
     reg u256 x y;
 
-    x = out[0];
-    y = out[1];
+    x = r[0];
+    y = r[1];
 
     return x, y;
 }
