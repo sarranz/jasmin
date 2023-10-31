@@ -1,0 +1,23 @@
+fn iterations_not_guaranteed(reg u64 x) {
+    reg u64 msf;
+
+    inline int i;
+    i = 0;
+    for i = 0 to i {
+        msf = #init_msf();
+    }
+
+    x = #protect(x, msf);
+}
+
+fn iterations_not_guaranteed1(reg u64 x) {
+    reg u64 msf;
+
+    inline int i;
+    i = 0;
+    for i = i downto 0 {
+        msf = #init_msf();
+    }
+
+    x = #protect(x, msf);
+}

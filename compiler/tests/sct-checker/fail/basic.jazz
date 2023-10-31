@@ -36,3 +36,19 @@ fn missing_then(#transient reg u64 a){
   a = not[(int) a];
   a = #protect(a, m);
 }
+
+fn not_msf_after_init() -> #public reg u64 {
+    reg u64 msf0 msf1;
+    msf0 = #init_msf();
+    _ = #init_msf();
+    msf1 = #mov_msf(msf0);
+    return msf1;
+}
+
+fn not_msf_after_init2() -> #public reg u64 {
+    reg u64 x msf;
+    x = 0;
+    msf = #init_msf();
+    x = #mov_msf(x);
+    return x;
+}

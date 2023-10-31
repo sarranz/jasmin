@@ -110,6 +110,42 @@ output corruption: #transient
  constraints:
 
 
+modmsf msf_after_for_loop : #transient ->
+#public
+output corruption: #public
+ constraints:
+
+
+modmsf msf_init_in_for_loop : #transient ->
+#public
+output corruption: #public
+ constraints:
+
+
+modmsf msf_mov_in_for_loop : #transient ->
+#public
+output corruption: #public
+ constraints:
+
+
+modmsf for_loop_one_iter : #transient ->
+#public
+output corruption: #public
+ constraints:
+
+
+nomodmsf zero_iterations_dont_mod_msf_aux : #public ->
+
+output corruption: #public
+ constraints:
+
+
+modmsf zero_iterations_dont_mod_msf : #transient ->
+#public
+output corruption: #public
+ constraints:
+
+
 File local-stack-array.jazz:
 modmsf main : #transient ->
 #public
@@ -133,7 +169,7 @@ modmsf fig3b : #[ptr = transient, val = transient] *
 #[ptr = public, val = { n = s, s = s}]
 output corruption: #transient
  constraints:
-s <= s, w <= w, 
+w <= w, s <= s, 
 
 modmsf fig4a : #[ptr = public, val = { n = d, s = d}] *
                #[ptr = public, val = secret] ->

@@ -275,7 +275,3 @@ val clamp_pe : pelem -> Z.t -> Z.t
 (* -------------------------------------------------------------------- *)
 type ('info,'asm) sfundef = Expr.stk_fun_extra * ('info,'asm) func 
 type ('info,'asm) sprog   = ('info,'asm) sfundef list * Expr.sprog_extra
-
-
-
-
