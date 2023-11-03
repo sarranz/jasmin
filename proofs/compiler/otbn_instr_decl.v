@@ -239,6 +239,9 @@ Variant otbn_op :=
   | BN_ACCW  (* Write from wide register to ACC register. *)
   | BN_MODR  (* Read from MOD register to wide register. *)
   | BN_MODW  (* Write from wide register to MOD register. *)
+
+  | BN_LID
+  | BN_SID
 .
 
 Scheme Equality for otbn_op.
@@ -280,6 +283,8 @@ Definition string_of_otbn_op (op : otbn_op) : string :=
   | BN_ACCW => "BN.ACCW"
   | BN_MODR => "BN.MODR"
   | BN_MODW => "BN.MODW"
+  | BN_LID => "BN.LID"
+  | BN_SID => "BN.SID"
   end.
 
 (* -------------------------------------------------------------------------- *)
@@ -318,6 +323,12 @@ Section I_ARGS_KINDS.
 
   Definition ak_xreg_xreg_imm8_xreg_imm8_imm8 : i_args_kinds :=
     [:: [:: xreg; xreg; imm8; xreg; imm8; imm8 ] ].
+
+  Definition ak_xreg_reg_mem : i_args_kinds :=
+    [:: [:: [:: CAxmm ]; [:: CAreg ]; [:: CAmem true ] ]].
+
+  Definition ak_mem_reg_xreg : i_args_kinds :=
+    [:: [:: [:: CAmem true ]; [:: CAreg ]; [:: CAxmm ] ]].
 
 End I_ARGS_KINDS.
 
@@ -1270,9 +1281,9 @@ Definition desc_FGRW (fg : bn_flag_group) : instr_desc_t := TODO_OTBN "FGRW".
 Definition desc_BN_WSR op ad_in ad_out : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
-    id_tin := [:: sword xreg_size ];
+    id_tin := [:: sxreg ];
     id_in := [:: ad_in ];
-    id_tout := [:: sword xreg_size ];
+    id_tout := [:: sxreg ];
     id_out := [:: ad_out ];
     id_semi := fun x => ok x;
     id_nargs := 1;
@@ -1281,6 +1292,25 @@ Definition desc_BN_WSR op ad_in ad_out : instr_desc_t :=
     id_tin_narr := refl_equal;
     id_tout_narr := refl_equal;
     id_check_dest := ltac:(by case ad_out);
+    id_str_jas := pp_s (string_of_otbn_op op);
+    id_safe := [::];
+    id_pp_asm := pp_otbn_op op xreg_size;
+  |}.
+
+Definition desc_BN_indirect op ak : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := [:: sreg; sxreg ];
+    id_in := [:: E 1; E 2 ];
+    id_tout := [:: sxreg ];
+    id_out := [:: E 0 ];
+    id_semi := fun _ x => ok x;
+    id_nargs := 3;
+    id_args_kinds := ak;
+    id_eq_size := refl_equal;
+    id_tin_narr := refl_equal;
+    id_tout_narr := refl_equal;
+    id_check_dest := refl_equal;
     id_str_jas := pp_s (string_of_otbn_op op);
     id_safe := [::];
     id_pp_asm := pp_otbn_op op xreg_size;
@@ -1310,6 +1340,8 @@ Definition desc_otbn_op (op : otbn_op) : instr_desc_t :=
   | BN_ACCW => desc_BN_WSR op (E 0) (Xreg ACC)
   | BN_MODR => desc_BN_WSR op (Xreg MOD) (E 0)
   | BN_MODW => desc_BN_WSR op (E 0) (Xreg MOD)
+  | BN_LID => desc_BN_indirect BN_LID ak_xreg_reg_mem
+  | BN_SID => desc_BN_indirect BN_SID ak_mem_reg_xreg
   end.
 
 
@@ -1397,30 +1429,29 @@ Section VALIDATION.
 
   Goal uniq strings. done. Qed.
 
+  Let hidden := [:: "LA"; "BN_LID"; "BN_SID" ]%string.
+
   Goal
     forall op,
       let: s := replace_dot (string_of_otbn_op op) in
-      xorb (s == "LA"%string) (s \in strings).
-  by move=> [] // []. Qed.
+      xorb (s \in hidden) (s \in strings).
+  by move=> [] // [] //. Qed.
 
-  Definition aux (seen : seq nat) (acc : nat) (x : arg_desc) : seq nat * nat :=
+  Definition aux (seen : seq nat) (x : arg_desc) : seq nat :=
     if x is ADExplicit _ n _
-    then
-      if n \notin seen
-      then (n :: seen, S acc)
-      else (seen, acc)
-    else (seen, acc).
+    then if n \notin seen then n :: seen else seen
+    else seen.
 
   Fixpoint count_explicit_arguments_aux
-    (seen : seq nat) (acc : nat) (xs : seq arg_desc) : nat :=
+    (seen : seq nat) (xs : seq arg_desc) : nat :=
     match xs with
-    | [::] => acc
+    | [::] => size seen
     | x :: xs =>
-        let '(seen', acc') := aux seen acc x in
-        count_explicit_arguments_aux seen' acc' xs
+        let seen' := aux seen x in
+        count_explicit_arguments_aux seen' xs
     end.
 
-  Definition count_explicit_arguments := count_explicit_arguments_aux [::] O.
+  Definition count_explicit_arguments := count_explicit_arguments_aux [::].
 
   Goal
     forall op,

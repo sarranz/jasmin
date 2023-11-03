@@ -31,7 +31,7 @@ export
 fn mulqacc_fg0(reg u256 x y) -> reg u256 {
     reg u256 a b acc;
 
-    ?{}, a = #set0();
+    ?{}, a = #set0_256();
     acc = #BN_ACCW(a);
 
     reg bool mf, lf, zf;
@@ -54,7 +54,7 @@ export
 fn mulqacc_fg1(reg u256 x y) -> reg u256 {
     reg u256 a b acc;
 
-    ?{}, a = #set0();
+    ?{}, a = #set0_256();
     acc = #BN_ACCW(a);
 
     reg bool mf, lf, zf;

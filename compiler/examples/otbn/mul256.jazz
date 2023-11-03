@@ -2,7 +2,7 @@ fn mul256(reg u256 x y) -> reg u256, reg u256 {
     reg u256 acc rlo rhi;
     reg bool mf0 lf0 zf0;
 
-    ?{mf0, lf0, zf0}, rlo = #set0();
+    ?{mf0, lf0, zf0}, rlo = #set0_256();
 
     acc = #BN_MULQACC_Z(x, 0, y, 0, 0);                        /* a0b0 */
     acc = #BN_MULQACC(x, 0, y, 1, acc, 64);                    /* a0b1 */
@@ -42,7 +42,7 @@ export
 fn mock() -> reg u256, reg u256 {
     reg u256 x y;
 
-    ?{}, x = #set0();
+    ?{}, x = #set0_256();
     y = !x;
     x += 2;
 

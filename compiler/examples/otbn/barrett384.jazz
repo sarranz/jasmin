@@ -1,3 +1,41 @@
+// Return [rhi, rlo] = b ? [hi0, lo0] : [hi1, lo1].
+inline
+fn bn_sel512(reg u256 hi0 lo0 hi1 lo1, reg bool b) -> reg u256, reg u256 {
+    reg u256 rlo rhi;
+    rlo = b ? lo0 : lo1;
+    rhi = b ? hi0 : hi1;
+    return rhi, rlo;
+}
+
+// Return [rhi, rlo] = [ahi, alo] + [bhi, blo].
+inline
+fn bn_add512(reg u256 ahi alo bhi blo) -> reg bool, reg u256, reg u256 {
+    reg u256 rhi rlo;
+    reg bool cf;
+    cf, rlo = alo +256u blo;
+    cf, rhi = ahi +256u bhi + cf;
+    return cf, rhi, rlo;
+}
+
+// Return [rhi, rlo] = [ahi, alo] - [bhi, blo].
+inline
+fn bn_sub512(reg u256 ahi alo bhi blo) -> reg bool, reg u256, reg u256 {
+    reg u256 rhi rlo;
+    reg bool bf;
+    bf, rlo = alo -256u blo;
+    bf, rhi = ahi -256u bhi - bf;
+    return bf, rhi, rlo;
+}
+
+// Return [rhi, rlo] = [a, b] >> sham.
+inline
+fn bn_rshi512(reg u256 a b z, inline int sham) -> reg u256, reg u256 {
+    reg u256 rhi rlo;
+    rhi = #BN_RSHI(z, a, sham);
+    rlo = #BN_RSHI(a, b, sham);
+    return rhi, rlo;
+}
+
 /*
 // The compiler should print labels for each of these.
 
@@ -106,8 +144,7 @@ fn barrett384(
     // u0 = M ? u : 0
     //    = M ? [uhi, ulo] : 0
     reg u256 u0hi u0lo;
-    u0lo = #BN_SEL(ulo, z, mf0);
-    u0hi = #BN_SEL(uhi, z, mf0);
+    u0hi, u0lo = bn_sel512(uhi, ulo, z, z, mf0);
 
     // Save the two lower limbs of x.
     reg u256 s_x_0 s_x_1;
@@ -118,8 +155,7 @@ fn barrett384(
     //    = [x_2, x_1, x_0] >> 383
     //    = [x_2, x_0] >> 127
     reg u256 q1hi q1lo;
-    q1hi = #BN_RSHI(z, x_2, 127);
-    q1lo = #BN_RSHI(x_2, x_1, 127);
+    q1hi, q1lo = bn_rshi512(x_2, x_1, z, 127);
 
     // q2' = q1[383:0] * u[383:0]
     //     = [q1hi, q1lo] * [uhi, ulo]
@@ -136,14 +172,12 @@ fn barrett384(
 
     // q2'' = q2' >> 384
     reg u256 q2pphi q2pplo;
-    q2pphi = #BN_RSHI(z, q2phi, 128);
-    q2pplo = #BN_RSHI(q2phi, q2plo, 128);
+    q2pphi, q2pplo = bn_rshi512(q2phi, q2plo, z, 128);
 
     // q2''' = q2'' + q1
     reg bool cf;
     reg u256 q2ppphi q2ppplo;
-    cf, q2ppplo = q2pplo +256u q1lo;
-    _, q2ppphi = q2pphi +256u q1hi + cf;
+    _, q2ppphi, q2ppplo = bn_add512(q2pphi, q2pplo, q1hi, q1lo);
 
     // q2'''' = x[767] ? (q2''' + u[383:0]) : q2'''
     reg u256 q2pppphi q2pppplo;
@@ -153,8 +187,7 @@ fn barrett384(
     // q3 = q2 >> 385
     //    = q2'''' >> 1
     reg u256 q3hi q3lo;
-    q3hi = #BN_RSHI(z, q2pppphi, 1);
-    q3lo = #BN_RSHI(q2pppphi, q2pppplo, 1);
+    q3hi, q3lo = bn_rshi512(q2pppphi, q2pppplo, z, 1);
 
     // r2 = q3 * m
     reg u256 r2_2 r2_1 r2_0;
@@ -172,23 +205,16 @@ fn barrett384(
     //   = x - r2
     reg bool bf;
     reg u256 rhi rlo;
-    bf, rhi = s_x_0 -256u r2_0;
-    _, rlo = s_x_1 -256u r2_1 - bf;
+    _, rhi, rlo = bn_sub512(s_x_1, s_x_0, r2_1, r2_0);
 
     // c = a * b % m
     //   = ??
     reg u256 chi clo;
-    bf, clo = s_x_0 -256u mlo;
-    bf, chi = s_x_1 -256u mhi - bf;
+    bf, chi, clo = bn_sub512(rhi, rlo, mhi, mlo);
+    rhi, rlo = bn_sel512(rhi, rlo, chi, clo, bf);
 
-    s_x_0 = #BN_SEL(s_x_0, clo, bf);
-    s_x_1 = #BN_SEL(s_x_1, chi, bf);
-
-    bf, clo = s_x_0 -256u mlo;
-    bf, chi = s_x_1 -256u mhi - bf;
-
-    clo = #BN_SEL(s_x_0, clo, bf);
-    chi = #BN_SEL(s_x_1, chi, bf);
+    bf, chi, clo = bn_sub512(rhi, rlo, mhi, mlo);
+    chi, clo = bn_sel512(rhi, rlo, chi, clo, bf);
 
     return chi, clo;
 }
@@ -201,10 +227,10 @@ inline
 fn _main(reg u256 ahi alo bhi blo mhi mlo uhi ulo) -> reg u256, reg u256 {
     reg u256 c2 c1 c0 z;
     reg bool mf0 lf0 zf0;
-    ?{}, c2 = #set0();
-    ?{}, c1 = #set0();
-    ?{}, c0 = #set0();
-    ?{mf0, lf0, zf0}, z = #set0();
+    ?{}, c2 = #set0_256();
+    ?{}, c1 = #set0_256();
+    ?{}, c0 = #set0_256();
+    ?{mf0, lf0, zf0}, z = #set0_256();
 
     reg u256 clo chi;
     chi, clo = barrett384(
@@ -235,20 +261,20 @@ fn main(reg u256 ahi alo bhi blo mhi mlo uhi ulo) -> reg u256, reg u256 {
 export
 fn mock() -> reg u256, reg u256 {
     reg u256 ahi alo; // a, first operand, max. length 384 bit.
-    ?{}, ahi = #set0();
-    ?{}, alo = #set0();
+    ?{}, ahi = #set0_256();
+    ?{}, alo = #set0_256();
 
     reg u256 bhi blo; // b, second operand, max. length 384 bit.
-    ?{}, bhi = #set0();
-    ?{}, blo = #set0();
+    ?{}, bhi = #set0_256();
+    ?{}, blo = #set0_256();
 
     reg u256 mhi mlo; // m, modulus, max. length 384 bit with 2^384 > m > 2^383.
-    ?{}, mhi = #set0();
-    ?{}, mlo = #set0();
+    ?{}, mhi = #set0_256();
+    ?{}, mlo = #set0_256();
 
     reg u256 uhi ulo; // u, pre-computed Barrett constant (without u[384]/MSb.
-    ?{}, uhi = #set0();
-    ?{}, ulo = #set0();
+    ?{}, uhi = #set0_256();
+    ?{}, ulo = #set0_256();
 
     reg u256 chi clo;
     chi, clo = _main(ahi, alo, bhi, blo, mhi, mlo, uhi, ulo);

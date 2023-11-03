@@ -161,15 +161,22 @@ let pp_mnemonic_ext ext =
   | PP_name -> ""
   | _ -> E.invalid_pp_aop_ext ()
 
+(* TODO_OTBN: Remove. *)
+let indirect_args pp =
+  match Conv.string_of_cstring pp.pp_aop_name with
+  | "BN.LID" | "BN.SID" -> List.tl pp.pp_aop_args
+  | _ -> pp.pp_aop_args
+
 (* TODO_OTBN: Is this generic? *)
 let pp_otbn_op pp =
+  let pp_args = indirect_args pp in
   let name =
     Format.sprintf
       "%s%s"
       (Conv.string_of_cstring pp.pp_aop_name |> String.lowercase)
       (pp_mnemonic_ext pp.pp_aop_ext)
   in
-  let args = List.map (fun (_, a) -> pp_asm_arg a) pp.pp_aop_args in
+  let args = List.map (fun (_, a) -> pp_asm_arg a) pp_args in
   name, args
 
 let addr_rsp =

@@ -30,8 +30,8 @@ Module E.
   Definition internal_error (msg : string) (ii : instr_info) : pp_error_loc :=
     (pp_internal_error_s_at pass_name ii msg).
 
-  Definition set0_invalid_lexprs :=
-    internal_error "invalid destination for set0".
+  Definition invalid_lexprs := internal_error "invalid destination".
+  Definition invalid_rexprs := internal_error "invalid arguments".
 
 End E.
 
@@ -45,7 +45,9 @@ Notation E n := (ADExplicit n None) (only parsing).
 Context {atoI : arch_toIdent}.
 
 Variant extra_op :=
-  | set0
+  | set0 of wsize
+  | bn_indirect_load
+  | bn_indirect_store
 .
 
 Scheme Equality for extra_op.
@@ -65,28 +67,50 @@ Canonical extra_op_eqType := @ceqT_eqType _ eqTC_extra_op.
 
 Definition string_of_extra_op (eo : extra_op) : string :=
   match eo with
-  | set0 => "set0"
+  | set0 _ => "set0"
+  | bn_indirect_load => "BN_INDIRECT_LOAD"
+  | bn_indirect_store => "BN_INDIRECT_STORE"
   end.
 
-Definition desc_set0 : instruction_desc :=
+Definition desc_set0_small : instruction_desc :=
+  mk_instr_desc
+    (pp_s (string_of_extra_op (set0 U8)))
+    [::] [::]
+    [:: sreg ] [:: E 0 ]
+    (ok 0%R)
+    [::].
+
+Definition desc_set0_large : instruction_desc :=
   let ty_mlz := behead ty_cmlz in
   let ak_mlz := map sopn_arg_desc (behead (ad_cmlz FG0)) in
   let vf := Some false in
   let vt := Some true in
   mk_instr_desc
-    (pp_s (string_of_extra_op set0))
+    (pp_s (string_of_extra_op (set0 U8)))
     [::] [::]
     (ty_mlz ++ [:: sxreg ]) (ak_mlz ++ [:: E 0 ])
     (ok (:: vf, vf, vt & 0%R))
     [::].
 
+Definition desc_indirect : instruction_desc :=
+  mk_instr_desc
+    (pp_s (string_of_extra_op bn_indirect_load))
+    [:: sxreg ] [:: E 2 ]
+    [:: sreg; sxreg ] [:: E 0; E 1 ]
+    (fun x => ok (:: 0%R & x ))
+    [::].
+
 Definition get_instr_desc (eo : extra_op) : instruction_desc :=
   match eo with
-  | set0 => desc_set0
+  | set0 ws => if (ws <= reg_size) then desc_set0_small else desc_set0_large
+  | bn_indirect_load | bn_indirect_store => desc_indirect
   end.
 
 Definition prim_string : seq (string * prim_constructor extra_op) :=
-  [:: (string_of_extra_op set0, PrimOTBN_none set0) ].
+  [:: (string_of_extra_op (set0 U8), PrimOTBN_ws set0)
+    ; (string_of_extra_op bn_indirect_load, PrimOTBN_none bn_indirect_load)
+    ; (string_of_extra_op bn_indirect_store, PrimOTBN_none bn_indirect_store)
+  ].
 
 #[global]
 Instance extra_op_decl : asmOp extra_op | 1 :=
@@ -99,25 +123,115 @@ Instance extra_op_decl : asmOp extra_op | 1 :=
 (* -------------------------------------------------------------------------- *)
 (* Assembly of extra operations. *)
 
-Definition get_last_var (err : pp_error_loc) (les : seq lexpr) : cexec var_i :=
-  match rev les with
-  | LLvar x :: _ =>  ok x
-  | _ => Error err
-  end.
+Section ASSEMBLE.
 
-Definition assemble_extra
-  (ii : instr_info)
-  (eo : extra_op)
-  (les : seq lexpr)
-  (res : seq rexpr) :
-  cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
-  match eo with
-  | set0 =>
-      Let x := get_last_var (E.set0_invalid_lexprs ii) les in
-      let x := Rexpr (Fvar x) in
-      let k0 := Rexpr (fconst reg_size 0) in
-      ok [:: ((None, BN_basic BN_XOR FG0), les, [:: x; x ]) ]
-  end.
+  Context (ii : instr_info).
+
+  Definition assemble_set0
+    (ws : wsize)
+    (les : seq lexpr)
+    (res : seq rexpr) :
+    cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
+    let '(op, v) :=
+      if (ws <= reg_size)%CMP
+      then (RV32 XOR, to_var X03)
+      else (BN_basic BN_XOR FG0, to_var W01)
+    in
+    let x := rvar (mk_var_i v) in
+    ok [:: ((None, op), les, [:: x; x ]) ].
+
+  Definition idx_of_wide_register (wr : wide_register) : option Z :=
+    match wr with
+    | W00 => Some 0
+    | W01 => Some 1
+    | W02 => Some 2
+    | W03 => Some 3
+    | W04 => Some 4
+    | W05 => Some 5
+    | W06 => Some 6
+    | W07 => Some 7
+    | W08 => Some 8
+    | W09 => Some 9
+    | W10 => Some 10
+    | W11 => Some 11
+    | W12 => Some 12
+    | W13 => Some 13
+    | W14 => Some 14
+    | W15 => Some 15
+    | W16 => Some 16
+    | W17 => Some 17
+    | W18 => Some 18
+    | W19 => Some 19
+    | W20 => Some 20
+    | W21 => Some 21
+    | W22 => Some 22
+    | W23 => Some 23
+    | W24 => Some 24
+    | W25 => Some 25
+    | W26 => Some 26
+    | W27 => Some 27
+    | W28 => Some 28
+    | W29 => Some 29
+    | W30 => Some 30
+    | W31 => Some 31
+    | ACC => None
+    | MOD => None
+    end%Z.
+
+  Definition assemble_bn_indirect_load
+    (les : seq lexpr)
+    (res : seq rexpr) :
+    cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
+    Let: (vrd, vwr) :=
+      if les is LLvar vrd :: LLvar vwr :: _
+      then ok (vrd, vwr)
+      else Error (E.invalid_lexprs ii)
+    in
+    Let addr :=
+      if res is Load U256 _ _ as addr :: _
+      then ok addr
+      else Error (E.invalid_rexprs ii)
+    in
+    Let wr := o2r (E.invalid_lexprs ii) (of_var vwr) in
+    Let nwr := o2r (E.invalid_lexprs ii) (idx_of_wide_register wr) in
+    let i0 := ((None, RV32 LI), [:: LLvar vrd ], [:: rconst reg_size nwr ]) in
+    let i1 := ((None, BN_LID), [:: LLvar vwr ], [:: rvar vrd; addr ]) in
+    let i2 := ((None, RV32 LI), [:: LLvar vrd ], [:: rconst reg_size 0 ] ) in
+    ok [:: i0; i1; i2 ].
+
+  Definition assemble_bn_indirect_store
+    (les : seq lexpr)
+    (res : seq rexpr) :
+    cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
+    Let: (vrd, addr) :=
+      if les is LLvar vrd :: Store U256 _ _ as addr :: _
+      then ok (vrd, addr)
+      else Error (E.invalid_lexprs ii)
+    in
+    Let vwr :=
+      if res is Rexpr (Fvar vwr) :: _
+      then ok vwr
+      else Error (E.invalid_rexprs ii)
+    in
+    Let wr := o2r (E.invalid_lexprs ii) (of_var vwr) in
+    Let nwr := o2r (E.invalid_lexprs ii) (idx_of_wide_register wr) in
+    let i0 := ((None, RV32 LI), [:: LLvar vrd ], [:: rconst reg_size nwr ]) in
+    let i1 := ((None, BN_SID), [:: addr ], [:: rvar vrd; rvar vwr ]) in
+    let i2 := ((None, RV32 LI), [:: LLvar vrd ], [:: rconst reg_size 0 ] ) in
+    ok [:: i0; i1; i2 ].
+
+  Definition assemble_extra
+    (eo : extra_op)
+    (les : seq lexpr)
+    (res : seq rexpr) :
+    cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
+    match eo with
+    | set0 ws => assemble_set0 ws les res
+    | bn_indirect_load => assemble_bn_indirect_load les res
+    | bn_indirect_store => assemble_bn_indirect_store les res
+    end.
+
+End ASSEMBLE.
 
 #[export]
 Instance otbn_extra :

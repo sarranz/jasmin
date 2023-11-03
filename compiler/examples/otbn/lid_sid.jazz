@@ -1,0 +1,34 @@
+param int NDATA = 1;
+
+u64[4 * NDATA] data = { 0x1, 0x0, 0x0, 0x0 };
+
+inline
+fn load_data() -> reg u256[NDATA] {
+    reg ptr u256[NDATA] p;
+    p = data;
+
+    reg u256[NDATA] wr;
+    inline int i;
+    for i = 0 to NDATA {
+        _, wr[i] = #BN_INDIRECT_LOAD(p[u256 i]);
+    }
+
+    return wr;
+}
+
+export
+fn main() -> reg u256 {
+    reg u256[NDATA] wr;
+    wr = load_data();
+
+    reg u256 r;
+    r = wr[0];
+
+    reg u32 p;
+    p = 0x1000;
+    _, (u256)[p] = #BN_INDIRECT_STORE(r);
+
+    _, r = #BN_INDIRECT_LOAD((u256)[p]);
+
+    return r;
+}

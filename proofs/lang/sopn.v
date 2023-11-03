@@ -68,6 +68,7 @@ Variant prim_constructor (asm_op:Type) :=
      -> bool              (* is_conditional *)
      -> asm_op)
   | PrimOTBN_none of asm_op
+  | PrimOTBN_ws of wsize -> asm_op
   | PrimOTBN_fg of bn_flag_group -> asm_op
   | PrimOTBN_mulqacc_so of
       bn_flag_group ->
@@ -335,6 +336,7 @@ Definition map_prim_constructor {A B} (f: A -> B) (p : prim_constructor A) : pri
   | PrimX86 a k => PrimX86 a (fun x => Option.bind (olift f) (k x))
   | PrimARM x => PrimARM (fun sf ic => f (x sf ic))
   | PrimOTBN_none x => PrimOTBN_none (f x)
+  | PrimOTBN_ws pr => PrimOTBN_ws (fun ws => f (pr ws))
   | PrimOTBN_fg pr => PrimOTBN_fg (fun fg => f (pr fg))
   | PrimOTBN_mulqacc_so pr => PrimOTBN_mulqacc_so (fun fg wb => f (pr fg wb))
   end.

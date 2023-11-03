@@ -16,7 +16,7 @@ module OTBN_core = struct
   type rflag = flag
   type cond = condition
   type asm_op = Otbn_instr_decl.otbn_op
-  type extra_op = Otbn_extra.__
+  type extra_op = Otbn_extra.extra_op
   type fresh_vars = Otbn_lowering.fresh_vars
   type lowering_options = Otbn_lowering.lowering_options
 
@@ -41,5 +41,6 @@ module OTBN (Input : OTBN_input) : Arch_full.Core_arch = struct
 
   let pp_asm = Pp_otbn.print_prog
 
-  let callstyle = Arch_full.ByReg (Some X01) (* TODO_OTBN: Fix this. *)
+  (* TODO_OTBN: Fix this. *)
+  let callstyle = Arch_full.ByReg (Some X01)
 end

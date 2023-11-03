@@ -14,6 +14,7 @@ let show_intrinsics asmOp fmt =
       end
     | PrimARM _ -> 5
     | PrimOTBN_none _ -> 0
+    | PrimOTBN_ws _ -> 1
     | PrimOTBN_fg _ -> 6
     | PrimOTBN_mulqacc_so _ -> 7
   in

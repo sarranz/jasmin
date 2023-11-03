@@ -132,9 +132,12 @@ Definition no_pre (li : low_instr) : low_cmd :=
   let%lr (lvs, op, es) := li in
   lc_issue [::] lvs op es.
 
+Definition with_pre (pre : seq otbn_args) (li : low_instr) : low_cmd :=
+  let%lr (lvs, op, es) := li in
+  lc_issue pre lvs op es.
+
 
 (* -------------------------------------------------------------------------- *)
-(* Utils. *)
 Section UTILS.
 
   Context (ii : instr_info).
@@ -146,11 +149,10 @@ Section UTILS.
   Definition chk_le_reg_ws (ws : wsize) : cexec unit :=
     assert (ws <= reg_size)%CMP (E.invalid_wsize ii).
 
-  Definition chk_reg_ws (ws : wsize) :=
-    assert (ws == reg_size)%CMP (E.invalid_wsize ii).
-
-  Definition chk_xreg_ws (ws : wsize) :=
-    assert (ws == xreg_size)%CMP (E.invalid_wsize ii).
+  Notation chk_ws :=
+    (fun (ws ws' : wsize) => assert (ws' == ws)%CMP (E.invalid_wsize ii)).
+  Definition chk_reg_ws := chk_ws reg_size.
+  Definition chk_xreg_ws := chk_ws xreg_size.
 
   Definition chk_shift_amount (z : Z) : cexec unit :=
     assert (is_range_steps z 0 248 8) (E.invalid_sham ii z).
@@ -299,8 +301,8 @@ Section LOWER_CONDITION.
 
   Context (ii : instr_info).
 
-  Definition lower_condition (c : pexpr) : cexec (seq otbn_args * pexpr) :=
-    Error (E.not_implemented ii).
+  Definition lower_condition (econd : pexpr) : cexec (seq otbn_args * pexpr) :=
+    if econd is Pvar f then ok ([::], econd) else Error (E.not_implemented ii).
 
 End LOWER_CONDITION.
 
@@ -448,19 +450,24 @@ Section LOWER_ASSIGN.
   Definition lower_pexpr_aux (ws : wsize) (e : pexpr) : low_instr :=
     match e with
     | Pvar v => lower_Pvar ws v
-    | Pget _ _ _ _
-    | Pload _ _ _ => lower_load ws e
+    | Pget _ _ _ _ | Pload _ _ _ => lower_load ws e
     | Papp1 op e => lower_Papp1 ws op e
     | Papp2 op a b => lower_Papp2 ws op a b
-    | _ => Error (E.invalid_expr ii)
+    | _ => skip
     end.
 
+  (* TODO_OTBN: This should be an extra_op without flag group and we issue
+     [BN_SEL] once we know which flag group we need. *)
+  Definition lower_Pif (ws : wsize) (econd e0 e1 : pexpr) : low_instr :=
+    Let _ := chk_xreg_ws ii ws in
+    li_simple (BN_SEL FG0) [:: e0; e1; econd ].
+
   Definition lower_pexpr (ws : wsize) (e : pexpr) : low_cmd :=
-    if e is Pif (sword ws') c e0 e1
+    if e is Pif (sword ws') econd e0 e1
     then
       Let _ := assert (ws == ws') (E.invalid_wsize ii) in
-      Let: (pre_cond, c') := lower_condition ii c in
-      Error (E.not_implemented ii)
+      Let: (pre, econd') := lower_condition ii econd in
+      with_pre pre (lower_Pif ws econd' e0 e1)
     else no_pre (lower_pexpr_aux ws e).
 
   (* Try to match a memory access and return the base pointer and

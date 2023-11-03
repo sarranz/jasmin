@@ -54,9 +54,9 @@ Context
   {ad : arch_decl reg regx xreg rflag cond}.
 
 Definition ak_reg_reg : i_args_kinds :=
-    [:: [:: [:: CAreg ]; [:: CAreg ] ] ].
+  [:: [:: [:: CAreg ]; [:: CAreg ] ] ].
 Definition ak_reg_imm : i_args_kinds :=
-    [:: [:: [:: CAreg ]; [:: CAimm reg_size ] ] ].
+  [:: [:: [:: CAreg ]; [:: CAimm reg_size ] ] ].
 Definition ak_reg_imm8 : i_args_kinds :=
   [:: [:: [:: CAreg ]; [:: CAimm U8 ] ] ].
 Definition ak_reg_imm16 : i_args_kinds :=
@@ -65,9 +65,9 @@ Definition ak_reg_addr : i_args_kinds :=
   [:: [:: [:: CAreg ]; [:: CAmem true ] ] ].
 
 Definition ak_reg_reg_reg : i_args_kinds :=
-    [:: [:: [:: CAreg ]; [:: CAreg ]; [:: CAreg ] ] ].
+  [:: [:: [:: CAreg ]; [:: CAreg ]; [:: CAreg ] ] ].
 Definition ak_reg_reg_imm : i_args_kinds :=
-    [:: [:: [:: CAreg ]; [:: CAreg ]; [:: CAimm reg_size ] ] ].
+  [:: [:: [:: CAreg ]; [:: CAreg ]; [:: CAimm reg_size ] ] ].
 Definition ak_reg_reg_imm8 : i_args_kinds :=
   [:: [:: [:: CAreg ]; [:: CAreg ]; [:: CAimm U8 ] ] ].
 Definition ak_reg_reg_imm16 : i_args_kinds :=

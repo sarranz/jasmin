@@ -81,11 +81,14 @@ Definition free_vars_r (r:rexpr) : Sv.t :=
   | Rexpr e    => free_vars e
   end.
 
+Definition rvar (x : var_i) : rexpr := Rexpr (Fvar x).
+Definition rconst (ws : wsize) (z : Z) : rexpr := Rexpr (fconst ws z).
+
 Module FOPN_ARGS.
   Definition lval := lexpr.
   Definition rval := rexpr.
   Definition lvar := LLvar.
   Definition lmem ws x z := Store ws x (Fconst z).
-  Definition rvar x := Rexpr (Fvar x).
-  Definition rconst ws z := Rexpr (fconst ws z).
+  Definition rvar := rvar.
+  Definition rconst := rconst.
 End FOPN_ARGS.

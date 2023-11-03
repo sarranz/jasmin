@@ -36,7 +36,7 @@ param int MWORDS = (MBITS - 1) / WORD_SIZE + 1; // ceil(MBITS / WORD_SIZE)
 param int MLIMBS = (MBITS - 1) / LIMB_SIZE + 1; // ceil(MBITS / LIMB_SIZE)
 
 param int RWORDS = (NBITS + MBITS - 1) / WORD_SIZE + 1;
-param int RLIMBS = (NBITS + MBITS - 1) / LIMBS_SIZE + 1;
+param int RLIMBS = (NBITS + MBITS - 1) / LIMB_SIZE + 1;
 
 inline
 fn bn_mulqacc_so(
@@ -232,12 +232,12 @@ fn widemul(reg u256[NWORDS] a, reg u256[MWORDS] b) -> reg u256[RWORDS] {
 
     reg u256[RWORDS] r;
     for i = 0 to RWORDS {
-        ?{}, r[i] = #set0();
+        ?{}, r[i] = #set0_256();
     }
 
     reg u256 z;
     reg bool mf0, lf0, zf0;
-    ?{mf0, lf0, zf0}, z = #set0();
+    ?{mf0, lf0, zf0}, z = #set0_256();
 
     reg u256 acc;
     for i = 0 to RWORDS {
@@ -264,12 +264,12 @@ fn mock() -> reg u256, reg u256 {
 
     reg u256[NWORDS] a;
     for i = 0 to NWORDS {
-        ?{}, a[i] = #set0();
+        ?{}, a[i] = #set0_256();
     }
 
     reg u256[MWORDS] b;
     for i = 0 to MWORDS {
-        ?{}, b[i] = #set0();
+        ?{}, b[i] = #set0_256();
     }
 
     reg u256[RWORDS] r;
