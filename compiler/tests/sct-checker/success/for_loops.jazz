@@ -1,0 +1,96 @@
+export fn msf_after_for_loop(#transient reg u64 x) -> #public reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
+
+    inline int i;
+    i = 1;
+    for i = 0 to i {
+        x += 1;
+    }
+
+    x = #protect(x, msf);
+    return x;
+}
+
+export fn msf_init_in_for_loop(#transient reg u64 x) -> #public reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
+
+    inline int i;
+    i = 1;
+    for i = 0 to i {
+        msf = #init_msf();
+    }
+
+    x = #protect(x, msf);
+    return x;
+}
+
+
+export fn msf_mov_in_for_loop(#transient reg u64 x) -> #public reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
+
+    inline int i;
+    i = 1;
+    for i = 0 to i {
+        msf = #mov_msf(msf);
+    }
+
+    x = #protect(x, msf);
+    return x;
+}
+
+export fn for_loop_one_iter(#transient reg u64 x) -> #public reg u64 {
+    reg u64 msf;
+    inline int i;
+    for i = 2 * 1 to 1 + 3 - 1 {
+        msf = #init_msf();
+    }
+    x = #protect(x, msf);
+    return x;
+}
+
+inline fn zero_iterations_dont_mod_msf_aux(#secret reg u64 x) -> {
+    inline int i;
+    for i = 4 to 0 {
+        if (x == 0) {}
+    }
+}
+
+export
+fn zero_iterations_dont_mod_msf(#transient reg u64 x) -> #public reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
+    zero_iterations_dont_mod_msf_aux(x);
+    x = #protect(x, msf);
+    return x;
+}
+
+export
+fn zero_iterations_dont_kill_msf(#transient reg u64 x) -> #public reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
+
+    inline int i;
+    for i = 0 to 0 {
+        if (x == 0) {}
+    }
+
+    x = #protect(x, msf);
+    return x;
+}
+
+export
+fn zero_iterations_dont_need_msf(#transient reg u64 x) -> #public reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
+
+    inline int i;
+    for i = 0 to 0 {
+        x = #protect(x, x);
+    }
+
+    x = #protect(x, msf);
+    return x;
+}

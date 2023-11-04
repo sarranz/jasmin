@@ -5,6 +5,29 @@ open Constraints
 
 module S = Syntax
 
+
+(* ----------------------------------------------------------- *)
+
+let current_fcp () =
+  let open Glob_options in
+  match !target_arch with
+  | X86_64 -> X86_decl.x86_fcp
+  | ARM_M4 -> Arm_decl.arm_fcp
+
+let guaranteed_iterations (_, elo, ehi) =
+  let fcp = current_fcp () in
+  Conv.cexpr_of_expr (Papp2(Osub Op_int, ehi, elo))
+  |> Constant_prop.const_prop_e fcp None Constant_prop.empty_cpm
+  |> Expr.is_const
+  |> Option.map Conv.z_of_cz
+
+let guaranteed_zero_iterations rn =
+  guaranteed_iterations rn |> Option.map_default (fun z -> z <= Z.zero) false
+
+let guaranteed_nonzero_iterations rn =
+  guaranteed_iterations rn |> Option.map_default (fun z -> Z.zero < z) false
+
+
 (* ----------------------------------------------------------- *)
 let pp_var fmt x = Printer.pp_var ~debug:false fmt x
 
@@ -15,7 +38,7 @@ let pp_expr fmt e = Printer.pp_expr ~debug:false fmt e
 let pp_lval fmt x = Printer.pp_lval ~debug:false fmt x
 
 let pp_vset fmt xs =
-  Format.fprintf fmt "{@[ %a @]}"  (pp_list ",@ " pp_var) (Sv.elements xs)
+  Format.fprintf fmt "@[<h>{@ %a@ }@]" (pp_list ",@ " pp_var) (Sv.elements xs)
 
 
 (* ----------------------------------------------------------- *)
@@ -149,7 +172,7 @@ let rec modmsf_i fenv i =
     | Update_msf  -> true (* not sure it is needed *)
     | Mov_msf | Protect | Other -> false
     end
-  | Cfor(_, _, c) -> modmsf_c fenv c
+  | Cfor(_, rn, c) -> not (guaranteed_zero_iterations rn) && modmsf_c fenv c
   | Ccall (_, _, f, _) -> (FEnv.get_fty fenv f).modmsf
 
 and modmsf_c fenv c =
@@ -222,13 +245,23 @@ let rec infer_msf_i ~withcheck fenv (tbl:(L.i_loc, Sv.t) Hashtbl.t) i ms =
     let ms2 = infer_msf_c ~withcheck fenv tbl c2 ms in
     Sv.union ms1 ms2
 
-  | Cfor(x, _, c) ->
-    check_x ms x;
-    let rec loop ms =
-      let ms' = infer_msf_c ~withcheck fenv tbl c ms in
-      if Sv.subset ms' ms then (Hashtbl.add tbl i.i_loc ms'; ms')
-      else loop (Sv.union ms' ms) in
-    loop ms
+  | Cfor(x, rn, c) ->
+    let ms =
+      if guaranteed_zero_iterations rn
+      then ms
+      else
+        let nonzero_iters = guaranteed_nonzero_iterations rn in
+        let rec loop ms =
+          let ms' = infer_msf_c ~withcheck fenv tbl c ms in
+          if Sv.subset ms' ms
+          then if nonzero_iters then ms' else ms
+          else loop (Sv.union ms' ms)
+        in
+        check_x ms x;
+        loop ms
+    in
+    Hashtbl.add tbl i.i_loc ms;
+    ms
 
   | Cwhile (_, c1, _, c2) ->
     (* c1; while e do c2; c1 *)
@@ -348,7 +381,6 @@ module Env : sig
   val corruption_speculative : env -> venv -> VlPairs.t -> venv
 
   val get_resulting_corruption : venv -> VlPairs.t
-
 end = struct
 
   type env = {
@@ -644,11 +676,7 @@ and ty_exprs_max env venv loc es : vty =
 (* ------------------------------------------------------------- *)
 (* Compare expressions up to constant folding *)
 let expr_equal a b =
-  let fcp =
-    let open Glob_options in
-    match !target_arch with
-    | X86_64 -> X86_decl.x86_fcp
-    | ARM_M4 -> Arm_decl.arm_fcp in
+  let fcp = current_fcp () in
   let normalize e =
     e |> Conv.cexpr_of_expr |> Constant_prop.(const_prop_e fcp None empty_cpm) in
   Expr.eq_expr (normalize a) (normalize b)
@@ -708,6 +736,20 @@ module MSF : sig
     | Some e1, Some e2 when expr_equal e1 e2 -> Sv.inter xs1 xs2, Some e1
     | _, _ -> toinit
 
+  let check_known_msf ms xs =
+    let explanation =
+      match Sv.elements xs with
+      | [] -> "there are no MSFs at this point"
+      | [x] -> Format.asprintf "only %a is" pp_var x
+      | _ -> Format.asprintf "only the variables in %a are" pp_vset xs
+    in
+    if not (Sv.mem (L.unloc ms) xs) then
+      error
+        ~loc:(L.loc ms)
+        "@[<h>the variable %a is not an MSF, %s@]"
+        pp_var_i ms
+        explanation
+
   let check_msf_trans (xs, ob) ms b =
     match ob with
     | None -> error ~loc:(L.loc ms) "MSF is not Trans"
@@ -716,10 +758,7 @@ module MSF : sig
           error ~loc:(L.loc ms)
           "the expression %a need to be equal to@ %a"
             pp_expr b pp_expr  b';
-        if not (Sv.mem (L.unloc ms) xs) then
-          error ~loc:(L.loc ms)
-            "the variable %a is not known to be a msf, only %a are"
-          pp_var_i ms pp_vset xs
+        check_known_msf ms xs
 
   let is_msf_exact (xs, ob) ms =
     match ob with
@@ -728,13 +767,8 @@ module MSF : sig
 
   let check_msf_exact (xs, ob) ms =
     match ob with
-    | Some b ->
-      error ~loc:(L.loc ms) "MSF is Trans@ %a"  pp_expr b
-    | None ->
-        if not (Sv.mem (L.unloc ms) xs) then
-          error ~loc:(L.loc ms)
-            "the variable %a is not known to be a msf, only %a are"
-          pp_var_i ms pp_vset xs
+    | Some b -> error ~loc:(L.loc ms) "MSF is Trans@ %a" pp_expr b
+    | None -> check_known_msf ms xs
 
   let pp fmt (xs, oe) =
     match oe with
@@ -746,25 +780,22 @@ module MSF : sig
     if Sv.subset xs' xs then (xs', oe)
     else
       error ~loc:(loc.L.base_loc)
-        "current msf = %a, it should contain %a"
+        "@[<h>the current MSF state is %a, it should contain %a@]"
         pp msf pp_vset (Sv.diff xs' xs)
 
-  let end_loop loc ((xsi, oei) as msfi) ((xso, oeo) as msfo)=
-    if Sv.subset xsi xso then
-      begin match oei, oeo with
-      | None, None -> msfi
-      | Some ei, Some eo when expr_equal ei eo -> msfi
-      | _, _ ->
-          if not (Sv.is_empty xsi) then
-            error ~loc
-            "msf is %a it should be be at least %a"
-            pp msfo pp msfi;
-          toinit
-    end
-    else
+  let end_loop loc ((xsi, oei) as msfi) ((xso, oeo) as msfo) =
+    let err () =
       error ~loc
-        "msf is %a it should be be at least %a"
-        pp msfo pp msfi
+        "@[<h>the MSF state at the end of the loop is %a \
+        but it should be be at least %a@]"
+        pp msfo
+        pp msfi
+    in
+    if not (Sv.subset xsi xso) then err ();
+    match oei, oeo with
+    | None, None -> msfi
+    | Some ei, Some eo when expr_equal ei eo -> msfi
+    | _, _ -> if not (Sv.is_empty xsi) then err (); toinit
 
 end
 
@@ -950,18 +981,38 @@ let rec ty_instr fenv env ((msf,venv) as msf_e :msf_e) i =
       MSF.max msf1 msf2, Env.max env venv1 venv2
     end
 
-  | Cfor(x, (_, e1, e2), c) ->
+  | Cfor(x, ((_, e1, e2) as rn), c) ->
+      (* venv |- e1 : public
+         venv |- e2 : public
+         msf* <= msf
+         venv1 fresh
+         venv <= venv1
+         after_assign msf* x, venv1 |- c : msf', venv'
+         msf* <= msf'
+         venv' <= venv1
+         ---------------------------------------------
+         msf, venv |- for x = e1 to e2 : msf*, venv1
+
+         Our guess for the MSF state, [msf*], comes from the oracle (from the
+         inference).
+         When we are guaranteed that the loop has at least one iteration, we
+         check [for x = ... do c; c] instead. *)
       ensure_public env venv loc e1;
       ensure_public env venv loc e2;
-
-      let msf = MSF.loop env i.i_loc msf in
-      (* let w, _ = written_vars [i] in *)
-      let venv1 = Env.freshen env venv in (* venv <= venv1 *)
-      let msf_e = ty_lval env (msf, venv1) (Lvar x) (Env.dpublic env) in
-      let (msf', venv') = ty_cmd fenv env msf_e c in
-      let msf' = MSF.end_loop loc msf msf' in
-      Env.ensure_le loc venv' venv1; (* venv' <= venv1 *)
-      msf', venv1
+      if guaranteed_zero_iterations rn
+      then msf, venv
+      else
+        let msf = MSF.loop env i.i_loc msf in
+        let venv1 = Env.freshen env venv in
+        let msf_e = ty_lval env (msf, venv1) (Lvar x) (Env.dpublic env) in
+        let msf', venv' = ty_cmd fenv env msf_e c in
+        let msf' = MSF.end_loop loc msf msf' in
+        Env.ensure_le loc venv' venv1;
+        if guaranteed_nonzero_iterations rn
+        then
+          let msf_e = ty_lval env (msf', venv1) (Lvar x) (Env.dpublic env) in
+          ty_cmd fenv env msf_e c
+        else msf', venv1
 
   | Cwhile(_, c1, e, c2) ->
     (* c1; while e do (c2; c1) *)
@@ -1231,9 +1282,19 @@ let init_constraint fenv f =
            if Option.default false msf then Sv.add (L.unloc x) s else s)
          Sv.empty f.f_ret tyout) in
 
-  if export && not (Sv.is_empty msfs) then
-    error ~loc:f.f_loc
-      "%a need to be a msf, this is not allowed in export function" pp_vset msfs;
+  if export && not (Sv.is_empty msfs) then begin
+    let vars_kind, pos =
+      if Sv.subset msfs (Sv.of_list f.f_args)
+      then "arguments", ", this is not allowed for export functions"
+      else "variables", ""
+    in
+    error
+      ~loc:f.f_loc
+      "@[<h>the %s %a need to be MSFs%s.@]"
+      vars_kind
+      pp_vset msfs
+      pos
+  end;
 
   (* process function inputs *)
   let process_param venv x =
