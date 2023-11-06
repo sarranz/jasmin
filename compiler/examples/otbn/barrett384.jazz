@@ -7,7 +7,7 @@ fn bn_sel512(reg u256 hi0 lo0 hi1 lo1, reg bool b) -> reg u256, reg u256 {
     return rhi, rlo;
 }
 
-// Return [rhi, rlo] = [ahi, alo] + [bhi, blo].
+// Return cf, [rhi, rlo] = [ahi, alo] + [bhi, blo].
 inline
 fn bn_add512(reg u256 ahi alo bhi blo) -> reg bool, reg u256, reg u256 {
     reg u256 rhi rlo;
@@ -17,7 +17,7 @@ fn bn_add512(reg u256 ahi alo bhi blo) -> reg bool, reg u256, reg u256 {
     return cf, rhi, rlo;
 }
 
-// Return [rhi, rlo] = [ahi, alo] - [bhi, blo].
+// Return bf, [rhi, rlo] = [ahi, alo] - [bhi, blo].
 inline
 fn bn_sub512(reg u256 ahi alo bhi blo) -> reg bool, reg u256, reg u256 {
     reg u256 rhi rlo;
@@ -35,15 +35,6 @@ fn bn_rshi512(reg u256 a b z, inline int sham) -> reg u256, reg u256 {
     rlo = #BN_RSHI(a, b, sham);
     return rhi, rlo;
 }
-
-/*
-// The compiler should print labels for each of these.
-
-u256[3] a = { 0, 0, 0 };
-u256[3] b = { 0, 0, 0 };
-u256[3] m = { 0, 0, 0 };
-u256[3] u = { 0, 0, 0 };
-*/
 
 /* Unrolled 768=384x384 bit multiplication.
 
@@ -219,10 +210,6 @@ fn barrett384(
     return chi, clo;
 }
 
-/* Externally callable wrapper for modular multiplication with Barrett
-   reduction.
-   Returns c = a x b % m.
-   Clobbered flag groups: FG0 */
 inline
 fn _main(reg u256 ahi alo bhi blo mhi mlo uhi ulo) -> reg u256, reg u256 {
     reg u256 c2 c1 c0 z;
@@ -249,37 +236,58 @@ fn _main(reg u256 ahi alo bhi blo mhi mlo uhi ulo) -> reg u256, reg u256 {
     return chi, clo;
 }
 
+/* Externally callable wrapper for modular multiplication with Barrett
+   reduction.
+   Returns c = a x b % m.
+   Clobbered flag groups: FG0 */
+// Here we should load the arguments from DMEM, and write the results back.
 export
 fn main(reg u256 ahi alo bhi blo mhi mlo uhi ulo) -> reg u256, reg u256 {
-    // Here we should load the arguments from DMEM, but indirect addressing is
-    // not supported yet.
     reg u256 chi clo;
     chi, clo = _main(ahi, alo, bhi, blo, mhi, mlo, uhi, ulo);
     return chi, clo;
 }
+
+
+// -----------------------------------------------------------------------------
+// Mock
+
+// These bytes, in the .data section, will be overwritten by the main core:
+// that's how it passes arguments to OTBN.
+u64[4 * 8] data =
+    {
+        0x1, 0x0, 0x0, 0x0, // alo
+        0x0, 0x0, 0x0, 0x0, // ahi
+        0x1, 0x0, 0x0, 0x0, // blo
+        0x0, 0x0, 0x0, 0x0, // bhi
+        0x0, 0x0, 0x0, 0x0, // mlo
+        0x0, 0x0, 0x0, 0x0, // mhi
+        0x0, 0x0, 0x0, 0x0, // ulo
+        0x0, 0x0, 0x0, 0x0  // uhi
+    };
+
+// This is generic.
+param int NDATA = 8;
+require "load_data.jazz"
 
 export
 fn mock() -> reg u256, reg u256 {
-    reg u256 ahi alo; // a, first operand, max. length 384 bit.
-    ?{}, ahi = #set0_256();
-    ?{}, alo = #set0_256();
-
-    reg u256 bhi blo; // b, second operand, max. length 384 bit.
-    ?{}, bhi = #set0_256();
-    ?{}, blo = #set0_256();
-
-    reg u256 mhi mlo; // m, modulus, max. length 384 bit with 2^384 > m > 2^383.
-    ?{}, mhi = #set0_256();
-    ?{}, mlo = #set0_256();
-
-    reg u256 uhi ulo; // u, pre-computed Barrett constant (without u[384]/MSb.
-    ?{}, uhi = #set0_256();
-    ?{}, ulo = #set0_256();
+    reg u256[8] rdata;
+    rdata = load_data();
 
     reg u256 chi clo;
-    chi, clo = _main(ahi, alo, bhi, blo, mhi, mlo, uhi, ulo);
+    chi, clo = _main(
+        rdata[1],
+        rdata[0],
+        rdata[3],
+        rdata[2],
+        rdata[5],
+        rdata[4],
+        rdata[7],
+        rdata[6]
+    );
 
     return chi, clo;
 }
 
-// exec mock()
+exec mock()

@@ -337,7 +337,9 @@ Section PP_ASM_OP.
   (* We need to catch the pseudo-instructions [FGRS], [FGRW], [BN_ACCR],
      [BN_ACCW], [BN_MODR], and [BN_MODW], and print them as csrrs, csrrw,
      bn.wsrr, and bn.wsrw with the appropriate number as an argument.
-     We also need to replace on [MOV] and [NEG]. *)
+
+     TODO_OTBN: We also need to replace on [MOV] and [NEG] until they are extra
+     operations. *)
 
   Let error : pp_asm_op :=
     {|

@@ -20,18 +20,16 @@ Variant register : Type :=
   | X00 (* TODO_OTBN: x0 is unallocatable. *)
   | X01 (* TODO_OTBN: x1 should not be a register. *)
   | X02 (* Stack pointer. *)
-  (* TODO_OTBN: These two are unallocatable in RISC-V. Do we use them? *)
-  | X03 | X04
-  | X05 | X06 | X07 | X08 | X09 | X10 | X11 | X12 | X13 | X14 | X15 | X16 | X17
-  | X18 | X19 | X20 | X21 | X22 | X23 | X24 | X25 | X26 | X27 | X28 | X29 | X30
-  | X31
+  | X03 | X04 | X05 | X06 | X07 | X08 | X09 | X10 | X11 | X12 | X13 | X14 | X15
+  | X16 | X17 | X18 | X19 | X20 | X21 | X22 | X23 | X24 | X25 | X26 | X27 | X28
+  | X29 | X30 | X31
 .
 
 Definition string_of_register (r : register) : string :=
   match r with
   | X00 => "x0"
   | X01 => "ra"
-  | X02 => "sp" (* TODO_OTBN: Change to x2? *)
+  | X02 => "sp"
   | X03 => "x3"
   | X04 => "x4"
   | X05 => "x5"
@@ -72,8 +70,7 @@ Variant wide_register : Type :=
   | W13 | W14 | W15 | W16 | W17 | W18 | W19 | W20 | W21 | W22 | W23 | W24 | W25
   | W26 | W27 | W28 | W29 | W30 | W31
 
-  (* TODO_OTBN: These two are unallocatable. Maybe we should have extra extended
-     registers. *)
+  (* TODO_OTBN: These two shold be extended extra registers. *)
   | ACC | MOD
 .
 

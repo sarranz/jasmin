@@ -34,10 +34,6 @@ let of_val_z ii v : coq_Z =
 let of_val_b ii v : bool = 
   Obj.magic (exn_exec ii (of_val Coq_sbool v))
 
-let of_val_word ii ws v : coq_Z =
-  let ty = Coq_sword(ws) in
-  Obj.magic (exn_exec ii (of_val ty v))
-
 (* ----------------------------------------------------------------- *)
 type 'asm stack = 
   | Sempty of instr_info * 'asm fundef

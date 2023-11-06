@@ -26,28 +26,45 @@ fn mul256(reg u256 x y) -> reg u256, reg u256 {
     return rlo, rhi;
 }
 
-export
-fn main(reg u256 x y) -> reg u256, reg u256 {
-    // Here we should load the arguments from DMEM, but indirect addressing is
-    // not supported yet.
-
+inline
+fn _main(reg u256 x y) -> reg u256, reg u256 {
     reg u256 rlo rhi;
     x = x;
     rlo, rhi = mul256(x, y);
-
     return rlo, rhi;
 }
 
+// Here we should load the arguments from DMEM, and write the results back.
+export
+fn main(reg u256 x y) -> reg u256, reg u256 {
+    reg u256 rlo rhi;
+    rlo, rhi = _main(x, y);
+    return rlo, rhi;
+}
+
+
+// -----------------------------------------------------------------------------
+// Mock
+
+// These bytes, in the .data section, will be overwritten by the main core:
+// that's how it passes arguments to OTBN.
+u64[4 * 2] data =
+    {
+        0x1, 0x0, 0x0, 0x0, // x
+        0x2, 0x0, 0x0, 0x0  // y
+    };
+
+param int NDATA = 2;
+require "load_data.jazz"
+
 export
 fn mock() -> reg u256, reg u256 {
-    reg u256 x y;
+    reg u256[2] rdata;
+    rdata = load_data();
 
-    ?{}, x = #set0_256();
-    y = !x;
-    x += 2;
-
-    x, y = mul256(x, y);
+    reg u256 x, y;
+    x, y = _main(rdata[0], rdata[1]);
     return x, y;
 }
 
-// exec mock()
+exec mock()

@@ -1,0 +1,13 @@
+inline
+fn load_data() -> reg u256[NDATA] {
+    reg ptr u256[NDATA] p;
+    p = data;
+
+    reg u256[NDATA] wr;
+    inline int i;
+    for i = 0 to NDATA {
+        _, wr[i] = #BN_INDIRECT_LOAD(p[u256 i]);
+    }
+
+    return wr;
+}

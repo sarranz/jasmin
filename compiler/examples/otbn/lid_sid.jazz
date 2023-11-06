@@ -1,23 +1,10 @@
 param int NDATA = 1;
 
 u64[4 * NDATA] data = { 0x1, 0x0, 0x0, 0x0 };
-
-inline
-fn load_data() -> reg u256[NDATA] {
-    reg ptr u256[NDATA] p;
-    p = data;
-
-    reg u256[NDATA] wr;
-    inline int i;
-    for i = 0 to NDATA {
-        _, wr[i] = #BN_INDIRECT_LOAD(p[u256 i]);
-    }
-
-    return wr;
-}
+require "load_data.jazz"
 
 export
-fn main() -> reg u256 {
+fn mock() -> reg u256 {
     reg u256[NDATA] wr;
     wr = load_data();
 
@@ -32,3 +19,5 @@ fn main() -> reg u256 {
 
     return r;
 }
+
+exec mock (0x1000 : 32)
