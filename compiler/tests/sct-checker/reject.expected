@@ -6,22 +6,25 @@ Failed as expected not_msf_after_init: "fail/basic.jazz", line 43 (4-20):
                                        SCT checker: only {  } is ensured to be msf after init_msf, 
                                        { msf0 } are required
 Failed as expected missing_then: "fail/basic.jazz", line 37 (18-19):
-                                 SCT checker: the variable m is not an MSF, there are no MSFs at this point.
+                                 SCT checker: the variable m is not an MSF, there are no MSFs at this point
 Failed as expected missing_else: "fail/basic.jazz", line 23 (18-19):
-                                 SCT checker: the variable m is not an MSF, there are no MSFs at this point.
+                                 SCT checker: the variable m is not an MSF, there are no MSFs at this point
 Failed as expected after_branch: "fail/basic.jazz", line 10 (18-19):
-                                 SCT checker: the variable m is not an MSF, there are no MSFs at this point.
+                                 SCT checker: the variable m is not an MSF, there are no MSFs at this point
 Failed as expected leak_transient: "fail/basic.jazz", line 1 (42-50):
                                    SCT checker: x has type #transient but should be at most #public
 File for_loop.jazz:
 Failed as expected iterations_not_guaranteed1: "fail/for_loop.jazz", line 18 (4) to line 20 (5):
-                                               SCT checker: current msf = Exact 
-                                               {  }, it should contain 
-                                               { msf }
+                                               SCT checker: the current MSF state is Exact {  }, it should contain { msf }
 Failed as expected iterations_not_guaranteed: "fail/for_loop.jazz", line 6 (4) to line 8 (5):
-                                              SCT checker: current msf = Exact 
-                                              {  }, it should contain 
-                                              { msf }
+                                              SCT checker: the current MSF state is Exact {  }, it should contain { msf }
+File for_loops.jazz:
+Failed as expected iteration_changes_venv: "fail/for_loops.jazz", line 28 (4) to line 31 (5):
+                                           SCT checker: constraints caused by the loop cannot be satisfied
+Failed as expected iterations_not_guaranteed1: "fail/for_loops.jazz", line 18 (4) to line 20 (5):
+                                               SCT checker: the current MSF state is Exact {  }, it should contain { msf }
+Failed as expected iterations_not_guaranteed: "fail/for_loops.jazz", line 6 (4) to line 8 (5):
+                                              SCT checker: the current MSF state is Exact {  }, it should contain { msf }
 File functions.jazz:
 Failed as expected call_kills_msf: "fail/functions.jazz", line 9 (2-10):
                                    SCT checker: this function call destroys MSFs and { m } are required.

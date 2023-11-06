@@ -32,7 +32,7 @@ Failed as expected inconsistent_constraint: "error-messages/inconsistent_constra
                                             SCT checker: cannot add constraint secret <= public, it is inconsistent
 File msf_in_export.jazz:
 Failed as expected msf_in_export: "error-messages/msf_in_export.jazz", line 1 (0) to line 3 (1):
-                                  SCT checker: The arguments { p } need to be MSFs, this is not allowed for export functions.
+                                  SCT checker: the arguments { p } need to be MSFs, this is not allowed for export functions.
 File msf_trans.jazz:
 Failed as expected msf_trans: "error-messages/msf_trans.jazz", line 5 (24-25):
                               SCT checker: MSF is Trans
@@ -45,7 +45,7 @@ Failed as expected need_declassify: "error-messages/need_declassify.jazz", line 
                                     SCT checker: return type for x is #secret it should be less than #public
 File not_known_as_msf.jazz:
 Failed as expected not_known_as_msf: "error-messages/not_known_as_msf.jazz", line 1 (0) to line 9 (1):
-                                     SCT checker: The variables { x } need to be MSFs.
+                                     SCT checker: the variables { x } need to be MSFs.
 File public_arg.jazz:
 Failed as expected public_arg: "error-messages/public_arg.jazz", line 1 (37-38):
                                SCT checker: security annotation for x should be at least transient
@@ -72,7 +72,7 @@ File unknown_function.jazz:
 Failed as expected unknown_function: SCT checker: unknown function unknown_function
 File update_msf_not_msf.jazz:
 Failed as expected update_msf_not_msf: "error-messages/update_msf_not_msf.jazz", line 1 (0) to line 4 (1):
-                                       SCT checker: The variables { x } need to be MSFs.
+                                       SCT checker: the variables { x } need to be MSFs.
 File update_msf_not_trans.jazz:
 Failed as expected update_msf_not_trans: "error-messages/update_msf_not_trans.jazz", line 4 (27-28):
                                          SCT checker: MSF is not Trans
