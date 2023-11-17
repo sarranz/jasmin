@@ -201,6 +201,67 @@ output corruption: #public
  constraints:
 
 
+File rsb.jazz:
+nomodmsf do_nothing :  ->
+
+output corruption: #public
+ constraints:
+
+
+nomodmsf transient_after_call : #public ->
+#transient
+output corruption: #public
+ constraints:
+
+
+nomodmsf id_msf : #msf ->
+#msf
+output corruption: #public
+ constraints:
+
+
+modmsf transient_after_call1 : #transient ->
+#transient
+output corruption: #public
+ constraints:
+
+
+nomodmsf protect_after_call : #public * #msf ->
+#public
+output corruption: #public
+ constraints:
+
+
+nomodmsf inline_ignored : #public ->
+#public
+output corruption: #public
+ constraints:
+
+
+nomodmsf inline_do_nothing :  ->
+
+output corruption: #public
+ constraints:
+
+
+nomodmsf inline_ignored2 : #public ->
+#public
+output corruption: #public
+ constraints:
+
+
+modmsf call_in_while : #transient ->
+#public
+output corruption: #public
+ constraints:
+
+
+modmsf call_in_for : #transient ->
+#public
+output corruption: #public
+ constraints:
+
+
 File while.jazz:
 modmsf while_first_branch : #public * #secret ->
 #public

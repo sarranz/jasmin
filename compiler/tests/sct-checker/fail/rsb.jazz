@@ -1,0 +1,66 @@
+#[test=nosct]
+fn id(reg u64 x) -> reg u64 {
+    return x;
+}
+
+#[test=nosct]
+inline
+fn leak(reg u64 x) {
+    if (x == 0) { [x] = 0; }
+}
+
+fn archetypical(#transient reg u64 pub, #secret reg u64 sec) {
+    _ = #init_msf();
+    reg u64 pub;
+    pub = id(pub);
+    leak(pub);
+    _ = id(sec);
+}
+
+#[test=nosct]
+fn do_nothing() {}
+
+fn transient_after_call(#transient reg u64 x) -> #public reg u64 {
+    _ = #init_msf();
+    do_nothing();
+    return x;
+}
+
+#[test=nosct]
+fn id_msf(reg u64 x) -> #msf reg u64 {
+    return x;
+}
+
+fn transient_after_call1(#transient reg u64 x) -> #public reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
+    msf = id_msf(msf);
+    return x;
+}
+
+fn call_in_while(#transient reg u64 x) -> #public reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
+    x = #protect(x, msf);
+
+    while (x < 5) {
+        msf = #update_msf(x < 5, msf);
+        do_nothing();
+    }
+
+    return x;
+}
+
+fn call_in_for(#transient reg u64 x) -> #public reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
+    x = #protect(x, msf);
+
+    inline int i;
+    i = 1;
+    for i = 0 to i {
+        do_nothing();
+    }
+
+    return x;
+}
