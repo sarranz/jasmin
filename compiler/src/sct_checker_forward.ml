@@ -400,6 +400,8 @@ module Env : sig
 
   val get_resulting_corruption : venv -> VlPairs.t
 
+  val venv_after_call : env -> venv -> venv
+
 end = struct
 
   type env = {
@@ -572,16 +574,18 @@ end = struct
     with Lvl.Unsat _unsat ->
       error ~loc "constraints caused by the loop cannot be satisfied"
 
+  let map_vty f vty =
+    match vty with
+    | Direct le -> Direct(f le)
+    | Indirect(lp, le) -> Indirect(f lp, f le)
+
   let clone_for_call (env:env) (tyfun:ty_fun) =
     let subst1 = C.clone tyfun.constraints env.constraints in
     let subst (n, s) = (subst1 n, subst1 s) in
     let subst_ty = function
       | IsMsf -> IsMsf
-      | IsNormal ty -> let ty =
-            match ty with
-            | Direct le -> Direct (subst le)
-            | Indirect(lp, le) -> Indirect(subst lp, subst le) in
-          IsNormal ty in
+      | IsNormal ty -> IsNormal (map_vty subst ty)
+    in
     List.map subst_ty tyfun.tyout, List.map subst_ty tyfun.tyin,
     subst tyfun.resulting_corruption
 
@@ -592,6 +596,22 @@ end = struct
   let corruption_speculative env venv (_, s) = corruption env venv (public env, s)
 
   let get_resulting_corruption venv = venv.resulting_corruption
+
+  (* Fresh variable environment where all public variables became transient. *)
+  let venv_after_call env venv =
+    let is_rsb_vulnerable k =
+      match k with
+      | Wsize.Const | Inline -> false
+      | Global | Stack _ | Reg _ -> true
+    in
+    let new_ty (le_n, _) = (le_n, secret env) in
+    let add x acc =
+      let ty = Mv.find x acc in
+      let ty = if is_rsb_vulnerable x.v_kind then map_vty new_ty ty else ty in
+      Mv.add x ty acc
+    in
+    { venv with vtype = Sv.fold add venv.vars venv.vtype }
+
 end
 
 
@@ -1070,8 +1090,14 @@ let rec ty_instr fenv env ((msf,venv) as msf_e :msf_e) i =
       let (msf, venv) = ty_lval env msf_e x ty in
       let msf = if vfty = IsMsf then MSF.add (reg_lval ~direct:true loc x) msf else msf in
       (msf, venv) in
-    let msf = if is_Modified modmsf then MSF.toinit else msf in
-    List.fold_left2 output_ty (msf, venv) xs tyout
+    let msf' = if is_Modified modmsf then MSF.toinit else msf in
+    let (msf', venv') = List.fold_left2 output_ty (msf', venv) xs tyout in
+    let venv' =
+      if Prog.is_inline i.i_annot (FEnv.get_fun_def fenv f).f_cc
+      then venv'
+      else Env.venv_after_call env venv'
+    in
+    (msf', venv')
 
 and ty_cmd fenv env msf_e c =
   List.fold_left (ty_instr fenv env) msf_e c
@@ -1263,8 +1289,13 @@ let init_constraint fenv f =
         | Inline, Direct _ -> ()
         | Global, Direct _ -> ()
         | _ ->
-          error ~loc
-            "invalid security annotations for %a" pp_var x
+          error
+            ~loc
+            "@[<h>invalid security annotations for the variable %a.@]@.\
+             @[<h>The kind of this variable is %a, but the annotation is %a.@]"
+            pp_var x
+            PrintCommon.pp_kind x.v_kind
+            pp_vty ty
         end; ty in
     msf, vty in
 

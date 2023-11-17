@@ -1,0 +1,70 @@
+#[test=nosct]
+fn do_nothing() {}
+
+fn transient_after_call(#public reg u64 x) -> #transient reg u64 {
+    do_nothing();
+    return x;
+}
+
+#[test=nosct]
+fn id_msf(reg u64 x) -> #msf reg u64 {
+    return x;
+}
+
+fn transient_after_call1(#transient reg u64 x) -> #transient reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
+    msf = id_msf(msf);
+    return x;
+}
+
+fn protect_after_call(#public reg u64 x, #msf reg u64 msf) -> #public reg u64 {
+    do_nothing();
+    x = #protect(x, msf);
+    return x;
+}
+
+fn inline_ignored(#public reg u64 x) -> #public reg u64 {
+    #inline
+    do_nothing();
+    return x;
+}
+
+#[test=nosct]
+inline
+fn inline_do_nothing() {}
+
+fn inline_ignored2(#public reg u64 x) -> #public reg u64 {
+    inline_do_nothing();
+    return x;
+}
+
+fn call_in_while(#transient reg u64 x) -> #public reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
+    x = #protect(x, msf);
+
+    while (x < 5) {
+        msf = #update_msf(x < 5, msf);
+        do_nothing();
+        x = #protect(x, msf);
+    }
+
+    return x;
+}
+
+fn call_in_for(#transient reg u64 x) -> #public reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
+    x = #protect(x, msf);
+
+    inline int i;
+    i = 1;
+    for i = 0 to i {
+        do_nothing();
+        x = #protect(x, msf);
+        [x + i] = 0; // The checker needs to realize that i can't be transient.
+    }
+
+    return x;
+}
