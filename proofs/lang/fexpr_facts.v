@@ -91,6 +91,7 @@ Lemma lexpr_of_lvalP x d s v s' :
   write_lexpr d v s = ok s'.
 Proof.
   case: x => //.
+  - move=> ? [] // ? [?]; subst d. rewrite /= /write_none. by t_xrbindP=> _ _ ->.
   - by move => x /Some_inj <-.
   move => ws x e /obindI[] a [] /fexpr_of_pexprP ok_a /Some_inj <- {d} /=.
   by t_xrbindP => > -> /= -> > /ok_a -> /= -> /= > -> /= > -> <-.

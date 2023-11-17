@@ -158,7 +158,9 @@ Variant asm_arg : Type :=
 | Reg    of reg_t
 | Regx   of regx_t
 | Addr   of address
-| XReg   of xreg_t.
+| XReg   of xreg_t
+| ConstReg ws of word ws
+.
 
 Definition asm_args := (seq asm_arg).
 
@@ -173,6 +175,8 @@ Definition asm_arg_beq (a1 a2:asm_arg) :=
   | Regx r1, Regx r2   => r1 == r2 ::>
   | Addr a1, Addr a2   => a1 == a2
   | XReg r1, XReg r2   => r1 == r2 ::>
+  | ConstReg sz1 w1, ConstReg sz2 w2 =>
+      [&& sz1 == sz2 & wunsigned w1 == wunsigned w2 ]
   | _, _ => false
   end.
 
@@ -180,13 +184,21 @@ Definition Imm_inj sz sz' w w' (e: @Imm sz w = @Imm sz' w') :
   ∃ e : sz = sz', eq_rect sz (λ s, (word s)) w sz' e = w' :=
   let 'Logic.eq_refl := e in (ex_intro _ erefl erefl).
 
+Definition ConstReg_inj
+  sz sz' w w' (harg : @ConstReg sz w = @ConstReg sz' w') :
+  exists (hsz : sz = sz'), eq_rect sz (fun s => word s) w sz' hsz = w' :=
+  let 'Logic.eq_refl := harg in ex_intro _ erefl erefl.
+
 Lemma asm_arg_eq_axiom : Equality.axiom asm_arg_beq.
 Proof.
-  case => [t1 | sz1 w1 | r1 | r1 | a1 | xr1] [t2 | sz2 w2 | r2 | r2 | a2 | xr2] /=;
+  case=> [?|??|?|?|?|?|??] [?|??|?|?|?|?|??] /=;
     try by (constructor || apply: reflect_inj eqP => ?? []).
+  - apply: (iffP idP) => //=.
+    + by move=> /andP [] /eqP ? /eqP; subst => /wunsigned_inj ->.
+    by move=> /Imm_inj [? ];subst => /= ->;rewrite !eqxx.
   apply: (iffP idP) => //=.
-  + by move=> /andP [] /eqP ? /eqP; subst => /wunsigned_inj ->.
-  by move=> /Imm_inj [? ];subst => /= ->;rewrite !eqxx.
+  - by move=> /andP [] /eqP ? /eqP; subst => /wunsigned_inj ->.
+  by move=> /ConstReg_inj [?]; subst => /= ->; rewrite !eqxx.
 Qed.
 
 Definition asm_arg_eqMixin := Equality.Mixin asm_arg_eq_axiom.
@@ -280,7 +292,9 @@ Variant arg_kind :=
 | CAregx
 | CAxmm
 | CAmem of bool (* true if Global is allowed *)
-| CAimm of wsize.
+| CAimm of wsize
+| CAconstreg of wsize
+.
 
 Scheme Equality for arg_kind.
 
@@ -324,6 +338,7 @@ Definition check_arg_kind (a:asm_arg) (cond: arg_kind) :=
   | Regx _, CAregx => true
   | Addr _, CAmem _ => true
   | XReg _, CAxmm   => true
+  | ConstReg sz _, CAconstreg sz' => sz == sz'
   | _, _ => false
   end.
 

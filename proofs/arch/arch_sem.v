@@ -228,6 +228,8 @@ Definition eval_asm_arg k (s: asmmem) (a: asm_arg) (ty: stype) : exec value :=
     | _        => type_error
     end
   | XReg x     => ok (Vword (s.(asm_xreg) x))
+  | ConstReg _ w =>
+      if ty is sword sz then ok (Vword (sign_extend sz w)) else type_error
   end.
 
 Definition eval_arg_in_v (s:asmmem) (args:asm_args) (a:arg_desc) (ty:stype) : exec value :=
@@ -341,7 +343,8 @@ Definition mem_write_word (f:msb_flag) (s:asmmem) (args:asm_args) (ad:arg_desc) 
       | Regx r  => ok (mem_write_regx  f r w s)
       | XReg x  => ok (mem_write_xreg f x w s)
       | Addr addr => mem_write_mem (decode_addr s addr) w s
-      | _       => type_error
+      | ConstReg _ _ => ok s
+      | _ => type_error
       end
     end
   end.
@@ -514,11 +517,12 @@ Proof.
   - by move => ? _; case: d.1 => // - [] // ? /ok_inj <-.
   move => ? ? _; case: d.1 => [ [] | ] //=.
   - by move => ? /ok_inj <-.
-  move => _ ? ?; case: onth => //; t_xrbindP => - [] // ? _.
-  - by move=> /ok_inj <-.
-  - by move=> /ok_inj <-.
-  - by exact: mem_write_mem_invariant.
-  by move => /ok_inj <-.
+  move => _ ? ?; case: onth => //; t_xrbindP => - [] // ?.
+  - by move=> _ /ok_inj <-.
+  - by move=> _ /ok_inj <-.
+  - move=> _. exact: mem_write_mem_invariant.
+  - by move=> _ /ok_inj <-.
+  by move=> ? _ /ok_inj <-.
 Qed.
 
 Lemma mem_write_vals_invariant f xs ys tys zs (s s': asmmem) :

@@ -42,6 +42,7 @@ Definition write_lexpr e v (s: estate) : exec estate :=
   | LLvar x =>
       Let vm := set_var true (evm s) x v in
       ok (with_vm s vm)
+  | LLnone _ _ => ok s
   end.
 
 Definition sem_rexprs (s: estate) := mapM (sem_rexpr s.(emem) s.(evm)).

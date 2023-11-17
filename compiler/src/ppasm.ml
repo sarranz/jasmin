@@ -381,6 +381,7 @@ module Printer (BP:BPrinter) = struct
     | Regx r     -> pp_register_ext ~reg_pre ws r
     | Addr addr  -> BP.pp_address ws addr
     | XReg r     -> pp_xmm_register ~reg_pre ws r
+    | ConstReg _ -> assert false
   
   let pp_asm_args args = List.map pp_asm_arg (BP.rev_args args)
 

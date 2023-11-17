@@ -278,7 +278,7 @@ Qed.
 
 Variant check_sopn_argI rip ii args e : arg_desc -> stype -> Prop :=
 | CSA_Implicit i ty :
-       is_implicit i e
+       is_implicit_rexpr i e
     -> check_sopn_argI rip ii args e (ADImplicit i) ty
 
 | CSA_Explicit k n o a a' ty :
@@ -332,7 +332,7 @@ Proof.
 Qed.
 
 Lemma is_implicitP i e :
-  is_implicit i e →
+  is_implicit_rexpr i e →
   ∃ vi, e = Rexpr (Fvar {| v_var := var_of_implicit_arg i ; v_info := vi |}).
 Proof. by case: e => //- [] // [] x vi //= /eqP ->; exists vi. Qed.
 
@@ -521,18 +521,17 @@ Proof.
   by move=> f; rewrite Vm.setP_neq.
 Qed.
 
-Lemma compile_lval rip ii msb_flag loargs ad ty (vt:sem_ot ty) m m' s lv1 e1:
+Lemma compile_lval rip ii msb_flag loargs ad ty (vt:sem_ot ty) m m' s lv1 :
   lom_eqv rip m s ->
   check_arg_dest ad ty ->
   write_lexpr lv1 (oto_val vt) m = ok m' ->
-  rexpr_of_lexpr lv1 = e1 ->
-  check_sopn_dest agparams rip ii loargs e1 (ad, ty) ->
+  check_sopn_dest agparams rip ii loargs lv1 (ad, ty) ->
   exists s', mem_write_val msb_flag loargs (ad, ty) (oto_val vt) s = ok s' /\ lom_eqv rip m' s'.
 Proof.
   move=> hlom; case:(hlom) => [hscs h1 hrip hnrip h2 h3 h4 h5]; case: ad => [ai _ | k n o]; rewrite /check_sopn_dest /=.
   case: ai => [f | r].
-  + case: lv1 => //=; first by move=> ???? <-.
-    t_xrbindP => x vm hvm <- <- /is_implicitP[] xi [] ?; subst x.
+  - case: lv1 => //=.
+    t_xrbindP=> -[x xi] vm hvm <- /eqP /= ?; subst x.
     case: ty vt hvm => //= vt /set_varP [_ htr ->]; rewrite /mem_write_val /=.
     have -> /= :
       match match vt with Some b => Vbool b | None => undef_b end with
@@ -550,17 +549,17 @@ Proof.
     + by apply/eqtype.inj_eq/inj_to_var.
     case: eqP => [<- | hne] //.
     by move: (vm_truncate_valE htr) => {htr}; case: vt  => [ b | ] [+ ->].
-  + case: lv1 => //=; first by move=> ???? <-.
-    move=> x hw <- /is_implicitP [] xi [] ?; subst x.
+  - case: lv1 => //=.
+    move=> -[x xi] hw /eqP /= ?; subst x.
     case: ty vt hw=> //; first by case.
     move=> ws vt hw.
     have /(_ r erefl) := lom_eqv_write_var msb_flag hlom hw.
     rewrite /mem_write_val /= truncate_word_u /=; eauto.
   case heq1: onth => [a | //].
-  case heq2: arg_of_rexpr => [ a' | //] hty hw he1 /andP[] /eqP ? hc; subst a'.
+  case heq2: arg_of_lexpr => [ a' | //] hty hw /andP[] /eqP ? hc; subst a'.
   rewrite /mem_write_val /mem_write_ty.
-  case: lv1 hw he1 heq2=> //=; cycle 1.
-  + move=> [x xii] hw <-; rewrite /arg_of_rexpr.
+  case: lv1 hw heq2 => //=; cycle 1.
+  + move=> [x xii] hw; rewrite /arg_of_rexpr.
     case: ty hty vt hw => //= sz _ vt hw.
     rewrite truncate_word_u /= heq1 hc => /xreg_of_varI {heq1 hc}.
     case: a => // r h; have {h}/=h := of_varI h; subst x.
@@ -598,8 +597,12 @@ Proof.
       + by apply word_uincl_word_extend => //; apply cmp_lt_le.
       by rewrite word_extend_big //;apply /negP.
     by move=> f; rewrite Vm.setP_neq.
+  + move=> ? ws [?]; subst m'.
+    case: ty hty vt => //= ws' _ w [?]; subst a.
+    rewrite truncate_word_u /= heq1 hc.
+    by eexists.
   move=> sz [x xii] /= e; t_xrbindP.
-  move=> wp vp hget hp wofs vofs he hofs w hw m1 hm1 ??; subst m' e1.
+  move=> wp vp hget hp wofs vofs he hofs w hw m1 hm1 ?; subst m'.
   case: ty hty vt hw => //= sz' _ vt hw.
   case: eqP => // ?; subst sz'.
   move: hw; rewrite truncate_word_u => -[?]; subst vt.
@@ -633,7 +636,7 @@ Proof.
   rewrite /check_sopn_dests /= => h /andP [] hca hcall.
   case/andP: h => hce1 hces.
   rewrite /mem_write_vals /=.
-  have [s1 [-> /= h2]]:= compile_lval msb_flag hlo hca hw1 erefl hce1.
+  have [s1 [-> /= h2]] := compile_lval msb_flag hlo hca hw1 hce1.
   exact: (hrec _  _ _ _ _ heqs hwn h2 _ hcall).
 Qed.
 
@@ -1012,9 +1015,9 @@ Lemma enforce_imm_arg_kind_correct a c a' :
   enforce_imm_arg_kind a c = Some a' ->
   check_arg_kind a' c.
 Proof.
-  case: a; case: c => [|||| b |] //=; try by move=> ? [<-].
-  move=> ws1 ws2 w.
-  by case: eqP => // -> [<-] /=.
+  case: a; case: c => [|||| b ||] //=; try by move=> ? [<-].
+  - move=> ws1 ws2 w. by case: eqP => // -> [<-] /=.
+  - move=> ??? [<-]. exact: eqxx.
 Qed.
 
 Lemma enforce_imm_arg_kinds_correct a cond' a' :

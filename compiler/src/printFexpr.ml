@@ -19,3 +19,4 @@ let pp_lexpr fmt =
   function
   | LLvar x -> pp_var_i fmt x
   | Store (sz, x, e) -> Format.fprintf fmt "(%a)[%a + %a]" pp_wsize sz pp_var_i x pp_fexpr e
+  | LLnone (_, ws) -> Format.fprintf fmt "_ /* %a */" pp_wsize ws

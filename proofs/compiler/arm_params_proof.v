@@ -811,7 +811,7 @@ Proof.
   move=> lp fn s1 s2 pc ii x e args ws ws' w w' hlassign hseme htrunc hwrite.
   move: hlassign => /=.
   apply: obindP => -[mn' re].
-  case: x hwrite => [??? | x] /= hwrite.
+  case: x hwrite => [??? | x | //] /= hwrite.
 
   - apply: obindP => mn hmn [??] [?]; subst mn' re args.
     rewrite /eval_instr /= /sem_sopn /= to_estate_of_estate hseme {hseme} /=.

@@ -27,7 +27,9 @@ Variant rexpr :=
 (* Left-expressions *)
 Variant lexpr :=
   | Store of wsize & var_i & fexpr
-  | LLvar of var_i.
+  | LLvar of var_i
+  | LLnone of var_info & wsize
+.
 
 Notation rexprs := (seq rexpr).
 Notation lexprs := (seq lexpr).
@@ -59,6 +61,7 @@ Definition lexpr_of_lval (e: lval) : option lexpr :=
   | Lvar x => Some (LLvar x)
   | Lmem ws p e =>
       omap (Store ws p) (fexpr_of_pexpr e)
+  | Lnone vi (sword ws) => Some (LLnone vi ws)
   | _ => None
   end.
 

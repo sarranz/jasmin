@@ -168,6 +168,7 @@ Definition arm_lassign
     | Store _ _ _ =>
         let%opt mn := store_mn_of_wsize ws in
         Some (mn, e)
+    | LLnone _ _ => None
     end
   in
   Some ([:: lv ], Oarm (ARM_op mn default_opts), [:: e' ]).

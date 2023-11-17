@@ -267,41 +267,33 @@ Definition arg_of_rexpr k rip ii (ty: stype) (e: rexpr) :=
   | sarr _ => Error (E.werror ii e "not able to assemble an expression of type array _")
   end.
 
-Definition rexpr_of_lexpr (lv: lexpr) : rexpr :=
-  match lv with
-  | LLvar x => Rexpr (Fvar x)
-  | Store s x e => Load s x e
-  end.
-
 Definition nmap (T:Type) := nat -> option T.
 Definition nget (T:Type) (m:nmap T) (n:nat) := m n.
 Definition nset (T:Type) (m:nmap T) (n:nat) (t:T) :=
   fun x => if x == n then Some t else nget m x.
 Definition nempty (T:Type) := fun n:nat => @None T.
 
-(* FIXME: try to use the commented version *)
-Definition is_implicit (i: implicit_arg) (e: rexpr) : bool :=
-  if e is Rexpr (Fvar x) then x.(v_var) == var_of_implicit_arg i else false.
-(*
-Definition is_implicit (i: implicit_arg) (e: rexpr) : bool :=
-  match i, e with
-  | Rexpr (Fvar x), IArflag f => eq_op (T := [eqType of option ceqT_eqType]) (of_var x) (Some f)
-  | Rexpr (Fvar x), IAreg r   => eq_op (T := [eqType of option ceqT_eqType]) (of_var x) (Some r)
-  | _, _ => false
-  end.
-*)
-
-Definition compile_arg rip ii (ade: (arg_desc * stype) * rexpr) (m: nmap asm_arg) : cexec (nmap asm_arg) :=
+Definition compile_arg
+  {X : Type}
+  (rip : var)
+  (ii : instr_info)
+  (is_implicit : implicit_arg -> X -> bool)
+  (get_arg : addr_kind -> var -> instr_info -> stype -> X -> cexec asm_arg)
+  (ade : (arg_desc * stype) * X)
+  (m : nmap asm_arg) :
+  cexec (nmap asm_arg) :=
   let ad := ade.1 in
   let e := ade.2 in
   match ad.1 with
   | ADImplicit i =>
     Let _ :=
-      assert (is_implicit i e)
-             (E.internal_error ii "(compile_arg) bad implicit register") in
+      assert
+        (is_implicit i e)
+        (E.internal_error ii "(compile_arg) bad implicit register")
+    in
     ok m
   | ADExplicit k n o =>
-    Let a := arg_of_rexpr k rip ii ad.2 e in
+    Let a := get_arg k rip ii ad.2 e in
     Let _ :=
       assert (check_oreg o a)
              (E.internal_error ii "(compile_arg) bad forced register") in
@@ -313,8 +305,38 @@ Definition compile_arg rip ii (ade: (arg_desc * stype) * rexpr) (m: nmap asm_arg
     end
   end.
 
-Definition compile_args rip ii adts (es: rexprs) (m: nmap asm_arg) :=
-  foldM (compile_arg rip ii) m (zip adts es).
+(* FIXME: try to use the commented version *)
+Definition is_implicit_rexpr (i: implicit_arg) (e: rexpr) : bool :=
+  if e is Rexpr (Fvar x) then x.(v_var) == var_of_implicit_arg i else false.
+(*
+Definition is_implicit (i: implicit_arg) (e: rexpr) : bool :=
+  match i, e with
+  | Rexpr (Fvar x), IArflag f => eq_op (T := [eqType of option ceqT_eqType]) (of_var x) (Some f)
+  | Rexpr (Fvar x), IAreg r   => eq_op (T := [eqType of option ceqT_eqType]) (of_var x) (Some r)
+  | _, _ => false
+  end.
+*)
+
+Definition compile_rexprs rip ii adts (es: rexprs) (m: nmap asm_arg) :=
+  foldM (compile_arg rip ii is_implicit_rexpr arg_of_rexpr) m (zip adts es).
+
+Definition arg_of_lexpr k rip ii ty (le : lexpr) : cexec asm_arg :=
+  match le with
+  | LLvar x => arg_of_rexpr k rip ii ty (Rexpr (Fvar x))
+  | Store s x e => arg_of_rexpr k rip ii ty (Load s x e)
+  | LLnone _ ws =>
+      if ty is sword ws
+      then ok (ConstReg (wrepr ws 0))
+      else
+        let msg := "not able to assemble _ of non-word type"%string in
+        Error (E.internal_error ii msg)
+  end.
+
+Definition is_implicit_lexpr (ia : implicit_arg) (le : lexpr) :=
+  if le is LLvar x then v_var x == var_of_implicit_arg ia else false.
+
+Definition compile_lexprs rip ii adts (es: lexprs) (m: nmap asm_arg) :=
+  foldM (compile_arg rip ii is_implicit_lexpr arg_of_lexpr) m (zip adts es).
 
 Definition compat_imm ty a' a := 
   (a == a') || match ty, a, a' with
@@ -324,7 +346,7 @@ Definition compat_imm ty a' a :=
 
 Definition check_sopn_arg rip ii (loargs : seq asm_arg) (x : rexpr) (adt : arg_desc * stype) :=
   match adt.1 with
-  | ADImplicit i => is_implicit i x
+  | ADImplicit i => is_implicit_rexpr i x
   | ADExplicit k n o =>
     match onth loargs n with
     | Some a =>
@@ -334,23 +356,28 @@ Definition check_sopn_arg rip ii (loargs : seq asm_arg) (x : rexpr) (adt : arg_d
     end
   end.
 
-Definition check_sopn_dest rip ii (loargs : seq asm_arg) (x : rexpr) (adt : arg_desc * stype) :=
+Definition check_sopn_dest
+  (rip : var)
+  (ii : instr_info)
+  (loargs : seq asm_arg)
+  (le : lexpr)
+  (adt : arg_desc * stype) :
+  bool :=
   match adt.1 with
-  | ADImplicit i => is_implicit i x
+  | ADImplicit i => is_implicit_lexpr i le
   | ADExplicit _ n o =>
-    match onth loargs n with
-    | Some a =>
-      if arg_of_rexpr AK_mem rip ii adt.2 x is Ok a' then (a == a') && check_oreg o a
+    if onth loargs n is Some a
+    then
+      if arg_of_lexpr AK_mem rip ii adt.2 le is Ok a'
+      then [&& a == a' & check_oreg o a ]
       else false
-    | None => false
-    end
+    else false
   end.
 
 Definition assemble_asm_op_aux rip ii op (outx : lexprs) (inx : rexprs) :=
   let id := instr_desc op in
-  Let m := compile_args rip ii (zip id.(id_in) id.(id_tin)) inx (nempty _) in
-  let eoutx := map rexpr_of_lexpr outx in
-  Let m := compile_args rip ii (zip id.(id_out) id.(id_tout)) eoutx m in
+  Let m := compile_rexprs rip ii (zip id.(id_in) id.(id_tin)) inx (nempty _) in
+  Let m := compile_lexprs rip ii (zip id.(id_out) id.(id_tout)) outx m in
   match oseq.omap (nget m) (iota 0 id.(id_nargs)) with
   | None => Error (E.internal_error ii "compile_arg : assert false nget")
   | Some asm_args => ok asm_args
@@ -360,8 +387,7 @@ Definition check_sopn_args rip ii (loargs : seq asm_arg) (xs : rexprs) (adt : se
   all2 (check_sopn_arg rip ii loargs) xs adt.
 
 Definition check_sopn_dests rip ii (loargs : seq asm_arg) (outx : lexprs) (adt : seq (arg_desc * stype)) :=
-  let eoutx := map rexpr_of_lexpr outx in
-  all2 (check_sopn_dest rip ii loargs) eoutx adt.
+  all2 (check_sopn_dest rip ii loargs) outx adt.
 
 (* [check_arg_kind] but ignore constraints on immediate sizes *)
 Definition check_arg_kind_no_imm (a:asm_arg) (cond: arg_kind) :=
@@ -372,6 +398,7 @@ Definition check_arg_kind_no_imm (a:asm_arg) (cond: arg_kind) :=
   | Regx _, CAregx => true
   | Addr _, CAmem _ => true
   | XReg _, CAxmm   => true
+  | ConstReg _ _, CAconstreg _ => true
   | _, _ => false
   end.
 
@@ -405,6 +432,7 @@ Definition enforce_imm_arg_kind (a:asm_arg) (cond: arg_kind) : option asm_arg :=
     let w2 := sign_extend sz w1 in
     (* this check is not used (yet?) in the correctness proof *)
     if w == w2 then Some (Imm w1) else None
+  | Imm sz w, CAconstreg sz' => Some (ConstReg (zero_extend sz' w))
   | Reg _, CAreg => Some a
   | Regx _, CAregx => Some a
   | Addr _, CAmem _ => Some a
@@ -434,6 +462,7 @@ Definition pp_arg_kind c :=
   | CAreg => pp_s "reg"
   | CAregx => pp_s "regx"
   | CAxmm => pp_s "xreg"
+  | CAconstreg _ => pp_s "constant register"
   end.
 
 Definition pp_arg_kinds cond :=

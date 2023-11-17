@@ -533,9 +533,8 @@ Lemma check_sopn_dests_xmm rip ii oargs xs ads cond n k ws:
     oseq.onth oargs k = Some (XReg r).
 Proof.
   rewrite /= orbF => hca hc hE hxmm hn.
-  have /(_ n):= all2_nth (Rexpr (Fconst 0)) (E 0, sword8) _ hca.
-  rewrite size_map hn => /(_ erefl).
-  rewrite (nth_map (LLvar (mk_var_i rip))) //.
+  have /(_ n):= all2_nth (LLvar (mk_var_i rip)) (E 0, sword8) _ hca.
+  rewrite hn => /(_ erefl).
   set e := nth (LLvar _) _ _.
   rewrite /check_sopn_dest hE /=.
   case H : oseq.onth => [a | //].
@@ -543,7 +542,7 @@ Proof.
   have : check_arg_kinds (nth (Imm (wrepr U8 0)) oargs k) (nth xmm cond k).
   + by have /(_ k) := all2_nth (Imm (wrepr U8 0)) xmm _ hc; rewrite hk; apply.
   rewrite heqa hxmm.
-  case heq : assemble_word_load => [ a' | //]; rewrite andbT.
+  case heq : arg_of_lexpr => [ a' | //]; rewrite andbT.
   rewrite /check_arg_kinds /= orbF => ha /eqP ?; subst a' => {heqa}.
   case: a heq ha => // r heq _; exists r.
   case: e heq => /=; t_xrbindP => //.
@@ -635,7 +634,7 @@ Proof.
     rewrite /Oset0_instr; case: ifP => /= hsz64.
     + case: args => /=; t_xrbindP; last by move => *; subst.
       move => <-{xs} _ /ok_inj <- /= <-{ys} hw x.
-      case: rev => [ // | [ // | d ] ds ] /ok_inj <-{x} <- /=.
+      case: rev => [ // | [// | d | //] ds ] /ok_inj <-{x} <- /=.
       t_xrbindP => -[op' asm_args] hass <- hlo /=.
       assert (h := assemble_asm_opI hass); case: h=> hca hcd hidc -> /= {hass}.
       move: hca; rewrite /check_sopn_args /= => /and3P [].
@@ -656,7 +655,7 @@ Proof.
              (let vf := Some false in let: vt := Some true in (::vf, vf, vf, vt, vt & (0%R: word sz)))
              (reg_msb_flag sz) (refl_equal _) hw hlo hcd id.(id_check_dest)); eauto.
     case: xs => // ok_xs /ok_inj <-{ys} hw.
-    case: rev => [ // | [ // | d ] ds ] /ok_inj <-{ops} /=.
+    case: rev => [ // | [// | d | //] ds ] /ok_inj <-{ops} /=.
     t_xrbindP => -[op' asm_args] hass <- hlo /=.
     assert (h := assemble_asm_opI hass); case: h=> hca hcd hidc -> /= {hass}.
     move: hca; rewrite /check_sopn_args /= => /and3P [].

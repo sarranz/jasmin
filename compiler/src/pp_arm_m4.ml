@@ -127,6 +127,7 @@ let pp_asm_arg arg =
   | Regx r -> Some (pp_register_ext r)
   | Addr addr -> Some (pp_address addr)
   | XReg r -> Some (pp_xregister r)
+  | ConstReg _ -> None
 
 (* -------------------------------------------------------------------- *)
 
