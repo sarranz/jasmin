@@ -68,3 +68,16 @@ fn call_in_for(#transient reg u64 x) -> #public reg u64 {
 
     return x;
 }
+
+fn write_mmx_public(#public reg u64 x) -> #mmx reg u64 {
+    #mmx reg u64 m;
+    m = x;
+    return m;
+}
+
+fn write_mmx_protected(#transient reg u64 x, #msf reg u64 msf) -> #mmx reg u64 {
+    #mmx reg u64 m;
+    x = #protect(x, msf);
+    m = x;
+    return m;
+}

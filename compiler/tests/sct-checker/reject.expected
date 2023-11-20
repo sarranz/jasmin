@@ -30,6 +30,16 @@ Failed as expected modmsf_trace: "fail/modmsf-trace.jazz", line 18 (2-8):
                                    the function f1 destroys MSFs at "fail/modmsf-trace.jazz", line 10 (19-31)
                                    the function kill_msf destroys MSFs at "fail/modmsf-trace.jazz", line 3 (4) to line 5 (5)
 File rsb.jazz:
+Failed as expected write_mmx_call: "fail/rsb.jazz", line 100 (4-5):
+                                   speculative constant type checker: Assignment of type #transient to register m not allowed. MMX registers must always be public.
+Failed as expected write_mmx_ptr: "fail/rsb.jazz", line 89 (4-5):
+                                  speculative constant type checker: Assignment of type #transient to register m not allowed. MMX registers must always be public.
+Failed as expected write_mmx_opn: "fail/rsb.jazz", line 82 (4-5):
+                                  speculative constant type checker: Assignment of type #transient to register m not allowed. MMX registers must always be public.
+Failed as expected write_mmx_assign2: "fail/rsb.jazz", line 76 (4-5):
+                                      speculative constant type checker: Assignment of type #secret to register m not allowed. MMX registers must always be public.
+Failed as expected write_mmx_assign: "fail/rsb.jazz", line 70 (4-5):
+                                     speculative constant type checker: Assignment of type #transient to register m not allowed. MMX registers must always be public.
 Failed as expected call_in_for: "fail/rsb.jazz", line 65 (11-12):
                                 speculative constant type checker: return type for x is #transient it should be less than #public
 Failed as expected call_in_while: "fail/rsb.jazz", line 46 (4) to line 49 (5):

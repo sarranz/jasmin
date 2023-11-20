@@ -64,3 +64,52 @@ fn call_in_for(#transient reg u64 x) -> #public reg u64 {
 
     return x;
 }
+
+fn write_mmx_assign(#transient reg u64 x) -> #transient #mmx reg u64 {
+    #mmx reg u64 m;
+    m = x;
+    return m;
+}
+
+fn write_mmx_assign2(#secret reg u64 x) -> #secret #mmx reg u64 {
+    #mmx reg u64 m;
+    m = x;
+    return m;
+}
+
+fn write_mmx_opn(#transient reg u64 x) -> #transient #mmx reg u64 {
+    #mmx reg u64 m;
+    m = #MOV(x);
+    return m;
+}
+
+inline
+fn write_mmx_ptr(#transient stack u64[1] a) -> reg u64 {
+    #mmx reg ptr u64[1] m;
+    m = a;
+    a = m;
+
+    reg u64 r;
+    r = a[0];
+    return r;
+}
+
+#test=nosct
+fn move_to_mmx(#transient reg u64 x) -> #transient #mmx reg u64 {
+    #mmx reg u64 m;
+    m = x;
+    return m;
+}
+
+fn write_mmx_call(#transient reg u64 x) -> #transient reg u64 {
+    #mmx reg u64 m;
+    m = move_to_mmx(x);
+    x = m;
+    return x;
+}
+
+/*
+fn lnone_mmx(#transient reg u64 x) {
+    _ = #MOVX(x);
+}
+*/
