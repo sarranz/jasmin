@@ -595,6 +595,8 @@ end = struct
 
   let get_resulting_corruption venv = venv.resulting_corruption
 
+  (* TODO_RSB: This makes MSFs transient. We assumed that this never happened,
+     but it doesn't seem to affect things? *)
   (* Fresh variable environment where all public variables became transient. *)
   let venv_after_call env venv =
     let is_rsb_vulnerable k =
@@ -842,11 +844,26 @@ end
 (* Type checking of lvalue                                   *)
 type msf_e = MSF.t * Env.venv
 
+let ensure_public_mmx env venv x ety =
+  if is_regx (L.unloc x) then
+    match ety with
+    | Direct le | Indirect (le, _) ->
+        try VlPairs.add_le le (Env.public2 env)
+        with Lvl.Unsat _ ->
+          error
+            ~loc:(L.loc x)
+            "Assignment of type %a to register %a not allowed. \
+            MMX registers must always be public."
+            pp_vty ety
+            pp_var_i x
+
 let ty_lval env ((msf, venv) as msf_e : msf_e) x ety : msf_e =
   (* First path the type ety to make it consistant with the variable info *)
   match x with
-  | Lnone _ -> msf_e
+  | Lnone _ -> msf_e (* TODO_RSB: How to detect MMX here? *)
   | Lvar x ->
+      ensure_public_mmx env venv x ety;
+
       (* TODO assumption: p = e when p is a pointer and e a direct value means p
          points to a new position, where the expression is *)
       (* as opposed to assigning the pointer directly to the given value *)
@@ -887,6 +904,7 @@ let ty_lval env ((msf, venv) as msf_e : msf_e) x ety : msf_e =
         msf, Env.corruption_speculative env venv le
 
   | Lasub(_, _, _, x, i) ->
+      ensure_public_mmx env venv x ety;
       ensure_public_address env venv (L.loc x) x;
       ensure_public env venv (L.loc x) i;
       let le = content_ty ety in

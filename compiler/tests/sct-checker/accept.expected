@@ -262,6 +262,18 @@ output corruption: #public
  constraints:
 
 
+nomodmsf write_mmx_public : #public ->
+#public
+output corruption: #public
+ constraints:
+
+
+nomodmsf write_mmx_protected : #transient * #msf ->
+#public
+output corruption: #public
+ constraints:
+
+
 File while.jazz:
 modmsf while_first_branch : #public * #secret ->
 #public
