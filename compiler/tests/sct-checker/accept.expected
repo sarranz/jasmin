@@ -214,8 +214,8 @@ output corruption: #public
  constraints:
 
 
-nomodmsf transient_after_call : #public ->
-#transient
+nomodmsf inline_do_nothing :  ->
+
 output corruption: #public
  constraints:
 
@@ -226,7 +226,19 @@ output corruption: #public
  constraints:
 
 
-modmsf transient_after_call1 : #transient ->
+nomodmsf transient_after_call : #public ->
+#transient
+output corruption: #public
+ constraints:
+
+
+modmsf transient_after_call_noupdate : #transient ->
+#transient
+output corruption: #public
+ constraints:
+
+
+modmsf transient_after_call_update : #transient ->
 #transient
 output corruption: #public
  constraints:
@@ -244,13 +256,13 @@ output corruption: #public
  constraints:
 
 
-nomodmsf inline_do_nothing :  ->
-
+nomodmsf inline_ignored2 : #public ->
+#public
 output corruption: #public
  constraints:
 
 
-nomodmsf inline_ignored2 : #public ->
+modmsf call_in_if : #transient ->
 #public
 output corruption: #public
  constraints:
