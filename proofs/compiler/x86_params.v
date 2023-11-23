@@ -305,6 +305,7 @@ Section WITH_ERR.
         ok (cmd_msf ++ cmd_msfs)
     end.
 
+  (* TODO_RSB: We should always protect. *)
   Definition load_tag (lta : load_tag_args) : var_i * seq linstr_r :=
     let '(ra, c) :=
       match lta with
@@ -316,6 +317,8 @@ Section WITH_ERR.
     in
     (ra, map lir_of_fopn_args c).
 
+  (* We need to jump on [NE] because conditional jumps do not allow far jumps,
+  only short or near ([label] instead of [remote_label]). *)
   Definition x86_cmd_lcond_remote
     (cond : fexpr)
     (lbl_fresh : label)
