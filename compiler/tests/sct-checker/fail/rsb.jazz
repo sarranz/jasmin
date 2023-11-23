@@ -1,28 +1,14 @@
 #[test=nosct]
-fn id(reg u64 x) -> reg u64 {
-    return x;
-}
-
-#[test=nosct]
 inline
 fn leak(reg u64 x) {
     if (x == 0) { [x] = 0; }
 }
 
-fn archetypical(#transient reg u64 pub, #secret reg u64 sec) {
-    _ = #init_msf();
-    reg u64 pub;
-    pub = id(pub);
-    leak(pub);
-    _ = id(sec);
-}
-
 #[test=nosct]
 fn do_nothing() {}
 
-fn transient_after_call(#transient reg u64 x) -> #public reg u64 {
-    _ = #init_msf();
-    do_nothing();
+#[test=nosct]
+fn id(reg u64 x) -> reg u64 {
     return x;
 }
 
@@ -31,7 +17,35 @@ fn id_msf(reg u64 x) -> #msf reg u64 {
     return x;
 }
 
-fn transient_after_call1(#transient reg u64 x) -> #public reg u64 {
+fn archetypical(#public reg u64 pub, #secret reg u64 sec) {
+    reg u64 x;
+    x = id(pub);
+    leak(x);
+    _ = id(sec);
+}
+
+fn transient_after_call_update(#transient reg u64 x) -> #public reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
+    #update_after_call
+    _ = id_msf(msf);
+    return x;
+}
+
+fn transient_after_call_noupdate(#transient reg u64 x) -> #public reg u64 {
+    _ = #init_msf();
+    do_nothing();
+    return x;
+}
+
+fn transient_after_call_noupdate1(#transient reg u64 x) -> #public reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
+    do_nothing();
+    return x;
+}
+
+fn transient_after_call_noupdate2(#transient reg u64 x) -> #public reg u64 {
     reg u64 msf;
     msf = #init_msf();
     msf = id_msf(msf);
@@ -41,7 +55,30 @@ fn transient_after_call1(#transient reg u64 x) -> #public reg u64 {
 fn call_in_while(#transient reg u64 x) -> #public reg u64 {
     reg u64 msf;
     msf = #init_msf();
-    x = #protect(x, msf);
+
+    while (x < 5) {
+        msf = #update_msf(x < 5, msf);
+        #update_after_call
+        msf = id_msf(msf);
+    }
+
+    return x;
+}
+
+fn call_in_while_unknown(#transient reg u64 x) -> #public reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
+
+    while (x < 5) {
+        do_nothing();
+    }
+
+    return x;
+}
+
+fn call_in_while_noupdate(#transient reg u64 x) -> #public reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
 
     while (x < 5) {
         msf = #update_msf(x < 5, msf);
@@ -54,7 +91,20 @@ fn call_in_while(#transient reg u64 x) -> #public reg u64 {
 fn call_in_for(#transient reg u64 x) -> #public reg u64 {
     reg u64 msf;
     msf = #init_msf();
-    x = #protect(x, msf);
+
+    inline int i;
+    i = 1;
+    for i = 0 to i {
+        #update_after_call
+        msf = id_msf(msf);
+    }
+
+    return x;
+}
+
+fn call_in_for_noupdate(#transient reg u64 x) -> #public reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
 
     inline int i;
     i = 1;
@@ -101,15 +151,38 @@ fn move_to_mmx(#transient reg u64 x) -> #transient #mmx reg u64 {
     return m;
 }
 
-fn write_mmx_call(#transient reg u64 x) -> #transient reg u64 {
+fn write_mmx_call(#transient reg u64 x, #msf reg u64 msf) -> #transient reg u64 {
+    #mmx reg u64 m;
+    #update_after_call=msf
+    m = move_to_mmx(x);
+    x = m;
+    return x;
+}
+
+fn write_mmx_call_noupdate(#transient reg u64 x) -> #transient reg u64 {
     #mmx reg u64 m;
     m = move_to_mmx(x);
     x = m;
     return x;
 }
 
-/*
-fn lnone_mmx(#transient reg u64 x) {
-    _ = #MOVX(x);
+fn invalid_update_after_call() -> {
+    reg u64 msf;
+    msf = #init_msf();
+    #update_after_call
+    do_nothing();
 }
-*/
+
+#[test=nosct]
+fn two_msf() -> #msf reg u64, #msf reg u64 {
+    reg u64 msf0 msf1;
+    msf0 = #init_msf();
+    msf1 = #mov_msf(msf0);
+    return msf0, msf1;
+}
+
+fn update_after_call_many() -> {
+    reg u64 msf0 msf1;
+    #update_after_call
+    msf0, msf1 = two_msf();
+}

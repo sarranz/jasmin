@@ -11,6 +11,12 @@ Failed as expected after_branch: "fail/basic.jazz", line 10 (18-19):
 Failed as expected leak_transient: "fail/basic.jazz", line 1 (42-50):
                                    speculative constant type checker: x has type #transient but should be at most #public
 File functions.jazz:
+Failed as expected return_outdated: "fail/functions.jazz", line 34 (14-17):
+                                    speculative constant type checker: the variable msf is not known to be a msf, only {
+                                      } are
+Failed as expected return_unknown: "fail/functions.jazz", line 23 (14-17):
+                                   speculative constant type checker: the variable msf is not known to be a msf, only {
+                                     } are
 Failed as expected call_kills_msf: "fail/functions.jazz", line 10 (2-10):
                                    speculative constant type checker: 
                                    this function call destroys MSFs and { m } are required.
@@ -30,23 +36,41 @@ Failed as expected modmsf_trace: "fail/modmsf-trace.jazz", line 18 (2-8):
                                    the function f1 destroys MSFs at "fail/modmsf-trace.jazz", line 10 (19-31)
                                    the function kill_msf destroys MSFs at "fail/modmsf-trace.jazz", line 3 (4) to line 5 (5)
 File rsb.jazz:
-Failed as expected write_mmx_call: "fail/rsb.jazz", line 100 (4-5):
-                                   speculative constant type checker: Assignment of type #transient to register m not allowed. MMX registers must always be public.
-Failed as expected write_mmx_ptr: "fail/rsb.jazz", line 89 (4-5):
-                                  speculative constant type checker: Assignment of type #transient to register m not allowed. MMX registers must always be public.
-Failed as expected write_mmx_opn: "fail/rsb.jazz", line 82 (4-5):
-                                  speculative constant type checker: Assignment of type #transient to register m not allowed. MMX registers must always be public.
-Failed as expected write_mmx_assign2: "fail/rsb.jazz", line 76 (4-5):
-                                      speculative constant type checker: Assignment of type #secret to register m not allowed. MMX registers must always be public.
-Failed as expected write_mmx_assign: "fail/rsb.jazz", line 70 (4-5):
-                                     speculative constant type checker: Assignment of type #transient to register m not allowed. MMX registers must always be public.
-Failed as expected call_in_for: "fail/rsb.jazz", line 65 (11-12):
-                                speculative constant type checker: return type for x is #transient it should be less than #public
-Failed as expected call_in_while: "fail/rsb.jazz", line 46 (4) to line 49 (5):
-                                  speculative constant type checker: constraints caused by the loop cannot be satisfied
-Failed as expected transient_after_call1: "fail/rsb.jazz", line 38 (11-12):
-                                          speculative constant type checker: return type for x is #transient it should be less than #public
-Failed as expected transient_after_call: "fail/rsb.jazz", line 26 (11-12):
+Failed as expected update_after_call_many: "fail/rsb.jazz", line 187 (4-27):
+                                           speculative constant type checker: This function is annotated with update_after_call, but it returns more than one MSF
+Failed as expected invalid_update_after_call: "fail/rsb.jazz", line 173 (4-17):
+                                              speculative constant type checker: This function is annotated with update_after_call, but it does not return an MSF
+Failed as expected write_mmx_call_noupdate: "fail/rsb.jazz", line 150 (4-5):
+                                            speculative constant type checker: Assignment of type #transient to m not allowed. MMX registers must always be public.
+Failed as expected write_mmx_call: "fail/rsb.jazz", line 150 (4-5):
+                                   speculative constant type checker: Assignment of type #transient to m not allowed. MMX registers must always be public.
+Failed as expected write_mmx_ptr: "fail/rsb.jazz", line 139 (4-5):
+                                  speculative constant type checker: Assignment of type #transient to m not allowed. MMX registers must always be public.
+Failed as expected write_mmx_opn: "fail/rsb.jazz", line 132 (4-5):
+                                  speculative constant type checker: Assignment of type #transient to m not allowed. MMX registers must always be public.
+Failed as expected write_mmx_assign2: "fail/rsb.jazz", line 126 (4-5):
+                                      speculative constant type checker: Assignment of type #secret to m not allowed. MMX registers must always be public.
+Failed as expected write_mmx_assign: "fail/rsb.jazz", line 120 (4-5):
+                                     speculative constant type checker: Assignment of type #transient to m not allowed. MMX registers must always be public.
+Failed as expected call_in_for_noupdate: "fail/rsb.jazz", line 115 (11-12):
                                          speculative constant type checker: return type for x is #transient it should be less than #public
-Failed as expected archetypical: "fail/rsb.jazz", line 16 (4-14):
-                                 speculative constant type checker: pub has type #transient but should be at most #public
+Failed as expected call_in_for: "fail/rsb.jazz", line 102 (11-12):
+                                speculative constant type checker: return type for x is #transient it should be less than #public
+Failed as expected call_in_while_noupdate: "fail/rsb.jazz", line 83 (4) to line 86 (5):
+                                           speculative constant type checker: msf is 
+                                           Exact {  } it should be be at least 
+                                           Exact { msf }
+Failed as expected call_in_while_unknown: "fail/rsb.jazz", line 72 (4) to line 74 (5):
+                                          speculative constant type checker: constraints caused by the loop cannot be satisfied
+Failed as expected call_in_while: "fail/rsb.jazz", line 59 (4) to line 63 (5):
+                                  speculative constant type checker: constraints caused by the loop cannot be satisfied
+Failed as expected transient_after_call_noupdate2: "fail/rsb.jazz", line 52 (11-12):
+                                                   speculative constant type checker: return type for x is #transient it should be less than #public
+Failed as expected transient_after_call_noupdate1: "fail/rsb.jazz", line 45 (11-12):
+                                                   speculative constant type checker: return type for x is #transient it should be less than #public
+Failed as expected transient_after_call_noupdate: "fail/rsb.jazz", line 38 (11-12):
+                                                  speculative constant type checker: return type for x is #transient it should be less than #public
+Failed as expected transient_after_call_update: "fail/rsb.jazz", line 31 (4-20):
+                                                speculative constant type checker: L-value _ /* u64 */ must be a reg
+Failed as expected archetypical: "fail/rsb.jazz", line 23 (4-12):
+                                 speculative constant type checker: x has type #transient but should be at most #public

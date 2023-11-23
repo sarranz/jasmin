@@ -24,6 +24,7 @@ let spoly   = "poly"
 let spublic = "public"
 let stransient = "transient"
 let smsf = "msf"
+let supdate_after_call = "update_after_call"
 
 let sflexible = "flex"
 let sstrict   = "strict"
@@ -295,6 +296,9 @@ let rec infer_msf_i ~withcheck fenv (tbl:(L.i_loc, Sv.t) Hashtbl.t) i ms =
     ms
 
   | Ccall(xs, f, es) ->
+    (* The inference does not need to consider the [update_after_call]
+       annotation because it refers to an MSF in [xs] and we take care of this
+       already. *)
     let fty = FEnv.get_fty fenv f in
     let ms =
       let doout ms vfty x =
@@ -398,7 +402,7 @@ module Env : sig
 
   val get_resulting_corruption : venv -> VlPairs.t
 
-  val venv_after_call : env -> venv -> venv
+  val after_call : env -> venv -> venv
 
 end = struct
 
@@ -598,7 +602,7 @@ end = struct
   (* TODO_RSB: This makes MSFs transient. We assumed that this never happened,
      but it doesn't seem to affect things? *)
   (* Fresh variable environment where all public variables became transient. *)
-  let venv_after_call env venv =
+  let after_call env venv =
     let is_rsb_vulnerable k =
       match k with
       | Wsize.Const | Inline -> false
@@ -743,6 +747,7 @@ module MSF : sig
   val check_msf_exact : t -> var_i -> unit
   val loop : Env.env -> L.i_loc -> t -> t
   val end_loop : L.t -> t -> t -> t
+  val after_call : loc:L.t -> t -> annotations -> vfty list -> int glvals -> t
 
   val pp : Format.formatter -> t -> unit
 
@@ -809,8 +814,8 @@ module MSF : sig
 
   let pp fmt (xs, oe) =
     match oe with
-    | Some e -> Format.fprintf fmt "Trans %a %a" pp_vset xs pp_expr e
-    | None   -> Format.fprintf fmt "Exact %a" pp_vset xs
+    | Some e -> Format.fprintf fmt "@[Trans %a %a@]" pp_vset xs pp_expr e
+    | None   -> Format.fprintf fmt "@[Exact %a@]" pp_vset xs
 
   let loop env loc ((xs, oe) as msf) =
     let xs' = Env.msf_oracle env loc in
@@ -837,6 +842,27 @@ module MSF : sig
         "msf is %a it should be be at least %a"
         pp msfo pp msfi
 
+  let after_call ~loc ((xs, ocond) as msf) annot tout lvs =
+    if Annot.ensure_uniq1 supdate_after_call Annot.none annot = Some ()
+    then begin
+      let msg = "This function is annotated with " ^ supdate_after_call in
+      if Option.is_some ocond then
+        error ~loc
+          "%s, but the MSF state is %a (it should be updated)"
+          msg
+          pp msf;
+      let get_msf (t, lv) =
+        if t = IsMsf
+        then reg_lval ~direct:true loc lv |> L.unloc |> Option.some
+        else None
+      in
+      match List.filter_map get_msf (List.combine tout lvs) with
+      | [] -> error ~loc "%s, but it does not return an MSF" msg
+      | [x] -> exact (Sv.singleton x)
+      |  _ -> error ~loc "%s, but it returns more than one MSF" msg
+    end
+    else toinit
+
 end
 
 
@@ -852,15 +878,17 @@ let ensure_public_mmx env venv x ety =
         with Lvl.Unsat _ ->
           error
             ~loc:(L.loc x)
-            "Assignment of type %a to register %a not allowed. \
+            "Assignment of type %a to %a not allowed. \
             MMX registers must always be public."
             pp_vty ety
             pp_var_i x
 
+(* TODO_RSB: For [Lnone], register allocation will never choose an MMX register,
+   so we don't check. Is this the best solution? *)
 let ty_lval env ((msf, venv) as msf_e : msf_e) x ety : msf_e =
   (* First path the type ety to make it consistant with the variable info *)
   match x with
-  | Lnone _ -> msf_e (* TODO_RSB: How to detect MMX here? *)
+  | Lnone _ -> msf_e
   | Lvar x ->
       ensure_public_mmx env venv x ety;
 
@@ -958,11 +986,13 @@ let ensure_public_address_expr env venv loc e =
   | Indirect (le, _) -> try VlPairs.add_le le (Env.public2 env)
       with Lvl.Unsat unsat -> error_unsat loc unsat pp_expr e ety (Direct (Env.public2 env))
 
+
 (* --------------------------------------------------------------- *)
 (* [ty_instr env msf i] return msf' such that env, msf |- i : msf' *)
 
 let rec ty_instr fenv env ((msf,venv) as msf_e :msf_e) i =
   let loc = i.i_loc.L.base_loc in
+  let annot = i.i_annot in
   match i.i_desc with
   | Csyscall (xs, o, es) ->
     (* TODO: generalize to other syscalls *)
@@ -978,7 +1008,7 @@ let rec ty_instr fenv env ((msf,venv) as msf_e :msf_e) i =
 
   | Cassgn(x, _, _, e) ->
     let ety = ty_expr env venv loc e in
-    ty_lval env msf_e x (declassify_ty env i.i_annot ety)
+    ty_lval env msf_e x (declassify_ty env annot ety)
 
   | Copn(xs, _, o, es) ->
     begin match is_special o, xs, es with
@@ -1022,7 +1052,7 @@ let rec ty_instr fenv env ((msf,venv) as msf_e :msf_e) i =
     | Other, _, _  ->
         (* FIXME allows to add more constraints on es depending on the operators, like for div *)
         let ety = ty_exprs_max env venv loc es in
-        ty_lvals1 env msf_e xs (declassify_ty env i.i_annot ety)
+        ty_lvals1 env msf_e xs (declassify_ty env annot ety)
     end
 
   | Cif(e, c1, c2) ->
@@ -1102,17 +1132,19 @@ let rec ty_instr fenv env ((msf,venv) as msf_e :msf_e) i =
       let ty =
         match vfty with
         | IsMsf -> Env.dpublic env
-        | IsNormal ty -> declassify_ty env i.i_annot ty in
+        | IsNormal ty -> declassify_ty env annot ty in
       let (msf, venv) = ty_lval env msf_e x ty in
       let msf = if vfty = IsMsf then MSF.add (reg_lval ~direct:true loc x) msf else msf in
       (msf, venv) in
     let msf' = if is_Modified modmsf then MSF.toinit else msf in
     let (msf', venv') = List.fold_left2 output_ty (msf', venv) xs tyout in
-    let venv' =
-      if Prog.is_inline i.i_annot (FEnv.get_fun_def fenv f).f_cc
-      then venv'
-      else Env.venv_after_call env venv'
+
+    let msf', venv' =
+      if Prog.is_inline annot (FEnv.get_fun_def fenv f).f_cc
+      then msf', venv'
+      else MSF.after_call ~loc msf' annot tyout xs, Env.after_call env venv'
     in
+
     (msf', venv')
 
 and ty_cmd fenv env msf_e c =

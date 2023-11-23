@@ -5,6 +5,7 @@ open Sct_checker_forward
 let path = "fail"
 
 let load_and_check name =
+  Jasmin.Utils.nowarning ();
   Format.printf "File %s:@." name;
   let ((_, fds) as p) = load_file (Filename.concat path name) in
   List.iter
