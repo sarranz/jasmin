@@ -24,8 +24,8 @@ Module E.
 
   Definition pass : string := "protect calls".
 
-  (* TODO: Depending on the checker, some of these might be user errors and not
-     internal ones. *)
+  (* TODO_RSB: Depending on the checker, some of these might be user errors and
+     not internal ones. *)
 
   Definition assoc_failed : pp_error_loc :=
     pp_internal_error_s pass "assoc failed".
@@ -92,8 +92,8 @@ Section CALL_SITE_TABLE.
   (* Return info is the name of the callee and the return label. *)
   Notation ret_info := (funname * label)%type (only parsing).
 
-  (* We keep track of return labels and assign unique tags to them (unique within
-     each callee). *)
+  (* We keep track of return labels and assign unique tags to them (unique
+     within each callee). *)
   Notation cs_info := (remote_label * Z)%type (only parsing).
 
   (* We collect for each function all return labels and their tags, and also
@@ -105,8 +105,7 @@ Section CALL_SITE_TABLE.
   Definition cst_lookup (cst : cs_table) (fn : funname) : cst_value :=
     if Mf.get cst fn is Some x then x else ([::], xH).
 
-  (* Return the maximum label, and a list of called functions and their
-     return labels. *)
+  (* Return the maximum label, and a list of callees and their return labels. *)
   Fixpoint label_info
     (ris : seq ret_info) (max_lbl : label) (lc : lcmd) : seq ret_info * label :=
     match lc with
@@ -121,27 +120,24 @@ Section CALL_SITE_TABLE.
   Definition next_tag (s : seq (remote_label * Z)) : Z :=
     if s is (_, t) :: _ then Z.succ t else 0.
 
-  (* Update the entry for the callee in [tbl] to include [(fn, ret_lbl)]. *)
+  (* Update the entry for the callee in [tbl] to include [(caller, ret_lbl)]. *)
   Definition acc_entry
-    (fn : funname) (tbl : cs_table) (ri : ret_info) : cs_table :=
+    (caller : funname) (tbl : cs_table) (ri : ret_info) : cs_table :=
     let '(callee, ret_lbl) := ri in
     let '(old_info, max_lbl) := cst_lookup tbl callee in
-    let new_info := ((fn, ret_lbl), next_tag old_info) :: old_info in
+    let new_info := ((caller, ret_lbl), next_tag old_info) :: old_info in
     Mf.set tbl callee (new_info, max_lbl).
 
-  (* Update the entries of the callees of [fn], and set its max label. *)
+  (* Update the entries of the callees of [caller], and set its max label. *)
   Definition add_call_sites
-    (tbl0 : cs_table) (fn : funname) (lfd : lfundef) : cs_table :=
+    (tbl0 : cs_table) (caller : funname) (lfd : lfundef) : cs_table :=
     let '(ris, max_lbl) := label_info [::] xH (lfd_body lfd) in
-    let '(old_info, _) := cst_lookup tbl0 fn in
-    let tbl1 := Mf.set tbl0 fn (old_info, max_lbl) in
-    foldl (acc_entry fn) tbl1 ris.
+    let '(old_info, _) := cst_lookup tbl0 caller in
+    let tbl1 := Mf.set tbl0 caller (old_info, max_lbl) in
+    foldl (acc_entry caller) tbl1 ris.
 
   Definition call_sites_table (lp : lprog) : cs_table :=
-    foldl
-      (fun tbl '(fn, lfd) => add_call_sites tbl fn lfd)
-      (Mf.empty _)
-      (lp_funcs lp).
+    foldl (fun tbl => uncurry (add_call_sites tbl)) (Mf.empty _) (lp_funcs lp).
 
 End CALL_SITE_TABLE.
 
@@ -393,7 +389,7 @@ Section DO_CALLS.
     then ok (ret_tbl, tag, r, STempty)
     else Error E.invalid_state.
 
-  Definition set_scratch (st : state) (les : seq lexpr) : cexec state :=
+  Definition set_scratch (les : seq lexpr) : cexec state :=
     if les is [:: LLvar r ]
     then ok (STscratch r)
     else Error E.invalid_use_vars.
@@ -429,14 +425,14 @@ Section DO_CALLS.
 
     (* We don't need to save the tag if we are the only caller of callee.
        Note that there must be at least one caller. *)
-    Let: cmd_push :=
+    Let cmd_push :=
       if ret_tbl is [:: _ ]
       then ok [::]
       else
         Let args := pcp_save_ra (E.save_tag_failed ii) sta tag in
         ok (map (li_of_fopn_args ii) args)
     in
-    let lc := cmd_push ++ [:: MkLI ii (Lgoto callee) ] in
+    let lc := rcons cmd_push (MkLI ii (Lgoto callee)) in
 
     Let r := get_tag_reg callee.1 in
     Let st'' := set_update_args st' ret_tbl tag r in
@@ -457,7 +453,7 @@ Section DO_CALLS.
   Fixpoint do_call_lcmd (st : state) (lc : lcmd) : cexec lcmd :=
     match lc with
     | MkLI _ (Lopn les (Ointernal (Ouse_vars IRpc_save_scratch _ _)) _) :: lc =>
-        Let st' := set_scratch st les in
+        Let st' := set_scratch les in
         do_call_lcmd st' lc
 
     | MkLI ii (Lcall ra_loc callee)
@@ -497,24 +493,29 @@ Definition pc_lfd (lfd : lfundef) : cexec lfundef :=
 
 End PASS.
 
-(* TODO: remove (debug). *)
+
+(* TODO_RSB: Remove. *)
+Section DEBUG.
+
 Let get_label (i : linstr) : option label :=
   if li_i i is Llabel _ lbl then Some lbl else None.
 
-(* TODO: remove (debug). *)
 Let labels_in_lcmd (body: lcmd) : seq label :=
   pmap get_label body.
 
-(* TODO: remove (debug). *)
 Let is_max_label_in_fbody (lp : lprog) (fn : funname) (l : label) : bool :=
   if get_fundef (lp_funcs lp) fn is Some fd
   then all (fun x => x <=? l)%positive (labels_in_lcmd (lfd_body fd))
   else false.
 
-(* TODO: remove (debug). *)
-Let chk_f lp (fn : funname) (v : cst_value) : bool :=
+Definition chk_f lp (fn : funname) (v : cst_value) : bool :=
   let '(s, max_lbl) := v in
-  uniq (map snd s) && is_max_label_in_fbody lp fn max_lbl.
+  let tags := map snd s in
+  [&& sort (fun x y => x <? y) tags == ziota 0 (size tags)
+    & is_max_label_in_fbody lp fn max_lbl
+  ].
+
+End DEBUG.
 
 Definition pc_lprog
   (export_fs : seq funname) (protect_calls : bool) (lp : lprog) : cexec lprog :=
@@ -522,7 +523,7 @@ Definition pc_lprog
   then
     let cs_tbl := call_sites_table lp in
 
-    (* TODO: remove (debug). *)
+    (* TODO_RSB: Remove. *)
     Let _ := assert (Mf.all (chk_f lp) cs_tbl) E.debug in
 
     Let: (lti_tbl, lfuncs) := lti_lfuncs export_fs (lp_funcs lp) in

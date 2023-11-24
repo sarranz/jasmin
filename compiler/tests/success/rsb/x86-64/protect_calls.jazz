@@ -1,16 +1,13 @@
-#returnaddress=stack
 fn g0(reg u64 x msf) -> reg u64, #msf reg u64 {
     msf = #mov_msf(msf);
     return x, msf;
 }
 
-#returnaddress=reg
 fn g1(reg u64 x msf) -> reg u64, #msf reg u64 {
     msf = #mov_msf(msf);
     return x, msf;
 }
 
-#returnaddress=mmx
 fn g2(reg u64 x msf) -> reg u64, #msf reg u64 {
     msf = #mov_msf(msf);
     return x, msf;

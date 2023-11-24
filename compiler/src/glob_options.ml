@@ -242,7 +242,7 @@ let options = [
     "-return-address-kind",
       Arg.Symbol
         (List.map fst return_address_kind_strings, set_return_address_kind),
-      ": overwrite return address kind"
+      ": overwrite return address kind of local functions"
   ] @  List.map print_option Compiler.compiler_step_list @ List.map stop_after_option Compiler.compiler_step_list
 
 let usage_msg = "Usage : jasminc [option] filename"

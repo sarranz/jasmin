@@ -155,17 +155,16 @@ Definition x86_sh_lower
   | SLHprotect_ptr _ | SLHprotect_ptr_fail _ => None (* Taken into account by stack alloc *)
   end.
 
-Definition x86_update_after_call (msf : var_i) (msfs : seq var_i) : copn_args :=
-  let lvs := Lnone dummy_var_info sreg :: Lvar msf :: map Lvar msfs in
+Definition x86_update_after_call (msf : var_i) : copn_args :=
+  let lvs := [:: Lnone dummy_var_info sreg; Lvar msf ] in
   let es := [:: Pvar (mk_lvar msf) ]
   in
-  (lvs, Oasm (ExtOp (Ox86SLHupdate_after_call (size msfs))), es).
+  (lvs, Oasm (ExtOp Ox86SLHupdate_after_call), es).
 
 Definition x86_shparams : sh_params :=
   {|
     shp_lower := x86_sh_lower;
-    shp_update_after_call :=
-      fun _ msf msfs => ok (x86_update_after_call msf msfs);
+    shp_update_after_call := fun _ msf => ok (x86_update_after_call msf);
   |}.
 
 
@@ -252,7 +251,7 @@ Section WITH_ERR.
   Let fcond_ne := Fapp1 Onot fcond_eq.
 
   Definition x86_is_update_after_call (op : sopn) : bool :=
-    if op is Oasm (ExtOp (Ox86SLHupdate_after_call _)) then true else false.
+    if op is Oasm (ExtOp Ox86SLHupdate_after_call) then true else false.
 
   (* To update the MSFs after returning from a function call, there are three
      cases:
@@ -343,6 +342,23 @@ Section WITH_ERR.
     let x := lir_of_fopn_args (x86_fop_cmpi r tag) :: cmd_jmp in
     ok (x ++ lirs, next_lbl lbl_fresh).
 
+  Definition ret_table
+    (lta : load_tag_args)
+    (max_lbl : label)
+    (ris : seq (remote_label * Z)) :
+    cexec (seq linstr_r) :=
+    if ris is [::]
+    then ok [::]
+    else
+      let '(r, cmd_load) := load_tag lta in
+      Let: (ret_tbl, _) :=
+        foldM
+          (fun '(rlbl, tag) '(lirs, flbl) => add_entry r rlbl tag lirs flbl)
+          ([::], next_lbl max_lbl)
+          ris
+      in
+      ok (cmd_load ++ ret_tbl).
+
   (* The order is reversed because of [foldM].
      It is clearer to reverse here so that in [update_after_call] we have the
      natural ordering. *)
@@ -354,21 +370,7 @@ Section WITH_ERR.
     Let: ((rlbl0, _), ris') :=
       r_uncons (err (Some "empty return table"%string)) (rev ris)
     in
-
-    Let pre :=
-      if ris' is [::]
-      then ok [::]
-      else
-        let '(r, cmd_load) := load_tag lta in
-        Let: (ret_tbl, _) :=
-          foldM
-            (fun '(rlbl, tag) '(lirs, flbl) => add_entry r rlbl tag lirs flbl)
-            ([::], next_lbl max_lbl)
-            ris'
-        in
-        ok (cmd_load ++ ret_tbl)
-    in
-
+    Let pre := ret_table lta max_lbl ris in
     ok (pre ++ [:: Lgoto rlbl0 ]).
 
 Definition x86_save_ra

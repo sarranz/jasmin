@@ -238,7 +238,7 @@ Let pc_err_msg : string :=
 Definition arm_shparams : sh_params :=
   {|
     shp_lower := fun _ _ _ => None;
-    shp_update_after_call := fun err _ _ => Error (err (Some pc_err_msg));
+    shp_update_after_call := fun err _ => Error (err (Some pc_err_msg));
   |}.
 
 

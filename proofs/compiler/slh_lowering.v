@@ -108,9 +108,9 @@ Definition update_after_call_failed
     pel_internal := true;
   |}.
 
-Definition cant_find_msf (fn : funname) : pp_error_loc :=
+Definition not_implemented (fn : funname) (msg : string) : pp_error_loc :=
   {|
-    pel_msg := compiler_util.pp_s "can't find MSF to protect return address";
+    pel_msg := compiler_util.pp_s msg;
     pel_fn := Some fn;
     pel_fi := None;
     pel_ii := None;
@@ -442,12 +442,12 @@ Record sh_params :=
     (* Lower a speculative operator. *)
     shp_lower : seq lval -> slh_op -> seq pexpr -> option copn_args;
 
-    (* Update at least one MSF after returning from a function call.
+    (* Update an MSF after returning from a function call.
        This is mapped to
-         [shp_lower ... SLHupdate ...; shp_lower ... SLHmove_msf ...; ...]
+         [shp_lower ... SLHupdate ...]
        after linearization.  *)
     shp_update_after_call :
-      (option string -> pp_error_loc) -> var_i -> seq var_i -> cexec copn_args;
+      (option string -> pp_error_loc) -> var_i -> cexec copn_args;
   }.
 
 Record slh_function_info :=
@@ -537,13 +537,18 @@ Definition output_msfs (fn : funname) (lvs : seq lval) : seq var_i :=
   in
   pmap get_msf (zip lvs (slhfi_tout (slh_fun_info fn))).
 
-Definition update_msfs
+(* TODO_RSB: Here we enforce that there is exactly one returned MSF.
+   Do we want to keep this description? *)
+Definition update_msf
   (ii : instr_info) (fn : funname) (lvs : seq lval) : cexec (seq instr_r) :=
-  if output_msfs fn lvs is msf :: msfs
+  if ii_update_after_call ii
   then
     let on_err := E.update_after_call_failed ii in
-    Let args := shp_update_after_call shparams on_err msf msfs in
-    ok [:: instr_of_copn_args AT_keep args ]
+    if output_msfs fn lvs is [:: msf ]
+    then
+      Let args := shp_update_after_call shparams on_err msf in
+      ok [:: instr_of_copn_args AT_keep args ]
+    else Error (on_err (Some "invalid number of returned MSFs"%string))
   else ok [::].
 
 Fixpoint lower_i (i : instr) : cexec cmd :=
@@ -587,7 +592,7 @@ Fixpoint lower_i (i : instr) : cexec cmd :=
             then [:: use_vars_get_reg IRpc_save_scratch ]
             else [::]
           in
-          Let updates := update_msfs ii callee lvs in
+          Let updates := update_msf ii callee lvs in
           ok (pre ++ ir :: updates)
         else
           ok [:: ir ]
@@ -604,15 +609,9 @@ Definition protected_ret
   (env : Env.t) (fn : funname) (fd : fundef) : cexec cmd :=
   match slhfi_rak (slh_fun_info fn) with
   | RAKnone => ok [::]
-  | RAKstack =>
-      Let msf := o2r (E.cant_find_msf fn) (Env.choose_msf env) in
-      let irs :=
-        [:: use_vars_get_reg IRpc_load_scratch
-          ; use_vars_use_one IRpc_load_msf msf
-        ]
-      in
-      ok [seq MkI dummy_instr_info ir | ir <- irs ]
-  | RAKregister => ok [::]
+  | RAKstack | RAKregister =>
+      let msg := "Return tags are only allowed in MMX registers"%string in
+      Error (E.not_implemented fn msg)
   | RAKextra_register =>
       ok [:: MkI dummy_instr_info (use_vars_get_reg IRpc_load_scratch) ]
   end.
