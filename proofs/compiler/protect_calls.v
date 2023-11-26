@@ -1,3 +1,9 @@
+(* Protect calls and returns against Spectre-RSB.
+   This pass replaces [CALL]s and [RET]s by direct jumps and explicit [PUSH]
+   and [POP]s.
+   This pass is parametrized by the return table structure (a binary decision
+   tree) for each function.
+   The tree must have all the tags as nodes, and be sorted. *)
 From Coq Require Import ZArith.
 From mathcomp Require Import
   all_algebra
@@ -12,6 +18,7 @@ Require Import
   linear
   return_address_kind
   strings.
+Require oseq.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -94,7 +101,7 @@ Section CALL_SITE_TABLE.
 
   (* We keep track of return labels and assign unique tags to them (unique
      within each callee). *)
-  Notation cs_info := (remote_label * Z)%type (only parsing).
+  Definition cs_info : Type := remote_label * Z.
 
   (* We collect for each function all return labels and their tags, and also
      their maximum internal label of the function. *)
@@ -283,11 +290,19 @@ Record protect_calls_params :=
       seq rexpr ->
       cexec (seq fopn_args);
 
-    pcp_lower_return :
+    pcp_load_tag :
       (option string -> pp_error_loc) ->
       load_tag_args ->
-      cst_value ->
-      cexec (seq linstr_r);
+      cexec (var_i * seq fopn_args);
+
+    pcp_cmpi :
+      (option string -> pp_error_loc) ->
+      var_i ->
+      Z ->
+      cexec fopn_args;
+
+    pcp_cond_ne : fexpr;
+    pcp_cond_gt : fexpr;
 
     pcp_save_ra :
       (option string -> pp_error_loc) ->
@@ -296,7 +311,113 @@ Record protect_calls_params :=
       cexec (seq fopn_args);
   }.
 
-Context (pcparams : protect_calls_params).
+Context
+  (pcparams : protect_calls_params)
+  (return_tree : funname -> nat -> bintree nat)
+.
+
+Section RETURN_TABLE.
+
+Context (ii : instr_info).
+
+Notation err := (E.lower_ret_failed ii).
+Notation pcp_load_tag := (pcp_load_tag pcparams err).
+Notation pcp_cmpi := (pcp_cmpi pcparams err).
+
+(* We need to jump on the negation of the condition because conditional jumps do
+   not allow far jumps, only short or near ([label] instead of
+   [remote_label]). *)
+Definition lcond_remote
+  (cond : fexpr)
+  (lbl_fresh : label)
+  (lbl_remote : remote_label) :
+  cexec (seq linstr_r) :=
+  ok [:: Lcond cond lbl_fresh
+       ; Lgoto lbl_remote
+       ; Llabel InternalLabel lbl_fresh
+     ].
+
+Let get_ret_lbl (ris : seq cs_info) (tag : Z) : cexec remote_label :=
+  o2r (err (Some "invalid tree"%string)) (assoc_right ris tag).
+
+(* General case, when the tree is [BTnode(pos, t0, t1)]:
+       CMP ra, tag
+       JMPeq tag
+       JMPgt l_gt
+       code for t0
+       l_gt:
+       code for t1
+
+  If one of the two subtrees is empty, we don't introduce the [JMPgt] or
+  [l_gt]. *)
+Fixpoint lcmd_of_tree
+  (ra : var_i)
+  (lbl : label) (* Fresh label. *)
+  (ris : seq cs_info)
+  (t : bintree nat) :
+  cexec (seq linstr_r * label) :=
+  match t with
+  | BTleaf => ok ([::], lbl)
+  | BTnode tag BTleaf BTleaf =>
+      Let ret_lbl := get_ret_lbl ris tag in
+      ok ([:: Lgoto ret_lbl ], lbl)
+  | BTnode tag t0 t1 =>
+      Let ret_lbl := get_ret_lbl ris tag in
+      Let cmp_args := pcp_cmpi ra tag in
+      Let jmpeq := lcond_remote (pcp_cond_ne pcparams) lbl ret_lbl in
+      Let: (lcmd_t0, lbl) := lcmd_of_tree ra (next_lbl lbl) ris t0 in
+      Let: (lcmd_t1, lbl) := lcmd_of_tree ra (next_lbl lbl) ris t1 in
+      let '(jmp_gt, lbl_gt, lbl) :=
+        if is_nil lcmd_t0 || is_nil lcmd_t1
+        then ([::], [::], lbl)
+        else
+          ( [:: Lcond (pcp_cond_gt pcparams) lbl ]
+          , [:: Llabel InternalLabel lbl ]
+          , next_lbl lbl
+          )
+      in
+      let lc :=
+        lir_of_fopn_args cmp_args
+        :: jmpeq
+        ++ jmp_gt
+        ++ lcmd_t0
+        ++ lbl_gt
+        ++ lcmd_t1
+      in
+      ok (lc, lbl)
+  end.
+
+(* We don't load the tag if there is just one call site. *)
+Definition return_table
+  (callee : funname)
+  (lta : load_tag_args)
+  (csi : cst_value) :
+  cexec (seq linstr_r) :=
+  let '(ris, max_lbl) := csi in
+  Let: (ra, args) := pcp_load_tag lta in
+  let t := return_tree callee (size ris) in
+  Let: (lc, _) := lcmd_of_tree ra (next_lbl max_lbl) ris t in
+  let pop := if lc is [:: Lgoto _ ] then [::] else map lir_of_fopn_args args in
+
+  (* DEBUG *)
+  Let _ :=
+    let is_label i := if i is Llabel _ lbl then Some lbl else None in
+    let is_jump i := if i is Lgoto lbl then Some lbl else None in
+    let lbls := pmap is_label lc in
+    let remote_lbls := map fst ris in
+    let targets := pmap is_jump lc in
+    assert
+      [&& uniq lbls
+        , all (fun l => l \in remote_lbls) targets
+        & all (fun l => l \in targets) remote_lbls
+      ]
+      (err (Some "invalid return table"%string))
+  in
+
+  ok (pop ++ lc).
+
+End RETURN_TABLE.
+
 
 Section PASS.
 
@@ -312,7 +433,6 @@ Notation pcp_is_update_after_call :=
   (pcp_is_update_after_call pcparams) (only parsing).
 Notation pcp_lower_update_after_call :=
   (pcp_lower_update_after_call pcparams) (only parsing).
-Notation pcp_lower_return := (pcp_lower_return pcparams) (only parsing).
 Notation pcp_save_ra := (pcp_save_ra pcparams) (only parsing).
 
 
@@ -335,10 +455,8 @@ Section DO_RETURN.
   Definition do_ret (ii : instr_info) (csi : cst_value) : cexec lcmd :=
     Let irs :=
       if csi is ([::], _)
-      then ok [:: Lret ] (* Function is never called. *)
-      else
-        Let lta := get_lta in
-        pcp_lower_return (E.lower_ret_failed ii) lta csi
+      then Error (E.lower_ret_failed ii (Some "empty return table"%string))
+      else Let lta := get_lta in return_table ii fn lta csi
     in
     ok (map (MkLI ii) irs).
 

@@ -251,9 +251,11 @@ Definition arm_pcparams : protect_calls_params :=
   {|
     pcp_is_update_after_call := fun _ => false;
     pcp_lower_update_after_call :=
-      fun _ _ _ _ _ _  =>
-        Error (pp_internal_error_s "protect calls" "lower_update_after_call");
-    pcp_lower_return := fun err _ _ => Error (err (Some pc_err_msg));
+      fun err _ _ _ _ _  => Error (err (Some pc_err_msg));
+    pcp_load_tag := fun err _ => Error (err (Some pc_err_msg));
+    pcp_cmpi := fun err _ _ => Error (err (Some pc_err_msg));
+    pcp_cond_ne := Fconst 0;
+    pcp_cond_gt := Fconst 0;
     pcp_save_ra := fun err _ _ => Error (err (Some pc_err_msg));
   |}.
 

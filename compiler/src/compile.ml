@@ -244,6 +244,64 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
       }
   in
 
+  (* TODO_RSB: We should use the function name to check if the user provided the
+     tree in an annotation. *)
+  let pc_return_tree fn n =
+
+    (* Create a sorted binary tree with [n] internal nodes labeled
+       [pos, pos+1, ..., pos+n-1].
+       When [n] is 2, [go_left] decides to which side the child node goes. *)
+    let rec tree_structure pos go_left n =
+      let empty = Utils0.BTleaf in
+      let node x t0 t1 = Utils0.BTnode(Conv.nat_of_int x, t0, t1) in
+      let single x = node x empty empty in
+      match n with
+      | 0 -> empty
+      | 1 -> single pos
+      | 2 ->
+          if go_left
+          then node (pos + 1) (single pos) empty
+          else node pos empty (single (pos + 1))
+      | _ ->
+          let n0 = (n - 1) / 2 in (* Size of the left tree: at most half. *)
+          let n1 = n - n0 - 1 in  (* Size of the right tree: the rest. *)
+          let pos' = n0 + pos in
+          let t0 = tree_structure pos true n0 in
+          let t1 = tree_structure (pos' + 1) false n1 in
+          node pos' t0 t1
+    in
+
+    (* BEGIN DEBUG *)
+    let rec collect acc = function
+      | Utils0.BTleaf -> acc
+      | Utils0.BTnode(x, t0, t1) ->
+          collect (collect (Conv.int_of_nat x :: acc) t0) t1
+    in
+    let rec is_sorted = function
+      | Utils0.BTleaf -> true
+      | Utils0.BTnode(x, t0, t1) ->
+          let x = Conv.int_of_nat x in
+          List.for_all (fun y -> y < x) (collect [] t0)
+          && is_sorted t0
+          && List.for_all (fun y -> y > x) (collect [] t1)
+          && is_sorted t1
+    in
+    let all_tags t =
+      let x = collect [] t in
+      let tags = List.range 0 `To (List.length x - 1) in
+      List.sort compare x = tags
+    in
+    let check n t =
+      if not (all_tags t && is_sorted t)
+      then failwith (Format.sprintf "Error in%s, size %d" fn.fn_name n)
+    in
+    (* END DEBUG *)
+
+    let t = tree_structure 0 true (Conv.int_of_nat n) in
+    check (Conv.int_of_nat n) t; (* DEBUG *)
+    t
+  in
+
   let cparams =
     {
       Compiler.rename_fd;
@@ -280,6 +338,7 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
       Compiler.fresh_var_ident = Conv.fresh_var_ident;
       Compiler.slh_info;
       Compiler.protect_calls = !Glob_options.protect_calls;
+      Compiler.pc_return_tree;
     }
   in
 

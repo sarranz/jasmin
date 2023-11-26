@@ -202,7 +202,7 @@ Section WITH_ERR.
     let les := lexpr_flags ++ [:: LLvar x ] in
     (les, Oasm (ExtOp (Ox86SLHprotect U64)), [:: rvar x; rvar msf ]).
 
-  (* TODO: Use [x86_free_stack_frame]. *)
+  (* TODO_RSB: Use [x86_free_stack_frame]. *)
   Definition x86_lcmd_pop (rsp x : var_i) : seq fopn_args :=
     let addr := Load reg_size rsp (fconst reg_size 0) in
     let rsp' :=
@@ -213,7 +213,7 @@ Section WITH_ERR.
       ; ([:: LLvar rsp ], Ox86 (LEA reg_size), [:: rsp' ])
     ].
 
-  (* TODO: Use [x86_allocate_stack_frame]. *)
+  (* TODO_RSB: Use [x86_allocate_stack_frame]. *)
   Definition x86_lcmd_pushi (rsp : var_i) (z : Z) : seq fopn_args :=
     let addr := Store reg_size rsp (fconst reg_size 0) in
     let rsp' :=
@@ -224,31 +224,35 @@ Section WITH_ERR.
       ; ([:: addr ], Ox86 (MOV reg_size), [:: rconst reg_size z ])
     ].
 
-  Fixpoint pexpr_of_fexpr (fe : fexpr) : pexpr :=
-    match fe with
-    | Fconst z => Pconst z
-    | Fvar v => Pvar (mk_lvar v)
-    | Fapp1 op1 fe => Papp1 op1 (pexpr_of_fexpr fe)
-    | Fapp2 op2 fe0 fe1 => Papp2 op2 (pexpr_of_fexpr fe0) (pexpr_of_fexpr fe1)
-    | Fif c fe0 fe1 =>
-        Pif
-          sbool
-          (pexpr_of_fexpr c)
-          (pexpr_of_fexpr fe0)
-          (pexpr_of_fexpr fe1)
-    end.
-
-  Definition fnot (fe : fexpr) : option fexpr :=
-    fexpr_of_pexpr (constant_prop.snot (pexpr_of_fexpr fe)).
-
   Definition r_uncons
     {aT eT} (err : eT) (s : seq aT) : result eT (aT * seq aT) :=
     if s is a :: s' then ok (a, s') else Error err.
 
   (* ------------------------------------------------------------------------ *)
 
-  Let fcond_eq := Fvar (mk_var_i (to_var ZF)).
-  Let fcond_ne := Fapp1 Onot fcond_eq.
+  Section COND.
+    Import
+      constant_prop
+      flag_combination
+    .
+
+    Notation mk_pvar x := (Pvar (mk_lvar (mk_var_i (to_var x)))).
+
+    Let mk_fcond cf :=
+      let pvar_of := mk_pvar OF in
+      let pvar_cf := mk_pvar CF in
+      let pvar_sf := mk_pvar SF in
+      let pvar_zf := mk_pvar ZF in
+      let e := cf_xsem snot sand sor sbeq pvar_of pvar_cf pvar_sf pvar_zf cf in
+      odflt (Fconst 0) (fexpr_of_pexpr e).
+
+    Definition fcond_eq := Eval hnf in mk_fcond CF_EQ.
+    Definition fcond_ne := Eval hnf in mk_fcond CF_NEQ.
+    Definition fcond_le := Eval hnf in mk_fcond (CF_LE Unsigned).
+    Definition fcond_ge := Eval hnf in mk_fcond (CF_GE Unsigned).
+    Definition fcond_gt := Eval hnf in mk_fcond (CF_GT Unsigned).
+
+  End COND.
 
   Definition x86_is_update_after_call (op : sopn) : bool :=
     if op is Oasm (ExtOp Ox86SLHupdate_after_call) then true else false.
@@ -305,8 +309,8 @@ Section WITH_ERR.
     end.
 
   (* TODO_RSB: We should always protect. *)
-  Definition load_tag (lta : load_tag_args) : var_i * seq linstr_r :=
-    let '(ra, c) :=
+  Definition load_tag (lta : load_tag_args) : var_i * seq fopn_args :=
+    let '(ra, args) :=
       match lta with
       | LTAstack rsp r msf =>
           (r, x86_lcmd_pop rsp r ++ [:: x86_fop_protect_64 r msf ])
@@ -314,89 +318,35 @@ Section WITH_ERR.
       | LTAextra_register rx r => (r, [:: x86_fop_movx r rx ])
       end
     in
-    (ra, map lir_of_fopn_args c).
+    (ra, args).
 
-  (* We need to jump on [NE] because conditional jumps do not allow far jumps,
-  only short or near ([label] instead of [remote_label]). *)
-  Definition x86_cmd_lcond_remote
-    (cond : fexpr)
-    (lbl_fresh : label)
-    (lbl_remote : remote_label) :
-    cexec (seq linstr_r) :=
-    Let ncond :=
-      o2r (err (Some "could not negate condition"%string)) (fnot cond)
-    in
-    ok [:: Lcond ncond lbl_fresh
-         ; Lgoto lbl_remote
-         ; Llabel InternalLabel lbl_fresh
-       ].
-
-  Definition add_entry
-    (r : var_i)
-    (lbl_remote : remote_label)
+  Definition save_ra
+    (err : option string -> pp_error_loc)
+    (sral : save_tag_args)
     (tag : Z)
-    (lirs : seq linstr_r)
-    (lbl_fresh : positive) :
-    cexec (seq linstr_r * positive) :=
-    Let cmd_jmp := x86_cmd_lcond_remote fcond_eq lbl_fresh lbl_remote in
-    let x := lir_of_fopn_args (x86_fop_cmpi r tag) :: cmd_jmp in
-    ok (x ++ lirs, next_lbl lbl_fresh).
+    : cexec (seq fopn_args) :=
+    let c :=
+      match sral with
+      | STAstack rspi => x86_lcmd_pushi rspi tag
+      | STAregister r => [:: x86_fop_movi r tag ]
+      | STAextra_register rx r =>
+          [:: x86_fop_movi r tag
+            ; x86_fop_movx rx r
+          ]
+      end
+    in ok c.
 
-  Definition ret_table
-    (lta : load_tag_args)
-    (max_lbl : label)
-    (ris : seq (remote_label * Z)) :
-    cexec (seq linstr_r) :=
-    if ris is [::]
-    then ok [::]
-    else
-      let '(r, cmd_load) := load_tag lta in
-      Let: (ret_tbl, _) :=
-        foldM
-          (fun '(rlbl, tag) '(lirs, flbl) => add_entry r rlbl tag lirs flbl)
-          ([::], next_lbl max_lbl)
-          ris
-      in
-      ok (cmd_load ++ ret_tbl).
-
-  (* The order is reversed because of [foldM].
-     It is clearer to reverse here so that in [update_after_call] we have the
-     natural ordering. *)
-  Definition x86_lower_return
-    (lta : load_tag_args)
-    (csi : seq (remote_label * Z) * label) :
-    cexec (seq linstr_r) :=
-    let '(ris, max_lbl) := csi in
-    Let: ((rlbl0, _), ris') :=
-      r_uncons (err (Some "empty return table"%string)) (rev ris)
-    in
-    Let pre := ret_table lta max_lbl ris in
-    ok (pre ++ [:: Lgoto rlbl0 ]).
-
-Definition x86_save_ra
-  (err : option string -> pp_error_loc)
-  (sral : save_tag_args)
-  (tag : Z)
-  : cexec (seq fopn_args) :=
-  let c :=
-    match sral with
-    | STAstack rspi => x86_lcmd_pushi rspi tag
-    | STAregister r => [:: x86_fop_movi r tag ]
-    | STAextra_register rx r =>
-        [:: x86_fop_movi r tag
-          ; x86_fop_movx rx r
-        ]
-    end
-  in ok c.
-
-  End WITH_ERR.
+End WITH_ERR.
 
 Definition x86_pcparams : protect_calls_params :=
   {|
     pcp_is_update_after_call := x86_is_update_after_call;
     pcp_lower_update_after_call := x86_lower_update_after_call;
-    pcp_lower_return := x86_lower_return;
-    pcp_save_ra := x86_save_ra;
+    pcp_load_tag := fun _ lta => ok (load_tag lta);
+    pcp_cmpi := fun _ r tag => ok (x86_fop_cmpi r tag);
+    pcp_cond_ne := fcond_ne;
+    pcp_cond_gt := fcond_gt;
+    pcp_save_ra := save_ra;
   |}.
 
 End PROTECT_CALLS.

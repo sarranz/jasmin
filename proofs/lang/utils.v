@@ -1907,3 +1907,20 @@ Qed.
 Lemma map_const_nseq A B (l : list A) (c : B) : map (fun=> c) l = nseq (size l) c.
 Proof. by elim: l => // > ? /=; f_equal. Qed.
 
+Inductive bintree (T : Type) : Type :=
+  | BTleaf
+  | BTnode of T & bintree T & bintree T
+.
+
+Definition is_nil {X} (xs : seq X) : bool :=
+  if xs is [::] then true else false.
+
+Fixpoint assoc_right
+  {aT : Type} {bT : eqType} (s : seq (aT * bT)) (b : bT) : option aT :=
+  if s is (a, b') :: s
+  then if b == b' then Some a else assoc_right s b
+  else None.
+
+Lemma assoc_rightE aT {bT : eqType} (s : seq (aT * bT)) (b : bT) :
+  assoc_right s b = assoc [seq (p.2, p.1) | p <- s ] b.
+Proof. by elim: s => //= -[??] ? ->. Qed.

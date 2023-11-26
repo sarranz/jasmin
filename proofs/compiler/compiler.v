@@ -25,15 +25,14 @@ Require Import
   lowering
   makeReferenceArguments
   propagate_inline
+  protect_calls
   slh_lowering
   remove_globals
   stack_alloc
   tunneling
   unrolling
   wsize.
-Require
-  merge_varmaps
-  protect_calls.
+Require merge_varmaps.
 
 
 Set Implicit Arguments.
@@ -182,6 +181,7 @@ Record compiler_params
   fresh_var_ident  : v_kind -> instr_info -> Ident.name -> stype -> Ident.ident;
   slh_info         : _uprog -> funname -> slh_function_info;
   protect_calls    : bool;
+  pc_return_tree   : funname -> nat -> bintree nat;
 }.
 
 Context
@@ -375,6 +375,7 @@ Definition compiler_back_end entries (pd: sprog) :=
   Let pl :=
     protect_calls.pc_lprog
       pcparams
+      cparams.(pc_return_tree)
       entries
       cparams.(protect_calls)
       pl
