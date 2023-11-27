@@ -257,55 +257,23 @@ Section WITH_ERR.
   Definition x86_is_update_after_call (op : sopn) : bool :=
     if op is Oasm (ExtOp Ox86SLHupdate_after_call) then true else false.
 
-  (* To update the MSFs after returning from a function call, there are three
-     cases:
-     1. The callee has only one call site, so it returned via [Lgoto]. No update
-     is needed.
-     2. The callee has two call sites, so there was only one [CMP]. Therefore we
-     update with respect to the flags (EQ for the first call site in the table,
-     NE for the second one).
-     3. The callee has more call sites, so there are multiple [CMP]s. The first
-     call site in the table can update with respect to the flags as in the
-     previous case, but all the others need to recompute [CMP r, tag]. All of
-     them update with respect to EQ. *)
-
   Definition update_after_call_cond
-    (tag : Z)
-    (r : var_i)
-    (t : Z)
-    (rest : seq (remote_label * Z)) :
-    seq fopn_args * fexpr :=
-    if tag == t
-    then ([::], fcond_eq)
-    else
-      if rest is [::]
-      then ([::], fcond_ne)
-      else ([:: x86_fop_cmpi r tag ], fcond_eq).
+    (tag : Z) (ra : var_i) : seq fopn_args * fexpr :=
+    ([:: x86_fop_cmpi ra tag ], fcond_eq).
 
   Definition x86_lower_update_after_call
     (ret_tbl : seq (remote_label * Z))
     (tag : Z)
-    (r : var_i)
+    (ra : var_i)
     (les : seq lexpr)
     (res : seq rexpr) :
     cexec (seq fopn_args) :=
     match ret_tbl with
     | [::] => Error (err (Some "empty return table"%string))
     | [:: _ ] => ok [::]
-    | (_, t) :: _ :: rest =>
-        Let: (les0, msfs) :=
-          if les is x :: y :: msfs
-          then ok ([:: x; y ], msfs)
-          else Error (err (Some "invalid update_after_call args"%string))
-        in
-        let cmd_msf :=
-          let '(pre, cond) := update_after_call_cond tag r t rest in
-          pre ++ [:: (les0, Oasm (ExtOp Ox86SLHupdate), Rexpr cond :: res)]
-        in
-        let cmd_msfs :=
-          map (fun x => ([:: x ], Oasm (ExtOp Ox86SLHmove), res)) msfs
-        in
-        ok (cmd_msf ++ cmd_msfs)
+    | _ =>
+        let '(pre, cond) := update_after_call_cond tag ra in
+        ok (rcons pre (les, Oasm (ExtOp Ox86SLHupdate), Rexpr cond :: res))
     end.
 
   (* TODO_RSB: We should always protect. *)
