@@ -246,14 +246,13 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
 
   (* TODO_RSB: We should use the function name to check if the user provided the
      tree in an annotation. *)
-  let pc_return_tree fn n =
-
+  let pc_return_tree fn ris =
     (* Create a sorted binary tree with [n] internal nodes labeled
-       [pos, pos+1, ..., pos+n-1].
+       [get_label pos, get_label pos+1, ..., get_label pos+n-1].
        When [n] is 2, [go_left] decides to which side the child node goes. *)
-    let rec tree_structure pos go_left n =
+    let rec tree_structure pos go_left get_label n =
       let empty = Utils0.BTleaf in
-      let node x t0 t1 = Utils0.BTnode(Conv.nat_of_int x, t0, t1) in
+      let node x t0 t1 = Utils0.BTnode(get_label x, t0, t1) in
       let single x = node x empty empty in
       match n with
       | 0 -> empty
@@ -266,21 +265,21 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
           let n0 = (n - 1) / 2 in (* Size of the left tree: at most half. *)
           let n1 = n - n0 - 1 in  (* Size of the right tree: the rest. *)
           let pos' = n0 + pos in
-          let t0 = tree_structure pos true n0 in
-          let t1 = tree_structure (pos' + 1) false n1 in
+          let t0 = tree_structure pos true get_label n0 in
+          let t1 = tree_structure (pos' + 1) false get_label n1 in
           node pos' t0 t1
     in
 
     (* BEGIN DEBUG *)
     let rec collect acc = function
       | Utils0.BTleaf -> acc
-      | Utils0.BTnode(x, t0, t1) ->
-          collect (collect (Conv.int_of_nat x :: acc) t0) t1
+      | Utils0.BTnode((_, x), t0, t1) ->
+          collect (collect (CoreConv.int_of_cz x :: acc) t0) t1
     in
     let rec is_sorted = function
       | Utils0.BTleaf -> true
-      | Utils0.BTnode(x, t0, t1) ->
-          let x = Conv.int_of_nat x in
+      | Utils0.BTnode((_, x), t0, t1) ->
+          let x = CoreConv.int_of_cz x in
           List.for_all (fun y -> y < x) (collect [] t0)
           && is_sorted t0
           && List.for_all (fun y -> y > x) (collect [] t1)
@@ -297,8 +296,12 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
     in
     (* END DEBUG *)
 
-    let t = tree_structure 0 true (Conv.int_of_nat n) in
-    check (Conv.int_of_nat n) t; (* DEBUG *)
+    let get_label (pos : int) : Protect_calls.cs_info =
+      try List.find (fun (_, tag) -> Conv.cz_of_int pos = tag) ris
+      with Not_found -> assert false
+    in
+    let t = tree_structure 0 true get_label (List.length ris) in
+    check (List.length ris) t; (* DEBUG *)
     t
   in
 

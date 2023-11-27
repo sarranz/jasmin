@@ -1907,10 +1907,11 @@ Qed.
 Lemma map_const_nseq A B (l : list A) (c : B) : map (fun=> c) l = nseq (size l) c.
 Proof. by elim: l => // > ? /=; f_equal. Qed.
 
-Inductive bintree (T : Type) : Type :=
+Inductive bintree (A : Type) : Type :=
   | BTleaf
-  | BTnode of T & bintree T & bintree T
+  | BTnode of A & bintree A & bintree A
 .
+Arguments BTleaf {_}.
 
 Definition is_nil {X} (xs : seq X) : bool :=
   if xs is [::] then true else false.

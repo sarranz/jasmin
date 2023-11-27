@@ -181,7 +181,7 @@ Record compiler_params
   fresh_var_ident  : v_kind -> instr_info -> Ident.name -> stype -> Ident.ident;
   slh_info         : _uprog -> funname -> slh_function_info;
   protect_calls    : bool;
-  pc_return_tree   : funname -> nat -> bintree nat;
+  pc_return_tree   : funname -> seq cs_info -> bintree cs_info;
 }.
 
 Context

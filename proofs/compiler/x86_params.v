@@ -178,6 +178,8 @@ Import protect_calls.
 Section WITH_ERR.
 
   Context (err : option string -> pp_error_loc).
+  Let err_invalid_return_tree := err (Some "invalid return tree"%string).
+  Let err_empty_return_tree := err (Some "empty return tree"%string).
 
   Notation rvar := (fun v => Rexpr (Fvar v)) (only parsing).
   Notation rconst := (fun ws imm => Rexpr (fconst ws imm)) (only parsing).
@@ -248,8 +250,9 @@ Section WITH_ERR.
 
     Definition fcond_eq := Eval hnf in mk_fcond CF_EQ.
     Definition fcond_ne := Eval hnf in mk_fcond CF_NEQ.
-    Definition fcond_le := Eval hnf in mk_fcond (CF_LE Unsigned).
-    Definition fcond_ge := Eval hnf in mk_fcond (CF_GE Unsigned).
+    (* CF *)
+    Definition fcond_lt := Eval hnf in mk_fcond (CF_LT Unsigned).
+    (* !ZF && !CF *)
     Definition fcond_gt := Eval hnf in mk_fcond (CF_GT Unsigned).
 
   End COND.
@@ -257,24 +260,63 @@ Section WITH_ERR.
   Definition x86_is_update_after_call (op : sopn) : bool :=
     if op is Oasm (ExtOp Ox86SLHupdate_after_call) then true else false.
 
-  Definition update_after_call_cond
-    (tag : Z) (ra : var_i) : seq fopn_args * fexpr :=
-    ([:: x86_fop_cmpi ra tag ], fcond_eq).
+  (* When we reach the last internal node, we need to know whether it's the
+     leftmost (minimum tag) or rightmost (maximum tag) one to avoid recomputing
+     the comparison. *)
+  Variant btree_position :=
+    | BTPleft
+    | BTPright
+    | BTPmiddle
+  .
 
-  Definition x86_lower_update_after_call
-    (ret_tbl : seq (remote_label * Z))
-    (tag : Z)
-    (ra : var_i)
-    (les : seq lexpr)
-    (res : seq rexpr) :
-    cexec (seq fopn_args) :=
-    match ret_tbl with
-    | [::] => Error (err (Some "empty return table"%string))
-    | [:: _ ] => ok [::]
-    | _ =>
-        let '(pre, cond) := update_after_call_cond tag ra in
-        ok (rcons pre (les, Oasm (ExtOp Ox86SLHupdate), Rexpr cond :: res))
-    end.
+  Definition go_left (pos : btree_position) : btree_position :=
+    if pos is BTPleft then BTPleft else BTPmiddle.
+
+  Definition go_right (pos : btree_position) : btree_position :=
+    if pos is BTPright then BTPright else BTPmiddle.
+
+  Section UPDATE_AFTER_CALL.
+    Context
+      (tag : Z)
+      (ra : var_i)
+    .
+
+    Fixpoint update_after_call_cond
+      (pos : btree_position)
+      (t : bintree cs_info) :
+      cexec (seq fopn_args * fexpr) :=
+      match t with
+      | BTleaf => Error err_invalid_return_tree
+      | BTnode (_, tag') BTleaf BTleaf =>
+          Let _ := assert (tag == tag') err_invalid_return_tree in
+          match pos with
+          | BTPleft => ok ([::], fcond_lt)
+          | BTPright => ok ([::], fcond_gt)
+          | BTPmiddle => ok ([:: x86_fop_cmpi ra tag ], fcond_eq)
+          end
+      | BTnode (_, tag') t0 t1 =>
+          match Z.compare tag tag' with
+          | Eq => ok ([::], fcond_eq)
+          | Lt => update_after_call_cond (go_left pos) t0
+          | Gt => update_after_call_cond (go_right pos) t1
+          end
+      end.
+
+    Definition lower_update_after_call
+      (t : bintree cs_info)
+      (les : seq lexpr)
+      (res : seq rexpr) :
+      cexec (seq fopn_args) :=
+      match t with
+      | BTleaf => Error err_empty_return_tree
+      | BTnode _ BTleaf BTleaf => ok [::]
+      | _ =>
+          Let: (pre, cond) := update_after_call_cond BTPleft t in
+          let update := (les, Oasm (ExtOp Ox86SLHupdate), Rexpr cond :: res) in
+          ok (rcons pre update)
+      end.
+
+  End UPDATE_AFTER_CALL.
 
   (* TODO_RSB: We should always protect. *)
   Definition load_tag (lta : load_tag_args) : var_i * seq fopn_args :=
@@ -309,7 +351,7 @@ End WITH_ERR.
 Definition x86_pcparams : protect_calls_params :=
   {|
     pcp_is_update_after_call := x86_is_update_after_call;
-    pcp_lower_update_after_call := x86_lower_update_after_call;
+    pcp_lower_update_after_call := lower_update_after_call;
     pcp_load_tag := fun _ lta => ok (load_tag lta);
     pcp_cmpi := fun _ r tag => ok (x86_fop_cmpi r tag);
     pcp_cond_ne := fcond_ne;

@@ -124,7 +124,7 @@ Section CALL_SITE_TABLE.
     | [::] => (ris, max_lbl)
     end.
 
-  Definition next_tag (s : seq (remote_label * Z)) : Z :=
+  Definition next_tag (s : seq cs_info) : Z :=
     if s is (_, t) :: _ then Z.succ t else 0.
 
   (* Update the entry for the callee in [tbl] to include [(caller, ret_lbl)]. *)
@@ -283,9 +283,9 @@ Record protect_calls_params :=
 
     pcp_lower_update_after_call :
       (option string -> pp_error_loc) ->
-      seq (remote_label * Z) -> (* Return table of the callee. *)
       Z -> (* Return tag of the call site to protect. *)
       var_i -> (* Register with the return tag. *)
+      bintree cs_info -> (* Return tree of the callee. *)
       seq lexpr ->
       seq rexpr ->
       cexec (seq fopn_args);
@@ -313,7 +313,7 @@ Record protect_calls_params :=
 
 Context
   (pcparams : protect_calls_params)
-  (return_tree : funname -> nat -> bintree nat)
+  (return_tree : funname -> seq cs_info -> bintree cs_info)
 .
 
 Section RETURN_TABLE.
@@ -337,9 +337,6 @@ Definition lcond_remote
        ; Llabel InternalLabel lbl_fresh
      ].
 
-Let get_ret_lbl (ris : seq cs_info) (tag : Z) : cexec remote_label :=
-  o2r (err (Some "invalid tree"%string)) (assoc_right ris tag).
-
 (* General case, when the tree is [BTnode(pos, t0, t1)]:
        CMP ra, tag
        JMPeq tag
@@ -353,20 +350,17 @@ Let get_ret_lbl (ris : seq cs_info) (tag : Z) : cexec remote_label :=
 Fixpoint lcmd_of_tree
   (ra : var_i)
   (lbl : label) (* Fresh label. *)
-  (ris : seq cs_info)
-  (t : bintree nat) :
+  (t : bintree cs_info) :
   cexec (seq linstr_r * label) :=
   match t with
   | BTleaf => ok ([::], lbl)
-  | BTnode tag BTleaf BTleaf =>
-      Let ret_lbl := get_ret_lbl ris tag in
+  | BTnode (ret_lbl, tag) BTleaf BTleaf =>
       ok ([:: Lgoto ret_lbl ], lbl)
-  | BTnode tag t0 t1 =>
-      Let ret_lbl := get_ret_lbl ris tag in
+  | BTnode (ret_lbl, tag) t0 t1 =>
       Let cmp_args := pcp_cmpi ra tag in
       Let jmpeq := lcond_remote (pcp_cond_ne pcparams) lbl ret_lbl in
-      Let: (lcmd_t0, lbl) := lcmd_of_tree ra (next_lbl lbl) ris t0 in
-      Let: (lcmd_t1, lbl) := lcmd_of_tree ra (next_lbl lbl) ris t1 in
+      Let: (lcmd_t0, lbl) := lcmd_of_tree ra (next_lbl lbl) t0 in
+      Let: (lcmd_t1, lbl) := lcmd_of_tree ra (next_lbl lbl) t1 in
       let '(jmp_gt, lbl_gt, lbl) :=
         if is_nil lcmd_t0 || is_nil lcmd_t1
         then ([::], [::], lbl)
@@ -395,8 +389,8 @@ Definition return_table
   cexec (seq linstr_r) :=
   let '(ris, max_lbl) := csi in
   Let: (ra, args) := pcp_load_tag lta in
-  let t := return_tree callee (size ris) in
-  Let: (lc, _) := lcmd_of_tree ra (next_lbl max_lbl) ris t in
+  let t := return_tree callee ris in
+  Let: (lc, _) := lcmd_of_tree ra (next_lbl max_lbl) t in
   let pop := if lc is [:: Lgoto _ ] then [::] else map lir_of_fopn_args args in
 
   (* DEBUG *)
@@ -490,7 +484,7 @@ Section DO_CALLS.
   Variant state :=
     | STempty
     | STscratch of var_i
-    | STupdate_args of seq (remote_label * Z) & Z & var_i
+    | STupdate_args of seq cs_info & Z & var_i
   .
 
   Definition get_sta
@@ -502,9 +496,9 @@ Section DO_CALLS.
     end.
 
   Definition get_update_args
-    (st : state) : cexec (seq (remote_label * Z) * Z * var_i * state) :=
-    if st is STupdate_args ret_tbl tag r
-    then ok (ret_tbl, tag, r, STempty)
+    (st : state) : cexec (seq cs_info * Z * var_i * state) :=
+    if st is STupdate_args ris tag r
+    then ok (ris, tag, r, STempty)
     else Error E.invalid_state.
 
   Definition set_scratch (les : seq lexpr) : cexec state :=
@@ -514,12 +508,12 @@ Section DO_CALLS.
 
   Definition set_update_args
     (st : state)
-    (ret_tbl : seq (remote_label * Z))
+    (ris : seq cs_info)
     (tag : Z)
     (r : var_i) :
     cexec state :=
     if st is STempty
-    then ok (STupdate_args ret_tbl tag r)
+    then ok (STupdate_args ris tag r)
     else Error E.invalid_state.
 
   Definition get_tag_reg (callee : funname) : cexec var_i :=
@@ -537,35 +531,40 @@ Section DO_CALLS.
     (callee : remote_label)
     (ret_lbl : label) :
     cexec (lcmd * state) :=
-    let (ret_tbl, _) := cst_lookup cs_tbl callee.1 in
-    Let tag := o2r E.assoc_failed (assoc ret_tbl (fn, ret_lbl)) in
+    let (ris, _) := cst_lookup cs_tbl callee.1 in
+    Let tag := o2r E.assoc_failed (assoc ris (fn, ret_lbl)) in
     let '(sta, st') := get_sta st ra_loc in
 
-    (* We don't need to save the tag if we are the only caller of callee.
-       Note that there must be at least one caller. *)
+    (* We don't need to save the tag if we are the only caller of callee. *)
     Let cmd_push :=
-      if ret_tbl is [:: _ ]
-      then ok [::]
-      else
+      match ris with
+      | [::] => Error (E.save_tag_failed ii (Some "invalid table"%string))
+      | [:: _ ] => ok [::]
+      | _ =>
         Let args := pcp_save_ra (E.save_tag_failed ii) sta tag in
         ok (map (li_of_fopn_args ii) args)
+      end
     in
     let lc := rcons cmd_push (MkLI ii (Lgoto callee)) in
 
     Let r := get_tag_reg callee.1 in
-    Let st'' := set_update_args st' ret_tbl tag r in
+    Let st'' := set_update_args st' ris tag r in
 
     ok (lc, st'').
 
+  (* TODO_RBS: Here we recompute the tree. It would be good to share it with
+     [return_table]. Maybe [cst_value] holds a [cs_info bintree] instead of a
+     list, but then we need to implement tree lookups and such. *)
   Definition do_update_after_call
     (ii : instr_info)
     (st : state)
     (les : seq lexpr)
     (res : seq rexpr)
     : cexec (lcmd * state) :=
-    Let: (ret_tbl, tag, r, st') := get_update_args st in
     let err := E.lower_update_after_call_failed ii in
-    Let args := pcp_lower_update_after_call err ret_tbl tag r les res in
+    Let: (ris, tag, r, st') := get_update_args st in
+    let t := return_tree fn ris in
+    Let args := pcp_lower_update_after_call err tag r t les res in
     ok (map (li_of_fopn_args ii) args, st').
 
   Fixpoint do_call_lcmd (st : state) (lc : lcmd) : cexec lcmd :=
@@ -600,7 +599,7 @@ Section DO_CALLS.
 End DO_CALLS.
 
 Definition pc_lfd (lfd : lfundef) : cexec lfundef :=
-  (* Export functions don't have returns. *)
+  (* Export functions don't need protected returns. *)
   Let lbody_ret :=
     if fn \in export_fs
     then ok (lfd_body lfd)
