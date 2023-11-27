@@ -1,12 +1,15 @@
-#[test=nosct]
 fn do_nothing() {}
 
-#[test=nosct]
 inline
 fn inline_do_nothing() {}
 
-#[test=nosct]
 fn id_msf(reg u64 x) -> #msf reg u64 {
+    return x;
+}
+
+fn return_public() -> reg u64 {
+    reg u64 x;
+    x = 0;
     return x;
 }
 
@@ -107,4 +110,10 @@ fn write_mmx_protected(#transient reg u64 x, #msf reg u64 msf) -> #mmx reg u64 {
     x = #protect(x, msf);
     m = x;
     return m;
+}
+
+fn public_res_are_public() -> #public reg u64 {
+    reg u64 x;
+    x = return_public();
+    return x;
 }

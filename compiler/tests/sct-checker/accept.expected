@@ -226,6 +226,12 @@ output corruption: #public
  constraints:
 
 
+nomodmsf return_public :  ->
+#public
+output corruption: #public
+ constraints:
+
+
 nomodmsf transient_after_call : #public ->
 #transient
 output corruption: #public
@@ -287,6 +293,12 @@ output corruption: #public
 
 
 nomodmsf write_mmx_protected : #transient * #msf ->
+#public
+output corruption: #public
+ constraints:
+
+
+nomodmsf public_res_are_public :  ->
 #public
 output corruption: #public
  constraints:

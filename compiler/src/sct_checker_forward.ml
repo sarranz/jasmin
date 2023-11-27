@@ -111,7 +111,8 @@ type ty_fun = {
     tyin                 : vfty list;
     tyout                : vfty list;
     constraints          : C.constraints;
-    resulting_corruption : VlPairs.t (* resulting memory corruption after function call *)
+    resulting_corruption : VlPairs.t; (* resulting memory corruption after function call *)
+    out_guaranteed_public : bool list;
   }
 
 type ('info,'asm) fenv = {
@@ -404,7 +405,7 @@ module Env : sig
 
   val get_resulting_corruption : venv -> VlPairs.t
 
-  val after_call : env -> venv -> venv
+  val after_call : env -> venv -> bool list -> int glvals -> venv
 
 end = struct
 
@@ -604,16 +605,30 @@ end = struct
   (* TODO_RSB: This makes MSFs transient. We assumed that this never happened,
      but it doesn't seem to affect things? *)
   (* Fresh variable environment where all public variables became transient. *)
-  let after_call env venv =
+  let after_call env venv guaranteed_public lvs =
     let is_rsb_vulnerable k =
       match k with
       | Wsize.Const | Inline -> false
       | Global | Stack _ | Reg _ -> true
     in
-    let new_ty (le_n, _) = (le_n, secret env) in
+    let public_lvars =
+      let is_public_lval i x =
+        match x with
+        | Lvar x | Laset (_, _, x, _) -> begin
+            try if List.at guaranteed_public i then Some (L.unloc x) else None
+            with Invalid_argument _ -> assert false
+          end
+        | _ -> None
+      in
+      List.filteri_map is_public_lval lvs
+    in
+    let should_update x =
+      is_rsb_vulnerable x.v_kind && not (List.mem x public_lvars)
+    in
     let add x acc =
+      let new_ty (le_n, _) = (le_n, secret env) in
       let ty = Mv.find x acc in
-      let ty = if is_rsb_vulnerable x.v_kind then map_vty new_ty ty else ty in
+      let ty = if should_update x then map_vty new_ty ty else ty in
       Mv.add x ty acc
     in
     { venv with vtype = Sv.fold add venv.vars venv.vtype }
@@ -1144,7 +1159,9 @@ let rec ty_instr fenv env ((msf,venv) as msf_e :msf_e) i =
     let msf', venv' =
       if Prog.is_inline annot (FEnv.get_fun_def fenv f).f_cc
       then msf', venv'
-      else MSF.after_call ~loc msf' annot tyout xs, Env.after_call env venv'
+      else
+        MSF.after_call ~loc msf' annot tyout xs,
+        Env.after_call env venv' fty.out_guaranteed_public xs
     in
 
     (msf', venv')
@@ -1507,7 +1524,16 @@ and ty_fun_infer fenv fn =
   let to_keep = List.fold_left add (List.fold_left add [n1; s1] tyin) tyout in
 
   C.prune constraints to_keep;
-  let fty = { modmsf; tyin; tyout; constraints; resulting_corruption; } in
+  let fty =
+    {
+      modmsf;
+      tyin;
+      tyout;
+      constraints;
+      resulting_corruption;
+      out_guaranteed_public = [];
+    }
+  in
   if !Glob_options.debug then
     Format.eprintf
       "Before optimization:@.%a@.After optimization:@."
@@ -1516,7 +1542,17 @@ and ty_fun_infer fenv fn =
   let tomax = List.fold_left add [] tyin in
   let tomin = List.fold_left add [n1; s1] tyout in
   C.optimize constraints ~tomin ~tomax;
-  fty
+  let out_guaranteed_public =
+    let is_public vfty =
+      match vfty with
+      | IsMsf -> true
+      | IsNormal Direct(l) -> VlPairs.is_public l
+      | IsNormal Indirect(l0, l1) ->
+          VlPairs.is_public l0 && VlPairs.is_public l1
+    in
+    List.map is_public fty.tyout
+  in
+  { fty with out_guaranteed_public }
 
 
 let ty_prog (prog:('info, 'asm) prog) fl =
@@ -1576,6 +1612,7 @@ let compile_infer_msf (prog:('info, 'asm) prog) =
        tyout;
        constraints; (* dummy info *)
        resulting_corruption; (* dummy info *)
+       out_guaranteed_public = [];
      }  in
    Hf.add fenv.env_ty f.f_name fty
   in

@@ -65,4 +65,5 @@ module VlPairs : sig
   val add_le : t -> t -> unit
   val add_le_speculative : Lvl.t -> t -> unit
   val normalise : t -> t
+  val is_public : t -> bool
 end
