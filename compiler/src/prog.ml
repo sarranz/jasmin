@@ -102,7 +102,7 @@ type ('len,'info,'asm) ginstr_r =
   | Cif    of 'len gexpr * ('len,'info,'asm) gstmt * ('len,'info,'asm) gstmt
   | Cfor   of 'len gfor_iteration * ('len,'info,'asm) gstmt
   | Cwhile of E.align * ('len,'info,'asm) gstmt * 'len gexpr * ('len,'info,'asm) gstmt
-  | Ccall  of E.inline_info * 'len glvals * funname * 'len gexprs
+  | Ccall  of 'len glvals * funname * 'len gexprs
 
 and ('len,'info,'asm) ginstr = {
     i_desc : ('len,'info,'asm) ginstr_r;
@@ -225,6 +225,7 @@ let ident_of_var (x:var) : CoreIdent.var = x
 
 (* -------------------------------------------------------------------- *)
 (* used variables                                                       *)
+
 let rvars_v f x s =
   if is_gkvar x then f (L.unloc x.gv) s
   else s 
@@ -262,7 +263,7 @@ let rec rvars_i f s i =
   | Cif(e,c1,c2)   -> rvars_c f (rvars_c f (rvars_e f s e) c1) c2
   | Cfor(fi, c) -> rvars_c f (rvars_fi f s fi) c
   | Cwhile(_,c,e,c')    -> rvars_c f (rvars_e f (rvars_c f s c') e) c
-  | Ccall(_,x,_,e) -> rvars_es f (rvars_lvs f s x) e
+  | Ccall(x,_,e) -> rvars_es f (rvars_lvs f s x) e
 
 and rvars_c f s c =  List.fold_left (rvars_i f) s c
 
@@ -275,6 +276,7 @@ let vars_e e = rvars_e Sv.add Sv.empty e
 let vars_es es = rvars_es Sv.add Sv.empty es
 let vars_i i = rvars_i Sv.add Sv.empty i
 let vars_c c = rvars_c Sv.add Sv.empty c
+let pvars_c c = rvars_c Spv.add Spv.empty c
 
 let params fc =
   List.fold_left (fun s v -> Sv.add v s) Sv.empty fc.f_args
@@ -304,7 +306,7 @@ let rec written_vars_i ((v, f) as acc) i =
   | Cassgn(x, _, _, _) -> written_lv v x, f
   | Copn(xs, _, _, _) | Csyscall(xs, _, _)
     -> List.fold_left written_lv v xs, f
-  | Ccall(_, xs, fn, _) ->
+  | Ccall(xs, fn, _) ->
      List.fold_left written_lv v xs, Mf.modify_def [] fn (fun old -> i.i_loc :: old) f
   | Cif(_, s1, s2)
   | Cwhile(_, s1, _, s2)
@@ -478,8 +480,10 @@ let rec has_call_or_syscall_i i =
 
 and has_call_or_syscall c = List.exists has_call_or_syscall_i c
 
-let has_annot a { i_annot ; _ } =
-  List.exists (fun (k, _) -> String.equal (L.unloc k) a) i_annot
+let has_annot a { i_annot; _ } = Annotations.has_symbol a i_annot
+
+let is_inline annot cc =
+  Annotations.has_symbol "inline" annot || cc = FInfo.Internal
 
 (* -------------------------------------------------------------------- *)
 let clamp (sz : wsize) (z : Z.t) =

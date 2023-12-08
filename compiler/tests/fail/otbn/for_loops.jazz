@@ -1,0 +1,33 @@
+fn body(reg u64 x) -> reg u64 {
+    return x;
+}
+
+export
+fn main1() {
+    reg u64 x;
+    x = 0;
+
+    repeat (int)(x + 4) { x = body(x); }
+
+    [x] = 0;
+}
+
+export
+fn main2() {
+    reg u64 x;
+    x = 0;
+
+    repeat ((int)x + 4) { x = body(x); }
+
+    [x] = 0;
+}
+
+export
+fn main3() {
+    reg u64 x;
+    x = 0;
+
+    repeat 4 { x += 1; }
+
+    [x] = 0;
+}

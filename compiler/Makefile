@@ -14,6 +14,10 @@ CHECKCATS ?= \
 	x86-64-nolea \
 	arm-m4 \
 	arm-m4-print \
+	x86-64-stack-zero-loop \
+	x86-64-stack-zero-unrolled \
+	arm-m4-stack-zero-loop \
+	arm-m4-stack-zero-unrolled \
 	otbn
 
 # --------------------------------------------------------------------

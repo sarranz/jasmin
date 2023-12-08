@@ -29,6 +29,7 @@ type f_annot = {
     stack_size            : Z.t option;
     stack_align           : wsize option;
     max_call_depth        : Z.t option;
+    stack_zero_strategy   : (Stack_zero_strategy.stack_zero_strategy * wsize option) option;
     f_user_annot          : annotations;
 }
 
@@ -38,5 +39,14 @@ let f_annot_empty = {
     stack_size            = None;
     stack_align           = None;
     max_call_depth        = None;
+    stack_zero_strategy   = None;
     f_user_annot          = [];
   }
+
+let has_symbol s annot =
+  List.exists (fun (k, _) -> String.equal (Location.unloc k) s) annot
+
+let add_symbol ~loc s annot =
+  if has_symbol s annot
+  then annot
+  else (Location.mk_loc loc s, None) :: annot

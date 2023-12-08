@@ -8,7 +8,7 @@ Require Import Utf8.
 Import Relations.
 
 Require Import expr fexpr compiler_util label constant_prop.
-Require Export linear.
+Require Export linear linear_util.
 Import word_ssrZ.
 
 Set Implicit Arguments.
@@ -32,8 +32,8 @@ Definition my_error (msg:pp_error) :=
   |}.
 
 (* FIXME: are there internal errors? *)
-Definition gen_error (internal:bool) (ii:option instr_info) (msg:string) :=
-  {| pel_msg      := pp_s msg
+Definition gen_error (internal: bool) (ii: option instr_info) (msg: pp_error) :=
+  {| pel_msg      := msg
    ; pel_fn       := None
    ; pel_fi       := None
    ; pel_ii       := ii
@@ -42,14 +42,22 @@ Definition gen_error (internal:bool) (ii:option instr_info) (msg:string) :=
    ; pel_internal := internal
   |}.
 
-Definition ii_error (ii:instr_info) (msg:string) :=
-  gen_error false (Some ii) msg.
+Definition ii_error (ii: instr_info) (msg: string) :=
+  gen_error false (Some ii) (pp_s msg).
 
-Definition error (msg:string) :=
-  gen_error false None msg.
+Definition error (msg: string) :=
+  gen_error false None (pp_s msg).
 
-Definition internal_error (msg:string) :=
-  gen_error true None msg.
+Definition internal_error (msg: string) :=
+  gen_error true None (pp_s msg).
+
+Definition assign_remains (ii : instr_info) (lv: lval) (e: pexpr) :=
+  gen_error false (Some ii)
+    (pp_nobox [:: pp_s "The following assignment remains:"; PPEbreak;
+      pp_lv lv; pp_s " = "; pp_e e; PPEbreak;
+      pp_s "Is there an instruction in the target architecture that can implement it?"; PPEbreak;
+      pp_s "More information may be found online: https://github.com/jasmin-lang/jasmin/wiki/FAQ"
+  ]).
 
 End E.
 
@@ -261,7 +269,7 @@ Section EXPR.
   Definition to_fexpr (e: pexpr) : fexpr :=
     if fexpr_of_pexpr e is Some r then r else Fconst 0.
 
-  Let error msg := E.gen_error true (Some ii) msg.
+  Let error msg := E.gen_error true (Some ii) (pp_s msg).
 
   Definition check_fexpr := check_Some error fexpr_of_pexpr "check_fexpr".
 
@@ -282,7 +290,7 @@ Definition repeat_call_count
 
 Definition is_repeat_call
   (ii : instr_info) (c : cmd) : cexec (lvals * funname * pexprs) :=
-  if c is [:: MkI _ (Ccall _ xs fn es) ]
+  if c is [:: MkI _ (Ccall xs fn es) ]
   then ok (xs, fn, es)
   else Error (E.ii_error ii "invalid repeat loop body").
 
@@ -314,6 +322,12 @@ Notation var_tmp := {| vtype := sword Uptr; vname := lip_tmp liparams; |}.
 Definition stack_frame_allocation_size (e: stk_fun_extra) : Z :=
   round_ws e.(sf_align) (sf_stk_sz e + sf_stk_extra_sz e).
 
+Definition frame_size (e: stk_fun_extra) : Z :=
+  if is_RAnone e.(sf_return_address) then
+    (sf_stk_sz e + sf_stk_extra_sz e)%Z
+  else
+    stack_frame_allocation_size e.
+
   Section CHECK_c.
 
     Context (check_i: instr -> cexec unit).
@@ -328,12 +342,12 @@ Definition stack_frame_allocation_size (e: stk_fun_extra) : Z :=
 
   Section CHECK_i.
 
-  Context (this: funname) (stack_align : wsize).
+  Context (this: funname) (e_caller : stk_fun_extra).
 
   Fixpoint check_i (i:instr) : cexec unit :=
     let (ii,ir) := i in
     match ir with
-    | Cassgn x tag ty e => Error (E.ii_error ii "assign remains")
+    | Cassgn lv _ _ e => Error (E.assign_remains ii lv e)
     | Copn xs tag o es =>
       allM (check_rexpr ii) es >> allM (check_lexpr ii) xs
     | Csyscall xs o es =>
@@ -349,14 +363,16 @@ Definition stack_frame_allocation_size (e: stk_fun_extra) : Z :=
       | Some true => check_c check_i c >> check_c check_i c'
       | None => check_fexpr ii e >> check_c check_i c >> check_c check_i c'
       end
-    | Ccall _ xs fn es =>
+    | Ccall xs fn es =>
       Let _ := assert (fn != this) (E.ii_error ii "call to self") in
       if get_fundef (p_funcs p) fn is Some fd then
         let e := f_extra fd in
-        Let _ := assert (sf_return_address e != RAnone)
+        Let _ := assert (~~ is_RAnone (sf_return_address e))
           (E.ii_error ii "internal call to an export function") in
-        Let _ := assert (sf_align e <= stack_align)%CMP
+        Let _ := assert (sf_align e <= sf_align e_caller)%CMP
           (E.ii_error ii "caller need alignment greater than callee") in
+        Let _ := assert (sf_stk_max e + frame_size e_caller <=? sf_stk_max e_caller)%Z
+          (E.ii_error ii "max size problem") in
         ok tt
       else Error (E.ii_error ii "call to unknown function")
     end.
@@ -403,8 +419,9 @@ Definition stack_frame_allocation_size (e: stk_fun_extra) : Z :=
       Error (E.error "to-save: not a word").
 
   Definition check_to_save (e: stk_fun_extra) : cexec unit :=
-    if sf_return_address e is RAnone
+    if is_RAnone (sf_return_address e)
     then
+      (* FIXME: this assert seems redundant with the check in check_fd *)
       let stk_size := (sf_stk_sz e + sf_stk_extra_sz e)%Z in
       Let _ := assert (if sf_save_stack e is SavedStackStk ofs then (ofs + wsize_size Uptr <=? stk_size)%Z else true) 
                       (E.error "stack size to small") in
@@ -438,8 +455,6 @@ Section LINEAR_C.
 
 End LINEAR_C.
 
-Definition next_lbl lbl := (lbl + 1)%positive.
-
 Definition add_align ii a (lc:lcmd) :=
   match a with
   | NoAlign => lc
@@ -452,15 +467,18 @@ Definition align ii a (p:label * lcmd) : label * lcmd :=
 Section FUN.
 
 Context
-  (fn : funname)
-  (fn_align : wsize).
+  (fn : funname).
 
 Definition check_fd (fn: funname) (fd:sfundef) :=
   let e := fd.(f_extra) in
   let stack_align := e.(sf_align) in
-  Let _ := check_c (check_i fn stack_align) fd.(f_body) in
+  Let _ := check_c (check_i fn e) fd.(f_body) in
   Let _ := check_to_save e in
-  Let _ := assert [&& 0 <=? sf_stk_sz e, 0 <=? sf_stk_extra_sz e & stack_frame_allocation_size e <? wbase Uptr]%Z
+  (* FIXME: strange to have both stack_frame_allocation_size and frame_size *)
+  Let _ := assert [&& 0 <=? sf_stk_sz e,
+                      0 <=? sf_stk_extra_sz e,
+                      stack_frame_allocation_size e <? wbase Uptr
+                    & frame_size e <=? sf_stk_max e]%Z
                   (E.error "bad stack size") in
   Let _ := assert match sf_return_address e with
                   | RAnone => true
@@ -475,7 +493,7 @@ Definition check_fd (fn: funname) (fd:sfundef) :=
     match sf_save_stack e with
     | SavedStackNone =>
         [&& sf_to_save e == [::]
-          , stack_align == U8
+          , sf_align e == U8
           , sf_stk_sz e == 0
           & sf_stk_extra_sz e == 0
         ]
@@ -500,7 +518,7 @@ Definition check_fd (fn: funname) (fd:sfundef) :=
   in
   Let _ :=
     assert
-      ((sf_return_address e != RAnone) || ok_save_stack)
+      (~~ is_RAnone (sf_return_address e) || ok_save_stack)
       (E.error "bad save-stack")
   in
   ok tt.
@@ -562,15 +580,6 @@ Definition pop_to_save
       dummy_linstr (* Never happens. *)
   in
   map mkli to_save.
-
-Definition is_rastack_none ra := 
-  match ra with 
-  | RAstack None _ => true
-  | _ => false
-  end.
-
-Definition is_rastack ra :=
-  if ra is RAstack _ _ then true else false.
 
 Let ReturnTarget := Llabel ExternalLabel.
 Let Llabel := linear.Llabel InternalLabel.
@@ -653,15 +662,15 @@ Fixpoint linear_i (i:instr) (lbl:label) (lc:lcmd) :=
       end
     end
 
-  | Ccall _ xs fn' es =>
+  | Ccall xs fn' es =>
     if get_fundef (p_funcs p) fn' is Some fd then
       let e := f_extra fd in
       let ra := sf_return_address e in
-      if ra == RAnone then (lbl, lc)
+      if is_RAnone ra then (lbl, lc)
       else
         let sz := stack_frame_allocation_size e in
-        let before := allocate_stack_frame false ii sz (is_rastack_none ra) in
-        let after := allocate_stack_frame true ii sz (is_rastack ra) in
+        let before := allocate_stack_frame false ii sz (is_RAstack_None ra) in
+        let after := allocate_stack_frame true ii sz (is_RAstack ra) in
         let lret := lbl in
         let lbl := next_lbl lbl in
         (* The test is used for the proof of linear_has_valid_labels *) 
@@ -736,7 +745,7 @@ Definition linear_body (e: stk_fun_extra) (body: cmd) : label * lcmd :=
 
 Definition linear_fd (fd: sfundef) :=
   let e := fd.(f_extra) in
-  let is_export := sf_return_address e == RAnone in
+  let is_export := is_RAnone (sf_return_address e) in
   let res := if is_export then f_res fd else [::] in
   let body := linear_body e fd.(f_body) in
   (body.1,
@@ -744,12 +753,13 @@ Definition linear_fd (fd: sfundef) :=
     ; lfd_align := sf_align e
     ; lfd_tyin := f_tyin fd
     ; lfd_arg := f_params fd
+    ; lfd_body := body.2
     ; lfd_tyout := f_tyout fd
-    ; lfd_total_stack := sf_stk_max e
     ; lfd_res := res
     ; lfd_export := is_export
     ; lfd_callee_saved := if is_export then map fst e.(sf_to_save) else [::]
-    ; lfd_body := body.2
+    ; lfd_stk_max := sf_stk_max e
+    ; lfd_frame_size := frame_size e
     |}).
 
 End FUN.

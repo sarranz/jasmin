@@ -541,7 +541,7 @@ Fixpoint lower_i_aux (i : instr) : cexec cmd :=
       ok [:: MkI ii (Cwhile a c0' e c1') ]
 
   | Csyscall _ _ _
-  | Ccall _ _ _ _ => ok [:: i ]
+  | Ccall _ _ _ => ok [:: i ]
   end.
 
 (* TODO_OTBN: Generalize [lowering.v] to accept results. *)

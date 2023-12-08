@@ -1219,12 +1219,6 @@ Section CMP.
   Lemma cmp_nle_le x y : ~~ (cmp_le x y) -> cmp_le y x.
   Proof. by rewrite cmp_nle_lt; apply: cmp_lt_le. Qed.
 
-  Definition min (t1 t2: T) := 
-    if cmp_le t1 t2 then t1 else t2.
-
-  Definition max (t1 t2: T) := 
-    if cmp_le t1 t2 then t2 else t1.
-
 End CMP.
 
 Declare Scope cmp_scope.
@@ -1339,6 +1333,40 @@ Section MIN.
 End MIN.
 
 Arguments cmp_min {T cmp O} x y.
+
+Section MAX.
+  Context T (cmp: T → T → comparison) (O: Cmp cmp).
+  Definition cmp_max (x y: T) : T :=
+    if (x ≤ y)%CMP then y else x.
+
+  Lemma cmp_maxP x y (P: T → Prop) :
+    ((x ≤ y)%CMP → P y) →
+    ((y < x)%CMP → P x) →
+    P (cmp_max x y).
+  Proof.
+    rewrite /cmp_max; case: ifP.
+    - by move => _ /(_ erefl).
+    by rewrite -cmp_nle_lt => -> _ /(_ erefl).
+  Qed.
+
+  Lemma cmp_max_geL x y :
+    (x <= cmp_max x y)%CMP.
+  Proof. exact: (@cmp_maxP x y (λ z, x ≤ z)%CMP). Qed.
+
+  Lemma cmp_max_geR x y :
+    (y <= cmp_max x y)%CMP.
+  Proof.
+    apply: (@cmp_maxP x y (λ z, y ≤ z)%CMP) => //.
+    apply: cmp_lt_le.
+  Qed.
+
+  Lemma cmp_le_max x y :
+    (x ≤ y)%CMP → cmp_max x y = y.
+  Proof. by rewrite /cmp_max => ->. Qed.
+
+End MAX.
+
+Arguments cmp_max {T cmp O} x y.
 
 Definition bool_cmp b1 b2 :=
   match b1, b2 with
@@ -1770,9 +1798,27 @@ Ltac t_elim_uniq :=
 
 Variant and6 (P1 P2 P3 P4 P5 P6 : Prop) : Prop :=
   And6 of P1 & P2 & P3 & P4 & P5 & P6.
+Variant and7 (P1 P2 P3 P4 P5 P6 P7 : Prop) : Prop :=
+  And7 of P1 & P2 & P3 & P4 & P5 & P6 & P7.
+Variant and8 (P1 P2 P3 P4 P5 P6 P7 P8 : Prop) : Prop :=
+  And8 of P1 & P2 & P3 & P4 & P5 & P6 & P7 & P8.
+Variant and9 (P1 P2 P3 P4 P5 P6 P7 P8 P9 : Prop) : Prop :=
+  And9 of P1 & P2 & P3 & P4 & P5 & P6 & P7 & P8 & P9.
+Variant and10 (P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 : Prop) : Prop :=
+  And10 of P1 & P2 & P3 & P4 & P5 & P6 & P7 & P8 & P9 & P10.
 
 Notation "[ /\ P1 , P2 , P3 , P4 , P5 & P6 ]" :=
   (and6 P1 P2 P3 P4 P5 P6) : type_scope.
+Notation "[ /\ P1 , P2 , P3 , P4 , P5 & P6 ]" :=
+  (and6 P1 P2 P3 P4 P5 P6) : type_scope.
+Notation "[ /\ P1 , P2 , P3 , P4 , P5 , P6 & P7 ]" :=
+  (and7 P1 P2 P3 P4 P5 P6 P7) : type_scope.
+Notation "[ /\ P1 , P2 , P3 , P4 , P5 , P6 , P7 & P8 ]" :=
+  (and8 P1 P2 P3 P4 P5 P6 P7 P8) : type_scope.
+Notation "[ /\ P1 , P2 , P3 , P4 , P5 , P6 , P7 , P8 & P9 ]" :=
+  (and9 P1 P2 P3 P4 P5 P6 P7 P8 P9) : type_scope.
+Notation "[ /\ P1 , P2 , P3 , P4 , P5 , P6 , P7 , P8 , P9 & P10 ]" :=
+  (and10 P1 P2 P3 P4 P5 P6 P7 P8 P9 P10) : type_scope.
 
 Tactic Notation "have!" ":= " constr(x) :=
   let h := fresh "h" in
@@ -1788,6 +1834,7 @@ Ltac t_do_rewrites tac :=
     match goal with
     | [ h : ?lhs = ?rhs |- _ ] => tac h lhs rhs
     | [ h : is_true (?lhs == ?rhs) |- _ ] => move: h => /eqP h; tac h lhs rhs
+    | [ h : is_true ?lhs |- _ ] => tac h lhs true
     end.
 
 #[local]

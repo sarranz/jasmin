@@ -321,18 +321,21 @@ Definition wrange d (n1 n2 : Z) :=
 Module Type InstrInfoT <: TAG.
   Include TAG.
   Parameter with_location : t -> t.
+  Parameter is_inline : t -> bool.
 End InstrInfoT.
 
 Module InstrInfo : InstrInfoT.
   Definition t := positive.
   Definition witness : t := 1%positive.
   Definition with_location (ii : t) := ii.
+  Definition is_inline (_ : t) : bool := false.
 End InstrInfo.
 
 Definition instr_info := InstrInfo.t.
 Definition dummy_instr_info : instr_info := InstrInfo.witness.
 Definition ii_with_location (ii : instr_info) : instr_info :=
   InstrInfo.with_location ii.
+Definition ii_is_inline (ii : instr_info) : bool := InstrInfo.is_inline ii.
 
 Variant assgn_tag :=
   | AT_none       (* assignment introduced by the developer that can be removed *)
@@ -354,12 +357,6 @@ Qed.
 
 Definition assgn_tag_eqMixin     := Equality.Mixin assgn_tag_eq_axiom.
 Canonical  assgn_tag_eqType      := Eval hnf in EqType assgn_tag assgn_tag_eqMixin.
-
-(* -------------------------------------------------------------------- *)
-
-Variant inline_info :=
-  | InlineFun
-  | DoNotInline.
 
 (* -------------------------------------------------------------------- *)
 
@@ -416,7 +413,7 @@ Inductive instr_r :=
 | Cif      : pexpr -> seq instr -> seq instr  -> instr_r
 | Cfor     : for_iteration -> seq instr -> instr_r
 | Cwhile   : align -> seq instr -> pexpr -> seq instr -> instr_r
-| Ccall    : inline_info -> lvals -> funname -> pexprs -> instr_r
+| Ccall    : lvals -> funname -> pexprs -> instr_r
 
 with instr := MkI : instr_info -> instr_r ->  instr.
 
@@ -438,7 +435,7 @@ Section CMD_RECT.
   Hypothesis Hif  : forall e c1 c2, Pc c1 -> Pc c2 -> Pr (Cif e c1 c2).
   Hypothesis Hfor : forall fi c, Pc c -> Pr (Cfor fi c).
   Hypothesis Hwhile : forall a c e c', Pc c -> Pc c' -> Pr (Cwhile a c e c').
-  Hypothesis Hcall: forall i xs f es, Pr (Ccall i xs f es).
+  Hypothesis Hcall: forall xs f es, Pr (Ccall xs f es).
 
   Section C.
   Variable instr_rect : forall i, Pi i.
@@ -462,7 +459,7 @@ Section CMD_RECT.
     | Cif e c1 c2  => @Hif e c1 c2 (cmd_rect_aux instr_Rect c1) (cmd_rect_aux instr_Rect c2)
     | Cfor fi c => @Hfor fi c (cmd_rect_aux instr_Rect c)
     | Cwhile a c e c'   => @Hwhile a c e c' (cmd_rect_aux instr_Rect c) (cmd_rect_aux instr_Rect c')
-    | Ccall ii xs f es => @Hcall ii xs f es
+    | Ccall xs f es => @Hcall xs f es
     end.
 
   Definition cmd_rect := cmd_rect_aux instr_Rect.
@@ -590,6 +587,15 @@ Variant return_address_location :=
 | RAstack of option var & Z. (* None means that the call instruction directly store ra on the stack 
                                 Some r means that the call instruction directly store ra on r and 
                                 the function should store r on the stack *)
+
+Definition is_RAnone ra :=
+  if ra is RAnone then true else false.
+
+Definition is_RAstack ra :=
+  if ra is RAstack _ _ then true else false.
+
+Definition is_RAstack_None ra :=
+  if ra is RAstack None _ then true else false.
 
 Definition return_address_location_beq (r1 r2: return_address_location) : bool :=
   match r1 with
@@ -785,7 +791,7 @@ Fixpoint write_i_rec s (i:instr_r) :=
   | Cif   _ c1 c2   => foldl write_I_rec (foldl write_I_rec s c2) c1
   | Cfor fi c => foldl write_I_rec (write_fi_rec s fi) c
   | Cwhile _ c _ c' => foldl write_I_rec (foldl write_I_rec s c') c
-  | Ccall _ x _ _   => vrvs_rec s x
+  | Ccall x _ _   => vrvs_rec s x
   end
 with write_I_rec s i :=
   match i with
@@ -876,7 +882,7 @@ Fixpoint read_i_rec (s:Sv.t) (i:instr_r) : Sv.t :=
     let s := foldl read_I_rec s c in
     let s := foldl read_I_rec s c' in
     read_e_rec s e
-  | Ccall _ xs _ es => read_es_rec (read_rvs_rec s xs) es
+  | Ccall xs _ es => read_es_rec (read_rvs_rec s xs) es
   end
 with read_I_rec (s:Sv.t) (i:instr) : Sv.t :=
   match i with

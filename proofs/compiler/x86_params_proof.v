@@ -19,7 +19,8 @@ Require Import
   slh_lowering
   slh_lowering_proof
   stack_alloc
-  stack_alloc_proof.
+  stack_alloc_proof
+  stack_zeroization_proof.
 Require
   arch_sem.
 Require Import
@@ -33,7 +34,8 @@ Require Import
   x86_extra
   x86_instr_decl
   x86_lowering
-  x86_lowering_proof.
+  x86_lowering_proof
+  x86_stack_zeroization_proof.
 Require Export x86_params.
 
 Set Implicit Arguments.
@@ -691,7 +693,6 @@ Proof.
     rewrite /mem_write_vals.
     eexists.
     * by rewrite /mem_write_val /= truncate_word_u /=.
-    move: (hlow) => [h0 h1 hrip hd h2 h2x h3 h4].
     move: hwx; rewrite /write_var /set_var.
     rewrite -xr => -[<-]{m1}.
     apply: (lom_eqv_write_reg _ _ hlow).
@@ -935,6 +936,23 @@ Definition x86_hshparams : h_sh_params (ap_shp x86_params) :=
 
 
 (* ------------------------------------------------------------------------ *)
+(* Stack zeroization. *)
+
+Section STACK_ZEROIZATION.
+
+Context {call_conv : calling_convention}.
+
+Lemma x86_hszparams : h_stack_zeroization_params (ap_szp x86_params).
+Proof.
+  split.
+  + exact: x86_stack_zero_cmd_no_ext_lbl.
+  exact: x86_stack_zero_cmdP.
+Qed.
+
+End STACK_ZEROIZATION.
+
+
+(* ------------------------------------------------------------------------ *)
 (* Shared hypotheses. *)
 
 Definition x86_is_move_opP op vx v :
@@ -970,6 +988,7 @@ Definition x86_h_params {dc : DirectCall} {call_conv : calling_convention} : h_a
     hap_hlop := x86_hloparams;
     hap_hagp := x86_hagparams;
     hap_hshp := x86_hshparams;
+    hap_hszp := x86_hszparams;
     hap_is_move_opP := x86_is_move_opP;
   |}.
 

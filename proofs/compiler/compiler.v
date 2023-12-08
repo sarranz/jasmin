@@ -27,6 +27,7 @@ Require Import
   slh_lowering
   remove_globals
   stack_alloc
+  stack_zeroization
   tunneling
   unrolling
   wsize.
@@ -98,6 +99,7 @@ Variant compiler_step :=
   | RegAllocation               : compiler_step
   | DeadCode_RegAllocation      : compiler_step
   | Linearization               : compiler_step
+  | StackZeroization            : compiler_step
   | Tunneling                   : compiler_step
   | Assembly                    : compiler_step.
 
@@ -128,6 +130,7 @@ Definition compiler_step_list := [::
   ; RegAllocation
   ; DeadCode_RegAllocation
   ; Linearization
+  ; StackZeroization
   ; Tunneling
   ; Assembly
 ].
@@ -176,7 +179,8 @@ Record compiler_params
   lowering_opt     : lowering_options;
   fresh_id         : glob_decls -> var -> Ident.ident;
   fresh_var_ident  : v_kind -> instr_info -> Ident.name -> stype -> Ident.ident;
-  slh_info         : _uprog → funname → seq slh_t * seq slh_t
+  slh_info         : _uprog → funname → seq slh_t * seq slh_t;
+  stack_zero_info  : funname -> option (stack_zero_strategy * option wsize);
 }.
 
 Context
@@ -238,7 +242,7 @@ Definition live_range_splitting (p: uprog) : cexec uprog :=
   ok p.
 
 Definition inlining (to_keep: seq funname) (p: uprog) : cexec uprog :=
-  Let p := inline_prog_err (wsw:= withsubword) cparams.(rename_fd) p in
+  Let p := inline_prog_err (wsw := withsubword) cparams.(rename_fd) p in
   let p := cparams.(print_uprog) Inlining p in
 
   Let p := dead_calls_err_seq to_keep p in
@@ -347,7 +351,7 @@ Definition check_export entries (p: sprog) : cexec unit :=
   allM (λ fn,
           if get_fundef (p_funcs p) fn is Some fd then
             assert
-              (fd.(f_extra).(sf_return_address) == RAnone)
+              (is_RAnone fd.(f_extra).(sf_return_address))
               (pp_at_fn fn (merge_varmaps.E.gen_error true None (pp_s "export function expects a return address")))
           else Error (pp_at_fn fn (merge_varmaps.E.gen_error true None (pp_s "unknown export function")))
        ) entries.
@@ -358,6 +362,26 @@ Definition compiler_back_end entries (pd: sprog) :=
   Let _ := merge_varmaps.check pd var_tmp in
   Let pl := linear_prog liparams pd in
   let pl := cparams.(print_linear) Linearization pl in
+  (* stack zeroization                 *)
+  let szs_of_fn fn :=
+    match cparams.(stack_zero_info) fn with
+    | Some (szs, ows) =>
+      let ws :=
+        match ows with
+        | Some ws => ws
+        | None =>
+          (* the default clear step is the alignment *)
+          if get_fundef pl.(lp_funcs) fn is Some lfd then
+            lfd.(lfd_align)
+          else U8 (* impossible *)
+        end
+      in
+      Some (szs, ws)
+    | None => None
+    end
+  in
+  Let pl := stack_zeroization_lprog aparams.(ap_szp) szs_of_fn pl in
+  let pl := cparams.(print_linear) StackZeroization pl in
   (* tunneling                         *)
   Let pl := tunnel_program pl in
   let pl := cparams.(print_linear) Tunneling pl in

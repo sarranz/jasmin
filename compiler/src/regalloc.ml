@@ -37,7 +37,7 @@ let fill_in_missing_names (f: ('info, 'asm) func) : ('info, 'asm) func =
     | Cif (e, s1, s2) -> Cif (e, fill_stmt s1, fill_stmt s2)
     | Cfor (fi, s) -> Cfor (fi, fill_stmt s)
     | Cwhile (a, s, e, s') -> Cwhile (a, fill_stmt s, e, fill_stmt s')
-    | Ccall (i, lvs, f, es) -> Ccall (i, fill_lvs lvs, f, es)
+    | Ccall (lvs, f, es) -> Ccall (fill_lvs lvs, f, es)
   and fill_instr i = { i with i_desc = fill_instr_r i.i_desc }
   and fill_stmt s = List.map fill_instr s in
   let f_body = fill_stmt f.f_body in
@@ -243,7 +243,7 @@ let collect_equality_constraints_in_func
        | (None, _) | (_, None) -> ()
        end
     | Cassgn _ -> ()
-    | Ccall (_, xs, fn, es) ->
+    | Ccall (xs, fn, es) ->
       let get_Pvar a =
         match a with
         | Pvar { gs = Expr.Slocal ; gv } -> gv
@@ -401,7 +401,7 @@ let iter_variables (cb: var -> unit) (f: ('info, 'asm) func) : unit =
   let rec iter_instr_r =
     function
     | Cassgn (lv, _, _, e) -> iter_lv lv; iter_expr e
-    | (Ccall (_, lvs, _, es) | Copn (lvs, _, _, es)) | Csyscall(lvs, _ , es) -> iter_lvs lvs; iter_exprs es
+    | (Ccall (lvs, _, es) | Copn (lvs, _, _, es)) | Csyscall(lvs, _ , es) -> iter_lvs lvs; iter_exprs es
     | (Cwhile (_, s1, e, s2) | Cif (e, s1, s2)) -> iter_expr e; iter_stmt s1; iter_stmt s2
     | Cfor (FIrange _, _) -> assert false
     | Cfor (FIrepeat e, c) -> iter_expr e; iter_stmt c
@@ -630,7 +630,7 @@ let allocate_forced_registers return_addresses translate_var nv (vars: int Hv.t)
         -> alloc_stmt s1; alloc_stmt s2
     | Cassgn _
       -> ()
-    | Ccall (_, lvs, _, es) ->
+    | Ccall (lvs, _, es) ->
        (* TODO: check this *)
        (*
        let args = List.map (function Pvar { gv ; gs = Slocal } -> (L.unloc gv) | _ -> assert false) es in
@@ -726,14 +726,23 @@ let two_phase_coloring
       | [] ->
          let pv = Printer.pp_dvar ~debug:true in
          let ppvl fmt = List.iter @@ Format.fprintf fmt "\n    %a" pv in
-         let pp_conflicts fmt =
-           IntSet.iter @@ fun i ->
-           match A.find i a with
-           | Some r ->
-              Format.fprintf fmt " - register %a%a\n"
-                (Printer.pp_var ~debug:false) r
-                ppvl (Hashtbl.find variables i)
-           | None -> assert false
+         let pp_conflicts fmt c =
+           let unallocated =
+             IntSet.fold (fun i xs ->
+                 match A.find i a with
+                 | Some r ->
+                   Format.fprintf fmt " - register %a%a\n"
+                     (Printer.pp_var ~debug:false) r
+                     ppvl (Hashtbl.find variables i);
+                   xs
+                 | None -> i :: xs)
+               c
+               []
+           in
+           if unallocated <> [] then begin
+             Format.fprintf fmt " - variables not allocated yet";
+             List.iter (fun i -> ppvl fmt (Hashtbl.find variables i)) unallocated
+           end
          in
          let c = get_conflicts i cnf in
          hierror_reg ~loc:Lnone "no more free register to allocate variable:%a\nConflicts with:\n%a"
@@ -821,8 +830,13 @@ let renaming (f: ('info, 'asm) func) : (unit, 'asm) func =
       f
   in
   let vars = normalize_variables vars eqc in
-  let a = reverse_varmap nv vars |> subst_of_allocation vars in
-  Subst.subst_func a f
+  let a = reverse_varmap nv vars in
+  (* The variable that is added last is the representative of its class.
+     This makes sure that each argument is the representative of its class,
+     meaning that it will be preserved. *)
+  List.iter (fun arg -> A.set (Hv.find vars arg) arg a) f.f_args;
+  let subst = subst_of_allocation vars a in
+  Subst.subst_func subst f
 
 let remove_phi_nodes (f: ('info, 'asm) func) : (unit, 'asm) func =
   Ssa.remove_phi_nodes f

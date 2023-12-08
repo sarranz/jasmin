@@ -99,9 +99,9 @@ Definition saved_stack_valid fd (k: Sv.t) : bool :=
   then [&& (r != vgd), (r != vrsp) & (~~ Sv.mem r k) ]
   else true.
 
-Definition top_stack_aligned fd st : bool :=
-  (fd.(f_extra).(sf_return_address) == RAnone)
-  || is_align (top_stack st.(emem)) fd.(f_extra).(sf_align).
+Definition top_stack_aligned fd m : bool :=
+  is_RAnone (fd.(f_extra).(sf_return_address))
+  || is_align (top_stack m) fd.(f_extra).(sf_align).
 
 Definition set_RSP m vm : Vm.t :=
   vm.[vrsp <- Vword (top_stack m)].
@@ -169,18 +169,18 @@ with sem_i : instr_info → Sv.t → estate → instr_r → estate → Prop :=
     sem_pexpr true gd s2 e = ok (Vbool false) →
     sem_i ii k s1 (Cwhile a c e c') s2
 
-| Ecall ii k s1 s2 ini res f args xargs xres :
+| Ecall ii k s1 s2 res f args xargs xres :
     mapM get_pvar args = ok xargs →
     mapM get_lvar res = ok xres →
     sem_call ii k s1 f s2 →
-    sem_i ii k s1 (Ccall ini res f args) s2
+    sem_i ii k s1 (Ccall res f args) s2
 
 with sem_call : instr_info → Sv.t → estate → funname → estate → Prop :=
 | EcallRun ii k s1 s2 fn f (* args *) m1 s2' (* res *) :
     get_fundef (p_funcs p) fn = Some f →
     ra_valid f ii k var_tmp →
     saved_stack_valid f k →
-    top_stack_aligned f s1 →
+    top_stack_aligned f s1.(emem) →
     valid_RSP s1.(emem) s1.(evm) →
     alloc_stack
       s1.(emem)
@@ -217,7 +217,7 @@ Variant sem_export_call_conclusion (scs: syscall_state_t) (m: mem) (fd: sfundef)
 Variant sem_export_call (gd: @extra_val_t progStack)  (scs: syscall_state_t) (m: mem) (fn: funname) (args: values)  (scs': syscall_state_t) (m': mem) (res: values) : Prop :=
   | SemExportCall (fd: sfundef) of
                   get_fundef p.(p_funcs) fn = Some fd &
-      fd.(f_extra).(sf_return_address) == RAnone &
+      is_RAnone fd.(f_extra).(sf_return_address) &
       disjoint (sv_of_list fst fd.(f_extra).(sf_to_save)) (sv_of_list v_var fd.(f_res)) &
       ~~ Sv.mem vrsp (sv_of_list v_var fd.(f_res)) &
     ∀ vm args',
@@ -273,7 +273,7 @@ Lemma sem_iE ii k s i s' :
     ∃ kc si b,
        [/\ sem kc s c si, sem_pexpr true gd si e = ok (Vbool b) &
                        if b then ex3_3 (λ k' krec _, k = Sv.union (Sv.union kc k') krec) (λ k' _ sj, sem k' si c' sj) (λ _ krec sj, sem_I krec sj (MkI ii (Cwhile a c e c')) s') else si = s' ∧ kc = k ]
-  | Ccall ini res f args =>
+  | Ccall res f args =>
     exists2 xargs,
     mapM get_pvar args = ok xargs &
     exists2 xres,
@@ -295,7 +295,7 @@ Lemma sem_callE ii k s fn s' :
     (λ f _ _ _, get_fundef (p_funcs p) fn = Some f)
     (λ f _ _ k', ra_valid f ii k' var_tmp)
     (λ f _ _ k', saved_stack_valid f k')
-    (λ f _ _ _, top_stack_aligned f s)
+    (λ f _ _ _, top_stack_aligned f s.(emem))
     (λ _ _ _ _, valid_RSP s.(emem) s.(evm))
     (λ f m1 _ _, alloc_stack s.(emem) f.(f_extra).(sf_align) f.(f_extra).(sf_stk_sz) f.(f_extra).(sf_stk_ioff) f.(f_extra).(sf_stk_extra_sz) = ok m1)
 (*    (λ f _ _ _ args _, mapM (λ x : var_i, get_var s.(evm) x) f.(f_params) = ok args)
@@ -405,19 +405,19 @@ Section SEM_IND.
   .
 
   Definition sem_Ind_call : Prop :=
-    ∀ (ii: instr_info) (k: Sv.t) (s1 s2: estate) ini res fn args xargs xres,
+    ∀ (ii: instr_info) (k: Sv.t) (s1 s2: estate) res fn args xargs xres,
       mapM get_pvar args = ok xargs →
       mapM get_lvar res = ok xres →
       sem_call ii k s1 fn s2 →
       Pfun ii k s1 fn s2 →
-      Pi_r ii k s1 (Ccall ini res fn args) s2.
+      Pi_r ii k s1 (Ccall res fn args) s2.
 
   Definition sem_Ind_proc : Prop :=
     ∀ (ii: instr_info) (k: Sv.t) (s1 s2: estate) (fn: funname) fd m1 s2',
       get_fundef (p_funcs p) fn = Some fd →
       ra_valid fd ii k var_tmp →
       saved_stack_valid fd k →
-      top_stack_aligned fd s1 →
+      top_stack_aligned fd s1.(emem) →
       valid_RSP s1.(emem) s1.(evm) →
       alloc_stack s1.(emem) fd.(f_extra).(sf_align) fd.(f_extra).(sf_stk_sz) fd.(f_extra).(sf_stk_ioff) fd.(f_extra).(sf_stk_extra_sz) = ok m1 →
       let vm1 := ra_undef_vm fd s1.(evm) var_tmp in
@@ -457,8 +457,8 @@ Section SEM_IND.
           (@sem_I_Ind krec s3 (MkI ii (Cwhile a c e1 c')) s4 s6)
     | @Ewhile_false ii k s1 s2 a c e1 c' s0 e2 =>
       @Hwhile_false ii k s1 s2 a c e1 c' s0 (@sem_Ind k s1 c s2 s0) e2
-    | @Ecall ii k s1 s2 ini res fn args xargs xres hargs hres exec =>
-      @Hcall ii k s1 s2 ini res fn args xargs xres hargs hres exec (@sem_call_Ind ii k s1 fn s2 exec)
+    | @Ecall ii k s1 s2 res fn args xargs xres hargs hres exec =>
+      @Hcall ii k s1 s2 res fn args xargs xres hargs hres exec (@sem_call_Ind ii k s1 fn s2 exec)
     end
 
   with sem_I_Ind (k: Sv.t) (s1 : estate) (i : instr) (s2 : estate) (s : sem_I k s1 i s2) {struct s} : Pi k s1 i s2 :=

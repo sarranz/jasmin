@@ -152,7 +152,7 @@ Section LEMMA.
     - by move => e c1 c2 h1 h2 s; rewrite /write_i /write_i_rec -!/write_c_rec -/write_c !h1 h2; SvD.fsetdec.
     - by move => v d lo hi body h s; rewrite /write_i /write_i_rec -!/write_c_rec !h; SvD.fsetdec.
     - by move => a c1 e c2  h1 h2 s; rewrite /write_i /write_i_rec -!/write_c_rec -/write_c !h1 h2; SvD.fsetdec.
-    by move => i xs fn es s; rewrite /write_i /write_i_rec; SvD.fsetdec.
+    by move=> xs fn es s; rewrite /write_i /write_i_rec; SvD.fsetdec.
   Qed.
 
   Lemma write_I_recE ii i s :
@@ -548,7 +548,7 @@ Section LEMMA.
   Let Pfun scs (m: mem) (fn: funname) (args: seq value) scs' (m': mem) (res: seq value) : Prop :=
     ∀ ii fd tvm1 args',
       get_fundef (p_funcs p) fn = Some fd →
-      (fd.(f_extra).(sf_return_address) == RAnone) || is_align (top_stack m) fd.(f_extra).(sf_align) →
+      top_stack_aligned fd m →
       tvm1.[vrsp] = Vword (top_stack m) →
       tvm1.[ vgd ] = Vword global_data →
       get_var_is false tvm1 fd.(f_params) = ok args' →
@@ -589,13 +589,14 @@ Section LEMMA.
 
   Lemma Hcall: sem_Ind_call p global_data Pi_r Pfun.
   Proof.
-    move => s1 scs2 m2 s2 jj xs fn args vargs vs ok_vargs sexec ih ok_s2 sz ii I O t1.
+    move=>
+      s1 scs2 m2 s2 xs fn args vargs vs ok_vargs sexec ih ok_s2 sz ii I O t1.
     rewrite /check_instr_r /=; case heq : get_fundef => [ fd | //].
     t_xrbindP => hces hal hargs hres hxs pre sim.
     have [vargs' hvargs' hincl]:= check_esP hces sim ok_vargs.
     have [|| k [tvm2] [res'] [texec hk get_res res_uincl] ] :=
       ih ii fd (evm t1) vargs' heq _ (mvp_top_stack pre) (mvp_global_data pre) _ hincl.
-    + by rewrite (is_align_m hal (mvp_stack_aligned pre)) orbT.
+    + by rewrite /top_stack_aligned (is_align_m hal (mvp_stack_aligned pre)) orbT.
     + elim: (args) (f_params fd) (vargs') hargs hvargs' => [ | e es hrec] [ |y ys] // vs'.
       move=> /= /andP []; case: e => //= -[] x [] // /eqP hxy hall2.
       by rewrite /get_gvar /= hxy; t_xrbindP => ? /= /hrec -> // <-.
@@ -893,7 +894,7 @@ Proof.
 
   case: (checkP ok_p ok_fd)=> _ok_wrf.
   rewrite /check_fd; t_xrbindP => D.
-  rewrite {1  2}Export.
+  rewrite /top_stack_aligned {1  2}Export.
   set ID := (ID in check_c _ ID _).
   set results := sv_of_list v_var (f_res fd).
   set params := sv_of_list v_var (f_params fd).
@@ -903,7 +904,7 @@ Proof.
   move => /(_ _ _ erefl) H.
   exists fd.
   - exact: ok_fd.
-  - exact/eqP.
+  - by rewrite Export.
   - exact: to_save_not_result.
   - exact: RSP_not_result.
   move => vm args' ok_args' args_args' vm_rsp vm_gd.

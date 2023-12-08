@@ -497,17 +497,6 @@ Definition x86_DEC sz (w: word sz) : ex_tpl (b4w_ty sz) :=
     (w - 1)
     (wsigned w - 1)%Z).
 
-
-Fixpoint leading_zero_aux (n: Z) (k : nat) (sz : nat) :=
-  if (n <? 2^(sz - k))%Z then k 
-  else match k with 
-  | 0 => 0
-  | S k' => leading_zero_aux n k' sz
-  end.
-      
-Definition leading_zero sz (w: word sz) : word sz := 
-  wrepr sz (leading_zero_aux (wunsigned w) sz sz).
-
 Definition x86_LZCNT sz (w: word sz) : ex_tpl (b5w_ty sz) := 
    Let _ := check_size_16_64 sz in
    let v := leading_zero w in 
@@ -878,12 +867,12 @@ Definition x86_VPBLENDVB sz (x y m: word sz) : ex_tpl (w_ty sz) :=
 
 Definition SaturatedSignedToUnsigned (sz1 sz2:wsize) (w:word sz1) : word sz2 := 
   let i1 := wsigned w in
-  let i2 := max 0%Z (min i1 (wmax_unsigned sz2)) in
+  let i2 := cmp_max 0%Z (cmp_min i1 (wmax_unsigned sz2)) in
   wrepr sz2 i2.
 
 Definition SaturatedSignedToSigned (sz1 sz2:wsize) (w:word sz1) : word sz2 := 
   let i1 := wsigned w in
-  let i2 := max (wmin_signed sz2) (min i1 (wmax_signed sz2)) in
+  let i2 := cmp_max (wmin_signed sz2) (cmp_min i1 (wmax_signed sz2)) in
   wrepr sz2 i2.
 
 Definition vpack2 (sz1 sz2 sz:wsize) (op:word sz1 -> word sz2) (w1 w2:word sz) : word sz := 

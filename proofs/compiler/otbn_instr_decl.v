@@ -1299,16 +1299,17 @@ Definition desc_BN_WSR op ad_in ad_out : instr_desc_t :=
     id_pp_asm := pp_otbn_op op xreg_size;
   |}.
 
-Definition desc_BN_indirect op ak : instr_desc_t :=
+Definition desc_BN_indirect op is_str : instr_desc_t :=
+  let arg_pos := (if is_str then 0 else 2)%nat in
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := [:: sreg; sxreg ];
-    id_in := [:: E 1; E 2 ];
+    id_in := [:: E 1; E arg_pos ];
     id_tout := [:: sxreg ];
-    id_out := [:: E 0 ];
+    id_out := [:: E (2 - arg_pos) ];
     id_semi := fun _ x => ok x;
     id_nargs := 3;
-    id_args_kinds := ak;
+    id_args_kinds := ak_xreg_reg_mem;
     id_eq_size := refl_equal;
     id_tin_narr := refl_equal;
     id_tout_narr := refl_equal;
@@ -1342,8 +1343,8 @@ Definition desc_otbn_op (op : otbn_op) : instr_desc_t :=
   | BN_ACCW => desc_BN_WSR op (E 0) (Xreg ACC)
   | BN_MODR => desc_BN_WSR op (Xreg MOD) (E 0)
   | BN_MODW => desc_BN_WSR op (E 0) (Xreg MOD)
-  | BN_LID => desc_BN_indirect BN_LID ak_xreg_reg_mem
-  | BN_SID => desc_BN_indirect BN_SID ak_mem_reg_xreg
+  | BN_LID => desc_BN_indirect BN_LID false
+  | BN_SID => desc_BN_indirect BN_SID true
   end.
 
 

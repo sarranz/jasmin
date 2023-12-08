@@ -25,6 +25,7 @@ Variant box :=
 
 Inductive pp_error :=
   | PPEstring  `(string)
+  | PPEz       `(Z)
   | PPEvar     `(var)
   | PPEvarinfo    `(var_info)
 (*   | PPEop1     `(sop1) *)
@@ -32,7 +33,7 @@ Inductive pp_error :=
 (*   | PPEopN     `(opN) *)
 (*   | PPEsopn    `(sopn) *)
 (*   | PPEexpr    `(pexpr) *)
-(*   | PPElval    `(lval) *)
+  | PPElval  of lval
   | PPEfunname `(funname)
   | PPEfuninfo `(fun_info)
 (*   | PPEinstr   `(instr_r) *)
@@ -62,11 +63,13 @@ Definition pp_vbox := PPEbox Vbox.
 Definition pp_nobox := PPEbox Nobox.
 
 Notation pp_s    := PPEstring.
+Notation pp_z    := PPEz.
 Notation pp_var  := PPEvar.
 Notation pp_e    := PPEexpr.
 Notation pp_re   := PPErexpr.
 Notation pp_fe   := PPEfexpr.
 Notation pp_fn   := PPEfunname.
+Notation pp_lv   := PPElval.
 
 Fixpoint pp_list {A} sep (pp : A -> pp_error) xs : pp_error :=
   match xs with

@@ -6,21 +6,51 @@ From mathcomp Require Import
 Require Import
   arch_decl
   arch_extra
-  arch_params.
+  arch_params
+.
 Require Import
   compiler_util
   expr
-  fexpr.
+  fexpr
+.
 Require Import
   otbn_decl
   otbn_extra
   otbn_instr_decl
-  otbn_lowering.
+  otbn_lowering
+.
 Require
   asm_gen
   linearization
   slh_lowering
-  stack_alloc.
+  stack_alloc
+  stack_zeroization
+.
+
+
+Module E.
+  Definition pass := "OTBN parameters"%string.
+
+  Section ERROR.
+    Import compiler_util.
+
+    Let user_error oii pp :=
+      {|
+        pel_msg := pp;
+        pel_fn := None;
+        pel_fi := None;
+        pel_ii := oii;
+        pel_vi := None;
+        pel_pass := Some pass;
+        pel_internal := false
+      |}.
+
+    Definition szp_cmd :=
+      user_error None (pp_s "Stack zeroization not implemented").
+
+  End ERROR.
+
+End E.
 
 #[local]
 Open Scope Z.
@@ -192,6 +222,18 @@ Section SHPARAMS.
 
 End SHPARAMS.
 
+
+Section SZPARAMS.
+
+  Import stack_zeroization.
+
+  Definition szparams : stack_zeroization_params :=
+    {|
+      szp_cmd := fun _ _ _ _ _ _ => Error E.szp_cmd;
+    |}.
+
+End SZPARAMS.
+
 Definition is_move_op (eop : extended_op) : bool :=
   if eop is BaseOp (None, op) then op \in [:: RV32 MOV; BN_MOV ] else false.
 
@@ -202,6 +244,7 @@ Definition otbn_params : architecture_params lowering_options :=
     ap_lop := loparams;
     ap_agp := agparams;
     ap_shp := shparams;
+    ap_szp := szparams;
     ap_is_move_op := is_move_op;
   |}.
 
