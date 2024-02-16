@@ -61,16 +61,16 @@ Definition cond_not_found (ii : instr_info) oe e : pp_error_loc :=
 
 Definition lvar_variable (ii: instr_info) : pp_error_loc :=
   pp_user_error (Some ii) None
-     (pp_s "miss-speculation flag should be stored into register").
+     (pp_s "misspeculation flag should be stored into register").
 
 Definition expr_variable (ii: instr_info) e : pp_error_loc :=
   pp_user_error (Some ii) None
-     (pp_vbox [:: pp_s "only register allowed for miss-speculation flag:";
+     (pp_vbox [:: pp_s "only register allowed for misspeculation flag:";
                   pp_e e]).
 
 Definition msf_not_found_r (x:var_i) (known : Sv.t) : pp_error_loc :=
    pp_user_error None (Some (v_info x))
-     (pp_vbox [:: pp_box [:: pp_s "Variable"; pp_var x; pp_s "is not a miss-speculation flag"];
+     (pp_vbox [:: pp_box [:: pp_s "Variable"; pp_var x; pp_s "is not a misspeculation flag"];
                   pp_box [:: pp_s "Known are"; pp_Sv known]]).
 
 Definition msf_not_found (ii : instr_info) (x:var_i) (known : Sv.t) : pp_error_loc :=
@@ -628,8 +628,7 @@ Definition lower_fd (fn : funname) (fd : fundef) : cexec fundef :=
 Definition lower_slh_prog (entries : seq funname) (p : prog) : cexec prog :=
   Let _ :=
     let msg :=
-      "exported function should not take an miss-speculation flag as \
-       input"%string
+      "export function should not take a missspeculation flag as input"%string
     in
     assert
       (all (fun f => all is_shl_none (slhfi_tin (slh_fun_info f))) entries)

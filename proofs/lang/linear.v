@@ -54,7 +54,8 @@ Record lfundef := LFundef {
  lfd_res  : seq var_i;  (* /!\ did we really want to have "seq var_i" here *)
  lfd_export: bool;
  lfd_callee_saved: seq var; (* A list of variables that must be initialized before calling this function *)
- lfd_total_stack: Z; (* total amount of stack memory needed by this function (and all functions called by this one *)
+ lfd_stk_max : Z; (* max amount of stack memory used by this function (and all functions called by this one *)
+ lfd_frame_size : Z; (* needed for stack zeroization *)
 }.
 
 Definition with_lbody (lfd : lfundef) (lbody : lcmd) : lfundef :=
@@ -68,8 +69,16 @@ Definition with_lbody (lfd : lfundef) (lbody : lcmd) : lfundef :=
     lfd_res := lfd_res lfd;
     lfd_export := lfd_export lfd;
     lfd_callee_saved := lfd_callee_saved lfd;
-    lfd_total_stack := lfd_total_stack lfd;
+    lfd_stk_max := lfd_stk_max lfd;
+    lfd_frame_size := lfd_frame_size lfd;
   |}.
+
+(* takes into account the padding due to the alignment of the stack of export functions *)
+Definition lfd_total_stack lfd :=
+  if lfd.(lfd_export) then
+    (lfd.(lfd_stk_max) + wsize_size lfd.(lfd_align) - 1)%Z
+  else
+    lfd.(lfd_stk_max).
 
 Definition signature_of_lfundef (lfd: lfundef) : function_signature :=
   (lfd_tyin lfd, lfd_tyout lfd).

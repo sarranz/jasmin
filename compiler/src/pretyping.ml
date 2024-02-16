@@ -383,7 +383,7 @@ end  = struct
       try 
         let v', _ = Map.find v.P.v_name map in
         warning DuplicateVar (L.i_loc0 v.v_dloc) 
-          "the variable %s is already declare at %a"
+          "the variable %s is already declared at %a"
           v.v_name L.pp_loc v'.P.v_dloc 
       with Not_found -> ()
 
@@ -440,7 +440,7 @@ end  = struct
 end
 
 (* -------------------------------------------------------------------- *)
-let tt_ws (ws : A.wsize) = Printer.ws_of_ws ws
+let tt_ws (ws : A.wsize) = ws
 
 (* -------------------------------------------------------------------- *)
 let tt_pointer dfl_writable (p:S.ptr) : W.reference =
@@ -943,7 +943,13 @@ let combine_flags =
 
 let is_combine_flags id =
   List.mem_assoc (L.unloc id) combine_flags
-  
+
+let ensure_int loc i ty =
+  match ty with
+  | P.Bty Int -> i
+  | P.Bty (P.U ws) -> P.Papp1(E.Oint_of_word ws,i)
+  | _ -> rs_tyerror ~loc (TypeMismatch (ty, P.tint))
+
 (* -------------------------------------------------------------------- *)
 let rec tt_expr pd ?(mode=`AllVar) (env : 'asm Env.env) pe =
   match L.unloc pe with
@@ -970,7 +976,7 @@ let rec tt_expr pd ?(mode=`AllVar) (env : 'asm Env.env) pe =
     let ws = Option.map_default tt_ws (P.ws_of_ty ty) ws in
     let ty = P.tu ws in
     let i,ity  = tt_expr ~mode pd env pi in
-    check_ty_eq ~loc:(L.loc pi) ~from:ity ~to_:P.tint;
+    let i = ensure_int (L.loc pi) i ity in
     begin match olen with
     | None -> P.Pget (aa, ws, x, i), ty
     | Some plen ->
@@ -1147,7 +1153,7 @@ let tt_lvalue pd (env : 'asm Env.env) { L.pl_desc = pl; L.pl_loc = loc; } =
     let ws = Option.map_default tt_ws (P.ws_of_ty ty) ws in
     let ty = P.tu ws in
     let i,ity  = tt_expr ~mode:`AllVar pd env pi in
-    check_ty_eq ~loc:(L.loc pi) ~from:ity ~to_:P.tint;
+    let i = ensure_int (L.loc pi) i ity in
     begin match olen with
     | None -> 
       loc, (fun _ -> P.Laset (aa, ws, L.mk_loc xlc x, i)), Some ty
@@ -1295,14 +1301,7 @@ let prim_of_op exn loc o =
     | Some({L.pl_desc = S.CVS _} ) -> raise exn
     | Some({L.pl_desc = S.CSS(None, _)}) -> None
     | Some({L.pl_desc = S.CSS(Some sz, _)}) ->  
-      Some (match sz with
-      | `W8 -> 8
-      | `W16 -> 16
-      | `W32 -> 32
-      | `W64 -> 64
-      | `W128 -> 128
-      | `W256 -> 256
-        )
+      Some (Annotations.int_of_ws sz)
   in
   let p =
     let f s n =
@@ -1637,6 +1636,21 @@ let rec tt_instr arch_info (env : 'asm Env.env) ((annot,pi) : S.pinstr) : 'asm E
       in
       env, [mk_i ~annot (mk_call (L.loc pi) is_inline lvs f es)]
 
+  | S.PIAssign ((ls, xs), `Raw, { pl_desc = PEPrim (f, args) }, None) 
+        when L.unloc f = "spill" || L.unloc f = "unspill"  ->
+    let op = L.unloc f in
+    if ls <> None then rs_tyerror ~loc:(L.loc pi) (string_error "%s expects no implicit result" op);
+    if xs <> [] then rs_tyerror ~loc:(L.loc pi) (string_error "%s expects no result" op);
+    let es = tt_exprs arch_info.pd env args in
+    let doit (e, _) = 
+      match e with 
+      | P.Pvar x when P.is_reg_kind (P.kind_i x.gv) -> e
+      | _ ->  rs_tyerror ~loc:(L.loc pi) (string_error "%s expects only reg/reg ptr as arguments" op) in
+    let es = List.map doit es in
+    let op = if op = "spill" then Pseudo_operator.Spill else Pseudo_operator.Unspill in
+    let p = Sopn.Opseudo_op (Ospill(op, [] (* dummy info, will be fixed latter *))) in 
+    env, [mk_i ~annot (P.Copn([], AT_keep, p, es))]
+
   | S.PIAssign ((ls, xs), `Raw, { pl_desc = PEPrim (f, args) }, None) when L.unloc f = "randombytes" ->
       (* FIXME syscall *)
       (* This is dirty but ... *)
@@ -1656,6 +1670,29 @@ let rec tt_instr arch_info (env : 'asm Env.env) ((annot,pi) : S.pinstr) : 'asm E
       let _ = tt_as_array (loc, ty) in
       let es = tt_exprs_cast arch_info.pd env (L.loc pi) args [ty] in
       env, [mk_i (P.Csyscall([x], Syscall_t.RandomBytes (Conv.pos_of_int 1), es))]
+
+  | S.PIAssign ((ls, xs), `Raw, { pl_desc = PEPrim (f, args) }, None) when L.unloc f = "swap" ->
+      if ls <> None then rs_tyerror ~loc:(L.loc pi) (string_error "swap expects no implicit arguments");
+      let loc, lvs, ty =
+        match xs with
+        | [x; y] ->
+          let loc, x, oxty = tt_lvalue arch_info.pd env x in
+          let yloc, y, oytu = tt_lvalue arch_info.pd env y in  
+          let ty =
+            match oxty with
+            | None -> rs_tyerror ~loc (string_error "_ lvalue not accepted here")
+            | Some ty -> ty in
+          let _ = 
+             match oxty with
+            | None -> rs_tyerror ~loc (string_error "_ lvalue not accepted here")
+            | Some yty -> check_ty_eq ~loc:yloc ~from:yty ~to_:ty in
+          loc, [x ty; y ty], ty
+        | _ ->
+          rs_tyerror ~loc:(L.loc pi)
+            (string_error "a pair of destination is expected for swap") in
+      let es = tt_exprs_cast arch_info.pd env (L.loc pi) args [ty; ty] in
+      let p = Sopn.Opseudo_op (Oswap Type.Coq_sbool) in  (* The type is fixed latter *)
+      env, [mk_i (P.Copn(lvs, AT_keep, p, es))]
 
   | S.PIAssign (ls, `Raw, { pl_desc = PEPrim (f, args) }, None) ->
       let p = tt_prim arch_info.asmOp f in
@@ -1831,22 +1868,64 @@ let tt_call_conv loc params returns cc =
 
 (* -------------------------------------------------------------------- *)
 
-let process_f_annot annot =
-  let open A in
+let process_f_annot loc funname f_cc annot =
+  let open FInfo in
 
-  let rak =
+  let retaddr_kind =
     let mk_ra = Annot.filter_string_list None return_address_kind_strings in
     let rak0 = Annot.ensure_uniq1 "returnaddress" mk_ra annot in
+    if rak0 <> None && not (FInfo.is_subroutine f_cc) then
+      hierror
+        ~loc:(Lone loc)
+        ~funname
+        ~kind:"unexpected annotation"
+        "returnaddress only applies to subroutines";
     match !Glob_options.return_address_kind with
     | Some rak1 -> Some rak1
     | None -> rak0
   in
 
-  { retaddr_kind          = rak;
+  let stack_zero_strategy =
+
+    let strategy =
+      let mk_szs = Annot.filter_string_list None Glob_options.stack_zero_strategies in
+      let strategy = Annot.ensure_uniq1 "stackzero" mk_szs annot in
+      if strategy <> None && f_cc <> Export then
+        hierror
+          ~loc:(Lone loc)
+          ~funname
+          ~kind:"unexpected annotation"
+          "stackzero only applies to export functions";
+      if Option.is_none strategy then
+        !Glob_options.stack_zero_strategy
+      else
+        strategy
+    in
+
+    let size =
+      let size = Annot.ensure_uniq1 "stackzerosize" (Annot.wsize None) annot in
+      if Option.is_none size then
+        !Glob_options.stack_zero_size
+      else
+        size
+    in
+
+    match strategy, size with
+    | None, None -> None
+    | None, Some _ ->
+        warning Always
+          (L.i_loc0 loc)
+          "\"stackzerosize\" is ignored, since you did not specify a strategy with attribute \"stackzero\"";
+        None
+    | Some szs, _ -> Some (szs, size)
+  in
+
+  { retaddr_kind;
     stack_allocation_size = Annot.ensure_uniq1 "stackallocsize" (Annot.pos_int None) annot;
     stack_size            = Annot.ensure_uniq1 "stacksize"      (Annot.pos_int None) annot;
     stack_align           = Annot.ensure_uniq1 "stackalign"     (Annot.wsize None)   annot;
     max_call_depth        = Annot.ensure_uniq1 "calldepth"      (Annot.pos_int None) annot;
+    stack_zero_strategy;
     f_user_annot          = annot;
   }
 
@@ -1917,11 +1996,12 @@ let tt_fundef arch_info (env0 : 'asm Env.env) loc (pf : S.pfundef) : 'asm Env.en
   let body, xret = tt_funbody arch_info envb pf.pdf_body in
   let f_cc = tt_call_conv loc args xret pf.pdf_cc in
   let args = List.map L.unloc args in
+  let name = L.unloc pf.pdf_name in
   let fdef =
     { P.f_loc   = loc;
-      P.f_annot = process_f_annot pf.pdf_annot;
+      P.f_annot = process_f_annot loc name f_cc pf.pdf_annot;
       P.f_cc    = f_cc;
-      P.f_name  = P.F.mk (L.unloc pf.pdf_name);
+      P.f_name  = P.F.mk name;
       P.f_tyin  = List.map (fun { P.v_ty } -> v_ty) args;
       P.f_args  = args;
       P.f_body  = body;

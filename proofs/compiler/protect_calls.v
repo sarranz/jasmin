@@ -117,9 +117,9 @@ Section CALL_SITE_TABLE.
     (ris : seq ret_info) (max_lbl : label) (lc : lcmd) : seq ret_info * label :=
     match lc with
     | MkLI _ (Lcall _ (fn, _)) :: MkLI _ (Llabel ExternalLabel lbl) :: lc =>
-        label_info ((fn, lbl) :: ris) (max max_lbl lbl) lc
+        label_info ((fn, lbl) :: ris) (Pos.max max_lbl lbl) lc
     | MkLI _ (Llabel InternalLabel lbl) :: lc =>
-        label_info ris (max max_lbl lbl) lc
+        label_info ris (Pos.max max_lbl lbl) lc
     | _ :: lc => label_info ris max_lbl lc
     | [::] => (ris, max_lbl)
     end.
