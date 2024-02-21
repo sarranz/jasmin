@@ -112,6 +112,14 @@
   ([PR #710](https://github.com/jasmin-lang/jasmin/pull/710);
    fixes [#709](https://github.com/jasmin-lang/jasmin/issues/709)).
 
+- Type-checking warns about calls to export functions that are not explicitly
+  inlined; export functions called from Jasmin code are inlined at call sites
+  ([PR #731](https://github.com/jasmin-lang/jasmin/pull/731);
+  fixes [#729](https://github.com/jasmin-lang/jasmin/issues/729)).
+
+- The compiler no longer throws an exception when a required file does not exist
+  ([PR #733](https://github.com/jasmin-lang/jasmin/pull/733)).
+
 ## Other changes
 
 - Pretty-printing of Jasmin programs is more precise
@@ -127,6 +135,11 @@
 
   ([PR #605](https://github.com/jasmin-lang/jasmin/pull/605)).
   Warning this is a **breaking change**.
+
+- Instruction selection for x86-64, when storing a large immediate value in
+  memory, introduces a copy through an intermediate register rather that
+  emitting invalid code
+  ([PR #730](https://github.com/jasmin-lang/jasmin/pull/730)).
 
 # Jasmin 2023.06.2 — 2023-12-22
 
