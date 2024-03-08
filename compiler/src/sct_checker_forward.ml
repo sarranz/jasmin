@@ -114,7 +114,15 @@ type ty_fun = {
     tyout                : vfty list;
     constraints          : C.constraints;
     resulting_corruption : VlPairs.t; (* resulting memory corruption after function call *)
-    out_guaranteed_public : bool list;
+
+    (* These are the returned variables whose type is guaranteed to be either
+       public (L, L) or secret (H, H) regardless of the caller.
+       We do not set these as transient after returns, since regardless of the
+       caller, they must to keep their type.
+       For pointers the check is made separately for the two components, thus
+       ((L, L), (L, L)), ((L, L), (H, H)), and ((H, H), (H, H)) are considered
+       constant and will not become transient. *)
+    out_guaranteed_constant : bool list;
   }
 
 type ('info,'asm) fenv = {
@@ -425,6 +433,7 @@ module Env : sig
 
   val after_call : env -> venv -> bool list -> int glvals -> venv
 
+  val pp_venv : Format.formatter -> venv -> unit
 end = struct
 
   type env = {
@@ -595,10 +604,18 @@ end = struct
         in
         Mv.add x ty vtype) venv.vars venv.vtype }
 
+  let pp_venv fmt venv =
+      let pp fmt (x, ty) = Format.fprintf fmt "%a -> %a" pp_var x pp_vty ty in
+      Format.fprintf fmt "@[<hov>{%a}@]" (pp_list ",@. " pp) (Mv.bindings venv.vtype)
+
   let ensure_le loc venv1 venv2 =
     let add_le_silent _ oty1 oty2 = add_le_var (oget oty1) (oget oty2); None in
     try ignore (Mv.merge add_le_silent venv1.vtype venv2.vtype)
     with Lvl.Unsat _unsat ->
+      Format.printf
+        "==== ENTER LOOP ====\nBEFORE:\n%a\nAFTER:\n%a\n\n@."
+        pp_venv venv2
+        pp_venv venv1;
       error ~loc "constraints caused by the loop cannot be satisfied"
 
   let map_vty f vty =
@@ -628,13 +645,11 @@ end = struct
      but it doesn't seem to affect things? *)
   (* Fresh variable environment where all public variables became transient. *)
   let after_call env venv guaranteed_public lvs =
-    let is_rsb_vulnerable k =
-      match k with
-      | Wsize.Const | Inline -> false
-      | Global | Stack _ | Reg _ -> true
-    in
-    let public_lvars =
-      let is_public_lval i x =
+
+    (* These variables are guaranteed to be either (L, L) or (H, H) after the
+       function returns. *)
+    let constant_lvars =
+      let is_constant_lval i x =
         match x with
         | Lvar x | Laset (_, _, x, _) -> begin
             try if List.at guaranteed_public i then Some (L.unloc x) else None
@@ -642,17 +657,38 @@ end = struct
           end
         | _ -> None
       in
-      List.filteri_map is_public_lval lvs
+      List.filteri_map is_constant_lval lvs
     in
-    let should_update x =
-      is_rsb_vulnerable x.v_kind && not (List.mem x public_lvars)
+
+    (* Whether we need to update the type of the variable.
+       The type of pointed data always gets updated. *)
+    let is_rsb_vulnerable k =
+      match k with
+      | Wsize.Const | Inline -> false
+      | Reg (Extra, _) -> false (* This is only because we forbid moving
+                                   non-secret values to MMX.
+                                   This works for the pointer itself but not for
+                                   the pointed data. *)
+      | Global | Stack _ | Reg _ -> true
     in
+
     let add x acc =
-      let new_ty (le_n, _) = (le_n, secret env) in
+      let new_le (le_n, _) = (le_n, secret env) in
+      let maybe_new_le le =
+        if is_rsb_vulnerable x.v_kind then new_le le else le
+      in
       let ty = Mv.find x acc in
-      let ty = if should_update x then map_vty new_ty ty else ty in
-      Mv.add x ty acc
+      let ty' =
+        if List.mem x constant_lvars
+        then ty
+        else
+          match ty with
+          | Direct le -> Direct(maybe_new_le le)
+          | Indirect(lp, le) -> Indirect(maybe_new_le lp, new_le le)
+      in
+      Mv.add x ty' acc
     in
+
     { venv with vtype = Sv.fold add venv.vars venv.vtype }
 
 end
@@ -1195,8 +1231,12 @@ let rec ty_instr is_ct_asm fenv env ((msf,venv) as msf_e :msf_e) i =
       if Prog.is_inline annot (FEnv.get_fun_def fenv f).f_cc
       then msf', venv'
       else
-        MSF.after_call ~loc msf' annot tyout xs,
-        Env.after_call env venv' fty.out_guaranteed_public xs
+       let a = Env.after_call env venv' fty.out_guaranteed_constant xs in
+       Format.printf
+        "==== CALL ====\nBEFORE:\n%a\nAFTER:\n%a\n\n@."
+        Env.pp_venv venv'
+        Env.pp_venv a;
+        MSF.after_call ~loc msf' annot tyout xs, a
     in
 
     (msf', venv')
@@ -1566,7 +1606,7 @@ and ty_fun_infer is_ct_asm fenv fn =
       tyout;
       constraints;
       resulting_corruption;
-      out_guaranteed_public = [];
+      out_guaranteed_constant = [];
     }
   in
   if !Glob_options.debug then
@@ -1577,17 +1617,17 @@ and ty_fun_infer is_ct_asm fenv fn =
   let tomax = List.fold_left add [] tyin in
   let tomin = List.fold_left add [n1; s1] tyout in
   C.optimize constraints ~tomin ~tomax;
-  let out_guaranteed_public =
-    let is_public vfty =
-      match vfty with
+  let out_guaranteed_constant =
+    let is_public_or_secret l = VlPairs.is_public l || VlPairs.is_secret l in
+    let vfty_public_or_secret = function
       | IsMsf -> true
-      | IsNormal Direct(l) -> VlPairs.is_public l
+      | IsNormal Direct(l) -> is_public_or_secret l
       | IsNormal Indirect(l0, l1) ->
-          VlPairs.is_public l0 && VlPairs.is_public l1
+          is_public_or_secret l0 && is_public_or_secret l1
     in
-    List.map is_public fty.tyout
+    List.map vfty_public_or_secret fty.tyout
   in
-  { fty with out_guaranteed_public }
+  { fty with out_guaranteed_constant }
 
 
 let ty_prog is_ct_asm (prog:('info, 'asm) prog) fl =
@@ -1647,7 +1687,7 @@ let compile_infer_msf (prog:('info, 'asm) prog) =
        tyout;
        constraints; (* dummy info *)
        resulting_corruption; (* dummy info *)
-       out_guaranteed_public = [];
+       out_guaranteed_constant = [];
      }  in
    Hf.add fenv.env_ty f.f_name fty
   in
