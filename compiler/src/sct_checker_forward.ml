@@ -119,9 +119,9 @@ type ty_fun = {
        public (L, L) or secret (H, H) regardless of the caller.
        We do not set these as transient after returns, since regardless of the
        caller, they must to keep their type.
-       For pointers the check is made separately for the two components, thus
-       ((L, L), (L, L)), ((L, L), (H, H)), and ((H, H), (H, H)) are considered
-       constant and will not become transient. *)
+       For pointers the check is made only for addresses.
+       Pointed data is always made transient.
+       TODO_RSB: Shouldn't we be able to assume this also for pointed data? *)
     out_guaranteed_constant : bool list;
   }
 
@@ -146,17 +146,25 @@ let pp_modmsf fmt modmsf =
   in
   Format.fprintf fmt "%s" s
 
+(*let pp_guaranteed_constant =
+  pp_list ",@ " (Format.pp_print_bool)
+
+      @ guaranteed constant:@[%a@]\
+*)
+
 let pp_funty fmt (fname, tyfun) =
   Format.fprintf fmt
     "@[<v>%a %s : @[%a@] ->@ @[%a@]@ \
       output corruption: %a@.\
-      @ constraints:@ @[%a@]@]@."
+      @ constraints:@ @[%a@]\
+      @]@."
     pp_modmsf tyfun.modmsf
     fname
     (pp_list " *@ " pp_vfty) tyfun.tyin
     (pp_list " *@ " pp_vfty) tyfun.tyout
     pp_vty (Direct (tyfun.resulting_corruption))
     C.pp tyfun.constraints
+    (*pp_guaranteed_constant tyfun.out_guaranteed_constant*)
 
 
 (* --------------------------------------------------------------- *)
@@ -186,9 +194,17 @@ let rec modmsf_i fenv i =
     end
   | Cfor(_, _, c) -> modmsf_c fenv c
   | Ccall (_, f, _) ->
-    match (FEnv.get_fty fenv f).modmsf with
-    | Modified (l, tr) -> Modified(i.i_loc, (l, f) :: tr)
-    | NotModified -> NotModified
+      (* Local function calls destroy the MSF.
+         We don't need to check for the [update_after_call] annotation, since
+         such functions need to return the MSF and therefore it will be set
+         after the call (i.e., the MSF is indeed modified, but we get a new one
+         as a returned value). *)
+      if Prog.is_inline i.i_annot (FEnv.get_fun_def fenv f).f_cc
+      then
+        match (FEnv.get_fty fenv f).modmsf with
+        | Modified(l, tr) -> Modified(i.i_loc, (l, f) :: tr)
+        | NotModified -> NotModified
+      else modified_here
 
 and modmsf_c fenv c =
   List.map (modmsf_i fenv) c
@@ -612,24 +628,22 @@ end = struct
     let add_le_silent _ oty1 oty2 = add_le_var (oget oty1) (oget oty2); None in
     try ignore (Mv.merge add_le_silent venv1.vtype venv2.vtype)
     with Lvl.Unsat _unsat ->
-      Format.printf
+      (*Format.printf
         "==== ENTER LOOP ====\nBEFORE:\n%a\nAFTER:\n%a\n\n@."
         pp_venv venv2
-        pp_venv venv1;
+        pp_venv venv1;*)
       error ~loc "constraints caused by the loop cannot be satisfied"
-
-  let map_vty f vty =
-    match vty with
-    | Direct le -> Direct(f le)
-    | Indirect(lp, le) -> Indirect(f lp, f le)
 
   let clone_for_call (env:env) (tyfun:ty_fun) =
     let subst1 = C.clone tyfun.constraints env.constraints in
     let subst (n, s) = (subst1 n, subst1 s) in
     let subst_ty = function
       | IsMsf -> IsMsf
-      | IsNormal ty -> IsNormal (map_vty subst ty)
-    in
+      | IsNormal ty -> let ty =
+            match ty with
+            | Direct le -> Direct (subst le)
+            | Indirect(lp, le) -> Indirect(subst lp, subst le) in
+          IsNormal ty in
     List.map subst_ty tyfun.tyout, List.map subst_ty tyfun.tyin,
     subst tyfun.resulting_corruption
 
@@ -661,30 +675,29 @@ end = struct
     in
 
     (* Whether we need to update the type of the variable.
-       The type of pointed data always gets updated. *)
+       The type of pointed data always gets updated.
+       We don't consider MMX registers to be vulnerable because we forbid moving
+       non-secret values to MMX.
+       This works for the pointer itself but not for the pointed data. *)
     let is_rsb_vulnerable k =
       match k with
-      | Wsize.Const | Inline -> false
-      | Reg (Extra, _) -> false (* This is only because we forbid moving
-                                   non-secret values to MMX.
-                                   This works for the pointer itself but not for
-                                   the pointed data. *)
-      | Global | Stack _ | Reg _ -> true
+      | Wsize.Const | Reg(Extra, _) -> false
+      | Inline | Global | Stack _ | Reg(Normal, _) -> true
+    in
+
+    let new_le (le_n, _) = (le_n, secret env) in
+    let maybe_new_le x le =
+      if not (List.mem x constant_lvars) && is_rsb_vulnerable x.v_kind
+      then new_le le
+      else le
     in
 
     let add x acc =
-      let new_le (le_n, _) = (le_n, secret env) in
-      let maybe_new_le le =
-        if is_rsb_vulnerable x.v_kind then new_le le else le
-      in
-      let ty = Mv.find x acc in
       let ty' =
-        if List.mem x constant_lvars
-        then ty
-        else
-          match ty with
-          | Direct le -> Direct(maybe_new_le le)
-          | Indirect(lp, le) -> Indirect(maybe_new_le lp, new_le le)
+        match Mv.find x acc with
+        | Direct(le) -> Direct(maybe_new_le x le)
+        | Indirect(lp, le) -> Indirect(maybe_new_le x lp, new_le le)
+        | exception Not_found -> assert false
       in
       Mv.add x ty' acc
     in
@@ -928,8 +941,9 @@ module MSF : sig
         pp msfo pp msfi
 
   let after_call ~loc ((xs, ocond) as msf) annot tout lvs =
-    if Annot.ensure_uniq1 supdate_after_call Annot.none annot = Some ()
-    then begin
+    if Annot.ensure_uniq1 supdate_after_call Annot.none annot <> Some ()
+    then toinit
+    else
       let msg = "This function is annotated with " ^ supdate_after_call in
       if Option.is_some ocond then
         error ~loc
@@ -945,8 +959,6 @@ module MSF : sig
       | [] -> error ~loc "%s, but it does not return an MSF" msg
       | [x] -> exact (Sv.singleton x)
       |  _ -> error ~loc "%s, but it returns more than one MSF" msg
-    end
-    else toinit
 
 end
 
@@ -969,7 +981,7 @@ let ensure_public_mmx env venv x ety =
             pp_var_i x
 
 (* TODO_RSB: For [Lnone], register allocation will never choose an MMX register,
-   so we don't check. Is this the best solution? *)
+   so we don't check. But this should be fixed, so it's not a good idea. *)
 let ty_lval env ((msf, venv) as msf_e : msf_e) x ety : msf_e =
   (* First path the type ety to make it consistant with the variable info *)
   match x with
@@ -1192,6 +1204,9 @@ let rec ty_instr is_ct_asm fenv env ((msf,venv) as msf_e :msf_e) i =
     MSF.enter_if msf' (Papp1(Onot, e)), venv1
 
   | Ccall (xs, f, es) ->
+    (*Format.printf
+      "==== CALL %s ====\nBEFORE:@.%a\n" f.fn_name Env.pp_venv venv;*)
+
     let fty = FEnv.get_fty fenv f in
     let modmsf = fty.modmsf in
     let tyout, tyin, resulting_corruption = Env.clone_for_call env fty in
@@ -1225,20 +1240,17 @@ let rec ty_instr is_ct_asm fenv env ((msf,venv) as msf_e :msf_e) i =
       let msf = if vfty = IsMsf then MSF.add (reg_lval ~direct:true loc x) msf else msf in
       (msf, venv) in
     let msf' = if is_Modified modmsf then MSF.toinit else msf in
-    let (msf', venv') = List.fold_left2 output_ty (msf', venv) xs tyout in
+    let msf', venv' = List.fold_left2 output_ty (msf', venv) xs tyout in
 
     let msf', venv' =
       if Prog.is_inline annot (FEnv.get_fun_def fenv f).f_cc
       then msf', venv'
       else
-       let a = Env.after_call env venv' fty.out_guaranteed_constant xs in
-       Format.printf
-        "==== CALL ====\nBEFORE:\n%a\nAFTER:\n%a\n\n@."
-        Env.pp_venv venv'
-        Env.pp_venv a;
-        MSF.after_call ~loc msf' annot tyout xs, a
+       let msf' = MSF.after_call ~loc msf' annot tyout xs in
+       let venv' = Env.after_call env venv' fty.out_guaranteed_constant xs in
+       msf', venv'
     in
-
+    (*Format.printf "AFTER:@.%a\n@." Env.pp_venv venv';*)
     (msf', venv')
 
 and ty_cmd is_ct_asm fenv env msf_e c =
@@ -1599,6 +1611,9 @@ and ty_fun_infer is_ct_asm fenv fn =
   let to_keep = List.fold_left add (List.fold_left add [n1; s1] tyin) tyout in
 
   C.prune constraints to_keep;
+
+  (* We first give a safe guess for [out_guaranteed_constant] to print the type,
+     but recompute it after optimizing. *)
   let fty =
     {
       modmsf;
@@ -1606,9 +1621,10 @@ and ty_fun_infer is_ct_asm fenv fn =
       tyout;
       constraints;
       resulting_corruption;
-      out_guaranteed_constant = [];
+      out_guaranteed_constant = List.make (List.length tyout) false;
     }
   in
+
   if !Glob_options.debug then
     Format.eprintf
       "Before optimization:@.%a@."
@@ -1617,15 +1633,14 @@ and ty_fun_infer is_ct_asm fenv fn =
   let tomax = List.fold_left add [] tyin in
   let tomin = List.fold_left add [n1; s1] tyout in
   C.optimize constraints ~tomin ~tomax;
+
   let out_guaranteed_constant =
     let is_public_or_secret l = VlPairs.is_public l || VlPairs.is_secret l in
     let vfty_public_or_secret = function
       | IsMsf -> true
-      | IsNormal Direct(l) -> is_public_or_secret l
-      | IsNormal Indirect(l0, l1) ->
-          is_public_or_secret l0 && is_public_or_secret l1
+      | IsNormal(Direct(l)) | IsNormal(Indirect(l, _)) -> is_public_or_secret l
     in
-    List.map vfty_public_or_secret fty.tyout
+    List.map vfty_public_or_secret tyout
   in
   { fty with out_guaranteed_constant }
 
@@ -1687,7 +1702,7 @@ let compile_infer_msf (prog:('info, 'asm) prog) =
        tyout;
        constraints; (* dummy info *)
        resulting_corruption; (* dummy info *)
-       out_guaranteed_constant = [];
+       out_guaranteed_constant = []; (* dummy info *)
      }  in
    Hf.add fenv.env_ty f.f_name fty
   in

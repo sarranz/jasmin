@@ -14,6 +14,7 @@ let load_and_check name =
         let f = fd.Prog.f_name.fn_name in
         match ty_prog Arch.is_ct_sopn p [ f ] with
         | exception Utils.HiError e ->
+            let e = { e with err_loc = Lnone } in
             Format.printf "Failed as expected %s: %a@." f Utils.pp_hierror e
         | _ ->
             Format.eprintf "Did not fail: %s.@." f;
