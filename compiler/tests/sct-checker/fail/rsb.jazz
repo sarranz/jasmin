@@ -285,6 +285,11 @@ fn inline_kills_msf2() -> reg u64 {
 }
 
 #nomodmsf
+fn call_modmsf() {
+    do_nothing();
+}
+
+#nomodmsf
 fn inline_modmsf() {
     #inline
     call_do_nothing();

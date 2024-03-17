@@ -27,6 +27,8 @@ let spublic = "public"
 let stransient = "transient"
 let smsf = "msf"
 let supdate_after_call = "update_after_call"
+let smodmsf = "modmsf"
+let snomodmsf = "nomodmsf"
 
 let sflexible = "flex"
 let sstrict   = "strict"
@@ -108,6 +110,25 @@ let is_Modified m =
   | Modified _ -> true
   | NotModified -> false
 
+let pp_modmsf fmt modmsf =
+  let s =
+    match modmsf with
+    | Modified _ -> smodmsf
+    | NotModified -> snomodmsf
+  in
+  Format.fprintf fmt "%s" s
+
+let pp_modmsf_trace fmt tr =
+  if tr <> []
+  then
+    let pp_item fmt (l, fn) =
+      Format.fprintf fmt
+        "@[<h>the function %s destroys MSFs at %a@]"
+        fn.fn_name
+        L.pp_iloc l
+    in
+    Format.fprintf fmt "Trace:@;<0 2>@[<v>%a@]" (pp_list "" pp_item) tr
+
 type ty_fun = {
     modmsf               : modmsf;
     tyin                 : vfty list;
@@ -137,14 +158,6 @@ module FEnv = struct
     try Hf.find fenv.env_ty fn with Not_found -> assert false
 
 end
-
-let pp_modmsf fmt modmsf =
-  let s =
-    match modmsf with
-    | Modified _ -> "modmsf"
-    | NotModified -> "nomodmsf"
-  in
-  Format.fprintf fmt "%s" s
 
 (*let pp_guaranteed_constant =
   pp_list ",@ " (Format.pp_print_bool)
@@ -272,16 +285,6 @@ let rec infer_msf_i ~withcheck fenv (tbl:(L.i_loc, Sv.t) Hashtbl.t) i ms =
     | _ -> () in
 
   let checks ms xs = List.iter (check ms) xs in
-
-  let pp_modmsf_trace fmt tr =
-    let pp_item fmt (l, fn) =
-      Format.fprintf fmt
-        "@[<h>the function %s destroys MSFs at %a@]"
-        fn.fn_name
-        L.pp_iloc l
-    in
-    Format.fprintf fmt "Trace:@;<0 2>@[<v>%a@]" (pp_list "" pp_item) tr
-  in
 
   let check_call ~loc fn modmsf ms =
     match modmsf with
@@ -1254,7 +1257,20 @@ let rec ty_instr is_ct_asm fenv env ((msf,venv) as msf_e :msf_e) i =
     (msf', venv')
 
 and ty_cmd is_ct_asm fenv env msf_e c =
-  List.fold_left (ty_instr is_ct_asm fenv env) msf_e c
+  let f (msf, venv) i =
+    let print = Annotations.has_symbol "debugsct" i.i_annot in
+    if print then
+      Format.printf
+        "==== Checking %a ====\nBEFORE:@.%a@ %a\n"
+        L.pp_iloc i.i_loc
+        MSF.pp msf
+        Env.pp_venv venv;
+    let msf', venv' = ty_instr is_ct_asm fenv env (msf, venv) i in
+    if print then
+      Format.printf "AFTER:@.%a@ %a\n@." MSF.pp msf' Env.pp_venv venv';
+    (msf', venv')
+  in
+  List.fold_left f msf_e c
 
 
 (* ------------------------------------------------------------------- *)
@@ -1540,14 +1556,22 @@ let init_constraint fenv f =
   let modmsf = modmsf_c fenv f.f_body in
   let umodmsf =
     Annot.ensure_uniq
-       ["modmsf", (fun a -> Annot.none a; true);
-        "nomodmsf", (fun a -> Annot.none a; false)] f.f_annot.f_user_annot in
-  begin match umodmsf with
-  | None -> ()
-  | Some annot ->
-      if annot <> is_Modified modmsf then
-        let sannot = if annot then "modmsf" else "nomodmsf" in
-        error ~loc:f.f_loc "annotation %s should be %a" sannot pp_modmsf modmsf
+       [smodmsf, (fun a -> Annot.none a; true);
+        snomodmsf, (fun a -> Annot.none a; false)] f.f_annot.f_user_annot in
+  begin match umodmsf, modmsf with
+  | Some true, NotModified ->
+      error
+        ~loc:f.f_loc
+        "this function is annotated as %s, but it does not modify the MSF"
+        snomodmsf
+  | Some false, Modified(l, tr) ->
+      error
+        ~loc:f.f_loc
+        "this function is annotated as %s, but it modifies the MSF at %a.@ %a"
+        snomodmsf
+        L.pp_iloc l
+        pp_modmsf_trace tr
+  | _, _ -> ()
   end;
 
   env, venv, tyin, tyout, modmsf
