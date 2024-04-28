@@ -307,6 +307,7 @@ fn inline_bool_leaks() {
     }
 }
 
+export
 fn inline_int_leaks() {
     reg u64 x;
     x = 0;

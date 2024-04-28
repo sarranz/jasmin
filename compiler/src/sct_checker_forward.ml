@@ -603,23 +603,27 @@ end = struct
   (* freshen all variables in environment env, venv, with
      possibly a minimum (typically memory corruption) *)
   let freshen ?min env venv =
-    let fresh ~in_memory le =
-      let l = fresh2 env in
+    let fresh ~in_memory ~is_mmx le =
+      let l = if is_mmx then public2 env else fresh2 env in
       if in_memory && min != None then VlPairs.add_le (oget min) l;
       VlPairs.add_le le l;
       l
     in
     { venv with vtype = Sv.fold (fun x vtype ->
-        let in_memory = match x.v_kind with
+        let in_memory, is_mmx = match x.v_kind with
           | Wsize.Global (* likely unused as global variables are not in venv.vars *)
-          | Stack _ -> true
-          | Const | Inline | Reg _ -> false
+          | Stack _ -> (true, false)
+          | Const | Inline -> (false, false)
+          | Reg(rk, _) -> (false, rk = Extra)
         in
         let ty =
           match Mv.find x vtype with
-          | Direct le -> Direct (fresh ~in_memory le)
+          | Direct le -> Direct (fresh ~in_memory ~is_mmx le)
           | Indirect(lp, le) ->
-             Indirect(fresh ~in_memory lp, fresh ~in_memory:true le) (* the pointed values are in memory *)
+              (* The pointed values are in memory. *)
+              let lp = fresh ~in_memory ~is_mmx lp in
+              let le = fresh ~in_memory:true ~is_mmx:false le in
+              Indirect(lp, le)
         in
         Mv.add x ty vtype) venv.vars venv.vtype }
 
@@ -1035,7 +1039,7 @@ let ty_lval env ((msf, venv) as msf_e : msf_e) x ety : msf_e =
         msf, Env.corruption_speculative env venv le
 
   | Lasub(_, _, _, x, i) ->
-      ensure_public_mmx env venv x ety;
+      (* TODO_RSB: This is not needed. ensure_public_mmx env venv x ety; *)
       ensure_public_address env venv (L.loc x) x;
       ensure_public env venv (L.loc x) i;
       let le = content_ty ety in
