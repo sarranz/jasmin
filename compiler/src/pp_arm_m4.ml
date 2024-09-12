@@ -223,6 +223,14 @@ end = struct
     | _ -> ""
 end
 
+let aux_adr_counter =
+  let r = ref 0 in
+  fun () -> r := !r + 1; Conv.pos_of_int !r
+
+let aux_adr_offset fn addr =
+  let tmp = string_of_label (fn ^ "$aux_adr") (aux_adr_counter ()) in
+  (format_glob_data_entry (Some tmp) DKWord addr, tmp)
+
 let pp_instr fn i =
   match i with
   | ALIGN ->
@@ -266,11 +274,28 @@ let pp_instr fn i =
       let id = instr_desc arm_decl arm_op_decl (None, op) in
       let pp = id.id_pp_asm args in
       let suff = ArgChecker.check_args op pp.pp_aop_args in
-      let name = pp_mnemonic_ext op suff args in
+      let name =
+        let op' =
+          match op with
+          | ARM_op(ADR, opts) -> ARM_op(LDR, opts)
+          | _ -> op
+        in
+        pp_mnemonic_ext op' suff args
+      in
       let args = List.filter_map (fun (_, a) -> pp_asm_arg a) pp.pp_aop_args in
-      let args = pp_shift op args in
-      get_IT i @ [ LInstr (name, args) ]
-
+      let pre, args =
+        match op with
+        | ARM_op(ADR, _) ->
+            let dst, addr =
+              match args with
+              | [ dst; addr ] -> dst, addr
+              | _ -> assert false
+            in
+            let pre, tmp = aux_adr_offset fn addr in
+            (pre, [ dst; tmp ])
+        | _ -> ([], pp_shift op args)
+      in
+      pre @ get_IT i @ [ LInstr (name, args) ]
 
 (* -------------------------------------------------------------------- *)
 

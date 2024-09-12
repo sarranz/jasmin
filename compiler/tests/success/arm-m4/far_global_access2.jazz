@@ -1,0 +1,16 @@
+u32[2] g = { 3, 5 };
+
+export fn aux_addr() -> reg u32 {
+    reg ptr u32[1] a;
+    a = g[0:1];
+
+    reg u32 r;
+    r = a[0];
+
+    if (r > 0) { r += 1; }
+
+    a = g[1:1];
+    r = a[0];
+
+    return r;
+}
