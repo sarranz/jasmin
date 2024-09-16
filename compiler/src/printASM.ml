@@ -37,25 +37,29 @@ let string_of_label name p =
 let string_of_glob x =
   Format.asprintf "G$%s" (escape x.v_name)
 
+let byte_label global_datas i =
+  Format.asprintf "%s_%s" global_datas (string_of_int i)
+
 (* -------------------------------------------------------------------- *)
-let format_glob_data_entry olabel dk b =
+let format_glob_data_entry global_datas i olabel dk b =
   let lbl =
     match olabel with
     | Some x -> [ LLabel x ]
     | None -> []
   in
-  lbl @ [ LData(dk, b) ]
+  lbl @ [ LLabel(byte_label global_datas i); LData(dk, b) ]
 
-let format_glob_data globs names =
+let format_glob_data global_datas globs names =
   let names =
     List.map (fun ((x, _), p) -> (Conv.var_of_cvar x, Conv.z_of_cz p)) names
   in
   let doit i b =
     let olabel =
-      match List.find (fun (_, p) -> Z.equal (Z.of_int i) p) names with
+      match List.find (fun (_, p) -> Z.equal p (Z.of_int i)) names with
+      | x, _ -> Some (string_of_glob x)
       | exception Not_found -> None
-      | x, _ -> Some(string_of_glob x)
     in
-    format_glob_data_entry olabel DKByte (Conv.z_of_int8 b |> Z.to_string)
+    let b = Conv.z_of_int8 b |> Z.to_string in
+    format_glob_data_entry global_datas i olabel DKByte b
   in
   List.flatten (List.mapi doit globs)

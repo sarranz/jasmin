@@ -43,7 +43,7 @@ let pp_reg_address_aux base disp off scal =
 let global_datas = "glob_data"
 
 let pp_rip_address (p : Ssralg.GRing.ComRing.sort) : string =
-  Format.asprintf "%s+%a" global_datas Z.pp_print (Conv.z_of_int32 p)
+  Format.asprintf "%s_%a" global_datas Z.pp_print (Conv.z_of_int32 p)
 
 (* -------------------------------------------------------------------- *)
 (* TODO_ARM: This is architecture-independent. *)
@@ -223,14 +223,6 @@ end = struct
     | _ -> ""
 end
 
-let aux_adr_counter =
-  let r = ref 0 in
-  fun () -> r := !r + 1; Conv.pos_of_int !r
-
-let aux_adr_offset fn addr =
-  let tmp = string_of_label (fn ^ "$aux_adr") (aux_adr_counter ()) in
-  (format_glob_data_entry (Some tmp) DKWord addr, tmp)
-
 let pp_instr fn i =
   match i with
   | ALIGN ->
@@ -274,28 +266,31 @@ let pp_instr fn i =
       let id = instr_desc arm_decl arm_op_decl (None, op) in
       let pp = id.id_pp_asm args in
       let suff = ArgChecker.check_args op pp.pp_aop_args in
-      let name =
-        let op' =
-          match op with
-          | ARM_op(ADR, opts) -> ARM_op(LDR, opts)
-          | _ -> op
-        in
-        pp_mnemonic_ext op' suff args
-      in
-      let args = List.filter_map (fun (_, a) -> pp_asm_arg a) pp.pp_aop_args in
-      let pre, args =
-        match op with
-        | ARM_op(ADR, _) ->
-            let dst, addr =
-              match args with
-              | [ dst; addr ] -> dst, addr
-              | _ -> assert false
-            in
-            let pre, tmp = aux_adr_offset fn addr in
-            (pre, [ dst; tmp ])
-        | _ -> ([], pp_shift op args)
-      in
-      pre @ get_IT i @ [ LInstr (name, args) ]
+      match op with
+      | ARM_op(ADR, opts) ->
+          let name_lo = pp_mnemonic_ext (ARM_op(MOV, opts)) "w" args in
+          let name_hi = pp_mnemonic_ext (ARM_op(MOVT, opts)) "" args in
+          let args =
+            List.filter_map (fun (_, a) -> pp_asm_arg a) pp.pp_aop_args
+          in
+          let args_lo =
+            match args with
+            | dst :: addr :: rest -> dst :: ("#:lower16:" ^ addr) :: rest
+            | _ -> assert false
+          in
+          let args_hi =
+            match args with
+            | dst :: addr :: rest -> dst :: ("#:upper16:" ^ addr) :: rest
+            | _ -> assert false
+          in
+          [ LInstr(name_lo, args_lo); LInstr(name_hi, args_hi) ]
+      | _ ->
+          let name = pp_mnemonic_ext op suff args in
+          let args =
+            List.filter_map (fun (_, a) -> pp_asm_arg a) pp.pp_aop_args
+          in
+          let args = pp_shift op args in
+          get_IT i @ [ LInstr (name, args) ]
 
 (* -------------------------------------------------------------------- *)
 
@@ -339,7 +334,7 @@ let pp_data globs names =
   if not (List.is_empty globs) then
     LInstr (".p2align", ["5"]) ::
     LLabel global_datas ::
-    format_glob_data globs names
+    format_glob_data global_datas globs names
   else []
 
 let pp_prog p =
