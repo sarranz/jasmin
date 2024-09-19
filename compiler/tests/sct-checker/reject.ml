@@ -12,8 +12,8 @@ let load_and_check name =
       if fd.Prog.f_cc <> Internal then
         let f = fd.Prog.f_name.fn_name in
         match ty_prog Arch.is_ct_sopn p [ f ] with
-        | exception Utils.HiError e ->
-            Format.printf "Failed as expected %s: %a@." f Utils.pp_hierror e
+        | exception SCTError e ->
+            Format.printf "Failed as expected %s: %a@." f Utils.pp_hierror e.err
         | _ ->
             Format.eprintf "Did not fail: %s.@." f;
             assert false)

@@ -7,7 +7,8 @@ let () =
     match Sct_checker_forward.ty_prog Arch.is_ct_sopn p [ f ] with
     | exception Annot.AnnotationError (_loc, msg) ->
         Format.printf "Annotation error in %s: %t@." f msg
-    | exception Utils.HiError e ->
+    | exception Utils.HiError e
+    | exception (Sct_checker_forward.SCTError { err = e; _ } ) ->
         Format.printf "Failed as expected %s: %a@." f Utils.pp_hierror
           { e with err_loc = Lnone }
     | _ -> assert false

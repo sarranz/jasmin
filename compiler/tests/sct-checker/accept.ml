@@ -8,8 +8,8 @@ let load_and_check name =
   Format.printf "File %s:@." name;
   let p = load_file (Filename.concat path name) in
   match ty_prog Arch.is_ct_sopn p [] with
-  | exception Utils.HiError e ->
-      Format.eprintf "%a@." Utils.pp_hierror e;
+  | exception SCTError e ->
+      Format.eprintf "%a@." Utils.pp_hierror e.err;
       exit 1
   | r -> List.iter (Format.printf "%a@." pp_funty) r
 

@@ -18,7 +18,7 @@ let pp_expr fmt e = Printer.pp_expr ~debug:false fmt e
 let pp_lval fmt x = Printer.pp_lval ~debug:false fmt x
 
 let pp_vset fmt xs =
-  Format.fprintf fmt "@[{ %a }@]" (pp_list ",@ " pp_var) (Sv.elements xs)
+  Format.fprintf fmt "{@[ %a @]}" (pp_list ",@ " pp_var) (Sv.elements xs)
 
 (* ----------------------------------------------------------- *)
 
@@ -28,22 +28,25 @@ type sct_error = {
 }
 exception SCTError of sct_error
 
-let error ~loc ?funname ?sub_kind ?(internal=false) ?(info=Sv.empty) =
-  let mk pp =
-    let err =
-      {
-        err_msg = pp;
-        err_loc = Lone loc;
-        err_funname = funname;
-        err_kind = "speculative constant type checker";
-        err_sub_kind = sub_kind;
-        err_internal = internal;
-      }
-    in
-    let sct_err = { err; info } in
-    raise (SCTError sct_err)
+let mk_error ~loc ?funname ?sub_kind ?(internal=false) ?(info=Sv.empty) pp =
+  let err =
+    {
+      err_msg = pp;
+      err_loc = loc;
+      err_funname = funname;
+      err_kind = "speculative constant type checker";
+      err_sub_kind = sub_kind;
+      err_internal = internal;
+    }
   in
-  Format.kdprintf mk
+  let sct_err = { err; info } in
+  raise (SCTError sct_err)
+
+let error ~loc ?funname ?sub_kind ?(internal=false) ?(info=Sv.empty) =
+  Format.kdprintf (mk_error ~loc:(Lone loc) ?funname ?sub_kind ~internal ~info)
+
+let error_i ~loc ?funname ?sub_kind ?(internal=false) ?(info=Sv.empty) =
+  Format.kdprintf (mk_error ~loc:(Lmore loc) ?funname ?sub_kind ~internal ~info)
 
 let pp_sct_error fmt err =
   Format.fprintf fmt "err = %a\ninfo = %a@."
@@ -939,7 +942,7 @@ end
 (* Type checking of lvalue                                   *)
 type msf_e = MSF.t * Env.venv
 
-let ty_lval env ((msf, venv) as msf_e : msf_e) x ety : msf_e =
+let ty_lval env (loc : L.t) ((msf, venv) as msf_e : msf_e) x ety : msf_e =
   (* First path the type ety to make it consistant with the variable info *)
   match x with
   | Lnone _ -> msf_e
@@ -999,11 +1002,11 @@ let ty_lval env ((msf, venv) as msf_e : msf_e) x ety : msf_e =
       in
       msf, Env.set_ty env venv x xty
 
-let ty_lvals1 env (msf_e : msf_e) xs ety : msf_e =
-  List.fold_left (fun msf_e x -> ty_lval env msf_e x ety) msf_e xs
+let ty_lvals1 env (loc : L.t) (msf_e : msf_e) xs ety : msf_e =
+  List.fold_left (fun msf_e x -> ty_lval env loc msf_e x ety) msf_e xs
 
-let ty_lvals env (msf_e : msf_e) xs tys : msf_e =
-  List.fold_left2 (ty_lval env) msf_e xs tys
+let ty_lvals env (loc : L.t) (msf_e : msf_e) xs tys : msf_e =
+  List.fold_left2 (ty_lval env loc) msf_e xs tys
 
 
 (* -------------------------------------------------------------- *)
@@ -1061,14 +1064,14 @@ let rec ty_instr is_ct_asm fenv env ((msf,venv) as msf_e :msf_e) i =
     assert (match o with Syscall_t.RandomBytes _ -> true);
     List.iter (ensure_public_address_expr env venv loc) es;
     (* We don't known what happen to MSF after external function call *)
-    ty_lvals1 env (MSF.toinit, venv) xs (Env.dsecret env)
+    ty_lvals1 env loc (MSF.toinit, venv) xs (Env.dsecret env)
 
   | Cassgn(mso, _, _, (Pvar x as msi)) when MSF.is_msf msf x.gv ->
     move_msf ~loc env msf_e mso msi
 
   | Cassgn(x, _, _, e) ->
     let ety = ty_expr env venv loc e in
-    ty_lval env msf_e x (declassify_ty env i.i_annot ety)
+    ty_lval env loc msf_e x (declassify_ty env i.i_annot ety)
 
   | Copn(xs, _, o, es) ->
     begin match is_special o, xs, es with
@@ -1084,7 +1087,7 @@ let rec ty_instr is_ct_asm fenv env ((msf,venv) as msf_e :msf_e) i =
       let mso = reg_lval ~direct:true loc mso and msi = reg_expr ~direct:true loc msi in
       (* do not check b, if check_msf_trans succeed then b is public *)
       MSF.check_msf_trans msf msi b;
-      let _, venv = ty_lvals1 env (msf, venv) xs (Env.dpublic env) in
+      let _, venv = ty_lvals1 env loc (msf, venv) xs (Env.dpublic env) in
       MSF.exact1 mso, venv
 
     | Update_msf, _, _ -> assert false
@@ -1103,7 +1106,7 @@ let rec ty_instr is_ct_asm fenv env ((msf,venv) as msf_e :msf_e) i =
         | Direct (n, _) -> Direct (n, n)
         | Indirect ((n, _), le) -> Indirect ((n, n), le) in
 
-      ty_lval env msf_e x xty
+      ty_lval env loc msf_e x xty
 
     | Protect, _, _ -> assert false
 
@@ -1115,7 +1118,7 @@ let rec ty_instr is_ct_asm fenv env ((msf,venv) as msf_e :msf_e) i =
     | Other, _, _  ->
       let public = not (CT.is_ct_sopn is_ct_asm o) in
       let ety = ty_exprs_max ~public env venv loc es in
-      ty_lvals1 env msf_e xs (declassify_ty env i.i_annot ety)
+      ty_lvals1 env loc msf_e xs (declassify_ty env i.i_annot ety)
     end
 
   | Cif(e, c1, c2) ->
@@ -1137,7 +1140,7 @@ let rec ty_instr is_ct_asm fenv env ((msf,venv) as msf_e :msf_e) i =
       let msf = MSF.loop env i.i_loc msf in
       (* let w, _ = written_vars [i] in *)
       let venv1 = Env.freshen env venv in (* venv <= venv1 *)
-      let msf_e = ty_lval env (msf, venv1) (Lvar x) (Env.dpublic env) in
+      let msf_e = ty_lval env loc (msf, venv1) (Lvar x) (Env.dpublic env) in
       let (msf', venv') = ty_cmd is_ct_asm fenv env msf_e c in
       let msf' = MSF.end_loop loc msf msf' in
       Env.ensure_le loc venv' venv1; (* venv' <= venv1 *)
@@ -1199,7 +1202,7 @@ let rec ty_instr is_ct_asm fenv env ((msf,venv) as msf_e :msf_e) i =
         match vfty with
         | IsMsf -> Env.dpublic env
         | IsNormal ty -> declassify_ty env i.i_annot ty in
-      let (msf, venv) = ty_lval env msf_e x ty in
+      let (msf, venv) = ty_lval env loc msf_e x ty in
       let msf = if vfty = IsMsf then MSF.add (reg_lval ~direct:true loc x) msf else msf in
       (msf, venv) in
     let msf = if is_Modified modmsf then MSF.toinit else msf in
@@ -1461,7 +1464,7 @@ let init_constraint fenv f =
       in List.iter begin fun l ->
           try VlPairs.add_le (Env.public env, Env.secret env) l
           with Lvl.Unsat _unsat ->
-            error ~loc:(x.v_dloc) ~info:(Sv.singleton x)
+            error ~loc:(x.v_dloc)
               "security annotation for %a should be at least %s"
                  pp_var x stransient
         end lvls
@@ -1544,7 +1547,7 @@ and ty_fun_infer is_ct_asm fenv fn =
           VlPairs.add_le lp1 lp2; VlPairs.add_le le1 le2
         | _, _ -> assert false
       with Lvl.Unsat _unsat ->
-        error ~loc:(L.loc x) ~info:(Sv.singleton x)
+        error ~loc:(L.loc x) ~info:(Sv.singleton (L.unloc x))
           "return type for %a is %a it should be less than %a"
              pp_var_i x pp_vty ty1 pp_vty ty2 in
     match omsf with
