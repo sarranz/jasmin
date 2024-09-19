@@ -213,7 +213,11 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
 
   let slh_info up =
     let p = Conv.prog_of_cuprog up in
-    let ttbl = Sct_checker_forward.compile_infer_msf p in
+    let ttbl =
+      let open Sct_checker_forward in
+      try compile_infer_msf p
+      with SCTError(e) -> raise (HiError e.err)
+    in
     fun fn ->
       try Hf.find ttbl fn with Not_found -> assert false
   in

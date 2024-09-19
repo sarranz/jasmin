@@ -78,7 +78,8 @@ let parse_and_check arch call_conv should_slh_gen should_spill_msf =
     in
     match check ~doit infer ct_list speculative compile file with
     | () -> ()
-    | exception HiError e ->
+    | exception HiError e
+    | exception (Sct_checker_forward.SCTError { err = e; _ }) ->
         Format.eprintf "%a@." pp_hierror e;
         exit 1
 

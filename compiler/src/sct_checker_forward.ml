@@ -9,31 +9,6 @@ module S = Syntax
 
 (* ----------------------------------------------------------- *)
 
-type 'info sct_error = {
-  err : hierror;
-  info : 'info
-}
-exception 'info SCTError of 'info sct_error
-
-let error ~loc ?funname ?sub_kind ?(internal=false) ~(info : 'info) =
-  let mk pp =
-    let err =
-    {
-        err_msg = pp;
-        err_loc = Lone loc;
-        err_funname = funname;
-        err_kind = "speculative constant type checker";
-        err_sub_kind = sub_kind;
-        err_internal = internal;
-    }
-    in
-    let sct_err = { err; info } in
-    raise (SCTError sct_err)
-  in
-  Format.kdprintf mk
-
-(* ----------------------------------------------------------- *)
-
 let pp_var fmt x = Printer.pp_var ~debug:false fmt x
 
 let pp_var_i fmt x = pp_var fmt (L.unloc x)
@@ -43,7 +18,36 @@ let pp_expr fmt e = Printer.pp_expr ~debug:false fmt e
 let pp_lval fmt x = Printer.pp_lval ~debug:false fmt x
 
 let pp_vset fmt xs =
-  Format.fprintf fmt "{@[ %a @]}"  (pp_list ",@ " pp_var) (Sv.elements xs)
+  Format.fprintf fmt "@[{ %a }@]" (pp_list ",@ " pp_var) (Sv.elements xs)
+
+(* ----------------------------------------------------------- *)
+
+type sct_error = {
+  err : hierror;
+  info : Sv.t;
+}
+exception SCTError of sct_error
+
+let error ~loc ?funname ?sub_kind ?(internal=false) ?(info=Sv.empty) =
+  let mk pp =
+    let err =
+      {
+        err_msg = pp;
+        err_loc = Lone loc;
+        err_funname = funname;
+        err_kind = "speculative constant type checker";
+        err_sub_kind = sub_kind;
+        err_internal = internal;
+      }
+    in
+    let sct_err = { err; info } in
+    raise (SCTError sct_err)
+  in
+  Format.kdprintf mk
+
+let pp_sct_error fmt err =
+  Format.fprintf fmt "err = %a\ninfo = %a@."
+    pp_hierror err.err pp_vset err.info
 
 
 (* ----------------------------------------------------------- *)
@@ -623,6 +627,7 @@ end = struct
     let add_le_silent _ oty1 oty2 = add_le_var (oget oty1) (oget oty2); None in
     try ignore (Mv.merge add_le_silent venv1.vtype venv2.vtype)
     with Lvl.Unsat _unsat ->
+      (* TODO: Specify info. *)
       error ~loc "constraints caused by the loop cannot be satisfied"
 
   let clone_for_call (env:env) (tyfun:ty_fun) =
@@ -684,8 +689,8 @@ end
 
 
 (* --------------------------------------------------------- *)
-let error_unsat loc (_ : Lvl.t list * Lvl.t * Lvl.t) pp e ety ety' =
-  error ~loc
+let error_unsat loc info (_ : Lvl.t list * Lvl.t * Lvl.t) pp e ety ety' =
+  error ~loc ~info
     "%a has type %a but should be at most %a"
     pp e pp_vty ety pp_vty ety'
 
@@ -773,7 +778,9 @@ and ensure_smaller env venv loc e l =
   match ety with
   | Direct le | Indirect (le, _) ->
     try VlPairs.add_le le l
-    with Lvl.Unsat unsat -> error_unsat loc unsat pp_expr e ety (Direct l)
+    with Lvl.Unsat unsat ->
+      let info = vars_e e in
+      error_unsat loc info unsat pp_expr e ety (Direct l)
 
 and ensure_public env venv loc e = ensure_smaller env venv loc e (Env.public2 env)
 
@@ -782,7 +789,9 @@ and ensure_public_address env venv loc x =
   match ety with
   | Direct _ -> () (* stack or reg arrays have public addresses by definition *)
   | Indirect (le, _) -> try VlPairs.add_le le (Env.public2 env)
-      with Lvl.Unsat unsat -> error_unsat loc unsat pp_var_i x ety (Direct (Env.public2 env))
+      with Lvl.Unsat unsat ->
+        let info = Sv.singleton (L.unloc x) in
+        error_unsat loc info unsat pp_var_i x ety (Direct (Env.public2 env))
 
 and ty_exprs_max ~(public:bool) env venv loc es : vty =
   let l = if public then Env.public2 env else Env.fresh2 env in
@@ -1028,8 +1037,11 @@ let ensure_public_address_expr env venv loc e =
   let ety = ty_expr env venv loc e in
   match ety with
   | Direct _ -> ()
-  | Indirect (le, _) -> try VlPairs.add_le le (Env.public2 env)
-      with Lvl.Unsat unsat -> error_unsat loc unsat pp_expr e ety (Direct (Env.public2 env))
+  | Indirect (le, _) ->
+      try VlPairs.add_le le (Env.public2 env)
+      with Lvl.Unsat unsat ->
+        let info = vars_e e in
+        error_unsat loc info unsat pp_expr e ety (Direct (Env.public2 env))
 
 (* --------------------------------------------------------------- *)
 let move_msf ~loc env (msf, venv) mso msi =
@@ -1172,7 +1184,10 @@ let rec ty_instr is_ct_asm fenv env ((msf,venv) as msf_e :msf_e) i =
         | Direct le, Indirect (_, le') -> VlPairs.add_le le le'
         | Indirect(lp, le), Direct le' -> VlPairs.add_le lp (Env.public2 env); VlPairs.add_le le le'
         | Indirect(lp, le), Indirect(lp', le') -> VlPairs.add_le lp lp'; VlPairs.add_le le le'
-        with Lvl.Unsat unsat -> error_unsat loc unsat pp_expr e ety ety' in
+        with Lvl.Unsat unsat ->
+          let info = vars_e e in
+          error_unsat loc info unsat pp_expr e ety ety'
+    in
     List.iter2 input_ty es tyin;
 
     (* callee function has its own effect on this function corruption *)
@@ -1292,8 +1307,8 @@ let parse_user_constraints (a:annotations) : (string * string) list =
     A.error ~loc
       "attribute for %s should be a string" sconstraints in
 
-   List.flatten
-     (List.map snd (A.process_annot [sconstraints, A.on_attribute ~on_string error] a))
+  A.process_annot [sconstraints, A.on_attribute ~on_string error] a
+  |> List.concat_map snd
 
 let init_constraint fenv f =
   let sig_annot = SecurityAnnotations.get_sct_signature f.f_annot.f_user_annot in
@@ -1446,7 +1461,7 @@ let init_constraint fenv f =
       in List.iter begin fun l ->
           try VlPairs.add_le (Env.public env, Env.secret env) l
           with Lvl.Unsat _unsat ->
-            error ~loc:(x.v_dloc)
+            error ~loc:(x.v_dloc) ~info:(Sv.singleton x)
               "security annotation for %a should be at least %s"
                  pp_var x stransient
         end lvls
@@ -1529,7 +1544,7 @@ and ty_fun_infer is_ct_asm fenv fn =
           VlPairs.add_le lp1 lp2; VlPairs.add_le le1 le2
         | _, _ -> assert false
       with Lvl.Unsat _unsat ->
-        error ~loc:(L.loc x)
+        error ~loc:(L.loc x) ~info:(Sv.singleton x)
           "return type for %a is %a it should be less than %a"
              pp_var_i x pp_vty ty1 pp_vty ty2 in
     match omsf with

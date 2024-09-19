@@ -36,16 +36,17 @@ let protect_loc (mk_protect : 'a Slh_gen.mk_protectT) (p : (unit, 'asm) prog)
 let protect_gen is_ct_sopn (mk_protect : 'a Slh_gen.mk_protectT)
     (p : (unit, 'asm) prog) (entries : Name.t list) : (unit, 'asm) prog =
   let rec doit n p =
+    let open Sct_checker_forward in
     if n < 0 then p
     else
       try
-        ignore (Sct_checker_forward.ty_prog is_ct_sopn p entries);
+        ignore (ty_prog is_ct_sopn p entries);
         Format.eprintf "Done.@.";
         p
-      with Sct_checker_forward.sct_error e -> (
-        Format.eprintf "Found error: %a\n@." Utils.pp_hierror e;
+      with SCTError(e) ->
+        Format.eprintf "Found error:\n%a\n@." pp_sct_error e;
         match e.err.err_loc with
-        | Lone loc -> protect_loc mk_protect p loc e.info |> doit (n - 1)
-        | _ -> assert false)
+        | Lone loc -> protect_loc mk_protect p loc |> doit (n - 1)
+        | _ -> assert false
   in
   doit 1000 p

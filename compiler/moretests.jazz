@@ -22,9 +22,17 @@ fn protect_store_one_mem_caller(#transient reg u64 p) {
     protect_store_one_mem1(p);
 }
 
-fn protect_store_one_ptr(
-  reg ptr u64[3] p, reg ptr u64[3] w, reg u64 i
-) -> reg ptr u64[3] {
+fn load(reg ptr u64[3] p, reg u64 i) -> reg u64 {
+    i = p[i];
+    return i;
+}
+
+fn return_annot(reg ptr u64[3] p, reg u64 i) -> #public reg u64 {
+    i = load(p, i);
+    return i;
+}
+
+fn protect_store_one_ptr(reg ptr u64[3] p w, reg u64 i) -> reg ptr u64[3] {
     reg u64 x y;
     x = p[i];
     y = 0;
@@ -32,8 +40,7 @@ fn protect_store_one_ptr(
     return w;
 }
 
-fn protect_store_two_ptr
-    (reg ptr u64[3] p, reg ptr u64[3] w, reg u64 i) -> reg ptr u64[3] {
+fn protect_store_two_ptr(reg ptr u64[3] p w, reg u64 i) -> reg ptr u64[3] {
     reg u64 x y;
     x = p[i];
     y = x;
@@ -41,3 +48,14 @@ fn protect_store_two_ptr
     return w;
 }
 
+// Expect a protect inside the loop.
+fn loop(reg ptr u64[3] p w) -> reg ptr u64[3] {
+    reg u64 i x;
+    x = 0;
+    i = 0;
+    while (i < 3) {
+        p[x] = 0;
+        x = p[i];
+    }
+    return p;
+}
