@@ -8,6 +8,32 @@ module CT = Ct_checker_forward
 module S = Syntax
 
 (* ----------------------------------------------------------- *)
+
+type 'info sct_error = {
+  err : hierror;
+  info : 'info
+}
+exception 'info SCTError of 'info sct_error
+
+let error ~loc ?funname ?sub_kind ?(internal=false) ~(info : 'info) =
+  let mk pp =
+    let err =
+    {
+        err_msg = pp;
+        err_loc = Lone loc;
+        err_funname = funname;
+        err_kind = "speculative constant type checker";
+        err_sub_kind = sub_kind;
+        err_internal = internal;
+    }
+    in
+    let sct_err = { err; info } in
+    raise (SCTError sct_err)
+  in
+  Format.kdprintf mk
+
+(* ----------------------------------------------------------- *)
+
 let pp_var fmt x = Printer.pp_var ~debug:false fmt x
 
 let pp_var_i fmt x = pp_var fmt (L.unloc x)
@@ -183,9 +209,6 @@ and modmsf_c fenv c =
   List.map (modmsf_i fenv) c
   |> List.find_opt is_Modified
   |> Option.default NotModified
-
-let error ~loc =
-  hierror ~loc:(Lone loc) ~kind:"speculative constant type checker"
 
 let warn ~loc = warning SCTchecker (L.i_loc0 loc)
 

@@ -143,6 +143,13 @@ let main () =
       else prog
     in
 
+    let prog =
+      if !target_arch = X86_64 && !should_slh_gen then
+        let msf_var, prog = Slh_gen.add_slh prog !should_spill_msf in
+        Protect.protect_gen Arch.is_ct_sopn msf_var prog []
+      else prog
+    in
+
     (* The source program, before any compilation pass. *)
     let source_prog = prog in
 

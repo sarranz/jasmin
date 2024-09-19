@@ -1,0 +1,43 @@
+// Expect no protect.
+fn protect_store_one_mem_public(#public reg u64 p) {
+    [p] = 0;
+}
+
+// Expect one protect.
+fn protect_store_one_mem_transient(#transient reg u64 p) {
+    [p] = 0;
+}
+
+// Expect no protect.
+fn protect_store_one_mem(reg u64 p) {
+    [p] = 0;
+}
+
+// Expect one protect because of the caller.
+fn protect_store_one_mem1(reg u64 p) {
+    [p] = 0;
+}
+
+fn protect_store_one_mem_caller(#transient reg u64 p) {
+    protect_store_one_mem1(p);
+}
+
+fn protect_store_one_ptr(
+  reg ptr u64[3] p, reg ptr u64[3] w, reg u64 i
+) -> reg ptr u64[3] {
+    reg u64 x y;
+    x = p[i];
+    y = 0;
+    w[x + y] = 0;
+    return w;
+}
+
+fn protect_store_two_ptr
+    (reg ptr u64[3] p, reg ptr u64[3] w, reg u64 i) -> reg ptr u64[3] {
+    reg u64 x y;
+    x = p[i];
+    y = x;
+    w[x + y] = 0;
+    return w;
+}
+

@@ -113,6 +113,9 @@ type call_conv = Linux | Windows
 
 let call_conv = ref Linux (* Default value is chosen on start-up in `main_compiler` *)
 
+let should_slh_gen = ref false
+let should_spill_msf = ref false
+
 let set_cc cc = 
   let cc = 
     match cc with
@@ -217,7 +220,9 @@ let options = [
     "-stack-zero-size",
       Arg.Symbol (List.map fst Annot.ws_strings, set_stack_zero_size),
       " Select stack zeroization size for export functions";
-    "-pliveness", Arg.Set print_liveness, " Print liveness information during register allocation"
+    "-pliveness", Arg.Set print_liveness, " Print liveness information during register allocation";
+    ("-slh-gen", Arg.Set should_slh_gen, " enable slh_gen");
+    ("-spill-msf", Arg.Set should_spill_msf, " enable msf spilling to mmx");
   ] @  List.map print_option Compiler.compiler_step_list @ List.map stop_after_option Compiler.compiler_step_list
 
 let usage_msg = "Usage : jasminc [option] filename"
