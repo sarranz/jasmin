@@ -254,10 +254,74 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
 
   (* TODO_RSB: We should use the function name to check if the user provided the
      tree in an annotation. *)
+  (* Create a sorted binary tree with [n] internal nodes labeled
+     [get_label pos, get_label pos+1, ..., get_label pos+n-1].
+     When [n] is 2, [go_left] decides to which side the child node goes.
+
+     For each function f, we assign a unique tag to each call site of f.
+     This function will receive the tag it's supposed to return to in an MMX
+     register.
+     We use this register to decide where to jump via a tree.
+     For example:
+     Tags (one per call site): 1 2 4 6 8 9
+
+                         --LT--> JMP 1, update wrt LT
+                         |
+           --LT--> CMP 2 --EQ--> JMP 2, update wrt EQ
+           |             |
+           |             --GT--> JMP 4, CMP again, update wrt EQ
+           |
+     CMP 6 --EQ--> JMP 6, update wrt EQ
+           |
+           --GT--> CMP 8 --EQ--> JMP 8, update wrt EQ
+                         |
+                         --GT--> JMP 9, update wrt GT
+
+     The leaves are [JMP]s and the internal nodes [CMP]s, each edge is labeled
+     with the condition it corresponds to.
+
+     I'll refer to the value in MMX as the return tag, that's where we're
+     supposed to go.
+     The identifiers for the return sites are tags.
+     I'll refer to leaves as [EQ], [LT], or [GT] depending on the annotation of
+     their arrow.
+
+     Note that for [EQ] leaves, we don't need to do an extra [CMP] in the
+     caller.
+     The only jump to this return site is in this table, so we are guaranteed
+     that the flags were set by the [CMP] immediately before the jump (the
+     parent of the leave).
+
+     This is not true for the other leaves. Take a [LT] leaf: at the return
+     site, we are guaranteed that the return tag is less than the one for this
+     call site, but not that they are equal. For example, say the return tag is
+     9. After [CMP 6], we should go to the [GT] branch, but we misspeculate and
+     go to the [LT] one. Then we [CMP 2], and correctly take the [GT] branch (2
+     < tag = 9). At the return site, we know that the return tag is greater than
+     2, but nothing else.
+
+     We can optimize this for the minimum and maximum tag:
+     If they fall in an EQ, we don't need to redo the [CMP].
+     If they don't, take for instance the minimum (1). At its return site, the
+     flags will tell if the return tag is less than the second tag (tag < 2),
+     but there is only one possible tag less than that: the minimum (only 1 is
+     less than 2 in [1, 2, 4, 6, 8, 9]). Same goes for the maximum, we will
+     compare against the second largest element and if we get [GT] we know it
+     can only be the maximum.
+
+     This means that we should try to avoid putting the minimum/maximum tag as
+     an [EQ] leaf: that way we'll get two leaves that don't need to redo the
+     [CMP].
+
+     To construct the tree in such a way:
+     1. Take the middle tag ([floor(length / 2) + 1] in this case 4), compare
+        against it.
+     2. If [EQ], [JMP].
+     3. If [LT], repeat with the left half of the tags (using
+        [floor(length / 2) + 1]).
+     4. Else, repeat with the right half of the tags (using
+        [floor(length / 2)]). *)
   let pc_return_tree fn ris =
-    (* Create a sorted binary tree with [n] internal nodes labeled
-       [get_label pos, get_label pos+1, ..., get_label pos+n-1].
-       When [n] is 2, [go_left] decides to which side the child node goes. *)
     let rec tree_structure pos go_left get_label n =
       let empty = Utils0.BTleaf in
       let node x t0 t1 = Utils0.BTnode(get_label x, t0, t1) in
