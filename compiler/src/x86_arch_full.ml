@@ -64,6 +64,8 @@ module X86_core = struct
     | ANDN _ -> true
     | BSWAP _ -> false (* Not DOIT *)
     | BT _ -> true
+    | BTR _ -> true
+    | BTS _ -> true
     | CLC -> false (* Not DOIT *)
     | CLFLUSH -> false (* Not DOIT *)
     | CMOVcc _ -> true
@@ -73,8 +75,8 @@ module X86_core = struct
     | DIV _ -> false (* Not DOIT *)
     | IDIV _ -> false (* Not DOIT *)
     | IMUL _ -> true
-    | IMULr _ -> false (* Not DOIT *)
-    | IMULri _ -> false (* Not DOIT *)
+    | IMULr _ -> true
+    | IMULri _ -> true
     | INC _ -> true
     | LEA _ -> true
     | LFENCE -> false (* Not DOIT *)
