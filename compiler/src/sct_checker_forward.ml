@@ -636,8 +636,8 @@ end = struct
         Mv.add x ty vtype) venv.vars venv.vtype }
 
   let pp_venv fmt venv =
-      let pp fmt (x, ty) = Format.fprintf fmt "%a -> %a" pp_var x pp_vty ty in
-      Format.fprintf fmt "@[<hov>{%a}@]" (pp_list ",@. " pp) (Mv.bindings venv.vtype)
+      let pp fmt x ty = Format.fprintf fmt "%a -> %a@." pp_var x pp_vty ty in
+      Format.fprintf fmt "@[<hov>{%a}@]" (fun fmt -> Mv.iter (pp fmt)) venv.vtype
 
   let ensure_le loc venv1 venv2 =
     let add_le_silent _ oty1 oty2 = add_le_var (oget oty1) (oget oty2); None in
@@ -1320,15 +1320,17 @@ let rec ty_instr is_ct_asm fenv env ((msf,venv) as msf_e :msf_e) i =
 and ty_cmd is_ct_asm fenv env msf_e c =
   let f (msf, venv) i =
     let print = Annotations.has_symbol "debugsct" i.i_annot in
+    Glob_options.debug := true;
     if print then
       Format.printf
-        "==== Checking %a ====\nBEFORE:@.%a@ %a\n"
+        "==== Checking %a ====\nBEFORE:@.%a@ %a@."
         L.pp_iloc i.i_loc
         MSF.pp msf
         Env.pp_venv venv;
     let msf', venv' = ty_instr is_ct_asm fenv env (msf, venv) i in
     if print then
       Format.printf "AFTER:@.%a@ %a\n@." MSF.pp msf' Env.pp_venv venv';
+    Glob_options.debug := false;
     (msf', venv')
   in
   List.fold_left f msf_e c
