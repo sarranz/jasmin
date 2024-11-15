@@ -1,0 +1,8 @@
+export
+fn ldrsh(reg u32 arg) -> reg u32 {
+    reg u32 x;
+    ?{}, x = #LDRSHS((u16)[arg]);
+    reg u32 res;
+    res = x;
+    return res;
+}

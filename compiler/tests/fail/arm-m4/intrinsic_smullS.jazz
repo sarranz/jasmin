@@ -1,0 +1,10 @@
+export
+fn smull(reg u32 arg0, reg u32 arg1) -> reg u32 {
+    reg u32 x, y;
+    ?{}, x, y = #SMULLS(arg0, arg1);
+
+    reg u32 res;
+    res = x;
+    return res;
+}
+

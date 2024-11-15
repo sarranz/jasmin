@@ -1,0 +1,10 @@
+export
+fn ldrsb(reg u32 arg) -> reg u32 {
+    reg u32 x;
+
+    ?{}, x = #LDRSBS((u8)[arg]);
+
+    reg u32 res;
+    res = x;
+    return res;
+}

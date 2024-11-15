@@ -1,0 +1,4 @@
+export
+fn str(reg u32 arg0, reg u32 arg1) {
+    ?{}, [arg0] = #STRS(arg0);
+}

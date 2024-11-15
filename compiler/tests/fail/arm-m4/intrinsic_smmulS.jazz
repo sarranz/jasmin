@@ -1,0 +1,9 @@
+export
+fn smmul(reg u32 arg0, reg u32 arg1) -> reg u32 {
+    reg u32 x;
+    ?{}, x = #SMMULS(arg0, arg1);
+    reg u32 res;
+    res = x;
+    return res;
+}
+

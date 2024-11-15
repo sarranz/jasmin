@@ -1,0 +1,10 @@
+export
+fn uxtb(reg u32 arg0) -> reg u32 {
+    reg u32 x;
+    reg bool nf, zf, vf, cf;
+
+    ?{}, x = #UXTBS(arg0, 0);
+    reg u32 res;
+    res = x;
+    return res;
+}

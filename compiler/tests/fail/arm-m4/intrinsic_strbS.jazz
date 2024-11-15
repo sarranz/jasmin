@@ -1,0 +1,4 @@
+export
+fn strb(reg u32 arg0, reg u32 arg1) {
+    ?{}, (u8)[arg0] = #STRBS(arg0);
+}

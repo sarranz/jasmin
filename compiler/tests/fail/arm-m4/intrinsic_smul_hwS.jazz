@@ -1,0 +1,6 @@
+export
+fn smul_hw(reg u32 x y) -> reg u32 {
+    reg u32 r;
+    ?{}, r = #SMULBBS(x, y);
+    return r;
+}

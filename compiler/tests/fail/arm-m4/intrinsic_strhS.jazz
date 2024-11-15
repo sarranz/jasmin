@@ -1,0 +1,4 @@
+export
+fn strh(reg u32 arg0, reg u32 arg1) {
+    ?{}, (u16)[arg0] = #STRHS(arg0);
+}

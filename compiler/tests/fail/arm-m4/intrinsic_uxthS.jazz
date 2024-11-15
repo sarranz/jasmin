@@ -1,0 +1,9 @@
+export
+fn uxth(reg u32 arg0) -> reg u32 {
+    reg u32 x;
+    reg bool nf, zf, vf, cf;
+    ?{}, x = #UXTHS(arg0, 0);
+    reg u32 res;
+    res = x;
+    return res;
+}

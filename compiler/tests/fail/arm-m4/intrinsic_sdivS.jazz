@@ -1,0 +1,9 @@
+export
+fn sdiv(reg u32 arg0, reg u32 arg1) -> reg u32 {
+    reg u32 x;
+    ?{}, x = #SDIVS(arg0, arg1);
+    reg u32 res;
+    res = x;
+    return res;
+}
+

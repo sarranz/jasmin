@@ -1,0 +1,6 @@
+export
+fn bfi(reg u32 x y) -> reg u32 {
+    ?{}, y = #BFIS(y, x, 0, 1);
+    y = y;
+    return y;
+}

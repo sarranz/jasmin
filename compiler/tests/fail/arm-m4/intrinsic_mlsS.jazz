@@ -1,0 +1,6 @@
+export
+fn main(reg u32 x y z) -> reg u32 {
+    x = #MLSS(x, y, z);
+    return x;
+}
+

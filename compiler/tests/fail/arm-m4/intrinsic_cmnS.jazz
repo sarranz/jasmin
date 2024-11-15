@@ -1,0 +1,9 @@
+export
+fn cmn(reg u32 arg0 arg1 p) {
+    reg bool n, z, c, v;
+    reg u32 x;
+    x = 0;
+    n, z, c, v = #CMNS(arg0, arg1);
+    x = 1 if n;
+    [p] = x;
+}

@@ -1,0 +1,6 @@
+export
+fn rev(reg u32 x) -> reg u32 {
+  reg u32 y;
+  ?{}, y = #REVS(x);
+  return y;
+}

@@ -1,0 +1,9 @@
+export
+fn movt() -> reg u32 {
+    reg u32 x;
+    x = 0;
+    ?{}, x = #MOVTS(x, 0);
+    reg u32 res;
+    res = x;
+    return res;
+}

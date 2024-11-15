@@ -1,0 +1,8 @@
+export
+fn umlal(reg u32 arg0, reg u32 arg1) -> reg u32 {
+    reg u32 x, y;
+    ?{}, x, y = #UMLALS(x, y, arg0, arg1);
+    reg u32 res;
+    res = x;
+    return res;
+}
