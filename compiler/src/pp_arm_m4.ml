@@ -221,7 +221,11 @@ end = struct
     | MOV -> chk_imm_w16_encoding args 1 opts
     | AND | BIC | EOR | ORR -> chk_imm_reject_shift args 2
     | MVN | TST -> chk_imm_reject_shift args 1
-    | _ -> ""
+    | MUL | MLA | MLS | SDIV | UDIV | UMULL | UMAAL | UMLAL | SMULL | SMLAL
+    | SMMUL | SMMULR | SMUL_hw _ | SMLA_hw _ | SMULW_hw _ | BFC | BFI | ASR
+    | LSL | LSR | ROR | REV | REV16 | REVSH | ADR | MOVT | UBFX | UXTB | UXTH
+    | SBFX | CLZ | LDR | LDRB | LDRH | LDRSB | LDRSH | STR | STRB | STRH
+      -> ""
 end
 
 let pp_instr fn i =
