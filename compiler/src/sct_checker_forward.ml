@@ -715,7 +715,12 @@ end = struct
   let set_unspill env venv xs =
     let add venv (x:var_i) =
       (* Values spilled to MMX registers are guaranteed to be public. *)
-      Option.map_default (get_i venv) (dpublic env) (get_spilled env x)
+      let mmx =
+        match get_i venv x with
+        | Direct _ -> dpublic env
+        | Indirect(_, lc) -> Indirect(public2 env, lc)
+      in
+      Option.map_default (get_i venv) mmx (get_spilled env x)
       |> set_ty env venv x
    in
    List.fold_left add venv xs

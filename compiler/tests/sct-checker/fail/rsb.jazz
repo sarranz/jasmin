@@ -337,7 +337,15 @@ fn pointed_data_is_transient() {
 }
 
 #sct="secret -> secret"
-fn spill_secret_mmx(#spill_to_mmx reg u64 sec) -> reg u64{
+fn spill_secret_mmx(#spill_to_mmx reg u64 sec) -> reg u64 {
+    () = #spill(sec);
+    do_nothing();
+    () = #unspill(sec);
+    return sec;
+}
+
+#sct="transient -> transient"
+fn spill_transient_mmx(#spill_to_mmx reg u64 sec) -> reg u64 {
     () = #spill(sec);
     do_nothing();
     () = #unspill(sec);
@@ -351,3 +359,21 @@ fn spill_not_mmx() {
     () = #unspill(x);
     leak_u64(x);
 }
+
+#sct="{ptr: transient, val: secret} -> {ptr: transient, val: secret}"
+fn spill_secret_ptr_mmx(#spill_to_mmx reg ptr u64[1] sec) -> reg ptr u64[1] {
+    () = #spill(sec);
+    do_nothing();
+    () = #unspill(sec);
+    return sec;
+}
+
+#sct="{ptr: public, val: public} -> {ptr: public, val: public}"
+fn spill_not_ptr_mmx(reg ptr u64[1] x) -> reg ptr u64[1] {
+    () = #spill(x);
+    do_nothing();
+    () = #unspill(x);
+    x[0] = 0;
+    return x;
+}
+

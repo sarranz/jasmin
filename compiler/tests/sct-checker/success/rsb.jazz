@@ -218,10 +218,8 @@ fn call_in_for(#transient reg u64 x) -> #public reg u64 {
 }
 */
 
-#[
-  test=nosct,
-  sct="{ptr: public, val: secret} -> {ptr: public, val: secret}"
-]
+#test=nosct
+#sct="{ptr: public, val: secret} -> {ptr: public, val: secret}"
 fn f(reg ptr u32[1] x) -> reg ptr u32[1] {
     return x;
 }
@@ -240,4 +238,13 @@ fn spill_mmx() {
     do_nothing();
     () = #unspill(x);
     leak_u64(x);
+}
+
+#sct="{ptr: public, val: secret} -> {ptr: public, val: secret}"
+fn spill_ptr_mmx(#spill_to_mmx reg ptr u64[1] x) -> reg ptr u64[1] {
+    () = #spill(x);
+    do_nothing();
+    () = #unspill(x);
+    x[0] = 0;
+    return x;
 }
