@@ -482,6 +482,24 @@ output corruption: #public
  constraints:
 
 
+nomodmsf f : #[ptr = public, val = secret] ->
+#[ptr = public, val = secret]
+output corruption: #public
+ constraints:
+
+
+modmsf public_slice : #[ptr = public, val = secret] ->
+#[ptr = public, val = secret]
+output corruption: #public
+ constraints:
+
+
+modmsf spill_mmx :  ->
+
+output corruption: #public
+ constraints:
+
+
 File spill.jazz:
 nomodmsf spill1 : #public * #secret ->
 #public

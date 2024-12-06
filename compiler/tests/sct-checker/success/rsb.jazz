@@ -217,3 +217,27 @@ fn call_in_for(#transient reg u64 x) -> #public reg u64 {
     return x;
 }
 */
+
+#[
+  test=nosct,
+  sct="{ptr: public, val: secret} -> {ptr: public, val: secret}"
+]
+fn f(reg ptr u32[1] x) -> reg ptr u32[1] {
+    return x;
+}
+
+// The checker needs to realize that the x does not become transient.
+fn public_slice(reg ptr u32[1] x) -> reg ptr u32[1] {
+    inline int i;
+    x[0:1] = f(x[0:1]);
+    x[0] = 1;
+    return x;
+}
+
+fn spill_mmx() {
+    #spill_to_mmx reg u64 x = 0;
+    () = #spill(x);
+    do_nothing();
+    () = #unspill(x);
+    leak_u64(x);
+}

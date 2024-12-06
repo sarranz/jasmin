@@ -50,6 +50,8 @@ Failed as expected overwrite: speculative constant type checker: x cannot become
                               (x >u ((64u) 0)))
 Failed as expected fail: speculative constant type checker: MSF is not Trans
 File rsb.jazz:
+Failed as expected spill_not_mmx: speculative constant type checker: x has type #transient but should be at most #public
+Failed as expected spill_secret_mmx: speculative constant type checker: sec has type #secret but should be at most #public
 Failed as expected pointed_data_is_transient: speculative constant type checker: p has type #[ptr = public, val = transient] but should be at most #[ptr = public, val = public]
 Failed as expected inline_int_leaks: speculative constant type checker: i has type #transient but should be at most #public
 Failed as expected inline_bool_leaks: speculative constant type checker: b has type #transient but should be at most #public

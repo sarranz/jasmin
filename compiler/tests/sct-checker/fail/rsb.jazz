@@ -335,3 +335,19 @@ fn pointed_data_is_transient() {
 
     leak_u64(x);
 }
+
+#sct="secret -> secret"
+fn spill_secret_mmx(#spill_to_mmx reg u64 sec) -> reg u64{
+    () = #spill(sec);
+    do_nothing();
+    () = #unspill(sec);
+    return sec;
+}
+
+fn spill_not_mmx() {
+    reg u64 x = 0;
+    () = #spill(x);
+    do_nothing();
+    () = #unspill(x);
+    leak_u64(x);
+}

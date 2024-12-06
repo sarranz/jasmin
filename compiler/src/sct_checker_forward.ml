@@ -226,6 +226,11 @@ and modmsf_c fenv c =
 let error ~loc =
   hierror ~loc:(Lone loc) ~kind:"speculative constant type checker"
 
+let error_unsat loc (_ : Lvl.t list * Lvl.t * Lvl.t) pp e ety ety' =
+  error ~loc
+    "%a has type %a but should be at most %a"
+    pp e pp_vty ety pp_vty ety'
+
 let warn ~loc = warning SCTchecker (L.i_loc0 loc)
 
 (* --------------------------------------------------------- *)
@@ -688,19 +693,30 @@ end = struct
     Hv.add env.spilled x sx;
     sx
 
+  let ensure_public_var env venv loc x =
+    let ty = get_i venv x in
+    let pub = public2 env in
+    match ty with
+    | Direct le | Indirect(le, _) ->
+      try VlPairs.add_le le pub
+      with Lvl.Unsat unsat ->
+        error_unsat loc unsat pp_var_i x ty (Direct pub)
+
   let set_spill env venv xs =
     let add venv (x:var_i) =
-      Option.map_default (fun sx ->
-          let ty = get_i venv x in
-          set_ty env venv sx ty) venv (get_spilled env x)
+      (* Values spilled to MMX registers are guaranteed to be public. *)
+      let ty = get_i venv x in
+      match get_spilled env x with
+      | None -> ensure_public_var env venv (L.loc x) x; venv
+      | Some sx -> set_ty env venv sx ty
     in
     List.fold_left add venv xs
 
   let set_unspill env venv xs =
     let add venv (x:var_i) =
-      Option.map_default (fun sx ->
-      let ty = get_i venv sx in
-      set_ty env venv x ty) venv (get_spilled env x)
+      (* Values spilled to MMX registers are guaranteed to be public. *)
+      Option.map_default (get_i venv) (dpublic env) (get_spilled env x)
+      |> set_ty env venv x
    in
    List.fold_left add venv xs
   (* TODO_RSB: This makes MSFs transient. We assumed that this never happened,
@@ -713,7 +729,7 @@ end = struct
     let constant_lvars =
       let is_constant_lval i x =
         match x with
-        | Lvar x | Laset (_, _, _, x, _) -> begin
+        | Lvar x | Laset(_, _, _, x, _) | Lasub(_, _, _, x, _) -> begin
             try if List.at guaranteed_public i then Some (L.unloc x) else None
             with Invalid_argument _ -> assert false
           end
@@ -756,10 +772,6 @@ end
 
 
 (* --------------------------------------------------------- *)
-let error_unsat loc (_ : Lvl.t list * Lvl.t * Lvl.t) pp e ety ety' =
-  error ~loc
-    "%a has type %a but should be at most %a"
-    pp e pp_vty ety pp_vty ety'
 
 let ssafe_test x aa ws i =
   let x = L.unloc x in
@@ -860,7 +872,6 @@ and ty_exprs_max ~(public:bool) env venv loc es : vty =
   let l = if public then Env.public2 env else Env.fresh2 env in
   List.iter (fun e -> ensure_smaller env venv loc e l) es;
   Direct l
-
 
 (* ------------------------------------------------------------- *)
 (* Compare expressions up to constant folding *)
