@@ -1,0 +1,7 @@
+export
+fn bad_inline_int(reg ptr u32[1] p) -> reg u32 {
+    reg u32 x = 0;
+    inline int i = (int)x;
+    x = p.[i];
+    return x;
+}

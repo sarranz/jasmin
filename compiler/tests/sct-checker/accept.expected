@@ -482,6 +482,12 @@ output corruption: #public
  constraints:
 
 
+modmsf call_in_for : #transient ->
+#public
+output corruption: #public
+ constraints:
+
+
 nomodmsf f : #[ptr = public, val = secret] ->
 #[ptr = public, val = secret]
 output corruption: #public
@@ -496,6 +502,12 @@ output corruption: #public
 
 modmsf spill_mmx :  ->
 
+output corruption: #public
+ constraints:
+
+
+modmsf spill_ptr_mmx : #[ptr = public, val = secret] ->
+#[ptr = public, val = secret]
 output corruption: #public
  constraints:
 
