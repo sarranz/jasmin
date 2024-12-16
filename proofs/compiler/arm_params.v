@@ -25,10 +25,6 @@ Require Import
   arm_lowering
   arm_stack_zeroization.
 
-Set Implicit Arguments.
-Unset Strict Implicit.
-Unset Printing Implicit Defensive.
-
 Section Section.
 Context {atoI : arch_toIdent}.
 

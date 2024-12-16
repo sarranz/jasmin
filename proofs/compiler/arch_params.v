@@ -13,10 +13,6 @@ Require
   stack_zeroization
   slh_lowering.
 
-Set Implicit Arguments.
-Unset Strict Implicit.
-Unset Printing Implicit Defensive.
-
 
 Record lowering_params
   `{asmop : asmOp} (lowering_options : Type) :=

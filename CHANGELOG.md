@@ -7,6 +7,23 @@
   parts of global addresses
   ([PR#921](https://github.com/jasmin-lang/jasmin/pull/921)).
 
+- Extraction to EasyCrypt can now be done after a given compilation pass using
+  `--after` command-line argument
+  ([PR#972](https://github.com/jasmin-lang/jasmin/pull/972)).
+
+- While instructions now have two pieces of information (including locations)
+  attached to them: one corresponding to the whole instruction, the other one
+  corresponding to the guard condition
+  ([PR #969](https://github.com/jasmin-lang/jasmin/pull/969);
+  fixes [#902](https://github.com/jasmin-lang/jasmin/issues/902)).
+
+
+
+## Bug fixes
+
+- Fix EasyCrypt semantics of shift operators
+  ([PR#973](https://github.com/jasmin-lang/jasmin/pull/973)).
+
 ## Other changes
 
 - The deprecated legacy interface to the LATEX pretty-printer has been removed
@@ -17,8 +34,11 @@
   ([PR #846](https://github.com/jasmin-lang/jasmin/pull/846)).
 
 - Extraction to Easycrypt is now available as a separate `jasmin2ec` tool; the
-  `-ec`, `-oec`, `-oecarray` and `-CT` command-line options are deprecated
-  ([PR #914](https://github.com/jasmin-lang/jasmin/pull/914)).
+  `-ec`, `-oec`, `-oecarray` and `-CT` command-line options are deprecated.
+  The `jasmin2ec` tool uses a new set of theories in `eclib` for extracting array operations, and supports a new extraction for leakage based on local variables.
+  ([PR #914](https://github.com/jasmin-lang/jasmin/pull/914),
+  [PR #952](https://github.com/jasmin-lang/jasmin/pull/952),
+  [PR #967](https://github.com/jasmin-lang/jasmin/pull/967)).
 
 - The “allocation” pass now uses the liveness information to reduce the sizes
   of the tables it uses internally; it should be faster on large functions
@@ -61,7 +81,7 @@
   ([PR #948](https://github.com/jasmin-lang/jasmin/pull/948);
   fixes [#931](https://github.com/jasmin-lang/jasmin/issues/931)).
 
-- Correcting shift in location produced by multiline string annotations 
+- Correcting shift in location produced by multiline string annotations
   ([PR #959](https://github.com/jasmin-lang/jasmin/pull/959);
   fixes [#943](https://github.com/jasmin-lang/jasmin/issues/943)).
 
