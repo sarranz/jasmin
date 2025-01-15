@@ -397,7 +397,7 @@ output corruption: #public
  constraints:
 
 
-nomodmsf return_public_public_ptr : #[ptr = public, val = { n = t, s = t}] ->
+nomodmsf return_public_mmx_ptr : #[ptr = public, val = { n = t, s = t}] ->
 #[ptr = public, val = { n = t, s = t}]
 output corruption: #public
  constraints:

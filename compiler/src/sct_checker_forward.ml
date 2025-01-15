@@ -1497,7 +1497,7 @@ let init_constraint fenv f =
            are public even when uninitialized. *)
         | (Stack Direct | Reg (Normal, Direct)) when is_local -> Direct (Env.secret2 env)
         | (Stack Direct | Reg (_, Direct)) -> Direct (Env.fresh2 env)
-        | (Stack (Pointer _) | Reg (_, Pointer _)) when is_local -> Indirect(Env.secret2 env, Env.fresh2 env)
+        | (Stack (Pointer _) | Reg (Normal, Pointer _)) when is_local -> Indirect(Env.secret2 env, Env.fresh2 env)
         | (Stack (Pointer _) | Reg (_, Pointer _)) -> Indirect(Env.fresh2 env, Env.fresh2 env)
         | Inline -> Env.dpublic env
         | Global -> Env.dpublic env (* unsure *)
