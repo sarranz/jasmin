@@ -1493,9 +1493,9 @@ let init_constraint fenv f =
       | None ->
         begin match x.v_kind with
         | Const -> Env.dpublic env
-        (* TODO_RSB: No secret data can flow into MMX registers, so perhaps we
-           can assume that they are public even when uninitialized. *)
-        | (Stack Direct | Reg (_, Direct)) when is_local -> Direct (Env.secret2 env)
+        (* No secret data can flow into MMX registers, so we assume that they
+           are public even when uninitialized. *)
+        | (Stack Direct | Reg (Normal, Direct)) when is_local -> Direct (Env.secret2 env)
         | (Stack Direct | Reg (_, Direct)) -> Direct (Env.fresh2 env)
         | (Stack (Pointer _) | Reg (_, Pointer _)) when is_local -> Indirect(Env.secret2 env, Env.fresh2 env)
         | (Stack (Pointer _) | Reg (_, Pointer _)) -> Indirect(Env.fresh2 env, Env.fresh2 env)

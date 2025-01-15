@@ -367,8 +367,8 @@ output corruption: #public
  constraints:
 
 
-nomodmsf id : #poly = { n = ?907, s = ?906} ->
-#poly = { n = ?907, s = ?906}
+nomodmsf id : #poly = { n = ?911, s = ?910} ->
+#poly = { n = ?911, s = ?910}
 output corruption: #public
  constraints:
 
