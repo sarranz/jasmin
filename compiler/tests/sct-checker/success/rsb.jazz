@@ -166,6 +166,7 @@ fn write_mmx_protected(#transient reg u64 x, #msf reg u64 msf) -> #mmx reg u64 {
 }
 
 fn public_return_is_public() {
+    #mmx reg u64 m = 0;
     reg u64 x;
 
     stack u64[1] a;
@@ -179,7 +180,6 @@ fn public_return_is_public() {
     x = return_public_register();
     leak_u64(x);
 
-    #mmx reg u64 m;
     m = return_public_mmx();
     x = m;
     leak_u64(x);

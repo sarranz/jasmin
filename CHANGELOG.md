@@ -17,12 +17,18 @@
   ([PR #969](https://github.com/jasmin-lang/jasmin/pull/969);
   fixes [#902](https://github.com/jasmin-lang/jasmin/issues/902)).
 
-
-
 ## Bug fixes
 
 - Fix EasyCrypt semantics of shift operators
   ([PR#973](https://github.com/jasmin-lang/jasmin/pull/973)).
+
+- Fix EC extraction in case on nested loops
+  ([PR #971](https://github.com/jasmin-lang/jasmin/pull/971)).
+
+- The speculative constant-time checker rejects more programs, considering that
+  different source-level local variables may be merged during the compilation
+  process
+  ([PR#989](https://github.com/jasmin-lang/jasmin/pull/989)).
 
 ## Other changes
 
@@ -43,6 +49,18 @@
 - The “allocation” pass now uses the liveness information to reduce the sizes
   of the tables it uses internally; it should be faster on large functions
   ([PR #965](https://github.com/jasmin-lang/jasmin/pull/965)).
+
+- Compiling the OCaml source code no longer requires `-rectypes`
+  ([PR #980](https://github.com/jasmin-lang/jasmin/pull/980)).
+
+- The printer to LATEX shows a comment informing about jasmin.sty support file
+  ([PR #976](https://github.com/jasmin-lang/jasmin/pull/976) and
+  [PR #986](https://github.com/jasmin-lang/jasmin/pull/986)).
+
+- The (speculative) constant-time checkers now ignores `#strict` and `#flex`
+  annotations: all variables are considered “flexible”, i.e., have a
+  flow-sensitive type
+  ([PR #990](https://github.com/jasmin-lang/jasmin/pull/990)).
 
 # Jasmin 2024.07.2 — Nancy, 2024-11-21
 

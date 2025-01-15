@@ -61,14 +61,14 @@ output corruption: #public
  constraints:
 
 
-modmsf safe_access : #public * #poly = { n = d, s = secret} ->
-#poly = { n = d, s = secret}
+modmsf safe_access : #public * #secret ->
+#secret
 output corruption: #public
  constraints:
 
 
-modmsf safe_direct_access : #public * #poly = { n = d, s = secret} ->
-#poly = { n = d, s = secret}
+modmsf safe_direct_access : #public * #secret ->
+#secret
 output corruption: #public
  constraints:
 
@@ -207,13 +207,6 @@ output corruption: #public
 
 
 modmsf for_inference_bug2 : #transient ->
-#public
-output corruption: #public
- constraints:
-
-
-File local-stack-array.jazz:
-modmsf main :  ->
 #public
 output corruption: #public
  constraints:
@@ -374,8 +367,8 @@ output corruption: #public
  constraints:
 
 
-nomodmsf id : #poly = { n = ?1087, s = ?1086} ->
-#poly = { n = ?1087, s = ?1086}
+nomodmsf id : #poly = { n = ?907, s = ?906} ->
+#poly = { n = ?907, s = ?906}
 output corruption: #public
  constraints:
 
