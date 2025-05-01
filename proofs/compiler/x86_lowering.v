@@ -160,6 +160,7 @@ Variant lower_cassgn_t : Type :=
   | LowerIf   of stype & pexpr & pexpr & pexpr
   | LowerDivMod of divmod_pos & signedness & wsize & sopn & pexpr & pexpr
   | LowerConcat of pexpr & pexpr
+  | LowerMaskedAccess of sopn & pexpr & pexpr
   | LowerAssgn.
 
 (* -------------------------------------------------------------------- *)
@@ -199,15 +200,15 @@ Definition mulr sz a b :=
     end
  end.
 
-  Definition check_shift_amount sz e :=
-    if is_wconst U8 e is Some n
-    then if n == wand n (x86_shift_mask sz) then Some e else None
-    else match e with
-    | Papp2 (Oland _) a b =>
-        if is_wconst U8 b is Some n
-        then if n == x86_shift_mask sz then Some a else None
-        else None
-    | _ => None end.
+Definition check_shift_amount sz e :=
+  if is_wconst U8 e is Some n
+  then if n == wand n (x86_shift_mask sz) then Some e else None
+  else match e with
+  | Papp2 (Oland _) a b =>
+      if is_wconst U8 b is Some n
+      then if n == x86_shift_mask sz then Some a else None
+      else None
+  | _ => None end.
 
 Definition check_signed_range (m: option wsize) sz' (n: Z) : bool :=
   if m is Some ws then (
@@ -216,23 +217,49 @@ Definition check_signed_range (m: option wsize) sz' (n: Z) : bool :=
       if h <=? z then z <? -h else false)%Z
   else false.
 
+Definition lower_cassgn_classify_Pvar_Pget x ty e sz v :=
+  if (sz ≤ U64)%CMP
+  then LowerMov (if is_var_in_memory v then is_lval_in_memory x else false)
+  else if ty is sword szo
+  then if (U128 ≤ szo)%CMP then LowerCopn (Ox86 (VMOVDQU szo)) [:: e ]
+  else if (U32 ≤ szo)%CMP then LowerCopn (Ox86 (MOVV szo)) [:: e ]
+  else LowerAssgn
+  else LowerAssgn.
+
+Definition is_masked_access (e : pexpr) : option (pexpr * pexpr) :=
+  if e is Papp1 (Oint_of_word Unsigned _) (Papp2 (Oland _) e1 e2)
+  then Some (e1, e2)
+  else None.
+
 (* x =(ty) e *)
-Definition lower_cassgn_classify ty e x : lower_cassgn_t :=
+Definition lower_cassgn_classify ii ty e x : lower_cassgn_t :=
   let chk (b: bool) r := if b then r else LowerAssgn in
   let kb b sz := chk (b && (sword sz == ty)) in
   let k8 sz := kb (sz ≤ U64)%CMP sz in
   let k16 sz := kb ((U16 ≤ sz) && (sz ≤ U64))%CMP sz in
   let k32 sz := kb ((U32 ≤ sz) && (sz ≤ U64))%CMP sz in
   match e with
-  | Pget _ _ sz {| gv := v |} _
   | Pvar {| gv := ({| v_var := {| vtype := sword sz |} |} as v) |} =>
-    if (sz ≤ U64)%CMP
-    then LowerMov (if is_var_in_memory v then is_lval_in_memory x else false)
-    else if ty is sword szo
-    then if (U128 ≤ szo)%CMP then LowerCopn (Ox86 (VMOVDQU szo)) [:: e ]
-    else if (U32 ≤ szo)%CMP then LowerCopn (Ox86 (MOVV szo)) [:: e ]
-    else LowerAssgn
-    else LowerAssgn
+      lower_cassgn_classify_Pvar_Pget x ty e sz v
+  | Pget _ _ sz {| gv := v |} e' =>
+    let c := lower_cassgn_classify_Pvar_Pget x ty e sz v in
+    if ii_masked_access ii
+    then
+      if is_masked_access e' is Some (e1, e2)
+      then
+        match c with
+        | LowerMov false =>
+            if ty is sword szo then
+              LowerMaskedAccess (Ox86 (MOV szo)) e1 e2
+            else c
+        | LowerCopn op _ => LowerMaskedAccess op e1 e2
+        | _ => c
+        end
+      else
+        if x is Laset _ _ _ _ e'
+        then if is_masked_access e' then c else c
+        else c
+    else c
   | Pload _ sz _ _ =>
       if (sz ≤ U64)%CMP
       then LowerMov (is_lval_in_memory x)
@@ -423,7 +450,7 @@ Definition lower_cassgn (ii:instr_info) (x: lval) (tg: assgn_tag) (ty: stype) (e
   let f := Lnone_b vi in
   let copn o a := [:: MkI ii (Copn [:: x ] tg o a) ] in
   let inc o a := [:: MkI ii (Copn [:: f ; f ; f ; f ; x ] tg o [:: a ]) ] in
-  match lower_cassgn_classify ty e x with
+  match lower_cassgn_classify ii ty e x with
   | LowerMov b =>
     let szty := wsize_of_stype ty in
     let e := reduce_wconst szty e in
@@ -513,6 +540,13 @@ Definition lower_cassgn (ii:instr_info) (x: lval) (tg: assgn_tag) (ty: stype) (e
     [:: MkI ii (Copn [:: x ] tg (Oasm (ExtOp Oconcat128)) [:: h ; l ]) ]
 
   | LowerAssgn => [::  MkI ii (Cassgn x tg ty e)]
+
+  | LowerMaskedAccess op e emask =>
+      let c := {| v_var := fresh_word Uptr; v_info := vi; |} in
+      let and :=
+        opn_5flags (Some U32) U64 vi f (Lvar c) tg (Ox86 (AND Uptr)) [:: e; emask ]
+      in
+      map (MkI ii) and ++ copn op [:: Pvar (mk_lvar c) ]
   end.
 
 (* Lowering of Oaddcarry

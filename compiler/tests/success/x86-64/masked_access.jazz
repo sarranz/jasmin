@@ -1,0 +1,30 @@
+export fn exact(reg ptr u32[256] a, reg u32 x) -> reg ptr u32[256] {
+    #masked_access x = a[x & 0xff];
+    #masked_access a[x & 0xff] = x;
+    return a;
+}
+
+export fn smaller(reg ptr u32[256] a, reg u32 x) -> reg ptr u32[256] {
+    #masked_access x = a[x & 0xf];
+    #masked_access a[x & 0xf] = x;
+    return a;
+}
+
+export fn smaller_non_pow2(reg ptr u32[10] a, reg u32 x) -> reg ptr u32[10] {
+    #masked_access x = a[x & 0x3];
+    #masked_access a[x & 0x3] = x;
+    return a;
+}
+
+export fn greater(reg ptr u32[257] a, reg u32 x) -> reg ptr u32[257] {
+    #masked_access x = a[x & 0xff];
+    #masked_access x = a[x & 0xff];
+    return a;
+}
+
+export fn runtime(reg ptr u32[257] a, reg u32 x y) -> reg ptr u32[257] {
+    #masked_access x = a[x & y];
+    #masked_access a[x & y] = x;
+    return a;
+}
+
