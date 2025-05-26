@@ -4,6 +4,8 @@
    Each architecture provides the mapping
       [shp_lower : seq lval -> slh_op -> seq pexpr -> option copn_args]
    to be used.
+   We require that this mapping is correct *only* in sequential execution, which
+   means that we need to track the value of the MSF.
 
    We use a "copy" of the same operators that is architecture-specific (e.g.
    in x86-64 [SLHinit] goes to [Ox86SLHinit], [SLHupdate] goes to
@@ -463,8 +465,7 @@ Fixpoint check_i (i : instr) (env : Env.t) : cexec Env.t :=
 Definition check_cmd (env : Env.t) (c : cmd) : cexec Env.t :=
   rec_check_cmd check_i c env.
 
-Definition check_fd
-   (fn:funname) (fd : fundef) : cexec unit :=
+Definition check_fd (fn:funname) (fd : fundef) : cexec unit :=
   let '(in_t, out_t) := fun_info fn in
   Let env := init_fun_env Env.empty (f_params fd) (f_tyin fd) in_t in
   Let env := check_cmd env (f_body fd) in
@@ -534,9 +535,7 @@ Definition lower_fd (fn:funname) (fd:fundef) :=
   Let c := lower_cmd c in
   ok (MkFun ii si p c so r ev).
 
-Definition is_shl_none ty :=
-  if ty is Slh_None then true
-  else false.
+Definition is_shl_none ty := if ty is Slh_None then true else false.
 
 Definition lower_slh_prog (entries : seq funname) (p : prog) : cexec prog :=
    Let _ := assert (all (fun f => all is_shl_none (fst (fun_info f))) entries)
