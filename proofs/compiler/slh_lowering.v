@@ -218,6 +218,10 @@ Context
   {fcparams : flag_combination.FlagCombinationParams}
   {pT : progT}.
 
+(* FIXME: move *)
+Definition is_Oslh (op : sopn) : option slh_op :=
+  if op is Oslh op then Some op else None.
+
 Section CHECK_SLHO.
 
   Definition check_e_msf ii env e :=
@@ -438,7 +442,7 @@ Fixpoint check_i (i : instr) (env : Env.t) : cexec Env.t :=
   | Cassgn lv _ _ _ => ok (Env.after_assign_vars env (vrv lv))
 
   | Copn lvs _ op es =>
-      if op is Oslh slho
+      if is_Oslh op is Some slho
       then check_slho ii lvs slho es env
       else ok (Env.after_assign_vars env (vrvs lvs))
 
@@ -483,11 +487,12 @@ Definition lower_slho
   (slho : slh_op)
   (es : seq pexpr) :
   cexec instr_r :=
-  if is_protect_ptr slho is Some p then
-       ok (Copn lvs tg (Oslh (SLHprotect_ptr_fail p)) es)
-  else if shp_lower shparams lvs slho es is Some args then
-       ok (instr_of_copn_args tg args)
-  else Error (E.lowering_failed ii).
+  Let args :=
+    if is_protect_ptr slho is Some p then
+      ok (lvs, Oslh (SLHprotect_ptr_fail p), es)
+    else o2r (E.lowering_failed ii) (shp_lower shparams lvs slho es)
+  in
+  ok (instr_of_copn_args tg args).
 
 Notation rec_cmd lower_i c := (mapM lower_i c).
 
@@ -500,7 +505,7 @@ Fixpoint lower_i (i : instr) : cexec instr :=
       ok ir
 
     | Copn lvs tg op es =>
-      if op is Oslh slho
+      if is_Oslh op is Some slho
       then lower_slho ii lvs tg slho es
       else ok ir
 

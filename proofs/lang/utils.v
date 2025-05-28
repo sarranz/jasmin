@@ -1933,8 +1933,8 @@ Ltac eq_rewrite h _ _ :=
 Ltac t_eq_rewrites := t_do_rewrites eq_rewrite.
 
 Ltac destruct_opn_args :=
-  repeat (t_xrbindP=> -[|?]; first done);
-  (t_xrbindP=> -[]; last done).
+  repeat (t_xrbindP=> -[|?] /=; first done);
+  (t_xrbindP=> -[] /=; last done).
 
 (* Attempt to prove [injective f] on [eqType]s by case analysis on the
    arguments. *)
