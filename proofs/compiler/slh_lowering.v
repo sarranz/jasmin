@@ -218,10 +218,6 @@ Context
   {fcparams : flag_combination.FlagCombinationParams}
   {pT : progT}.
 
-(* FIXME: move *)
-Definition is_Oslh (op : sopn) : option slh_op :=
-  if op is Oslh op then Some op else None.
-
 Section CHECK_SLHO.
 
   Definition check_e_msf ii env e :=
@@ -475,10 +471,6 @@ Definition check_fd (fn:funname) (fd : fundef) : cexec unit :=
   Let env := check_cmd env (f_body fd) in
   Let _ := check_res env (f_res fd) (f_tyout fd) out_t in
   ok tt.
-
-Definition is_protect_ptr (slho : slh_op) :=
-  if slho is SLHprotect_ptr p then Some p
-  else None.
 
 Definition lower_slho
   (ii : instr_info)
