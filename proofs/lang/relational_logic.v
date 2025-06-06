@@ -1864,48 +1864,30 @@ Context
   {asm_op: Type}
   {sip : SemInstrParams asm_op syscall_state}
   {pT1 pT2 pT3 : progT}
-  {wsw1 wsw2 wsw3: WithSubWord}
-  {scP1 : semCallParams (wsw:= wsw1) (pT := pT1)}
-  {scP2 : semCallParams (wsw:= wsw2) (pT := pT2)}
-  {scP3 : semCallParams (wsw:= wsw3) (pT := pT3)}
-  {dc1 dc2 dc3: DirectCall}.
+  {E E0 : Type -> Type}
+  {sem_F1 : sem_Fun (pT := pT1) E}
+  {sem_F2 : sem_Fun (pT := pT2) E}
+  {sem_F3 : sem_Fun (pT := pT3) E}
+  {wE : with_Error E E0}
+  {rE0 : EventRels E0}
+  (rE0_trans : EventRels_trans rE0)
+.
 
 Notation prog1 := (prog (pT := pT1)).
 Notation prog2 := (prog (pT := pT2)).
 Notation prog3 := (prog (pT := pT3)).
+Notation wequiv_f12 := (wequiv_f (sem_F1 := sem_F1) (sem_F2 := sem_F2)).
+Notation wequiv_f23 := (wequiv_f (sem_F1 := sem_F2) (sem_F2 := sem_F3)).
+Notation wequiv_f13 := (wequiv_f (sem_F1 := sem_F1) (sem_F2 := sem_F3)).
 
-Notation extra_val_t1 := (@extra_val_t pT1).
-Notation extra_val_t2 := (@extra_val_t pT2).
-Notation extra_val_t3 := (@extra_val_t pT3).
-
-Notation vm1_t := (Vm.t (wsw:=wsw1)).
-Notation vm2_t := (Vm.t (wsw:=wsw2)).
-Notation vm3_t := (Vm.t (wsw:=wsw3)).
-
-Notation estate1 := (estate (wsw:=wsw1) (ep:=ep)).
-Notation estate2 := (estate (wsw:=wsw2) (ep:=ep)).
-Notation estate3 := (estate (wsw:=wsw3) (ep:=ep)).
-
-Notation isem_fun1 := (isem_fun (wsw:=wsw1) (dc:=dc1) (ep:=ep) (spp:=spp) (sip:=sip) (pT:=pT1) (scP:= scP1)).
-Notation isem_fun2 := (isem_fun (wsw:=wsw2) (dc:=dc2) (ep:=ep) (spp:=spp) (sip:=sip) (pT:=pT2) (scP:= scP2)).
-Notation isem_fun3 := (isem_fun (wsw:=wsw3) (dc:=dc3) (ep:=ep) (spp:=spp) (sip:=sip) (pT:=pT3) (scP:= scP3)).
-
-Notation sem_Fun1 := (sem_Fun (pT:=pT1)).
-Notation sem_Fun2 := (sem_Fun (pT:=pT2)).
-Notation sem_Fun3 := (sem_Fun (pT:=pT3)).
-
-Context {E E0 : Type -> Type} {sem_F : sem_Fun E} {wE: with_Error E E0} {rE0 : EventRels E0}.
-
-Context (rE0_trans : EventRels_trans rE0).
-
-Lemma wiequiv_f_trans (p1 : prog1) (p2 : prog2) (p3 : prog3) ev1 ev2 ev3 fn1 fn2 fn3
+Lemma wequiv_f_trans (p1 : prog1) (p2 : prog2) (p3 : prog3) ev1 ev2 ev3 fn1 fn2 fn3
   rpreF12 rpreF23 rpreF13 rpostF12 rpostF23 rpostF13 :
    (forall fs1 fs3, rpreF13 fn1 fn3 fs1 fs3 -> exists2 fs2, rpreF12 fn1 fn2 fs1 fs2 & rpreF23 fn2 fn3 fs2 fs3) ->
    (forall fs1 fs2 fs3 r1 r3, rpreF12 fn1 fn2 fs1 fs2 -> rpreF23 fn2 fn3 fs2 fs3 ->
      rcompose (rpostF12 fn1 fn2 fs1 fs2) (rpostF23 fn2 fn3 fs2 fs3) r1 r3 → rpostF13 fn1 fn3 fs1 fs3 r1 r3) ->
-   wiequiv_f p1 p2 ev1 ev2 rpreF12 fn1 fn2 rpostF12 ->
-   wiequiv_f p2 p3 ev2 ev3 rpreF23 fn2 fn3 rpostF23 ->
-   wiequiv_f p1 p3 ev1 ev3 rpreF13 fn1 fn3 rpostF13.
+   wequiv_f12 p1 p2 ev1 ev2 rpreF12 fn1 fn2 rpostF12 ->
+   wequiv_f23 p2 p3 ev2 ev3 rpreF23 fn2 fn3 rpostF23 ->
+   wequiv_f13 p1 p3 ev1 ev3 rpreF13 fn1 fn3 rpostF13.
 Proof.
   move=> hpre hpost h1 h2 fs1 fs3 hpre13.
   have [fs2 hpre12 hpre23] := hpre _ _ hpre13.

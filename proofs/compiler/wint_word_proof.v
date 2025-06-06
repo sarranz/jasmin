@@ -481,7 +481,7 @@ Proof.
   rewrite /wi2w_prog; t_xrbindP => ok_pv <-.
   have := [elaborate it_alloc_call_uprogP ev (p_globs p) ok_pv (fn:= fn)].
   have := [elaborate it_wi2w_call_internalP (fn:=fn)].
-  apply wiequiv_f_trans => //.
+  apply wequiv_f_trans => //.
   + by move=> fs1 fs2 hpre; exists fs1 => //; split => //; split => //; apply List_Forall2_refl.
   move=> ??? fr1 fr3 _ _ [fr2] [heq1 heq2 hu1] [heq3 heq4 hu2]; split.
   + by rewrite heq1. + by rewrite heq2.

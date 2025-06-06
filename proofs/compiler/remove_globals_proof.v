@@ -998,7 +998,7 @@ Module RGP. Section PROOFS.
     set P1 := {| p_funcs := p_funcs P; p_globs := gd'; p_extra := p_extra P |}.
     have h2 := it_remove_glob_call (P:=P1) ev hfds huniq (wE:=wE) (rE:=rE0) (fn:=fn).
     move: h1 h2.
-    apply wiequiv_f_trans => //.
+    apply wequiv_f_trans => //.
     + by move=> fs1 fs2 [_ <-]; exists fs1.
     by move=> ??? fs1 fs3 _ _ [fs2] <- <-.
   Qed.
