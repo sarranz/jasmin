@@ -1594,11 +1594,51 @@ Proof. by apply it_sem_uincl_aux => //; move=> fn ?? h; apply it_sem_uincl_f. Qe
 
 End REFL.
 
-End  IT_UNDEFINCL.
+Context
+  {pT1 : progT}
+  {wsw1 : WithSubWord}
+  {scP1 : semCallParams (wsw := wsw1) (pT := pT1)}
+  {dc1 : DirectCall}
+  {E E0 : Type -> Type}
+  {wE : with_Error E E0}
+  {rE0 : EventRels E0}
+  {ERT : EventRels_trans rE0}
+  (p1 : prog (pT := pT1)) (p2 : prog (pT := pT))
+  (ev1 : extra_val_t (progT := pT1)) (ev2 : extra_val_t (progT := pT))
+  (fn1 fn2 : funname)
+.
+
+Notation sem_fun_full1 :=
+  (sem_fun_full (wsw:=wsw1) (dc:=dc1) (ep:=ep) (spp:=spp) (sip:=sip) (pT:=pT1) (scP:= scP1)).
+Notation sem_fun_full2 :=
+  (sem_fun_full (wsw:=wsw) (dc:=dc) (ep:=ep) (spp:=spp) (sip:=sip) (pT:=pT) (scP:= sCP)).
+Notation wiequiv_f := (wequiv_f (sem_F1 := sem_fun_full1) (sem_F2 := sem_fun_full2)).
+
+Lemma it_sem_refl_eq_uincl :
+  wiequiv_f p1 p2 ev1 ev2 (rpreF (eS := eq_spec)) fn1 fn2 (rpostF (eS := uincl_spec)) ->
+  wiequiv_f p1 p2 ev1 ev2 (rpreF (eS := uincl_spec)) fn1 fn2 (rpostF (eS := uincl_spec)).
+Proof.
+move=> h.
+apply: (
+  wequiv_f_trans
+    (sem_F1 := sem_fun_full1)
+    ERT
+    (p2 := p2) (ev2 := ev2) (fn2 := fn2)
+    (rpreF12 := rpreF (eS := eq_spec))
+    (rpreF23 := rpreF (eS := uincl_spec))
+    (rpostF12 := rpostF (eS := uincl_spec))
+    (rpostF23 := rpostF (eS := uincl_spec))
+    _ _ h
+).
+- move=> s1 s2 [<- hincl]; by exists s1.
+- move=> s1 s2 s3 s1' s3' [<- <-] [_ hincl] [s2' [?? hincl1'] [?? hincl2']].
+  split; [congruence | congruence|].
+  exact: Forall2_trans value_uincl_trans hincl1' hincl2'.
+exact: it_sem_uincl_f.
+Qed.
+
+End IT_UNDEFINCL.
 
 End WITH_PARAMS.
 
 End WSW.
-
-
-
