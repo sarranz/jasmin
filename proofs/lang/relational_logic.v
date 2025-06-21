@@ -2083,3 +2083,6 @@ Proof.
 Qed.
 
 End TRANSITIVITY.
+
+Notation pre_eq := (rpreF (eS := eq_spec)).
+Notation post_eq := (rpostF (eS := eq_spec)).
