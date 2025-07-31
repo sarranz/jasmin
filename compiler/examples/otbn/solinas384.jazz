@@ -1,0 +1,70 @@
+fn mul384(
+    reg u256 w9, // Upper half of a
+    reg u256 w8, // Lower half of a
+    reg u256 w11, // Upper half of b
+    reg u256 w10, // Lower half of b
+) -> reg u256, reg u256, reg u256 { // 768 bit result
+
+    reg u256 acc;
+    reg u256 w14;
+
+    acc += (w8.0 * w10.0) << 0; // Use .z somehow?
+    acc = (w8.0 * w10.1) << 64 + acc;
+    w14, acc = #mulqadd_soL(w8.0, w10.1, 64, acc);
+    ...
+
+    return (w16, w15, w14);
+}
+
+fn mul_k(
+    reg u256 w4, // input operand
+    reg u256 w31 // zero
+) -> reg u256, reg u256 { // 512 bit result
+
+    reg u256 w6;
+    reg bool cf0;
+
+    // Possible shifts are [0, 8, 16, 24, ..., 248]
+    cf0, _, _, _, w6 = w4 + (w4 << 128);
+    _, _, _, _, w7 = w31 + (w4 >> 128) + cf0;
+}
+
+export
+fn solinas384() {
+    reg u256 w9, // Upper half of a
+    reg u256 w8, // Lower half of a
+    reg u256 w11, // Upper half of b
+    reg u256 w10, // Lower half of b
+    reg u256 w13, // Upper half of m
+    reg u256 w12, // Lower half of m
+    reg u256 w31 // Zero
+) -> reg u256, reg u256 { // 386b result
+
+    reg u256 w14, w16, w15;
+
+    w16, w15, w14 = mul384(w9, w8, w11, w10);
+
+    reg u256 w30;
+    w30 = !w31;
+
+    reg u256 w4;
+    // Concatenate w16 and w15 and shift right.
+    // Possible shifts are [0..255]
+    // Compiles to bn.rshi w4, w16, w15 >> 128
+    w4 = [w16, w15] >> 128;
+
+    w16, w15, w14 = mul384(w9, w8, w11, w10);
+
+    // Compiles to bn.and  w15, w15, w30 >> 128
+    // Possible shifts are [0, 8, 16, 24, ..., 248]
+    w15 &= (w30 >> 128);
+
+    reg bool cf0;
+
+    // ...
+
+    // Compiles to bn.sel w29, w14, w29, C
+    w29 = cf0 ? w14 : w29;
+
+    return (w30, w29);
+}
