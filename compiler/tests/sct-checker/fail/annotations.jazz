@@ -1,0 +1,19 @@
+fn extra2_arg(#[public, public] reg u64 x) {}
+fn extra3_arg(#[public, secret, secret] reg u64 x) {}
+
+fn extra2_ret() -> #[public, public] reg u64 {
+    reg u64 x;
+    x = 0;
+    return x;
+}
+
+fn extra3_ret() -> #[public, secret, secret] reg u64 {
+    reg u64 x;
+    x = 0;
+    return x;
+}
+
+fn extra_msf_public(#[public, msf] reg u64 x) {}
+fn extra_msf_secret(#[secret, msf] reg u64 x) {}
+fn extra_msf_poly(#[poly=t, msf] reg u64 x) {}
+fn extra_msf_swap(#[msf, public] reg u64 x) {}
