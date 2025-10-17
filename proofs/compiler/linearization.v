@@ -294,18 +294,9 @@ Definition is_repeat_call
   then ok (xs, fn, es)
   else Error (E.ii_error ii "invalid repeat loop body").
 
-Definition linearize_for
-  (ii : instr_info)
-  (fi : for_iteration)
-  (c : cmd) :
-  cexec ((var_i + Z) * funname) :=
-  match fi with
-  | FIrange _ _ _ _ => Error (E.ii_error ii "for loop found in linear")
-  | FIrepeat e =>
-      Let count := repeat_call_count ii e in
-      Let: (lvs, fn, es) := is_repeat_call ii c in
-      ok (count, fn)
-  end.
+Definition linearize_for ii (fi : for_iteration) : cexec (var_i + Z) :=
+  if fi is FIrepeat e then repeat_call_count ii e
+  else Error (E.ii_error ii "for loop found in linear").
 
 Section PROG.
 
@@ -355,7 +346,7 @@ Definition frame_size (e: stk_fun_extra) : Z :=
     | Cif b c1 c2 =>
       check_fexpr ii b >> check_c check_i c1 >> check_c check_i c2
     | Cfor fi c =>
-        Let _ := linearize_for ii fi c in
+        Let _ := linearize_for ii fi in
         check_c check_i c
     | Cwhile _ c e c' =>
       match is_bool e with
@@ -627,9 +618,11 @@ Fixpoint linear_i (i:instr) (lbl:label) (lc:lcmd) :=
    (MkLI ii (Llabel L2) :: lc)
 
   | Cfor fi c =>
-      if linearize_for ii fi c is Ok (count, fn)
-      then (lbl, MkLI ii (Lrepeat_call count fn) :: lc)
-      else (xH, [::]) (* Never happens. *)
+      if linearize_for ii fi is Ok count then
+        let: (lbl', c') := linear_c linear_i c lbl [::] in
+        (lbl', MkLI ii (Lrepeat_call count c') :: lc)
+      else
+        (xH, [::]) (* absurd *)
 
   | Cwhile a c e c' =>
     match is_bool e with

@@ -42,5 +42,5 @@ module OTBN (Input : OTBN_input) : Arch_full.Core_arch = struct
   let pp_asm = Pp_otbn.print_prog
 
   (* TODO_OTBN: Fix this. *)
-  let callstyle = Arch_full.ByReg (Some X01)
+  let callstyle = Arch_full.StackDirect
 end

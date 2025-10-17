@@ -14,11 +14,13 @@ Context `{asmop:asmOp}.
 (* --------------------------------------------------------------------------- *)
 (* Syntax                                                                      *)
 
-Variant linstr_r :=
+Record gen_linstr A : Type := MkLI { li_ii : instr_info; li_i : A; }.
+
+Inductive linstr_r :=
   | Lopn   : lexprs -> sopn -> rexprs -> linstr_r
   | Lsyscall : syscall_t -> linstr_r
   | Lcall    : option var_i -> remote_label -> linstr_r 
-     (* Lcall ra lbl: 
+  (* Lcall ra lbl: 
         if ra = Some r the return adress is stored in r else on top of the stack *)
   | Lret     : linstr_r
   | Lalign : linstr_r
@@ -27,10 +29,10 @@ Variant linstr_r :=
   | Ligoto : rexpr -> linstr_r (* Absolute indirect jump *)
   | LstoreLabel : var -> label -> linstr_r
   | Lcond  : fexpr -> label -> linstr_r
-  | Lrepeat_call : (var_i + Z) -> funname -> linstr_r
+  | Lrepeat_call : (var_i + Z) -> seq (gen_linstr linstr_r) -> linstr_r
 .
 
-Record linstr : Type := MkLI { li_ii : instr_info; li_i : linstr_r }.
+Definition linstr := gen_linstr linstr_r.
 
 Definition lcmd := seq linstr.
 

@@ -49,9 +49,14 @@ and live_d weak d (s_o: Sv.t) =
 
   | Cfor(FIrange _, _) -> assert false
 
-  | Cfor(FIrepeat e, c) ->
-    let s_i, c = live_c weak c s_o in
-    Sv.union s_o (Sv.union (vars_e e) s_i), s_o, Cfor(FIrepeat e, c)
+  | Cfor(FIrepeat e, c') ->
+    let rec loop s_o =
+      let s_i', c' = live_c weak c' s_o in
+      if Sv.subset s_i' s_o then s_o, c'
+      else loop (Sv.union s_i' s_o) in
+    let s_i, c' = loop s_o in
+    let ve = vars_e e in
+    (Sv.union ve s_i), s_o, Cfor(FIrepeat e, c')
 
   | Cwhile(a,c,e,c') ->
     let ve = (vars_e e) in

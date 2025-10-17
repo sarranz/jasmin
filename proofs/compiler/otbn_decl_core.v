@@ -28,8 +28,8 @@ Variant register : Type :=
 Definition string_of_register (r : register) : string :=
   match r with
   | X00 => "x0"
-  | X01 => "ra"
-  | X02 => "sp"
+  | X01 => "x1"
+  | X02 => "x2"
   | X03 => "x3"
   | X04 => "x4"
   | X05 => "x5"

@@ -268,7 +268,17 @@ let pp_args op args =
   |> pp_args_flag_group op
   |> pp_args_mulqacc_selectors op
 
-let pp_instr fn i =
+let need_nop c' =
+    match List.last c' with
+    | REPEATCALL _ | LABEL _ -> true
+    | _ -> false
+    | exception (Invalid_argument _) -> true
+
+let notlbl = function
+  | LLabel _ -> false
+  | _ -> true
+
+let rec pp_instr fn i =
   let x0 = pp_register X00 in
   let ra = pp_register X01 in
   let sp = pp_register X02 in
@@ -304,24 +314,23 @@ let pp_instr fn i =
       | BNcond _ -> E.invalid_jcc ()
       end
 
+  (* TODO this shouldn't be needed, use call *)
   | JAL (X01, lbl) -> [ LInstr ("jal", [ ra; pp_remote_label lbl ]) ]
 
-  | CALL _ -> E.invalid_call ()
+  | CALL lbl -> [ LInstr ("jal", [ ra; pp_remote_label lbl ]) ]
 
   | JAL _ -> E.invalid_jal ()
 
-  | REPEATCALL(count, fn) ->
-    let scount, name =
+  | REPEATCALL(count, c) ->
+    let count, name =
       match count with
       | Datatypes.Coq_inl v -> (pp_register v, "loop")
       | Datatypes.Coq_inr cz -> (Z.to_string (Conv.z_of_cz cz), "loopi")
     in
-    let lbl = (fn, Conv.pos_of_int 1) in
-    [
-      LInstr(name, [scount; "2"]);
-      LInstr("  jal", [ra; pp_remote_label lbl]);
-      LInstr("  nop", []);
-    ]
+    let c' = pp_cmd fn c in
+    let c' = if need_nop c then c' @ [ LInstr("nop", []) ] else c' in
+    let num_c' = Format.sprintf "%i" (List.count_matching notlbl c') in
+    LInstr(name, [count; num_c']) :: c'
 
   | POPPC ->
       [ LInstr ("lw", [ ra; pp_address (Areg addr_rsp) ])
@@ -338,23 +347,23 @@ let pp_instr fn i =
       let args = pp_args op args in
       [ LInstr (name, args) ]
 
+and pp_cmd fn c = List.concat_map (pp_instr fn) c
+
 let pp_fun_pre fn fd =
   if fd.asm_fd_export then
-    let ra = pp_register X01 in
-    let sp = pp_register X02 in
+    (*let ra = pp_register X01 in
+    let sp = pp_register X02 in*)
     [ LLabel (mangle fn)
     ; LLabel fn
-    ; LInstr ("sw", [ ra; pp_address (Areg addr_rsp) ])
-    ; LInstr ("addi", [ sp; sp; pp_imm (Z.of_int (-4)) ])
+    (*; LInstr ("sw", [ ra; pp_address (Areg addr_rsp) ])
+    ; LInstr ("addi", [ sp; sp; pp_imm (Z.of_int (-4)) ])*)
     ]
   else []
 
-let pp_fun_pos fn fd = if fd.asm_fd_export then pp_instr fn POPPC else []
+let pp_fun_pos fn fd = if fd.asm_fd_export then [ LInstr ("ret", []) ] else []
 
 (* -------------------------------------------------------------------------- *)
 (* TODO_OTBN: This is generic. *)
-
-let pp_body fn cmd = List.concat_map (pp_instr fn) cmd
 
 let pp_fun (fn, fd) =
   let fn = fn.fn_name in
@@ -364,7 +373,7 @@ let pp_fun (fn, fd) =
     else []
   in
   let pre = pp_fun_pre fn fd in
-  let body = pp_body fn fd.asm_fd_body in
+  let body = pp_cmd fn fd.asm_fd_body in
   let pos = pp_fun_pos fn fd in
   head @ pre @ body @ pos
 

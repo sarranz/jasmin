@@ -515,6 +515,7 @@ Let c_of_low_cmd ii tag '(pre, lvs, op, es) :=
   map (i_of_low_instr ii tag) (rcons pre (lvs, op, es)).
 
 Fixpoint lower_i_aux (i : instr) : cexec cmd :=
+  let lower_i i := ok (if lower_i_aux i is Ok irs then irs else [:: i ]) in
   let '(MkI ii ir) := i in
   match ir with
   | Cassgn lv tag ty e =>
@@ -527,17 +528,17 @@ Fixpoint lower_i_aux (i : instr) : cexec cmd :=
       ok [:: oapp (i_of_low_instr ii tag) i oargs ]
 
   | Cif e c1 c2  =>
-      Let c1' := conc_mapM lower_i_aux c1 in
-      Let c2' := conc_mapM lower_i_aux c2 in
+      Let c1' := conc_mapM lower_i c1 in
+      Let c2' := conc_mapM lower_i c2 in
       ok [:: MkI ii (Cif e c1' c2') ]
 
   | Cfor fi c =>
-      Let c' := conc_mapM lower_i_aux c in
+      Let c' := conc_mapM lower_i c in
       ok [:: MkI ii (Cfor fi c') ]
 
   | Cwhile a c0 e c1 =>
-      Let c0' := conc_mapM lower_i_aux c0 in
-      Let c1' := conc_mapM lower_i_aux c1 in
+      Let c0' := conc_mapM lower_i c0 in
+      Let c1' := conc_mapM lower_i c1 in
       ok [:: MkI ii (Cwhile a c0' e c1') ]
 
   | Csyscall _ _ _

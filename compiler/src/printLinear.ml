@@ -31,7 +31,7 @@ let pp_label_kind fmt = function
   | InternalLabel -> ()
   | ExternalLabel -> F.fprintf fmt "#returnaddress "
 
-let pp_instr pd asmOp fmt i =
+let rec pp_instr pd asmOp fmt i =
   match i.li_i with
   | Lopn (lvs, op, es) ->
     let pp_cast fmt = function
@@ -54,13 +54,15 @@ let pp_instr pd asmOp fmt i =
   | Ligoto e -> F.fprintf fmt "IGoto %a" pp_rexpr e
   | LstoreLabel (x, lbl) -> F.fprintf fmt "%a = Label %a" pp_var x pp_label lbl
   | Lcond (e, lbl) -> F.fprintf fmt "If %a goto %a" pp_fexpr e pp_label lbl
-  | Lrepeat_call (count, fn) ->
+  | Lrepeat_call (count, c) ->
       let pp_count fmt c =
         match c with
         | Datatypes.Coq_inl v -> pp_var_i fmt v
         | Datatypes.Coq_inr cz -> Z.pp_print fmt (Conv.z_of_cz cz)
       in
-      Format.fprintf fmt "Call %s %a times" fn.P.fn_name pp_count count
+      Format.fprintf fmt "repeat %a { %a }" pp_count count (pp_code pd asmOp) c
+and
+  pp_code pd asmOp = pp_list ";@ " (pp_instr pd asmOp)
 
 let pp_param fmt x =
   let y = Conv.var_of_cvar x.E.v_var in
@@ -85,7 +87,7 @@ let pp_lfun pd asmOp fmt (fn, fd) =
     fn.P.fn_name
     (pp_list ",@ " pp_param) fd.lfd_arg
     (pp_list ",@ " pp_stype) fd.lfd_tyout
-    (pp_list ";@ " (pp_instr pd asmOp)) fd.lfd_body
+    (pp_code pd asmOp) fd.lfd_body
     (pp_return fd.lfd_export) fd.lfd_res
 
 let pp_prog pd asmOp fmt lp =

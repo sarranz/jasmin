@@ -530,7 +530,7 @@ Definition instr_desc (o:asm_op_msb_t) : instr_desc_t :=
 
 (* -------------------------------------------------------------------- *)
 (* Assembly language. *)
-Variant asm_i : Type :=
+Inductive asm_i : Type :=
   | ALIGN
   | LABEL of label_kind & label
   | STORELABEL of reg_t & label (* Store the address of a local label *)
@@ -542,7 +542,7 @@ Variant asm_i : Type :=
   | JAL of reg_t & remote_label (* Direct jump; return address is saved in a register *)
   | CALL of remote_label (* Direct jump; return address is saved at the top of the stack *)
   | POPPC (* Pop a destination from the stack and jump there, arm : POP PC, x86 : RET *)
-  | REPEATCALL of (reg + Z) & funname
+  | REPEATCALL of (reg + Z) & seq asm_i
   (* Instructions exposed at source-level *)
   | AsmOp  of asm_op_t' & asm_args
   | SysCall of syscall_t.

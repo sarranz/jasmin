@@ -495,8 +495,7 @@ Definition assemble_sopn rip ii (op: sopn) (outx : lexprs) (inx : rexprs) :=
 Definition is_not_app1 e : bool :=
   if e is Rexpr (Fapp1 _ _) then false else true.
 
-Definition assemble_i (rip : var) (i : linstr) : cexec (seq asm_i) :=
-  let '{| li_ii := ii; li_i := ir; |} := i in
+Fixpoint assemble_i (rip : var) ii (ir : linstr_r) : cexec (seq asm_i) :=
   match ir with
   | Lopn ds op es =>
       Let args := assemble_sopn rip ii op ds es in
@@ -536,17 +535,17 @@ Definition assemble_i (rip : var) (i : linstr) : cexec (seq asm_i) :=
       else Error (E.verror true "Not a register" ii r) in
       ok [:: JAL r l ]
 
-  | Lrepeat_call cnt fn =>
+  | Lrepeat_call cnt c =>
       Let cnt' :=
         match cnt with
         | inl x =>
-            if to_reg x is Some r
-            then ok (inl r)
+            if to_reg x is Some r then ok (inl r)
             else Error (E.verror true "Not a register" ii x)
         | inr z => ok (inr z)
         end : cexec (reg_t + Z)
       in
-      ok [:: REPEATCALL cnt' fn ]
+      Let c' := conc_mapM (fun i => assemble_i rip (li_ii i) (li_i i)) c in
+      ok [:: REPEATCALL cnt' c' ]
 
   | Lret =>
       ok [:: POPPC ]
@@ -556,8 +555,7 @@ Definition assemble_i (rip : var) (i : linstr) : cexec (seq asm_i) :=
 (* -------------------------------------------------------------------- *)
 (*TODO: use in whatever characterization using an lprog there is.*)
 Definition assemble_c rip (lc: lcmd) : cexec (seq asm_i) :=
-  Let c := mapM (assemble_i rip) lc in
-  ok (flatten c).
+  conc_mapM (fun i => assemble_i rip (li_ii i) (li_i i)) lc.
 
 (* -------------------------------------------------------------------- *)
 
