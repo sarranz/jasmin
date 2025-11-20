@@ -86,7 +86,6 @@ Definition pp_Sv (s:Sv.t) : pp_error :=
 Definition pp_neq {A:Type} (pp_a: A -> pp_error) e1 e2 (_: unit):=
   pp_hov [:: pp_a e1; pp_s "should be equal to"; pp_a e2].
 
-
 Definition cexec A := result pp_error_loc A.
 
 (* -------------------------------------------------------- *)
