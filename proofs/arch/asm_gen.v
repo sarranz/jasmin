@@ -455,6 +455,10 @@ Definition pp_caimm_checker_s checker :=
   | CAimmC_arm_0_8_16_24 => [:: pp_s "[0;8;16;24]"]
   | CAimmC_riscv_12bits_signed => [:: pp_s "[-2048, 2047]"]
   | CAimmC_riscv_5bits_unsigned => [:: pp_s "[0, 31]"]
+  | CAimmC_otbn_nbits s n =>
+      let '(lo, hi) := signedness_bounds s n in
+      [:: pp_s "["; pp_z lo; pp_s ", "; pp_z hi; pp_s ")"]
+  | CAimmC_otbn_mulqacc_shift => [:: pp_s "[0, 192] in steps of 64" ]
   end.
 
 Definition pp_arg_kind c :=

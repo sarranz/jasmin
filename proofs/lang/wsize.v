@@ -5,6 +5,7 @@
 From elpi.apps Require Import derive.std.
 From HB Require Import structures.
 From mathcomp Require Import ssreflect ssrfun ssrbool seq eqtype fintype.
+From mathcomp Require word.
 From Coq Require Import ZArith.
 Require Import strings utils.
 Import Utf8.
@@ -51,6 +52,12 @@ Variant pelem :=
 Variant signedness :=
   | Signed
   | Unsigned.
+
+(* open-closed bounds for n-bit word *)
+Definition signedness_bounds (s : signedness) (n : positive) : Z * Z :=
+  let n := Pos.to_nat n in
+  if s is Unsigned then (0%Z, word.modulus n)
+  else (- word.modulus (n-1), word.modulus (n-1))%Z.
 
 (* -------------------------------------------------------------------- *)
 HB.instance Definition _ := hasDecEq.Build signedness signedness_eqb_OK.

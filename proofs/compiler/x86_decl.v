@@ -293,7 +293,6 @@ Definition x86_check_CAimm (checker : caimm_checker_s) ws (w : word ws) : bool :
     false (* Only CAimmC_none is needed for x86 *)
   end.
 
-
 #[global]
 Instance x86_decl : arch_decl register register_ext xmm_register rflag condt :=
   { reg_size := x86_reg_size
