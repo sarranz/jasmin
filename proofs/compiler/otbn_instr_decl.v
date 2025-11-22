@@ -24,6 +24,7 @@ Module E.
 End E.
 
 #[local] Open Scope Z.
+#[local] Open Scope ring_scope.
 
 (* TODO_OTBN
    This is because we can't parse BN.ADD so we do BN_ADD.
@@ -249,11 +250,13 @@ Section I_ARGS_KINDS.
 
   Let xreg := [:: CAxmm ].
   Let imm_u8 := [:: CAimm (CAimmC_otbn_nbits Unsigned 8) U8 ].
-  Let imm_u12 := [:: CAimm (CAimmC_otbn_nbits Unsigned 10) U32 ].
+  Let imm_u10 := [:: CAimm (CAimmC_otbn_nbits Unsigned 10) U32 ].
   Let imm_s12 := [:: CAimm (CAimmC_otbn_nbits Signed 12) U32 ].
 
   (* Quarter word *)
   Let imm_q := [:: CAimm (CAimmC_otbn_nbits Unsigned 2) U8 ].
+  Definition ak_bn_shift := CAimm CAimmC_otbn_bn_shift U8.
+  Let imm_bn_shift := [:: ak_bn_shift ].
   Let imm_mulqacc_shift := [:: CAimm CAimmC_otbn_mulqacc_shift U8 ].
 
   Definition ak_xreg : i_args_kinds :=
@@ -262,16 +265,16 @@ Section I_ARGS_KINDS.
   Definition ak_xreg_xreg : i_args_kinds :=
     [:: [:: xreg; xreg ] ].
 
-  Definition ak_xreg_xreg_imm12 : i_args_kinds :=
-    [:: [:: xreg; xreg; imm_u12 ] ].
-
   Definition ak_xreg_xreg_xreg : i_args_kinds :=
     [:: [:: xreg; xreg; xreg ] ].
+
+  Definition ak_xreg_xreg_imm10 : i_args_kinds :=
+    [:: [:: xreg; xreg; imm_u10 ] ].
 
   Definition ak_xreg_xreg_xreg_bool : i_args_kinds :=
     [:: [:: xreg; xreg; xreg; [:: CAcond ] ] ].
 
-  Definition ak_xreg_xreg_xreg_imm8 : i_args_kinds :=
+  Definition ak_xreg_xreg_xreg_shift : i_args_kinds :=
     [:: [:: xreg; xreg; xreg; imm_u8 ] ].
 
   Definition ak_xreg_q_xreg_q_shift : i_args_kinds :=
@@ -402,10 +405,16 @@ Definition desc_rv_binop
     id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
   |}.
 
+Definition wadd {ws : wsize} (x y : word ws) : word ws := x + y.
+Definition wsub {ws : wsize} (x y : word ws) : word ws := x - y.
+
+(* TODO_OTBN the reference states the reference defines the semantics in terms
+   of integer arithmetic and masks rather than modular arithmetic, perhaps it we
+   should use that? *)
 Definition _desc_rv_mnemonic : instr_desc_t :=
   match mn with
-  | ADD | ADDI => desc_rv_binop (fun x y => x + y)%R
-  | SUB => desc_rv_binop (fun x y => x - y)%R
+  | ADD | ADDI => desc_rv_binop wadd
+  | SUB => desc_rv_binop wsub
   | AND | ANDI => desc_rv_binop wand
   | OR | ORI => desc_rv_binop wor
   | XOR | XORI => desc_rv_binop wxor
@@ -428,16 +437,17 @@ Notation desc_rv_mnemonic := (_desc_rv_mnemonic reg_size) (only parsing).
 (* -------------------------------------------------------------------------- *)
 (* Big Number ISA. *)
 
-Definition ty_cmlz : seq ltype := [:: lbool; lbool; lbool; lbool ].
+Definition ty_mlz : seq ltype := [:: lbool; lbool; lbool ].
+Definition ty_cmlz : seq ltype := lbool :: ty_mlz.
 
 Section CURRENT_FLAG_GROUP.
 
 Context (fg : bn_flag_group).
 
-Definition current_cmlz : seq rflag :=
+Definition current_mlz : seq rflag :=
   match fg with
-  | FG0 => [:: CF0; MF0; LF0; ZF0 ]
-  | FG1 => [:: CF1; MF1; LF1; ZF1 ]
+  | FG0 => [:: MF0; LF0; ZF0 ]
+  | FG1 => [:: MF1; LF1; ZF1 ]
   end.
 
 Definition current_CF : rflag :=
@@ -446,6 +456,9 @@ Definition current_CF : rflag :=
   | FG1 => CF1
   end.
 
+Definition current_cmlz : seq rflag := current_CF :: current_mlz.
+
+Definition ad_mlz : seq arg_desc := map F current_mlz.
 Definition ad_cmlz : seq arg_desc := map F current_cmlz.
 
 End CURRENT_FLAG_GROUP.
@@ -457,17 +470,16 @@ Definition MF_of_word (res : u256) : option bool := Some (msb res).
 Definition LF_of_word (res : u256) : option bool := Some (lsb res).
 Definition ZF_of_word (res : u256) : option bool := Some (res == 0)%R.
 
-Definition with_cmlz
-  {ws : wsize}
-  (res : word ws)
-  (res_unsigned : Z) :
-  sem_tuple (ty_cmlz ++ [:: lword ws ]) :=
-  (:: CF_of_Z res_unsigned
-    , MF_of_word res
+Definition with_mlz (res : u256) : sem_ltuple (ty_mlz ++ [:: lword256 ]) :=
+  (:: MF_of_word res
     , LF_of_word res
     , ZF_of_word res
     & res
   ).
+
+Definition with_cmlz
+  (res : u256) (res_unsigned : Z) : sem_ltuple (ty_cmlz ++ [:: lword256 ]) :=
+  add_tuple (CF_of_Z res_unsigned) (with_mlz res).
 
 Definition drop_c (idt : instr_desc_t) : instr_desc_t := idt_drop1 idt.
 
@@ -484,22 +496,15 @@ Definition drop_c (idt : instr_desc_t) : instr_desc_t := idt_drop1 idt.
    - Those that use the carry flag, e.g. [BN_ADDC]: [desc_bn_basic_carry_binop].
    The instructions [BN_CMP] and [BN_CMPB] are special cases. *)
 
-(* Valid range for [shift_bits] in the reference manual: 0 to 248 in steps of
-   8. *)
 Definition word_shift_of_reg_shift
-  (sh : bn_register_shift)
-  {ws : wsize}
-  (x : word ws)
-  (sham : Z) :
-  exec (word ws) :=
-  Let _ := chk_range_steps sham 0 248 8 in
+  (sh : bn_register_shift) {ws : wsize} (x : word ws) (sham : Z) : word ws :=
   let f :=
     match sh with
     | RS_left => wshl
     | RS_right => wshr
     end
   in
-  ok (f ws x sham).
+  f ws x sham.
 
 Definition Z_shift_of_reg_shift
  (sh : bn_register_shift) {ws : wsize} (x : word ws) (sham : Z) : Z :=
@@ -518,163 +523,164 @@ Notation rtuple_drop5th xs :=
 
 Section BN_BASIC_DESC.
 
+Let pp_bn_basic_op mn fg args := pp_otbn_op (BN_basic mn fg) xreg_size args.
+
+Let semi_unop_mlz (semi : u256 -> u256) :
+  semi_type [:: lword256 ] (ty_mlz ++ [:: lword256 ]) :=
+  fun x => ok (with_mlz (semi x)).
+
+Let semi_binop_cmlz
+  (semi : u256 -> u256 -> u256)
+  (semiZ : Z -> Z -> Z) :
+  semi_type [:: lword256; lword256 ] (ty_cmlz ++ [:: lword256 ]) :=
+  fun x y =>
+    let res_unsigned := semiZ (wunsigned x) (wunsigned y) in
+    ok (with_cmlz (semi x y) res_unsigned).
+
+Definition semi_carry_binop_cmlz
+  (semi : u256 -> u256 -> u256)
+  (semiZ : Z -> Z -> Z) :
+  semi_type
+    [:: lword256; lword256; lbool ]
+    (ty_cmlz ++ [:: lword256 ]) :=
+  fun x y cf =>
+    let c := Z.b2z cf in
+    let res := semi (semi x y) (wrepr U256 c) in
+    let res_unsigned := semiZ (semiZ (wunsigned x) (wunsigned y)) c in
+    ok (with_cmlz res res_unsigned).
+
+(* TODO_OTBN Too hard to use
+Lemma eq_size_unop {fg} (itin itout : seq ltype) (iin iout : seq arg_desc) :
+  size iin == size itin ->
+  size iout == size itout ->
+  [&& size iin == size itin
+    & size (ad_mlz fg ++ iout) == size (ty_mlz ++ itout)
+  ].
+Proof. by case: fg => /= -> /= /eqP -> /[!eqxx]. Qed.
+*)
+
 Context
-  (ws : wsize)
   (mn : bn_basic_mnemonic)
   (fg : bn_flag_group)
 .
 
-Notation current_cmlz := (current_cmlz fg) (only parsing).
-Notation current_CF := (current_CF fg) (only parsing).
-Notation ad_cmlz := (ad_cmlz fg) (only parsing).
-
-Let pp_bn_basic_op mn args := pp_otbn_op (BN_basic mn fg) xreg_size args.
-
-Let semi_unop_cmlz
-  (semi : word ws -> word ws)
-  (semiZ : Z -> Z) :
-  semi_type [:: lword ws ] (ty_cmlz ++ [:: lword ws ]) :=
-  fun x =>
-    let res_unsigned := semiZ (wunsigned x) in
-    ok (with_cmlz (semi x) res_unsigned).
-
-Let semi_binop_cmlz
-  (chk : word ws -> exec unit)
-  (semi : word ws -> word ws -> word ws)
-  (semiZ : Z -> Z -> Z) :
-  semi_type [:: lword ws; lword ws ] (ty_cmlz ++ [:: lword ws ]) :=
-  fun x y =>
-    Let _ := chk y in
-    let res_unsigned := semiZ (wunsigned x) (wunsigned y) in
-    ok (with_cmlz (semi x y) res_unsigned).
-
-(* TODO_OTBN: Use [mk_shifted]. *)
-Definition shifted_semi_carry_binop_cmlz
-  (sh : bn_register_shift)
-  (semi : word ws -> word ws -> word ws)
-  (semiZ : Z -> Z -> Z) :
-  semi_type
-    [:: lword ws; lword ws; lbool; lword8 ]
-    (ty_cmlz ++ [:: lword ws ]) :=
-  fun x y cf wsham =>
-    let sham := wunsigned wsham in
-    Let y_shifted := word_shift_of_reg_shift sh y sham in
-    let c := Z.b2z cf in
-    let res := semi (semi x y_shifted) (wrepr ws c) in
-    let res_unsigned :=
-      semiZ (semiZ (wunsigned x) (Z_shift_of_reg_shift sh y sham)) c
-    in
-    ok (with_cmlz res res_unsigned).
-
-Let semi_carry_binop_cmlz semi semiZ x y cf :=
-  shifted_semi_carry_binop_cmlz RS_left semi semiZ x y cf 0%R.
-
 Definition desc_bn_basic_unop
-  (semi : word ws -> word ws) (semiZ : Z -> Z) : instr_desc_t :=
+  (semi : u256 -> u256) (semiZ : Z -> Z) : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
-    id_tin := [:: lword ws ];
-    id_in := [:: E 1 ];
-    id_tout := ty_cmlz ++ [:: lword ws ];
-    id_out := ad_cmlz ++ [:: E 0 ];
-    id_semi := semi_unop_cmlz semi semiZ;
-    id_nargs := 2;
+    id_tin := [:: lword256 ];
+    id_in := [:: Ea 1 ];
+    id_tout := ty_mlz ++ [:: lword256 ];
+    id_out := ad_mlz fg ++ [:: Ea 0 ];
+    id_semi := semi_unop_mlz semi;
     id_args_kinds := ak_xreg_xreg;
-    id_eq_size := ltac:(by t_case_ad_cmlz);
-    id_tin_narr := refl_equal;
-    id_tout_narr := refl_equal;
-    id_check_dest := ltac:(by t_case_ad_cmlz);
+    id_nargs := 2;
     id_str_jas := pp_s (bn_basic_mnemonic_to_string mn);
+    id_pp_asm := pp_bn_basic_op mn fg;
+    (* proof *)
+    id_valid := true;
     id_safe := [::];
-    id_pp_asm := pp_bn_basic_op mn;
+    id_eq_size := ltac:(by case: fg);
+    id_check_dest := ltac:(by case: fg);
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
   |}.
 
-Let desc_un_mlz semi semiZ := drop_c (@desc_bn_basic_unop semi semiZ).
-
 Definition desc_bn_basic_binop
-  (semi : word ws -> word ws -> word ws) (semiZ : Z -> Z -> Z) : instr_desc_t :=
+  (semi : u256 -> u256 -> u256) (semiZ : Z -> Z -> Z) : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
-    id_tin := [:: lword ws; lword ws ];
-    id_in := [:: E 1; E 2 ];
-    id_tout := ty_cmlz ++ [:: lword ws ];
-    id_out := ad_cmlz ++ [:: E 0 ];
-    id_semi := semi_binop_cmlz (fun _ => ok tt) semi semiZ;
-    id_nargs := 3;
+    id_tin := [:: lword256; lword256 ];
+    id_in := [:: Ea 1; Ea 2 ];
+    id_tout := ty_cmlz ++ [:: lword256 ];
+    id_out := ad_cmlz fg ++ [:: Ea 0 ];
+    id_semi := semi_binop_cmlz semi semiZ;
     id_args_kinds := ak_xreg_xreg_xreg;
-    id_eq_size := ltac:(by t_case_ad_cmlz);
-    id_tin_narr := refl_equal;
-    id_tout_narr := refl_equal;
-    id_check_dest := ltac:(by t_case_ad_cmlz);
+    id_nargs := 3;
     id_str_jas := pp_s (bn_basic_mnemonic_to_string mn);
+    id_pp_asm := pp_bn_basic_op mn fg;
+    (* proof *)
+    id_valid := true;
     id_safe := [::];
-    id_pp_asm := pp_bn_basic_op mn;
+    id_eq_size := ltac:(by case: fg);
+    id_check_dest := ltac:(by case: fg);
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
   |}.
 
 Let desc_bin_mlz semi semiZ := idt_drop1 (desc_bn_basic_binop semi semiZ).
 
 Definition desc_bn_basic_carry_binop
-  (semi : word ws -> word ws -> word ws) (semiZ : Z -> Z -> Z) : instr_desc_t :=
+  (semi : u256 -> u256 -> u256) (semiZ : Z -> Z -> Z) : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
-    id_tin := [:: lword ws; lword ws; lbool ];
-    id_in := [:: E 1; E 2; F current_CF ];
-    id_tout := ty_cmlz ++ [:: lword ws ];
-    id_out := ad_cmlz ++ [:: E 0 ];
+    id_tin := [:: lword256; lword256; lbool ];
+    id_in := [:: Ea 1; Ea 2; F (current_CF fg) ];
+    id_tout := ty_cmlz ++ [:: lword256 ];
+    id_out := ad_cmlz fg ++ [:: Ea 0 ];
     id_semi := semi_carry_binop_cmlz semi semiZ;
-    id_nargs := 3;
     id_args_kinds := ak_xreg_xreg_xreg;
-    id_eq_size := ltac:(by t_case_ad_cmlz);
-    id_tin_narr := refl_equal;
-    id_tout_narr := refl_equal;
-    id_check_dest := ltac:(by t_case_ad_cmlz);
+    id_nargs := 3;
     id_str_jas := pp_s (bn_basic_mnemonic_to_string mn);
+    id_pp_asm := pp_bn_basic_op mn fg;
+    (* proof *)
+    id_valid := true;
     id_safe := [::];
-    id_pp_asm := pp_bn_basic_op mn;
+    id_eq_size := ltac:(by case: fg);
+    id_check_dest := ltac:(by case: fg);
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
   |}.
 
 Definition desc_BN_CMP : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
-    id_tin := [:: lword ws; lword ws ];
-    id_in := [:: E 0; E 1 ];
+    id_tin := [:: lword256; lword256 ];
+    id_in := [:: Ea 0; Ea 1 ];
     id_tout := ty_cmlz;
-    id_out := ad_cmlz;
-    id_semi :=
-      fun x y =>
-        rtuple_drop5th (semi_binop_cmlz (fun _ => ok tt) wsub Z.sub x y);
-    id_nargs := 2;
+    id_out := ad_cmlz fg;
+    id_semi := fun x y => rtuple_drop5th (semi_binop_cmlz wsub Z.sub x y);
     id_args_kinds := ak_xreg_xreg;
-    id_eq_size := ltac:(by t_case_ad_cmlz);
-    id_tin_narr := refl_equal;
-    id_tout_narr := refl_equal;
-    id_check_dest := ltac:(by t_case_ad_cmlz);
+    id_nargs := 2;
     id_str_jas := pp_s (bn_basic_mnemonic_to_string BN_CMP);
+    id_pp_asm := pp_bn_basic_op BN_CMP fg;
+    (* proof *)
+    id_valid := true;
     id_safe := [::];
-    id_pp_asm := pp_bn_basic_op BN_CMP;
+    id_eq_size := ltac:(by case: fg);
+    id_check_dest := ltac:(by case: fg);
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
   |}.
 
 Definition desc_BN_CMPB : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
-    id_tin := [:: lword ws; lword ws; lbool ];
-    id_in := [:: E 0; E 1; F current_CF ];
+    id_tin := [:: lword256; lword256; lbool ];
+    id_in := [:: Ea 0; Ea 1; F (current_CF fg) ];
     id_tout := ty_cmlz;
-    id_out := ad_cmlz;
+    id_out := ad_cmlz fg;
     id_semi :=
       fun x y cf => rtuple_drop5th (semi_carry_binop_cmlz wsub Z.sub x y cf);
-    id_nargs := 2;
     id_args_kinds := ak_xreg_xreg;
-    id_eq_size := ltac:(by t_case_ad_cmlz);
-    id_tin_narr := refl_equal;
-    id_tout_narr := refl_equal;
-    id_check_dest := ltac:(by t_case_ad_cmlz);
+    id_nargs := 2;
     id_str_jas := pp_s (bn_basic_mnemonic_to_string BN_CMPB);
+    id_pp_asm := pp_bn_basic_op BN_CMPB fg;
+    (* proof *)
+    id_valid := true;
     id_safe := [::];
-    id_pp_asm := pp_bn_basic_op BN_CMPB;
+    id_eq_size := ltac:(by case: fg);
+    id_check_dest := ltac:(by case: fg);
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
   |}.
 
-Definition _desc_bn_basic_mnemonic : instr_desc_t :=
+Definition desc_bn_basic_mnemonic : instr_desc_t :=
   match mn with
   | BN_ADD => desc_bn_basic_binop wadd Z.add
   | BN_ADDC => desc_bn_basic_carry_binop wadd Z.add
@@ -682,7 +688,7 @@ Definition _desc_bn_basic_mnemonic : instr_desc_t :=
   | BN_SUBB => desc_bn_basic_carry_binop wsub Z.sub
   | BN_AND => desc_bin_mlz wand Z.land
   | BN_OR => desc_bin_mlz wor Z.lor
-  | BN_NOT => desc_un_mlz wnot Z.lnot
+  | BN_NOT => desc_bn_basic_unop wnot Z.lnot
   | BN_XOR => desc_bin_mlz wxor Z.lxor
   | BN_CMP => desc_BN_CMP
   | BN_CMPB => desc_BN_CMPB
@@ -690,33 +696,36 @@ Definition _desc_bn_basic_mnemonic : instr_desc_t :=
 
 End BN_BASIC_DESC.
 
-Notation desc_bn_basic_mnemonic :=
-  (_desc_bn_basic_mnemonic xreg_size) (only parsing).
-
-
 Section BN_BASIC_SHIFT_DESC.
 
-Let mk_shifted_semi_unop
-  sh ws oT : semi_type [:: lword ws ] oT -> semi_type [:: lword ws; lword8 ] oT
-  := mk_shifted_semi_unop (@word_shift_of_reg_shift sh).
+Notation mk_semi1_shifted sh :=
+  (arch_mk_semi1_shifted (@word_shift_of_reg_shift sh)).
+Notation mk_semi2_2_shifted sh :=
+  (arch_mk_semi2_2_shifted (@word_shift_of_reg_shift sh)).
+Notation mk_semi3_2_shifted sh :=
+  (arch_mk_semi3_2_shifted (@word_shift_of_reg_shift sh)).
 
-Let mk_shifted_semi_binop_2
-  sh ws oT ty0 :
-  semi_type [:: ty0; lword ws ] oT ->
-  semi_type [:: ty0; lword ws; lword8 ] oT
-  := mk_shifted_semi_binop_2 (@word_shift_of_reg_shift sh).
-
-Let xsemi x fg := id_semi (desc_bn_basic_mnemonic x fg).
-
-Notation mk_shifted_un x fg sh :=
-  (mk_shifted (mk_shifted_semi_unop sh (xsemi x fg))).
-Notation mk_shifted_bin x fg sh :=
-  (mk_shifted (mk_shifted_semi_binop_2 sh (xsemi x fg))).
-
-Notation mk_shifted_carry x fg sh semi semiZ :=
-  (mk_shifted
-     (idt := desc_bn_basic_mnemonic x fg)
-     (shifted_semi_carry_binop_cmlz sh semi semiZ)).
+Notation mk_shifted1 mn fg sh :=
+  (let d := desc_bn_basic_mnemonic mn fg in
+   arch_mk_shifted ak_bn_shift d
+     (mk_semi1_shifted sh (id_semi d))
+     (fun h => mk_semi1_shifted_errty (d.(id_semi_errty) h))
+     (fun h => mk_semi1_shifted_safe _ (d.(id_semi_safe) h))
+  ).
+Notation mk_shifted2 mn fg sh :=
+  (let d := desc_bn_basic_mnemonic mn fg in
+   arch_mk_shifted ak_bn_shift d
+     (mk_semi2_2_shifted sh (id_semi d))
+     (fun h => mk_semi2_2_shifted_errty (d.(id_semi_errty) h))
+     (fun h => mk_semi2_2_shifted_safe _ (d.(id_semi_safe) h))
+  ).
+Notation mk_shifted_carry mn fg sh :=
+  (let d := desc_bn_basic_mnemonic mn fg in
+   arch_mk_shifted ak_bn_shift d
+     (mk_semi3_2_shifted sh (id_semi d))
+     (fun h => mk_semi3_2_shifted_errty (d.(id_semi_errty) h))
+     (fun h => mk_semi3_2_shifted_safe _ (d.(id_semi_safe) h))
+  ).
 
 Definition desc_bn_basic_shift_mnemonic
   (mn : bn_basic_mnemonic)
@@ -724,23 +733,19 @@ Definition desc_bn_basic_shift_mnemonic
   (sh : bn_register_shift) :
   instr_desc_t :=
   match mn with
-  | BN_ADD => mk_shifted_bin BN_ADD fg sh
-  | BN_SUB => mk_shifted_bin BN_SUB fg sh
-  | BN_AND => mk_shifted_bin BN_AND fg sh
-  | BN_OR => mk_shifted_bin BN_OR fg sh
-  | BN_XOR => mk_shifted_bin BN_XOR fg sh
-  | BN_CMP => mk_shifted_bin BN_CMP fg sh
-  | BN_NOT => mk_shifted_un BN_NOT fg sh
-  | BN_ADDC => mk_shifted_carry BN_ADDC fg sh wadd Z.add
-  | BN_SUBB => mk_shifted_carry BN_SUBB fg sh wsub Z.sub
-  | BN_CMPB =>
-      let shifted := shifted_semi_carry_binop_cmlz sh wsub Z.sub in
-      let semi x y cf sham := rtuple_drop5th (shifted x y cf sham) in
-      mk_shifted (idt := desc_bn_basic_mnemonic BN_CMPB fg) semi
+  | BN_ADD => mk_shifted2 BN_ADD fg sh
+  | BN_SUB => mk_shifted2 BN_SUB fg sh
+  | BN_AND => mk_shifted2 BN_AND fg sh
+  | BN_OR => mk_shifted2 BN_OR fg sh
+  | BN_XOR => mk_shifted2 BN_XOR fg sh
+  | BN_CMP => mk_shifted2 BN_CMP fg sh
+  | BN_NOT => mk_shifted1 BN_NOT fg sh
+  | BN_ADDC => mk_shifted_carry BN_ADDC fg sh
+  | BN_SUBB => mk_shifted_carry BN_SUBB fg sh
+  | BN_CMPB => mk_shifted_carry BN_CMPB fg sh
   end.
 
 End BN_BASIC_SHIFT_DESC.
-
 
 (* -------------------------------------------------------------------------- *)
 (* Modular BN mnemonics.
@@ -902,7 +907,7 @@ Definition semi_BN_RSHI (x y : u256) (wsham : u8) : exec u256 :=
 Definition desc_BN_RSHI : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
-    id_tin := [:: lword256; lword256; lword U8 ];
+    id_tin := [:: lword256; lword256; lword8 ];
     id_in := [:: E 1; E 2; E 3 ];
     id_tout := [:: lword256 ];
     id_out := [:: E 0 ];

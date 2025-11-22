@@ -49,6 +49,7 @@ Variant extra_op :=
 | bn_indirect_load
 | bn_indirect_store
 | MOV  (* [ADDI x, y, 0]. *)
+| SUBI (* [ADDI x, y, -imm]. *)
 .
 
 Scheme Equality for extra_op.
