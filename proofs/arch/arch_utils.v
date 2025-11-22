@@ -1,11 +1,12 @@
-From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype.
+From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype ssralg.
 
 Require Import
   type
   sem_type
   strings
   utils
-  values.
+  values
+  word.
 Require Import arch_decl.
 
 (* -------------------------------------------------------------------- *)
@@ -308,4 +309,119 @@ Definition rtuple_drop5th
   let: (:: x0, x1, x2, x3 & x4 ) := xs in
   (:: x0, x1, x2 & x3 ).
 
+Section SHIFTED.
+
+(* -------------------------------------------------------------------- *)
+(* Shift transformations.
+   Instruction descriptions are defined without optionally shifted registers.
+   The following transformation adds a shift argument to an instruction
+   and updates the semantics and the rest of the fields accordingly. *)
+
+Context
+  (shift_op : forall ws, word ws -> Z -> word ws)
+  {ws : wsize}
+.
+
+  Section SEMI.
+
+  Context {oT : Type} {ty0 ty1 : ltype}.
+
+  Definition arch_mk_semi1_shifted
+    (semi : sem_lprod [:: lword ws ] (exec oT)) :
+    sem_lprod [:: lword ws; lword8 ] (exec oT) :=
+    fun wn shift_amount =>
+      let sham := wunsigned shift_amount in
+      semi (shift_op wn sham).
+
+  Definition arch_mk_semi2_2_shifted
+    (semi : sem_lprod [:: ty0; lword ws ] (exec oT)) :
+    sem_lprod [:: ty0; lword ws; lword8 ] (exec oT) :=
+    fun x wy shift_amount =>
+      let sham := wunsigned shift_amount in
+      semi x (shift_op wy sham).
+
+  Definition arch_mk_semi3_2_shifted
+    (semi : sem_lprod [:: ty0; lword ws; ty1 ] (exec oT)) :
+    sem_lprod [:: ty0; lword ws; ty1; lword8 ] (exec oT) :=
+    fun x wy z shift_amount =>
+      let sham := wunsigned shift_amount in
+      semi x (shift_op wy sham) z.
+
+  End SEMI.
+
+#[local]
+Lemma mk_shifted_eq_size {A B x y p} {xs0 : seq A} {ys0 : seq B} :
+  [&& size xs0 == size ys0 & p ] ->
+  [&& size (xs0 ++ [:: x ]) == size (ys0 ++ [:: y ]) & p ].
+Proof. by rewrite !size_cat /= !addn1 eqSS. Qed.
+
+Lemma mk_semi1_shifted_errty A (semi : sem_lprod [:: lword ws ] (exec A)) :
+  sem_lforall (fun r : exec A => r <> Error ErrType) [:: lword ws ] semi ->
+  sem_lforall (fun r : exec A => r <> Error ErrType)
+         ([:: lword ws ] ++ [:: lword8 ]) (arch_mk_semi1_shifted semi).
+Proof. rewrite /arch_mk_semi1_shifted /= => h *; exact: h. Qed.
+
+Lemma mk_semi2_2_shifted_errty A t
+  (semi : sem_lprod [:: t; lword ws] (exec A)) :
+  sem_lforall (fun r : exec A => r <> Error ErrType) [:: t; lword ws] semi ->
+  sem_lforall (fun r : exec A => r <> Error ErrType)
+         ([:: t; lword ws] ++ [:: lword8]) (arch_mk_semi2_2_shifted semi).
+Proof. rewrite /arch_mk_semi2_2_shifted /= => h *; exact: h. Qed.
+
+Lemma mk_semi3_2_shifted_errty A t1 t2
+  (semi : sem_lprod [:: t1; lword ws; t2] (exec A)) :
+  sem_lforall (fun r : exec A => r <> Error ErrType) [:: t1; lword ws; t2] semi ->
+  sem_lforall (fun r : exec A => r <> Error ErrType)
+         ([:: t1; lword ws; t2] ++ [:: lword8]) (arch_mk_semi3_2_shifted semi).
+Proof. rewrite /arch_mk_semi3_2_shifted /= => h *; exact: h. Qed.
+
+Lemma mk_semi1_shifted_safe A (semi : sem_lprod [:: lword ws] (exec A)) :
+  interp_safe_cond_ty [::] semi ->
+  interp_safe_cond_ty [::] (arch_mk_semi1_shifted semi).
+Proof. move=> h > _; exact: h. Qed.
+
+Lemma mk_semi2_2_shifted_safe A t (semi : sem_lprod [:: t; lword ws] (exec A)) :
+  interp_safe_cond_ty [::] semi ->
+  interp_safe_cond_ty [::] (arch_mk_semi2_2_shifted semi).
+Proof. move=> h > _; exact: h. Qed.
+
+Lemma mk_semi3_2_shifted_safe A t1 t2
+  (semi : sem_lprod [:: t1; lword ws; t2] (exec A)) :
+  interp_safe_cond_ty [::] semi ->
+  interp_safe_cond_ty [::] (arch_mk_semi3_2_shifted semi).
+Proof. move=> h > _; exact: h. Qed.
+
+Lemma safe_wf_cat (tin tin' : seq ltype) sc :
+  all (fun sc => sc_needed_args sc <= size tin) sc ->
+  all (fun sc => sc_needed_args sc <= size (tin ++ tin')) sc.
+Proof.
+  apply: sub_all => c h; rewrite size_cat; exact/(leq_trans h)/leq_addr.
+Qed.
+
+Definition arch_mk_shifted
+  ak (idt : instr_desc_t) semi' semi_errty' semi_safe' : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := (id_tin idt) ++ [:: lword8 ];
+    id_in := (id_in idt) ++ [:: Ea (id_nargs idt) ];
+    id_tout := id_tout idt;
+    id_out := id_out idt;
+    id_semi := semi';
+    id_args_kinds := [seq x ++ [:: [:: ak ] ] | x <- id_args_kinds idt ];
+    id_nargs := (id_nargs idt).+1;
+    id_eq_size := mk_shifted_eq_size (id_eq_size idt);
+    id_check_dest := id_check_dest idt;
+    id_str_jas := id_str_jas idt;
+    id_safe := id_safe idt;
+    id_pp_asm := id_pp_asm idt;
+    id_valid := id_valid idt;
+    id_safe_wf := safe_wf_cat _ (id_safe_wf idt);
+    id_semi_errty := semi_errty';
+    id_semi_safe := semi_safe'
+  |}.
+
+End SHIFTED.
+
 End WITH_ARCH.
+
+Arguments arch_mk_shifted {_ _ _ _ _ _}.

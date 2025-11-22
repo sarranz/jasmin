@@ -502,11 +502,6 @@ Proof.
   rewrite /eq_rect_r /=; apply.
 Qed.
 
-Lemma safe_wf_cat (tin tin' : seq ltype) sc :
-  all (fun sc => sc_needed_args sc <= size tin) sc ->
-  all (fun sc => sc_needed_args sc <= size (tin ++ tin')) sc.
-Proof. apply sub_all => c h; rewrite size_cat; apply: (leq_trans h); apply leq_addr. Qed.
-
 Definition mk_cond (idt : instr_desc_t) : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
@@ -528,105 +523,6 @@ Definition mk_cond (idt : instr_desc_t) : instr_desc_t :=
     id_semi_safe := fun h => mk_semi_cond_safe (id_safe_wf idt) (idt.(id_semi_safe) h);
   |}.
 Arguments mk_cond : clear implicits.
-
-
-(* -------------------------------------------------------------------- *)
-(* Shift transformations.
-   Instruction descriptions are defined without optionally shifted registers.
-   The following transformation adds a shift argument to an instruction
-   and updates the semantics and the rest of the fields accordingly. *)
-
-Definition mk_semi1_shifted
-  {A} (sk : shift_kind) (semi : sem_lprod [:: lreg ] (exec A)) :
-  sem_lprod [:: lreg; lword8 ] (exec A) :=
-  fun wn shift_amount =>
-    let sham := wunsigned shift_amount in
-    semi (shift_op sk wn sham).
-
-Definition mk_semi2_2_shifted
-  {A} {o : ltype} (sk : shift_kind) (semi : sem_lprod [:: o; lreg ] (exec A)) :
-  sem_lprod [:: o; lreg; lword8 ] (exec A) :=
-  fun x wm shift_amount =>
-    let sham := wunsigned shift_amount in
-    semi x (shift_op sk wm sham).
-
-Definition mk_semi3_2_shifted
-  {A}
-  {o0 o1 : ltype}
-  (sk : shift_kind)
-  (semi : sem_lprod [:: o0; lreg; o1 ] (exec A)) :
-  sem_lprod [:: o0; lreg; o1; lword8 ] (exec A) :=
-  fun x wm y shift_amount =>
-    let sham := wunsigned shift_amount in
-    semi x (shift_op sk wm sham) y.
-
-#[ local ]
-Lemma mk_shifted_eq_size {A B} {x y} {xs0 : seq A} {ys0 : seq B} {p} :
-  (size xs0 == size ys0) && p
-  -> (size (xs0 ++ [:: x ]) == size (ys0 ++ [:: y ])) && p.
-Proof.
-  move=> /andP [] /eqP H0 Hp.
-  rewrite 2!size_cat H0.
-  by apply/andP.
-Qed.
-
-Lemma mk_semi1_shifted_errty A sk (semi : sem_lprod [:: lreg] (exec A)) :
-  sem_lforall (fun r : exec A => r <> Error ErrType) [:: lreg] semi ->
-  sem_lforall (fun r : exec A => r <> Error ErrType)
-         ([:: lreg] ++ [:: lword8]) (mk_semi1_shifted sk semi).
-Proof. by rewrite /mk_semi1_shifted /= => h *; apply h. Qed.
-
-Lemma mk_semi2_2_shifted_errty A t sk (semi : sem_lprod [:: t; lreg] (exec A)) :
-  sem_lforall (fun r : exec A => r <> Error ErrType) [:: t; lreg] semi ->
-  sem_lforall (fun r : exec A => r <> Error ErrType)
-         ([:: t; lreg] ++ [:: lword8]) (mk_semi2_2_shifted sk semi).
-Proof. rewrite /mk_semi2_2_shifted /= => h *; apply h. Qed.
-
-Lemma mk_semi3_2_shifted_errty A t1 t2 sk (semi : sem_lprod [:: t1; lreg; t2] (exec A)) :
-  sem_lforall (fun r : exec A => r <> Error ErrType) [:: t1; lreg; t2] semi ->
-  sem_lforall (fun r : exec A => r <> Error ErrType)
-         ([:: t1; lreg; t2] ++ [:: lword8]) (mk_semi3_2_shifted sk semi).
-Proof. rewrite /mk_semi3_2_shifted /= => h *; apply h. Qed.
-
-Lemma mk_semi1_shifted_safe A sk (semi : sem_lprod [:: lreg] (exec A)) :
-  interp_safe_cond_ty [::] semi ->
-  interp_safe_cond_ty [::] (mk_semi1_shifted sk semi).
-Proof. move=> h > _; apply h; constructor. Qed.
-
-Lemma mk_semi2_2_shifted_safe A sk t (semi : sem_lprod [:: t; lreg] (exec A)) :
-  interp_safe_cond_ty [::] semi ->
-  interp_safe_cond_ty [::] (mk_semi2_2_shifted sk semi).
-Proof. move=> h > _; apply h; constructor. Qed.
-
-Lemma mk_semi3_2_shifted_safe A sk t1 t2 (semi : sem_lprod [:: t1; lreg; t2] (exec A)) :
-  interp_safe_cond_ty [::] semi ->
-  interp_safe_cond_ty [::] (mk_semi3_2_shifted sk semi).
-Proof. move=> h > _; apply h; constructor. Qed.
-
-Definition mk_shifted
-  (sk : shift_kind) (idt : instr_desc_t) semi' semi_errty' semi_safe' : instr_desc_t :=
-  {|
-    id_msb_flag := MSB_MERGE;
-    id_tin := (id_tin idt) ++ [:: lword8 ];
-    id_in := (id_in idt) ++ [:: Ea (id_nargs idt) ];
-    id_tout := id_tout idt;
-    id_out := id_out idt;
-    id_semi := semi';
-    id_nargs := (id_nargs idt).+1;
-    id_args_kinds :=
-      map (fun x => x ++ [:: [:: CAimm (CAimmC_arm_shift_amout sk) U8] ]) (id_args_kinds idt);
-    id_eq_size := mk_shifted_eq_size (id_eq_size idt);
-    id_check_dest := id_check_dest idt;
-    id_str_jas := id_str_jas idt;
-    id_safe := id_safe idt;
-    id_pp_asm := id_pp_asm idt;
-    id_valid := id_valid idt;
-    id_safe_wf := safe_wf_cat _ (id_safe_wf idt);
-    id_semi_errty := semi_errty';
-    id_semi_safe := semi_safe'
-  |}.
-
-Arguments mk_shifted : clear implicits.
 
 Definition ak_reg_reg_imm_ ew :=
   [:: [:: [:: CAreg]; [:: CAreg]; [:: CAimm (CAimmC_arm_wencoding ew) reg_size]]].
@@ -694,13 +590,18 @@ Definition pp_arm_op
 
 Section ARM_INSTR.
 
-Context
-  (opts : arm_options).
+Context (opts : arm_options).
+
+Notation mk_shifted sk :=
+  (arch_mk_shifted (CAimm (CAimmC_arm_shift_amout sk) U8)).
+Notation mk_semi1_shifted sk := (arch_mk_semi1_shifted (shift_op sk)).
+Notation mk_semi2_2_shifted sk := (arch_mk_semi2_2_shifted (shift_op sk)).
+Notation mk_semi3_2_shifted sk := (arch_mk_semi3_2_shifted (shift_op sk)).
 
 Let string_of_arm_mnemonic mn :=
-      (string_of_arm_mnemonic mn
-        ++ (if set_flags opts then "S" else "")
-        ++ (if is_conditional opts then "cc" else ""))%string.
+  (string_of_arm_mnemonic mn
+    ++ (if set_flags opts then "S" else "")
+    ++ (if is_conditional opts then "cc" else ""))%string.
 
 Definition arm_ADD_semi (wn wm : ty_r) : ty_nzcv_r :=
   let x :=
@@ -739,7 +640,7 @@ Definition arm_ADD_instr : instr_desc_t :=
     if has_shift opts is Some sk
     then mk_shifted sk x (mk_semi2_2_shifted sk (id_semi x))
                          (fun h => mk_semi2_2_shifted_errty (x.(id_semi_errty) h))
-                         (fun h => mk_semi2_2_shifted_safe sk (x.(id_semi_safe) h))
+                         (fun h => mk_semi2_2_shifted_safe _ (x.(id_semi_safe) h))
     else x
   in
   if set_flags opts
@@ -785,7 +686,7 @@ Definition arm_ADC_instr : instr_desc_t :=
     then
       mk_shifted sk x (mk_semi3_2_shifted sk (id_semi x))
                       (fun h => mk_semi3_2_shifted_errty (x.(id_semi_errty) h))
-                      (fun h => mk_semi3_2_shifted_safe sk (x.(id_semi_safe) h))
+                      (fun h => mk_semi3_2_shifted_safe _ (x.(id_semi_safe) h))
     else x
   in
   if set_flags opts
@@ -950,7 +851,7 @@ Definition arm_SUB_instr : instr_desc_t :=
     if has_shift opts is Some sk
     then mk_shifted sk x (mk_semi2_2_shifted sk (id_semi x))
                          (fun h => mk_semi2_2_shifted_errty (x.(id_semi_errty) h))
-                         (fun h => mk_semi2_2_shifted_safe sk (x.(id_semi_safe) h))
+                         (fun h => mk_semi2_2_shifted_safe _ (x.(id_semi_safe) h))
     else x
   in
   if set_flags opts
@@ -989,7 +890,7 @@ Definition arm_SBC_instr : instr_desc_t :=
     then
       mk_shifted sk x (mk_semi3_2_shifted sk (id_semi x))
                       (fun h => mk_semi3_2_shifted_errty (x.(id_semi_errty) h))
-                      (fun h => mk_semi3_2_shifted_safe sk (x.(id_semi_safe) h))
+                      (fun h => mk_semi3_2_shifted_safe _ (x.(id_semi_safe) h))
     else x
   in
   if set_flags opts
@@ -1026,7 +927,7 @@ Definition arm_RSB_instr : instr_desc_t :=
     if has_shift opts is Some sk
     then mk_shifted sk x (mk_semi2_2_shifted sk (id_semi x))
                          (fun h => mk_semi2_2_shifted_errty (x.(id_semi_errty) h))
-                         (fun h => mk_semi2_2_shifted_safe sk (x.(id_semi_safe) h))
+                         (fun h => mk_semi2_2_shifted_safe _ (x.(id_semi_safe) h))
     else x
   in
   if set_flags opts
@@ -1385,7 +1286,7 @@ Definition arm_AND_instr : instr_desc_t :=
     if has_shift opts is Some sk
     then mk_shifted sk x (mk_semi2_2_shifted sk (id_semi x))
                          (fun h => mk_semi2_2_shifted_errty (x.(id_semi_errty) h))
-                         (fun h => mk_semi2_2_shifted_safe sk (x.(id_semi_safe) h))
+                         (fun h => mk_semi2_2_shifted_safe _ (x.(id_semi_safe) h))
     else x
   in
   if set_flags opts
@@ -1533,7 +1434,7 @@ Definition arm_BIC_instr : instr_desc_t :=
     if has_shift opts is Some sk
     then mk_shifted sk x (mk_semi2_2_shifted sk (id_semi x))
                          (fun h => mk_semi2_2_shifted_errty (x.(id_semi_errty) h))
-                         (fun h => mk_semi2_2_shifted_safe sk (x.(id_semi_safe) h))
+                         (fun h => mk_semi2_2_shifted_safe _ (x.(id_semi_safe) h))
     else x
   in
   if set_flags opts
@@ -1569,7 +1470,7 @@ Definition arm_EOR_instr : instr_desc_t :=
     if has_shift opts is Some sk
     then mk_shifted sk x (mk_semi2_2_shifted sk (id_semi x))
                          (fun h => mk_semi2_2_shifted_errty (x.(id_semi_errty) h))
-                         (fun h => mk_semi2_2_shifted_safe sk (x.(id_semi_safe) h))
+                         (fun h => mk_semi2_2_shifted_safe _ (x.(id_semi_safe) h))
     else x
   in
   if set_flags opts
@@ -1613,7 +1514,7 @@ Definition arm_MVN_instr : instr_desc_t :=
     if has_shift opts is Some sk
     then mk_shifted sk x (mk_semi1_shifted sk (id_semi x))
                          (fun h => mk_semi1_shifted_errty (x.(id_semi_errty) h))
-                         (fun h => mk_semi1_shifted_safe sk (x.(id_semi_safe) h))
+                         (fun h => mk_semi1_shifted_safe _ (x.(id_semi_safe) h))
     else x
   in
   if set_flags opts
@@ -1649,7 +1550,7 @@ Definition arm_ORR_instr : instr_desc_t :=
     if has_shift opts is Some sk
     then mk_shifted sk x (mk_semi2_2_shifted sk (id_semi x))
                          (fun h => mk_semi2_2_shifted_errty (x.(id_semi_errty) h))
-                         (fun h => mk_semi2_2_shifted_safe sk (x.(id_semi_safe) h))
+                         (fun h => mk_semi2_2_shifted_safe _ (x.(id_semi_safe) h))
     else x
   in
   if set_flags opts
@@ -2112,7 +2013,7 @@ Definition arm_CMP_instr : instr_desc_t :=
   if has_shift opts is Some sk
   then mk_shifted sk x (mk_semi2_2_shifted sk (id_semi x))
                        (fun h => mk_semi2_2_shifted_errty (x.(id_semi_errty) h))
-                       (fun h => mk_semi2_2_shifted_safe sk (x.(id_semi_safe) h))
+                       (fun h => mk_semi2_2_shifted_safe _ (x.(id_semi_safe) h))
   else x.
 
 Definition arm_TST_semi (wn wm : ty_r) : ty_nzc :=
@@ -2150,7 +2051,7 @@ Definition arm_TST_instr : instr_desc_t :=
   if has_shift opts is Some sk
   then mk_shifted sk x (mk_semi2_2_shifted sk (id_semi x))
                        (fun h => mk_semi2_2_shifted_errty (x.(id_semi_errty) h))
-                       (fun h => mk_semi2_2_shifted_safe sk (x.(id_semi_safe) h))
+                       (fun h => mk_semi2_2_shifted_safe _ (x.(id_semi_safe) h))
   else x.
 
 Definition arm_CMN_instr : instr_desc_t :=
@@ -2181,7 +2082,7 @@ Definition arm_CMN_instr : instr_desc_t :=
   if has_shift opts is Some sk
   then mk_shifted sk x (mk_semi2_2_shifted sk (id_semi x))
                        (fun h => mk_semi2_2_shifted_errty (x.(id_semi_errty) h))
-                       (fun h => mk_semi2_2_shifted_safe sk (x.(id_semi_safe) h))
+                       (fun h => mk_semi2_2_shifted_safe _ (x.(id_semi_safe) h))
   else x.
 
 Definition arm_extend_semi

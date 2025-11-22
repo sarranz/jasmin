@@ -261,6 +261,9 @@ Definition otbn_check_CAimm
       let '(lo, hi) := signedness_bounds s n in
       let i := if s is Signed then wsigned w else wunsigned w in
       [&& lo <=? i & i <? hi ]%Z
+  | CAimmC_otbn_bn_shift =>
+      let i := wunsigned w in
+      [&& i <=? 248 & i mod 8 == 0]%Z
   | CAimmC_otbn_mulqacc_shift =>
       let i := wunsigned w in
       [&& i <=? 192 & i mod 64 == 0]%Z

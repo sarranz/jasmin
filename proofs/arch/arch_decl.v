@@ -58,6 +58,7 @@ Variant caimm_checker_s :=
   | CAimmC_riscv_12bits_signed
   | CAimmC_riscv_5bits_unsigned
   | CAimmC_otbn_nbits of signedness & positive
+  | CAimmC_otbn_bn_shift
   | CAimmC_otbn_mulqacc_shift
 .
 
@@ -386,6 +387,10 @@ Record pp_asm_op := mk_pp_asm_op {
 
 (* -------------------------------------------------------------------- *)
 (* Instruction descriptions. *)
+
+Definition semi_type (tin tout : seq ltype) : Type :=
+  sem_lprod tin (exec (sem_ltuple tout)).
+
 Record instr_desc_t := {
   (* Info for architecture semantics. *)
   (* This field allows to ensure the validity of the instruction,
@@ -402,7 +407,7 @@ Record instr_desc_t := {
   (* Description of output arguments. *)
   id_out        : seq arg_desc;
   (* Semantics (only deals with values). *)
-  id_semi       : sem_lprod id_tin (exec (sem_ltuple id_tout));
+  id_semi       : semi_type id_tin id_tout;
   (* Possible signatures for an instruction. *)
   id_args_kinds : i_args_kinds;
   (* Number of explicit arguments in assembly syntax. *)
