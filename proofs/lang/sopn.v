@@ -245,7 +245,7 @@ Definition Odeclassify_instr ty :=
     tout     := [:: ];
     i_out    := [:: ];
     conflicts:= [::];
-    semi     := fun=> ok tt;
+    semi     := declassify_semi cty;
     semu     := @declassify_semu cty;
     i_safe   := [:: ];
     i_valid  := true;
@@ -263,7 +263,7 @@ Definition Odeclassify_mem_instr len :=
     tout     := [:: ];
     i_out    := [:: ];
     conflicts:= [::];
-    semi     := fun=> ok tt;
+    semi     := declassify_semi cty;
     semu     := @declassify_semu cty;
     i_safe   := [:: ];
     i_valid  := true;
@@ -585,4 +585,3 @@ Instance asmOp_sopn : asmOp sopn :=
     prim_string := sopn_prim_string }.
 
 End WITH_PARAMS.
-
