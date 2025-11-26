@@ -212,19 +212,19 @@ Definition is_Odeclassify_mem (o : sopn) : option positive :=
   if o is Opseudo_op (pseudo_operator.Odeclassify_mem len) then Some len
   else None.
 
-Definition event_of_opn (s : estate) (o : sopn) (es : pexprs) :
+Definition event_of_opn (o : sopn) (m : mem) (vs : values) :
   exec (option (DeclassifyEvent unit)) :=
-  Let vs := sem_pexprs true (p_globs p) s es in
   let v := nth (Vbool true) vs 0 in
   if is_Odeclassify o is Some _ then ok (Some (Edeclassify v))
   else if is_Odeclassify_mem o is Some len then
     Let p := to_word Uptr v in
-    Let b := read_bytes (emem s) p len in
+    Let b := read_bytes m p len in
     ok (Some (Edeclassify_mem b))
   else ok None.
 
 Definition trigger_opn (s : estate) (o : sopn) (es : pexprs) : itree E unit :=
-  oe <- iresult s (event_of_opn s o es) ;;
+  vs <- iresult s (sem_pexprs true (p_globs p) s es) ;;
+  oe <- iresult s (event_of_opn o (emem s) vs) ;;
   if oe is Some e then trigger (e : DeclassifyEvent _) else Ret tt.
 
 Definition fexec_syscall (o : syscall_t) (fs:fstate) : exec fstate :=
@@ -407,6 +407,20 @@ Definition isem_fun_body (p : prog) (ev : extra_val_t)
    s2 <- isem_cmd_ p ev fd.(f_body) s1;;
    iresult s2 (finalize_funcall fd s2).
 
+Definition esem_trigger_opn
+  (p : prog) (o : sopn) (es : pexprs) (s : estate) : exec unit :=
+  Let vs := sem_pexprs true (p_globs p) s es in
+  Let oe := event_of_opn o (emem s) vs in
+  assert (~~ isSome oe) ErrSemUndef.
+
+Lemma esem_trigger_opnP p o es s :
+  esem_trigger_opn p o es s = ok tt ->
+  eq_itree eq (trigger_opn p s o es) (Ret tt).
+Proof.
+rewrite /esem_trigger_opn /trigger_opn; t_xrbindP=> vs -> [//|].
+rewrite /= bind_ret_l => ->; rewrite bind_ret_l; reflexivity.
+Qed.
+
 (* A variant of the semantic based on exec, usefull for the proofs *)
 Fixpoint esem_i (p : prog) (ev : extra_val_t) (i : instr) (s : estate) :
     exec estate :=
@@ -415,8 +429,7 @@ Fixpoint esem_i (p : prog) (ev : extra_val_t) (i : instr) (s : estate) :
   | Cassgn x tg ty e => sem_assgn p x tg ty e s
 
   | Copn xs tg o es =>
-      Let oe := event_of_opn p s o es in
-      Let _ := assert (~~ isSome oe) ErrSemUndef in
+      Let _ := esem_trigger_opn p o es s in
       sem_sopn (p_globs p) o s xs es
 
   | Csyscall xs o es => sem_syscall p xs o es s
@@ -455,8 +468,8 @@ Proof.
   + move=> > /= [<-]; reflexivity.
   + by move=> i c hi hc s s' /=; t_xrbindP => s1 /hi ->; rewrite bind_ret_l; apply hc.
   1,3: move=> > /= -> /=; reflexivity.
-  + move=> xs t o es ii s s' /=; t_xrbindP=> -[//|].
-    rewrite /trigger_opn => -> _ -> /=; rewrite !bind_ret_l; reflexivity.
+  + move=> xs t o es ii s s' /=; t_xrbindP=> /esem_trigger_opnP ->.
+    rewrite bind_ret_l => ->; reflexivity.
   + move=> > hc1 hc2 ii s s' /=.
     rewrite /isem_cond; t_xrbindP => b -> /=.
     by rewrite bind_ret_l; case: b; [apply hc1 | apply hc2].
@@ -604,8 +617,12 @@ End SEM_F.
 (*** Core lemmas about the definition ********************************)
 Section CoreLemmas.
 
-Context {E E0: Type -> Type} {wE : with_Error E E0} {wD : DeclassifyEvent -< E}.
-Context (p : prog) (ev : extra_val_t).
+Context
+  {E E0 : Type -> Type}
+  {wE : with_Error E E0}
+  {wD : DeclassifyEvent -< E}
+  (p : prog)
+  (ev : extra_val_t).
 
 Notation interp_rec := (interp (mrecursive (handle_recCall p ev))).
 
@@ -662,6 +679,8 @@ Proof.
   1,3: by move=> >; apply interp_iresult.
   + move=> xs t o es ii s; rewrite interp_bind; apply: eqit_bind.
     + rewrite interp_bind; apply: eqit_bind; first exact: interp_iresult.
+      move=> vs; rewrite interp_bind.
+      apply: eqit_bind; first exact: interp_iresult.
       move=> [?|]; rewrite (interp_rec_trigger, interp_ret); reflexivity.
     move=> ?; exact: interp_iresult.
   + move=> e c1 c2 hc1 hc2 ii s; rewrite /isem_i /isem_i_rec /=.
@@ -742,7 +761,8 @@ Lemma interp_cond_trigger_opn
     (interp (ctx_cond cond ctx) (trigger_opn q s o es))
     (trigger_opn q s o es).
 Proof.
-rewrite interp_bind interp_cond_iresult; apply: eutt_eq_bind => -[?|].
+rewrite interp_bind interp_cond_iresult; apply: eutt_eq_bind => vs.
+rewrite interp_bind interp_cond_iresult; apply: eutt_eq_bind => -[e|].
 + exact: interp_cond_trigger.
 rewrite interp_ret; reflexivity.
 Qed.
