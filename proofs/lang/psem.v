@@ -2,7 +2,7 @@
 
 (* ** Imports and settings *)
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssralg.
-From ITree Require Import ITreeFacts.
+From ITree Require Import ITree ITreeFacts.
 
 Require Import xseq.
 Require Export array type expr gen_map warray_ sem_type sem_op_typed values varmap expr_facts low_memory syscall_sem psem_defs.
@@ -470,7 +470,7 @@ Proof.
   + by move=> > [<-]; constructor.
   + by move=> > hi hc > /=; t_xrbindP => > /hi ? /hc; apply Eseq.
   + by move=> > /=; rewrite /sem_assgn; t_xrbindP => *; eapply Eassgn; eauto.
-  + by move=> > /=; apply: Eopn.
+  + move=> > /=; t_xrbindP=> _; exact: Eopn.
   + move=> > /=; rewrite /sem_syscall /fexec_syscall /upd_estate; t_xrbindP.
     move=> ? hes ? [[scs mem] vs] /= ? [<-] /= ?.
     by eapply Esyscall; eauto.
@@ -629,7 +629,14 @@ Qed.
 
 Section FUN.
 
-Context {E E0 : Type -> Type} {sem_F : sem_Fun E} {wE: with_Error E E0} {rE0 : EventRels E0}.
+Context
+  {E E0 : Type -> Type}
+  {sem_F : sem_Fun E}
+  {wE : with_Error E E0}
+  {wD : DeclassifyEvent -< E}
+  {rE0 : EventRels E0}
+  {declassifyE_refl : RndE0_refl rE0}
+.
 
 Let Pi i := wequiv p p' ev ev' (st_eq tt) [::i] [::i] (st_eq tt).
 
@@ -645,7 +652,8 @@ Proof.
   + by apply wequiv_nil.
   + by move=> *; apply wequiv_cons with (st_eq tt).
   + by move=> >;apply wequiv_assgn_rel_eq with checker_st_eq tt.
-  + by move=> >; apply wequiv_opn_rel_eq with checker_st_eq tt.
+  + move=> >; apply wequiv_opn_rel_eq with checker_st_eq tt => //.
+
   + by move=> >; apply wequiv_syscall_rel_eq with checker_st_eq tt.
   + by move=> > hc1 hc2 ii; apply wequiv_if_rel_eq with checker_st_eq tt tt tt.
   + by move=> > hc ii; apply wequiv_for_rel_eq with checker_st_eq tt tt.

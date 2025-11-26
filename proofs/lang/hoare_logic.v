@@ -228,10 +228,8 @@ Lemma rhoare_bind {I T O} (F1 : fresult Err I T) (F2 : fresult Err T O)
   rhoare R F2 Q QET ->
   rhoare P (fun i => Let r := F1 i in F2 r) Q QE.
 Proof.
-  move=> hQE hF1 hF2 i hP.
-  case: (F1 i) (hF1 i hP) => //=.
-  move=> t hR; case: (F2 t) (hF2 t hR) => //=.
-  by move=> e; apply: hQE hP hR.
+move=> hQE hF1 hF2 i hP; case: (F1 i) (hF1 i hP) => //= t hR.
+case: (F2 t) (hF2 t hR) => //= e; exact: hQE hP hR.
 Qed.
 
 Lemma rhoare_read {S T O} (F1 : fresult Err S T) (F2 : T -> fresult Err S O)
@@ -314,13 +312,9 @@ Lemma khoare_io_bind {I T O}
   (P : Pred I)
   (Q : Pred_io I O) F F' :
   khoare_io P F R ->
-  (forall i, P i -> khoare (R i) F' (Q i)) ->
-  khoare_io P (fun i => t <- F i;; F' t) Q.
-Proof.
-  move=> h h' i hP.
-  apply lutt_bind with (R i); first by apply h.
-  by move=> t hR; apply h'.
-Qed.
+  (forall i, P i -> khoare (R i) (F' i) (Q i)) ->
+  khoare_io P (fun i => t <- F i;; F' i t) Q.
+Proof. move=> h h' i hP; apply: (lutt_bind (h _ hP)) => t; exact: h'. Qed.
 
 Lemma khoare_bind {I T O}
   (R : Pred T)
@@ -329,7 +323,7 @@ Lemma khoare_bind {I T O}
   khoare P F R ->
   khoare R F' Q ->
   khoare P (fun i => t <- F i;; F' t) Q.
-Proof. by move=> h h'; apply khoare_io_bind with (R := fun t => R). Qed.
+Proof. move=> h h'; apply: (khoare_io_bind h) => i _; exact: h'. Qed.
 
 Definition rInvErr := fun s e => invErr (mk_error_data s e).
 
@@ -432,7 +426,13 @@ End KHOARE_WEAKEN.
 
 Section HOARE_CORE.
 
-Context {E E0: Type -> Type}  {sem_F : sem_Fun E} {wE: with_Error E E0} {iE0 : InvEvent E0} {iEr : InvErr}.
+Context
+  {E E0 : Type -> Type}
+  {sem_F : sem_Fun E}
+  {wE : with_Error E E0}
+  {wD : DeclassifyEvent -< E}
+  {iE0 : InvEvent E0}
+  {iEr : InvErr}.
 
 Context (p : prog) (ev: extra_val_t).
 
@@ -504,23 +504,33 @@ Proof.
   apply hwr.
 Qed.
 
-Lemma hoare_opn (Rve Rvo : Pred_vs) P Q Qerr ii xs tag o es :
+Definition preInvDeclassify (oe : option (DeclassifyEvent unit)) : Prop :=
+  if oe is Some e then preInv (wD e) else True.
+
+Lemma preInvDeclassifyP :
+  khoare
+    preInvDeclassify
+    (fun t => if t is Some e then trigger e else Ret tt)
+    PredT.
+Proof. move=> [e|] h; first exact: (lutt_trigger h). by rewrite -lutt_Ret. Qed.
+
+Lemma hoare_opn {Rve Rvo P Q Qerr ii xs tag o es} :
   (forall s e, P s -> Qerr e -> rInvErr s e) ->
   rhoare P (fun s => sem_pexprs true (p_globs p) s es) Rve Qerr ->
+  (forall vs, Rve vs -> rhoare P (fun s => event_of_opn o (emem s) vs) preInvDeclassify Qerr) ->
   (forall s, P s -> rhoare Rve (exec_sopn o) Rvo Qerr) ->
   (forall vs, Rvo vs -> rhoare P (fun s => write_lvals true (p_globs p) s xs vs) Q Qerr) ->
   hoare P [:: MkI ii (Copn xs tag o es)] Q.
 Proof.
-  move=> herr he ho hwr; rewrite /hoare /isem_cmd_ /=.
-  apply khoare_bind with Q; last by apply khoare_ret.
-  apply: (khoare_iresult herr); rewrite /sem_sopn.
-  eapply rhoare_read.
-  + eapply rhoare_read; first apply he.
-    move=> t ht; eapply rhoare_eval.
-    move=> s /ho; apply rhoare_weaken; last done.
-    + by move=> > ->.
-    by move=> > h; apply h.
-  by apply hwr.
+move=> herr he hev ho hwr.
+apply: (khoare_bind (R := Q)); last exact: khoare_ret.
+apply: (khoare_io_bind (R := fun _ _ => True)).
+- apply: khoare_io_bind; first exact: khoare_iresult herr he.
+  move=> s hs; apply: khoare_bind preInvDeclassifyP => vs hvs.
+  exact: (khoare_iresult herr (hev _ hvs)).
+move=> s h _ _; move: s h.
+apply/(khoare_iresult herr)/(rhoare_read _ hwr)/(rhoare_read he) => vs hvs.
+move=> s hs; exact: ho hs _ hvs.
 Qed.
 
 Lemma hoare_syscall Rv Ro P Q Qerr ii xs sc es :
@@ -701,7 +711,11 @@ End HOARE_CORE.
 
 Section TRIVIAL.
 
-Context {E E0: Type -> Type}  {sem_F : sem_Fun E} {wE: with_Error E E0}.
+Context
+  {E E0 : Type -> Type}
+  {sem_F : sem_Fun E}
+  {wE : with_Error E E0}
+  {wD : DeclassifyEvent -< E}.
 
 Context (p : prog) (ev: extra_val_t).
 
@@ -709,16 +723,16 @@ Context (p : prog) (ev: extra_val_t).
 #[local] Existing Instance trivial_invEvent.
 
 Lemma hoare_f_true (P : PreF) ii (fn : funname) : hoare_f_ii p ev P ii fn (fun _ _ _ => True).
-Proof. apply khoare_io_true. Qed.
+Proof. exact: khoare_io_true. Qed.
 
 Lemma hoare_f_body_true (P : PreF) (fn : funname) : hoare_f_body p ev P fn (fun _ _ _ => True).
-Proof. apply khoare_io_true. Qed.
+Proof. exact: khoare_io_true. Qed.
 
 Lemma hoare_io_true (P : Pred_c) (c : cmd) : hoare_io p ev P c (fun _ _ => True).
-Proof. apply khoare_io_true. Qed.
+Proof. exact: khoare_io_true. Qed.
 
 Lemma hoare_true (P : Pred_c) (c : cmd) : hoare p ev P c PredT.
-Proof. apply khoare_io_true. Qed.
+Proof. exact: khoare_io_true. Qed.
 
 End TRIVIAL.
 Notation ihoare_f p ev P fn Q  := (khoare_io (P fn) (isem_fun p ev fn) (Q fn)).
@@ -726,7 +740,12 @@ Notation ihoare   := (hoare (sem_F := sem_fun_full)).
 
 Section HOARE_FUN.
 
-Context {E E0: Type -> Type} {wE: with_Error E E0} {iE0 : InvEvent E0} {iEr : InvErr}.
+Context
+  {E E0 : Type -> Type}
+  {wE : with_Error E E0}
+  {wD : DeclassifyEvent -< E}
+  {iE0 : InvEvent E0}
+  {iEr : InvErr}.
 
 Context (p : prog) (ev: extra_val_t) (spec : HoareSpec).
 
@@ -797,7 +816,12 @@ Notation whoare_f := (hoare_f_ii (iEr := invErrT)).
 
 Section WHOARE_CORE.
 
-Context {E E0: Type -> Type}  {sem_F : sem_Fun E} {wE: with_Error E E0} {iE0 : InvEvent E0}.
+Context
+  {E E0 : Type -> Type}
+  {sem_F : sem_Fun E}
+  {wE : with_Error E E0}
+  {wD : DeclassifyEvent -< E}
+  {iE0 : InvEvent E0}.
 
 Context (p : prog) (ev: extra_val_t).
 
@@ -810,10 +834,11 @@ Proof. by apply hoare_assgn. Qed.
 
 Lemma whoare_opn (Rve Rvo : Pred_vs) P Q ii xs tag o es :
   rhoare P (fun s => sem_pexprs true (p_globs p) s es) Rve PredT ->
+  (forall vs, Rve vs -> rhoare P (fun s => event_of_opn o (emem s) vs) (preInvDeclassify (iEr := invErrT)) PredT) ->
   (forall s, P s -> rhoare Rve (exec_sopn o) Rvo PredT) ->
   (forall vs, Rvo vs -> rhoare P (fun s => write_lvals true (p_globs p) s xs vs) Q PredT) ->
   whoare p ev P [:: MkI ii (Copn xs tag o es)] Q.
-Proof. by apply hoare_opn. Qed.
+Proof. exact: hoare_opn. Qed.
 
 Lemma whoare_syscall Rv Ro P Q ii xs sc es :
   rhoare P (fun s => sem_pexprs true (p_globs p) s es) Rv PredT ->
@@ -886,7 +911,11 @@ Notation iwhoare   := (hoare (sem_F := sem_fun_full) (iEr := invErrT)).
 
 Section WHOARE_FUN.
 
-Context {E E0: Type -> Type} {wE: with_Error E E0} {iE0 : InvEvent E0}.
+Context
+  {E E0 : Type -> Type}
+  {wE: with_Error E E0}
+  {wD : DeclassifyEvent -< E}
+  {iE0 : InvEvent E0}.
 
 Context (p : prog) (ev: extra_val_t) (spec : HoareSpec).
 
@@ -941,9 +970,11 @@ Context
   {pT : progT}
   {wsw : WithSubWord}
   {scP : semCallParams}
-  {dc : DirectCall}.
-
-Context {E E0: Type -> Type} {sem_F : sem_Fun E} {wE: with_Error E E0}.
+  {dc : DirectCall}
+  {E E0 : Type -> Type}
+  {sem_F : sem_Fun E}
+  {wE : with_Error E E0}
+  {wD : DeclassifyEvent -< E}.
 
 Context (p : prog) (ev : extra_val_t).
 
@@ -981,9 +1012,13 @@ Proof.
     move=> v _; apply wrhoareP => s s' <-.
     rewrite write_Ii write_i_assgn; apply vrvP.
   + move=> xs tg o es ii s0.
-    apply whoare_opn with PredT PredT; try auto using rhoare_true.
+    apply: (whoare_opn ev (Rve := PredT) (Rvo := PredT)).
+    - exact: rhoare_true.
+    - move=> vs _ _ ->; case: event_of_opn => [[e|//]|//].
+      rewrite /= /preInv; by case: mfun1.
+    - move=> ??; exact: rhoare_true.
     move=> v _; apply wrhoareP => s s' <-.
-    rewrite write_Ii write_i_opn; apply vrvsP.
+    rewrite write_Ii write_i_opn; exact:vrvsP.
   + move=> xs o es ii s0.
     apply whoare_syscall with PredT PredT; try auto using rhoare_true.
     move=> v _; apply wrhoareP => s s' <-.
@@ -1024,5 +1059,3 @@ Proof.
 Qed.
 
 End Test.
-
-
