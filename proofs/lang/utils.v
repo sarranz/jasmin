@@ -1000,21 +1000,30 @@ Qed.
 
 Section Subseq.
 
-  Context (T : eqType).
-  Context (p : T -> bool).
+  Context {T : eqType}.
 
-  Lemma subseq_has s1 s2 : subseq s1 s2 -> has p s1 -> has p s2.
+  Lemma subseq_has p (s1 s2 : seq T) : subseq s1 s2 -> has p s1 -> has p s2.
   Proof.
-    move=> /mem_subseq hsub /hasP [x /hsub hin hp].
-    apply /hasP.
-    by exists x.
+  move=> /mem_subseq hsub /hasP [x /hsub hin hp]; apply /hasP; by exists x.
   Qed.
 
-  Lemma subseq_all s1 s2 : subseq s1 s2 -> all p s2 -> all p s1.
+  Lemma subseq_in_all p1 p2 (s1 s2 : seq T) :
+    subseq s1 s2 ->
+    {in s1, subpred p1 p2} ->
+    all p1 s2 ->
+    all p2 s1.
   Proof.
-    move=> /mem_subseq hsub /allP hall.
-    by apply /allP => x /hsub /hall.
+  move=> /mem_subseq hs ha /allP h; apply/allP => x ?; by rewrite ha // h // hs.
   Qed.
+
+  Lemma subpred_in_all p1 p2 (s : seq T) :
+    {in s, subpred p1 p2} ->
+    all p1 s ->
+    all p2 s.
+  Proof. exact: subseq_in_all. Qed.
+
+  Lemma subseq_all p (s1 s2 : seq T) : subseq s1 s2 -> all p s2 -> all p s1.
+  Proof. move=> /subseq_in_all; exact. Qed.
 
 End Subseq.
 

@@ -430,7 +430,7 @@ Context
   {E E0 : Type -> Type}
   {sem_F : sem_Fun E}
   {wE : with_Error E E0}
-  {wD : DeclassifyEvent -< E}
+  {wD : DeclassifyEvent -< E0}
   {iE0 : InvEvent E0}
   {iEr : InvErr}.
 
@@ -505,7 +505,7 @@ Proof.
 Qed.
 
 Definition preInvDeclassify (oe : option (DeclassifyEvent unit)) : Prop :=
-  if oe is Some e then preInv (wD e) else True.
+  if oe is Some e then preInv (subevent_withError e) else True.
 
 Lemma preInvDeclassifyP :
   khoare
@@ -715,7 +715,7 @@ Context
   {E E0 : Type -> Type}
   {sem_F : sem_Fun E}
   {wE : with_Error E E0}
-  {wD : DeclassifyEvent -< E}.
+  {wD : DeclassifyEvent -< E0}.
 
 Context (p : prog) (ev: extra_val_t).
 
@@ -743,7 +743,7 @@ Section HOARE_FUN.
 Context
   {E E0 : Type -> Type}
   {wE : with_Error E E0}
-  {wD : DeclassifyEvent -< E}
+  {wD : DeclassifyEvent -< E0}
   {iE0 : InvEvent E0}
   {iEr : InvErr}.
 
@@ -820,7 +820,7 @@ Context
   {E E0 : Type -> Type}
   {sem_F : sem_Fun E}
   {wE : with_Error E E0}
-  {wD : DeclassifyEvent -< E}
+  {wD : DeclassifyEvent -< E0}
   {iE0 : InvEvent E0}.
 
 Context (p : prog) (ev: extra_val_t).
@@ -914,7 +914,7 @@ Section WHOARE_FUN.
 Context
   {E E0 : Type -> Type}
   {wE: with_Error E E0}
-  {wD : DeclassifyEvent -< E}
+  {wD : DeclassifyEvent -< E0}
   {iE0 : InvEvent E0}.
 
 Context (p : prog) (ev: extra_val_t) (spec : HoareSpec).
@@ -974,7 +974,7 @@ Context
   {E E0 : Type -> Type}
   {sem_F : sem_Fun E}
   {wE : with_Error E E0}
-  {wD : DeclassifyEvent -< E}.
+  {wD : DeclassifyEvent -< E0}.
 
 Context (p : prog) (ev : extra_val_t).
 

@@ -633,9 +633,9 @@ Context
   {E E0 : Type -> Type}
   {sem_F : sem_Fun E}
   {wE : with_Error E E0}
-  {wD : DeclassifyEvent -< E}
+  {wD : DeclassifyEvent -< E0}
   {rE0 : EventRels E0}
-  {declassifyE_refl : RndE0_refl rE0}
+  {DEind : DeclassifyEvent_ind}
 .
 
 Let Pi i := wequiv p p' ev ev' (st_eq tt) [::i] [::i] (st_eq tt).
