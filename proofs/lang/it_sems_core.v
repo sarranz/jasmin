@@ -74,14 +74,17 @@ Class FIso (E1 E2: Type -> Type) : Type := FI {
 
 Notation with_Error E E0 := (FIso E (ErrEvent +' E0)).
 
-Class with_Events E E0 :=
-  {
-    wE :: with_Error E E0;
-    wD :: DeclassifyEvent -< E;
-  }.
-
 #[global] Instance fromErr E E0 {wE : with_Error E E0} : ErrEvent -< E :=
   fun T (e:ErrEvent T) => mfun2 (inl1 e).
+
+Instance subevent_withError
+  {E E0 E'} {wE : with_Error E E0} {sE : E' -< E0} : E' -< E :=
+  fun T (e : E' T) => mfun2 (inr1 (sE _ e)).
+
+Lemma subevent_withErrorP
+  E E0 E' {wE : with_Error E E0} {sE : E' -< E0} T (e : E' T) :
+  mfun1 (subevent_withError e) = inr1 (sE _ e).
+Proof. by rewrite /subevent_withError mid12. Qed.
 
 Definition is_error {E E0 : Type -> Type} (wE : with_Error E E0) (T : Type) (e : E T) :=
   match mfun1 e with
@@ -169,7 +172,7 @@ Section CORE.
 Context
   {E E0}
   {wE : with_Error E E0}
-  {wD : DeclassifyEvent -< E}
+  {wD : DeclassifyEvent -< E0}
   (p : prog)
   (ev : extra_val_t).
 
@@ -202,6 +205,7 @@ Definition sem_assgn  (x : lval) (tg : assgn_tag) (ty : atype) (e : pexpr)
   Let v' := truncate_val (eval_atype ty) v in
   write_lval true (p_globs p) x v' s.
 
+(* TODO find a better place for this *)
 Definition read8 m p i := CoreMem.read m Aligned (p + wrepr Uptr i)%R U8.
 Definition read_bytes m p len := mapM (read8 m p) (ziota 0 len).
 
@@ -211,11 +215,15 @@ Definition is_Odeclassify (o : sopn) : option atype :=
 Definition is_Odeclassify_mem (o : sopn) : option positive :=
   if o is Opseudo_op (pseudo_operator.Odeclassify_mem len) then Some len
   else None.
+(* end TODO *)
 
-Definition event_of_opn (o : sopn) (m : mem) (vs : values) :
-  exec (option (DeclassifyEvent unit)) :=
+Definition event_of_opn
+  (o : sopn) (m : mem) (vs : values) : exec (option (DeclassifyEvent unit)) :=
   let v := nth (Vbool true) vs 0 in
-  if is_Odeclassify o is Some _ then ok (Some (Edeclassify v))
+  if is_Odeclassify o is Some ty then
+    Let _ := assert (is_fully_defined v) ErrSemUndef in
+    Let v := truncate_val (eval_atype ty) v in
+    ok (Some (Edeclassify v))
   else if is_Odeclassify_mem o is Some len then
     Let p := to_word Uptr v in
     Let b := read_bytes m p len in
@@ -321,7 +329,7 @@ Section SEM_I.
 Context
   {E E0 : Type -> Type}
   {wE : with_Error E E0}
-  {wD : DeclassifyEvent -< E}
+  {wD : DeclassifyEvent -< E0}
   {sem_F : sem_Fun E }.
 
 (* semantics of instructions, abstracting on function calls (through
@@ -507,7 +515,7 @@ End SEM_I.
 (*** error-aware interpreter with recursion ***************************)
 Section SEM_F.
 
-Context {E E0} {wE : with_Error E E0} {wD : DeclassifyEvent -< E}.
+Context {E E0} {wE : with_Error E E0} {wD : DeclassifyEvent -< E0}.
 
 Section EXTEQ.
 Context (sem_F1 sem_F2: sem_Fun E) (p:prog) (ev:extra_val_t) .
@@ -620,7 +628,7 @@ Section CoreLemmas.
 Context
   {E E0 : Type -> Type}
   {wE : with_Error E E0}
-  {wD : DeclassifyEvent -< E}
+  {wD : DeclassifyEvent -< E0}
   (p : prog)
   (ev : extra_val_t).
 

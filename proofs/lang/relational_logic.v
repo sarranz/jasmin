@@ -24,6 +24,170 @@ Require Import expr psem_defs psem_core oseq compiler_util.
 Require Import it_sems_core core_logics hoare_logic.
 Import Utf8.
 
+
+(* TODO move *)
+
+Lemma truncate_val_word ws w v :
+  truncate_val (cword ws) v = ok (Vword w) <-> to_word ws v = ok w.
+Proof.
+split.
+- by move=> /truncate_valI [ws' [w' [_ <- ->]]].
+by rewrite /truncate_val => /to_wordI [ws' [w' [-> /= ->]]].
+Qed.
+
+Lemma subctype_antisymm t1 t2 :
+  subctype t1 t2 -> subctype t2 t1 -> t1 = t2.
+Proof.
+case: t1 => [||p1 | ws1]; case: t2 => [||p2 | ws2] // /subctypeE //.
+move=> [_ [[<-] h1]] /subctypeE [_ [[<-] h2]].
+by rewrite (cmp_le_antisym h1 h2).
+Qed.
+
+(* better inference than get_read8 for some reason (specific to arrays) *)
+Lemma read_get8 {n i al} {a : WArray.array n} :
+  read a al i U8 = WArray.get8 a i.
+Proof. by rewrite -get_read8. Qed.
+
+Lemma read_errP n (a : WArray.array n) i :
+  reflect
+    (exists e, read a Aligned i U8 = Error e)
+    (~~ WArray.in_bound a i || ~~ WArray.is_init a i).
+Proof.
+rewrite read_get8 /= /WArray.get8.
+case: WArray.in_bound => /=; last by constructor; eexists.
+case: WArray.is_init => /=; last by constructor; eexists.
+by constructor=> -[].
+Qed.
+
+From mathcomp Require Import eqtype word_ssrZ ssralg.
+
+(* TODO result and error should have an eqType instance
+   Then WArray.uincl can be a bool and value_uincl as well.
+   Why is uincl implemented with read instead of get8? *)
+Definition array_eq
+  (n1 n2 : positive) (a1 : WArray.array n1) (a2 : WArray.array n2) : Prop :=
+  [/\ n1 == n2
+    & forall i, WArray.in_bound a1 i -> WArray.get8 a1 i = WArray.get8 a2 i
+  ].
+
+Lemma array_eqP n1 n2 (a1 : WArray.array n1) (a2 : WArray.array n2) :
+  array_eq a1 a2 <-> WArray.uincl a1 a2 /\ WArray.uincl a2 a1.
+Proof.
+split=> -[].
+- move=> /eqP ? h; subst n2.
+  split; split=> // i w; rewrite !read_get8 /= => hok.
+  + rewrite -h //; apply: WArray.get_valid8 hok.
+  rewrite h //; apply: WArray.get_valid8 hok.
+move=> [? h1] [_ h2]; subst n2; split=> // i hi.
+rewrite -!(read_get8 (al := Aligned)).
+case hok1: (read a1 Aligned i U8) => [w1|e1].
+- by rewrite (h1 _ _ hok1).
+have /read_errP: exists e, read a1 Aligned i U8 = Error e by exists e1.
+rewrite hi /= -hok1 => hin1.
+case hok2: (read a2 Aligned i U8) => [w2|e2].
+- by rewrite (h2 _ _ hok2).
+rewrite -hok2 !read_get8 /= /WArray.get8 hi /=.
+have /read_errP: exists e, read a2 Aligned i U8 = Error e by exists e2.
+move: hin1; rewrite -[WArray.in_bound a2 i]/(WArray.in_bound a1 i) hi.
+by move=> /negPf -> /negPf ->.
+Qed.
+
+Lemma uincl_arr_is_fully_defined_array_eq
+  n1 n2 (a1 : WArray.array n1) (a2 : WArray.array n2) :
+  WArray.uincl a1 a2 ->
+  arr_is_fully_defined a1 ->
+  array_eq a1 a2.
+Proof.
+move=> [? h] /allP def; subst n2; split=> // i hi.
+rewrite -!(read_get8 (al := Aligned)).
+suff : exists w, [elaborate read a1 Aligned i U8 ] = ok w.
+- by move=> [w /[dup] /h ->].
+apply/read_okP; by rewrite hi def // in_ziota.
+Qed.
+
+Definition value_eq (v1 v2 : value) : Prop :=
+  match v1, v2 with
+  | Vbool b1, Vbool b2 => b1 == b2
+  | Vint z1, Vint z2 => z1 == z2
+  | Varr n1 a1, Varr n2 a2 => array_eq a1 a2
+  | Vword sz1 w1, Vword sz2 w2 => [&& sz1 == sz2 & w1 == zero_extend sz1 w2 ]
+  | Vundef t1 _, Vundef t2 _ => t1 == t2
+  | _, _ => false
+  end.
+
+Lemma value_eqP v1 v2 :
+  value_eq v1 v2 <-> value_uincl v1 v2 /\ value_uincl v2 v1.
+Proof.
+case: v1 => [b1 | z1 | n1 a1 | sz1 w1 | t1 ?];
+  case: v2 => [b2 | z2 | n2 a2 | sz2 w2 | t2 ?];
+  split=> [|[]] //=;
+  try (by move=> /eqP -> || by move=> -> /[!eqxx]).
+- by move=> /array_eqP.
+- move=> h1 h2; exact/array_eqP.
+- move=> /andP [] /eqP ? /eqP ?; subst sz2 w1.
+  by rewrite zero_extend_u word_uincl_refl.
+- move=> /andP [h1 /eqP <-] /andP [h2 _].
+  have ? := cmp_le_antisym h1 h2; subst sz2.
+  by rewrite !eqxx.
+by move=> /subctype_antisymm /[apply] ->.
+Qed.
+
+Lemma is_fully_defined_is_defined v :
+  is_fully_defined v ->
+  is_defined v.
+Proof. by case: v. Qed.
+
+Lemma is_Varr_truncate_val t v v' :
+  truncate_val t v = ok v' ->
+  is_Varr v' = is_Varr v.
+Proof.
+case: v => [b | z | n a | ws w | ??] /truncate_valE //.
+1-3: by move=> [_ ->].
+by move=> [? [? [_ _ ->]]].
+Qed.
+
+Lemma is_fully_defined_truncate_val t v v' :
+  is_fully_defined v ->
+  truncate_val t v = ok v' ->
+  is_fully_defined v'.
+Proof.
+move=> + tr; rewrite /is_fully_defined (is_Varr_truncate_val tr).
+case: (is_Varr v) => [[n a]|] // _; exact: truncate_val_defined tr.
+Qed.
+
+Lemma value_uincl_fully_defined_value_eq t v1 v2 v1' :
+  is_fully_defined v1 ->
+  value_uincl v1 v2 ->
+  truncate_val t v1 = ok v1' ->
+  exists2 v2', value_eq v1' v2' & truncate_val t v2 = ok v2'.
+Proof.
+move=> def uincl tr1.
+have [v2' tr2 uincl'] := value_uincl_truncate uincl tr1.
+rewrite tr2; exists v2' => //.
+case: v1' tr1 uincl' => [b | z | n1 a1 | ws1 w1 |??] tr1.
+- by move=> /value_uinclE -> /=.
+- by move=> /value_uinclE -> /=.
+- move=> /value_uinclE [a2 ->] uincl'.
+  apply: (uincl_arr_is_fully_defined_array_eq uincl').
+  exact: is_fully_defined_truncate_val def tr1.
+- move=> uincl'.
+  have [_ [_ [? _ _]]] := truncate_valI tr1; subst t.
+  have [w2' [_ [_ [_ _ ?]]]] := truncate_val_typeE tr2; subst v2'.
+  by rewrite /= zero_extend_u (word_uincl_eq uincl') !eqxx.
+by have := is_fully_defined_truncate_val def tr1.
+Qed.
+
+From mathcomp Require Import ssrnat.
+
+Lemma Forall2_nth A B (R : A -> B -> Prop) a b la lb i :
+  List.Forall2 R la lb ->
+  (if i < size la then True else R a b)%N ->
+  R (nth a la i) (nth b lb i).
+Proof.
+case: (ltnP i (size la)) => hi h hR; first exact: (Forall2_nth h _ _ hi).
+by rewrite !nth_default // -(Forall2_size h).
+Qed.
+
 Definition rel (I1 I2 : Type) := I1 -> I2 -> Prop.
 
 Definition rel_io (I1 I2 O1 O2 : Type) := I1 -> I2 -> O1 -> O2 -> Prop.
@@ -162,7 +326,7 @@ Context
   {asm_op}  {sip : SemInstrParams asm_op syscall_state}.
 
 Lemma wrequiv_exec_sopn o :
-  wrequiv (Forall2 value_uincl) (exec_sopn o) (exec_sopn o) (Forall2 value_uincl).
+  wrequiv values_uincl (exec_sopn o) (exec_sopn o) values_uincl.
 Proof. move=> vs1 vs2 vs1'; apply vuincl_exec_opn. Qed.
 
 End SOPN.
@@ -184,7 +348,7 @@ Qed.
 
 Lemma wrequiv_truncate_val ty :
   wrequiv value_uincl (truncate_val ty) (truncate_val ty) value_uincl.
-Proof. move=> v1 v2 v1'; apply value_uincl_truncate. Qed.
+Proof. move=> v1 v2 v1'; exact: value_uincl_truncate. Qed.
 
 (* ------------------------------------------------- *)
 
@@ -193,32 +357,40 @@ Class EventRels (E0 : Type -> Type) :=
   { EPreRel0_  : prerel E0 E0
   ; EPostRel0_ : postrel E0 E0 }.
 
-Definition EPreRel0 {E0} {rE0 : EventRels E0} := EPreRel0_.
-Definition EPostRel0 {E0} {rE0 : EventRels E0} := EPostRel0_.
+Section EVENTREL.
+
+Context
+  {E E0 : Type -> Type}
+  {wE : with_Error E E0}
+  {rE0 : EventRels E0}.
+
+Definition EPreRel0 := EPreRel0_.
+Definition EPostRel0 := EPostRel0_.
 
 (* pre-relation associated with an event type extended with errors *)
-Definition EPreRel {E E0 : Type -> Type} {wE : with_Error E E0}
-  {rE0 : EventRels E0} : prerel E E :=
+Definition EPreRel : prerel E E :=
   fun T1 T2 (e1 : E T1) (e2 : E T2) =>
     sum_prerelF (fun _ _ _ _ => True) EPreRel0 (mfun1 e1) (mfun1 e2).
 
 (* post-relation associated with an event type extended with errors *)
-Definition EPostRel {E E0 : Type -> Type} {wE : with_Error E E0}
-  {rE0 : EventRels E0} : postrel E E :=
+Definition EPostRel : postrel E E :=
   fun T1 T2 (e1 : E T1) (t1 : T1) (e2 : E T2) (t2 : T2) =>
     sum_postrelF (fun _ _ _ _ _ _ => True) EPostRel0
       (mfun1 e1) t1 (mfun1 e2) t2.
 
-Class DeclassifyEvent_refl
-  {E0 : Type -> Type} (rE0 : EventRels E0) {wD : DeclassifyEvent -< E0} :=
+Class DeclassifyEvent_ind {wD : DeclassifyEvent -< E0} :=
   {
-    rE0_rnd_pre_refl :
-      forall scs len,
-        EPreRel0_ (rndE0 _ (Rnd scs len)) (rndE0 _ (Rnd scs len));
-    rE0_rnd_post_refl :
-      forall scs len bytes1 bytes2,
-        EPostRel0_ (rndE0 _ (Rnd scs len)) bytes1 (rndE0 _ (Rnd scs len)) bytes2 -> bytes1 = bytes2
+    DEind_pre_val :
+      forall v1 v2,
+        value_eq v1 v2 ->
+        EPreRel0_ (wD _ (Edeclassify v1)) (wD _ (Edeclassify v2));
+
+    DEind_pre_mem :
+      forall b1 b2,
+        EPreRel0_ (wD _ (Edeclassify_mem b1)) (wD _ (Edeclassify_mem b2));
   }.
+
+End EVENTREL.
 
 Section WKEQUIV.
 
@@ -516,13 +688,77 @@ Qed.
 
 End IRESULT.
 
+Section DECLASSIFY.
+
+Context
+  {E E0 : Type -> Type}
+  {wE : with_Error E E0}
+  {wD : DeclassifyEvent -< E0}
+  {rE0 : EventRels E0}
+  {DEind : DeclassifyEvent_ind}.
+
+Definition preRelDeclassify (oe1 oe2 : option (DeclassifyEvent unit)) : Prop :=
+  match oe1, oe2 with
+  | Some e1, Some e2 => EPreRel (subevent_withError e1) (subevent_withError e2)
+  | None, None => True
+  | _, _ => False
+  end.
+
+Lemma preRelDeclassifyP :
+  wkequiv
+    preRelDeclassify
+    (fun t => if t is Some e then trigger e else Ret tt)
+    (fun t => if t is Some e then trigger e else Ret tt)
+    relT.
+Proof.
+move=> [e1|] [e2|] // h; [exact: (xrutt_trigger _ _ h)|exact: xrutt_Ret].
+Qed.
+
+Lemma event_of_opn_uincl o m :
+  wrequiv values_uincl (event_of_opn o m) (event_of_opn o m) preRelDeclassify.
+Proof.
+move=> vs1 vs2 + uincl.
+have {}uincl : value_uincl (nth (Vbool true) vs1 0) (nth (Vbool true) vs2 0).
+- apply: (Forall2_nth uincl); by case: ifP.
+rewrite /event_of_opn; case: is_Odeclassify => [t|].
+- t_xrbindP=> _ def v tr <-.
+  have [v2' eqv ->] := value_uincl_fully_defined_value_eq def uincl tr.
+  rewrite (value_uincl_fully_defined uincl def).
+  eexists; first reflexivity.
+  rewrite /= /EPreRel !subevent_withErrorP; exact: DEind_pre_val eqv.
+case: is_Odeclassify_mem => [len|].
+- t_xrbindP=> /= _ p /truncate_val_word tr bs + <- /=.
+  have [] := value_uincl_fully_defined_value_eq _ uincl tr.
+  + by move: tr => /truncate_valI [? [? [_ _ ->]]].
+  move=> [] // ws' w' /andP [] /eqP ? /eqP; subst ws'.
+  rewrite zero_extend_u => <- /truncate_val_word -> /= ->.
+  eexists; first reflexivity.
+  rewrite /EPreRel subevent_withErrorP; exact: DEind_pre_mem.
+move=> _ [<-]; by eexists.
+Qed.
+
+Lemma event_of_opn_eq o m :
+  wrequiv eq (event_of_opn o m) (event_of_opn o m) preRelDeclassify.
+Proof.
+apply/wrequiv_weaken/event_of_opn_uincl => // ?? ->; exact: values_uincl_refl.
+Qed.
+
+#[global]
+Instance RndE0_recall eS : DeclassifyEvent_ind (rE0 := relEvent_recCall eS).
+Proof.
+constructor; rewrite /EPostRel0_ /= /resum;
+  [exact: DEind_pre_val|exact: DEind_pre_mem].
+Qed.
+
+End DECLASSIFY.
+
 Section WEQUIV_CORE.
 
 Context
   {E E0 : Type -> Type}
   {sem_F1 : sem_Fun1 E} {sem_F2 : sem_Fun2 E}
   {wE : with_Error E E0}
-  {wD : DeclassifyEvent -< E}
+  {wD : DeclassifyEvent -< E0}
   {rE0 : EventRels E0}.
 
 Context (p1 : prog1) (p2 : prog2) (ev1: extra_val_t1) (ev2 : extra_val_t2).
@@ -637,23 +873,6 @@ Proof.
   by rewrite /errcutoff /is_error /subevent /resum /fromErr mid12.
 Qed.
 
-Definition preRelDeclassify (oe1 oe2 : option (DeclassifyEvent unit)) : Prop :=
-  match oe1, oe2 with
-  | Some e1, Some e2 => EPreRel (wD e1) (wD e2)
-  | None, None => True
-  | _, _ => False
-  end.
-
-Lemma preRelDeclassifyP :
-  wkequiv
-    preRelDeclassify
-    (fun t => if t is Some e then trigger e else Ret tt)
-    (fun t => if t is Some e then trigger e else Ret tt)
-    relT.
-Proof.
-move=> [e1|] [e2|] // h; [exact: (xrutt_trigger _ _ h)|exact: xrutt_Ret].
-Qed.
-
 Lemma wequiv_opn (Rve Rvo : rel_vs) P Q ii1 xs1 at1 o1 es1 ii2 xs2 at2 o2 es2 :
   wrequiv P (fun s => sem_pexprs true (p_globs p1) s es1)
             (fun s => sem_pexprs true (p_globs p2) s es2) Rve ->
@@ -700,23 +919,24 @@ Qed.
 
 Lemma wequiv_opn_uincl {P Q ii1 xs1 at1 o es1 ii2 xs2 at2 es2} :
   wrequiv P (fun s => sem_pexprs true (p_globs p1) s es1)
-           (fun s => sem_pexprs true (p_globs p2) s es2) (Forall2 value_uincl) ->
+           (fun s => sem_pexprs true (p_globs p2) s es2) values_uincl ->
   (forall vs1 vs2,
-      Forall2 value_uincl vs1 vs2 ->
+      values_uincl vs1 vs2 ->
       wrequiv P
         (fun s => event_of_opn o (emem s) vs1)
         (fun s => event_of_opn o (emem s) vs2)
         preRelDeclassify) ->
   (forall vs1 vs2,
-    Forall2 value_uincl vs1 vs2 ->
+    values_uincl vs1 vs2 ->
     wrequiv P (fun s1 => write_lvals true (p_globs p1) s1 xs1 vs1)
              (fun s2 => write_lvals true (p_globs p2) s2 xs2 vs2) Q) ->
   wequiv P [:: MkI ii1 (Copn xs1 at1 o es1)] [:: MkI ii2 (Copn xs2 at2 o es2)] Q.
 Proof.
-move=> he hev; apply: (wequiv_opn (Rve := Forall2 value_uincl)) => //.
+move=> he hev; apply: (wequiv_opn (Rve := values_uincl)) => //.
 move=> _ _ _; exact: wrequiv_exec_sopn.
 Qed.
 
+(* TODO I think the first hypothesis is not necessary *)
 Lemma wequiv_opn_esem (P Q : rel_c) ii1 xs1 tg1 o1 es1 c2 :
   (forall s1 s2, P s1 s2 -> esem_trigger_opn p1 o1 es1 s1 = ok tt) ->
   wrequiv P (fun s => sem_sopn (p_globs p1) o1 s xs1 es1)
@@ -830,7 +1050,7 @@ Proof. by move=> h fs; rewrite /upd_estate => s t s' [?? hvm]; apply h. Qed.
 
 End ST_REL.
 
-Definition fs_uincl := fs_rel (List.Forall2 value_uincl).
+Definition fs_uincl := fs_rel values_uincl.
 
 Lemma fs_uinclR fs : fs_uincl fs fs.
 Proof. split=> //; exact: values_uincl_refl. Qed.
@@ -838,7 +1058,7 @@ Proof. split=> //; exact: values_uincl_refl. Qed.
 Lemma wequiv_syscall_uincl P Q ii1 xs1 sc1 es1 ii2 sc2 xs2 es2 :
   (forall s1 s2, P s1 s2 -> escs s1 = escs s2 /\ emem s1 = emem s2) ->
   wrequiv P (fun s => sem_pexprs true (p_globs p1) s es1)
-           (fun s => sem_pexprs true (p_globs p2) s es2) (Forall2 value_uincl) ->
+           (fun s => sem_pexprs true (p_globs p2) s es2) values_uincl ->
   wrequiv fs_uincl (fexec_syscall (scP:=scP1) sc1)
                   (fexec_syscall (scP:=scP2) sc2) fs_uincl ->
   (forall fs1 fs2,
@@ -848,7 +1068,7 @@ Lemma wequiv_syscall_uincl P Q ii1 xs1 sc1 es1 ii2 sc2 xs2 es2 :
   wequiv P [:: MkI ii1 (Csyscall xs1 sc1 es1)] [:: MkI ii2 (Csyscall xs2 sc2 es2)] Q.
 Proof.
   move=> heq he hsc.
-  apply wequiv_syscall with (Forall2 value_uincl) => //.
+  apply wequiv_syscall with values_uincl => //.
   by rewrite /mk_fstate => s1 s2 /heq [<- <-] vs1 vs2 fr1 huincl;apply hsc.
 Qed.
 
@@ -959,7 +1179,7 @@ Qed.
 
 Lemma wrequiv_sem_bound (P : rel_c) lo1 hi1 lo2 hi2 :
   wrequiv P (fun s => sem_pexprs true (p_globs p1) s [::lo1; hi1])
-            (fun s => sem_pexprs true (p_globs p2) s [::lo2; hi2]) (List.Forall2 value_uincl) ->
+            (fun s => sem_pexprs true (p_globs p2) s [::lo2; hi2]) values_uincl ->
   wrequiv P (sem_bound (p_globs p1) lo1 hi1) (sem_bound (p_globs p2) lo2 hi2) eq.
 Proof.
   move=> hbound; rewrite /sem_bound.
@@ -976,7 +1196,7 @@ Qed.
 Lemma wequiv_for_uincl P0 P Pi ii1 i1 d lo1 hi1 c1 ii2 i2 lo2 hi2 c2 :
   (forall s1 s2, P0 s1 s2 -> P s1 s2) ->
   wrequiv P0 (fun s => sem_pexprs true (p_globs p1) s [::lo1; hi1])
-            (fun s => sem_pexprs true (p_globs p2) s [::lo2; hi2]) (List.Forall2 value_uincl) ->
+            (fun s => sem_pexprs true (p_globs p2) s [::lo2; hi2]) values_uincl ->
   (forall i : Z, wrequiv P (write_var true i1 (Vint i)) (write_var true i2 (Vint i)) Pi) ->
   wequiv Pi c1 c2 P ->
   wequiv P0 [:: MkI ii1 (Cfor i1 (d, lo1, hi1) c1)] [:: MkI ii2 (Cfor i2 (d, lo2, hi2) c2)] P.
@@ -991,7 +1211,7 @@ Lemma wequiv_for_eq P0 P Pi ii1 i1 d lo1 hi1 c1 ii2 i2 lo2 hi2 c2 :
   wequiv P0 [:: MkI ii1 (Cfor i1 (d, lo1, hi1) c1)] [:: MkI ii2 (Cfor i2 (d, lo2, hi2) c2)] P.
 Proof.
   move=> hP0P hbound; apply wequiv_for_uincl => //.
-  by apply: wrequiv_weaken hbound => // > <-; apply List_Forall2_refl.
+  apply: wrequiv_weaken hbound => // > <-; exact: values_uincl_refl.
 Qed.
 
 Lemma wequiv_while_full I I' ii1 al1 e1 inf1 c1 c1' ii2 al2 e2 inf2 c2 c2' :
@@ -1301,13 +1521,15 @@ Class Checker_uincl :=
    forall wdb1 wdb2 d es1 es2 d',
      wdb_ok wdb1 wdb2 ->
      check_es d es1 es2 d' ->
-     wrequiv (R d) ((sem_pexprs wdb1 (p_globs p1))^~ es1) ((sem_pexprs wdb2 (p_globs p2))^~ es2)
-       (List.Forall2 value_uincl)
+     wrequiv (R d)
+       ((sem_pexprs wdb1 (p_globs p1))^~ es1)
+       ((sem_pexprs wdb2 (p_globs p2))^~ es2)
+       values_uincl
  ; ucheck_lvalsP :
    forall wdb1 wdb2 d xs1 xs2 d',
      wdb_ok wdb1 wdb2 ->
      check_lvals d xs1 xs2 d' ->
-     forall vs1 vs2, List.Forall2 value_uincl vs1 vs2 ->
+     forall vs1 vs2, values_uincl vs1 vs2 ->
      wrequiv (R d) (λ s1 : estate, write_lvals wdb1 (p_globs p1) s1 xs1 vs1)
                           (λ s2 : estate, write_lvals wdb2 (p_globs p2) s2 xs2 vs2) ( R d')
  }.
@@ -1367,10 +1589,10 @@ Proof.
   apply: ucheck_lvalP hxs v1 v2 hu.
 Qed.
 
-Lemma wequiv_opn_rel_uincl d de d' ii1 xs1 tg1 o es1  ii2 xs2 tg2 es2 :
+Lemma wequiv_opn_rel_uincl_R {d de d' ii1 xs1 tg1 o es1  ii2 xs2 tg2 es2} :
   check_es d es1 es2 de →
   (forall vs1 vs2,
-    List.Forall2 value_uincl vs1 vs2 ->
+    values_uincl vs1 vs2 ->
     wrequiv
       (R de)
       (fun s => event_of_opn o (emem s) vs1)
@@ -1465,7 +1687,7 @@ Lemma wequiv_call_rel_uincl_R d de de' d' ii1 xs1 fn1 es1 ii2 xs2 fn2 es2 :
   wequiv (R d) [:: MkI ii1 (Ccall xs1 fn1 es1)] [:: MkI ii2 (Ccall xs2 fn2 es2)] (R d').
 Proof.
   move=> hsm hwith hes hxs hf.
-  apply wequiv_call with (fun _ _ => fs_uincl) (fun _ _ _ _ => fs_uincl) (List.Forall2 value_uincl).
+  apply wequiv_call with (fun _ _ => fs_uincl) (fun _ _ _ _ => fs_uincl) values_uincl.
   + by apply: ucheck_esP hes.
   + by rewrite /mk_fstate; move=> > /hsm [-> ->] ?.
   + by apply hf.
@@ -1517,7 +1739,7 @@ Proof.
   apply: echeck_lvalP hxs v.
 Qed.
 
-Lemma wequiv_opn_rel_eq d de d' ii1 xs1 tg1 o es1 ii2 xs2 tg2 es2 :
+Lemma wequiv_opn_rel_eq_R {d de d' ii1 xs1 tg1 o es1 ii2 xs2 tg2 es2} :
   check_es d es1 es2 de →
   (forall vs,
     wrequiv
@@ -1630,14 +1852,27 @@ End REL.
 
 Section ST_REL.
 
-Context {D:Type}.
-Context (R : D -> vm1_t -> vm2_t -> Prop).
-
-Context {ce : Checker_e (st_rel R)}.
+Context
+  {DEind : DeclassifyEvent_ind}
+  {D : Type}
+  (R : D -> vm1_t -> vm2_t -> Prop)
+  {ce : Checker_e (st_rel R)}.
 
 Section UINCL.
 
 Context {cu:Checker_uincl (R:=st_rel R)}.
+
+Lemma wequiv_opn_rel_uincl d de d' ii1 xs1 tg1 o es1 ii2 xs2 tg2 es2 :
+  check_es d es1 es2 de ->
+  check_lvals de xs1 xs2 d' ->
+  wequiv
+    (st_rel R d)
+    [:: MkI ii1 (Copn xs1 tg1 o es1) ] [:: MkI ii2 (Copn xs2 tg2 o es2) ]
+    (st_rel R d').
+Proof.
+move=> hes hxs; apply: (wequiv_opn_rel_uincl_R hes _ hxs).
+move=> vs1 vs2 uincl s1 s2 e [_ <- _]; exact: event_of_opn_uincl uincl.
+Qed.
 
 Lemma wequiv_if_rel_uincl d de d1 d2 d' ii e c1 c2 ii' e' c1' c2' :
   check_es d [::e] [::e'] de ->
@@ -1690,6 +1925,19 @@ End UINCL.
 Section EQ.
 
 Context {cu:Checker_eq (R:=st_rel R)}.
+
+Lemma wequiv_opn_rel_eq d de d' ii1 xs1 tg1 o es1 ii2 xs2 tg2 es2 :
+  check_es d es1 es2 de ->
+  check_lvals de xs1 xs2 d' ->
+  wequiv
+    (st_rel R d)
+    [:: MkI ii1 (Copn xs1 tg1 o es1) ]
+    [:: MkI ii2 (Copn xs2 tg2 o es2) ]
+    (st_rel R d').
+Proof.
+move=> hes hxs; apply: (wequiv_opn_rel_eq_R hes _ hxs) => vs s1 s2 e [_ <- _].
+exact: event_of_opn_eq.
+Qed.
 
 Lemma wequiv_if_rel_eq d de d1 d2 d' ii e c1 c2 ii' e' c1' c2' :
   check_es d [::e] [::e'] de ->
@@ -1776,7 +2024,7 @@ Context
   {E E0 : Type -> Type}
   {sem_F1 : sem_Fun1 E} {sem_F2 : sem_Fun2 E}
   {wE : with_Error E E0}
-  {wD : DeclassifyEvent -< E}
+  {wD : DeclassifyEvent -< E0}
   {iE0 : InvEvent E0}
   {rE0 : EventRels E0}.
 
@@ -1833,7 +2081,7 @@ Context
   {E E0 : Type -> Type}
   {sem_F1 : sem_Fun1 E} {sem_F2 : sem_Fun2 E}
   {wE : with_Error E E0}
-  {wD : DeclassifyEvent -< E}
+  {wD : DeclassifyEvent -< E0}
   {rE0 : EventRels E0}
   (p1 : prog1) (p2 : prog2)
   (ev1 : extra_val_t1) (ev2 : extra_val_t2).
@@ -1884,7 +2132,7 @@ Section WEQUIV_FUN.
 Context
   {E E0 : Type -> Type}
   {wE : with_Error E E0}
-  {wD : DeclassifyEvent -< E}
+  {wD : DeclassifyEvent -< E0}
   {rE0 : EventRels E0}
   (p1 : prog1) (p2 : prog2)
   (ev1 : extra_val_t1) (ev2 : extra_val_t2)
@@ -2085,7 +2333,7 @@ Context
   {E E0 : Type -> Type}
   {sem_F1 sem_F2 : sem_Fun E}
   {wE : with_Error E E0}
-  {wD : DeclassifyEvent -< E}
+  {wD : DeclassifyEvent -< E0}
   {rE0 : EventRels E0}
   (p1 p2 : prog)
   (ev1 ev2 : extra_val_t)
@@ -2142,7 +2390,7 @@ Context
   {pT1 pT2 pT3 : progT}
   {E E0 : Type -> Type}
   {wE : with_Error E E0}
-  {wD : DeclassifyEvent -< E}
+  {wD : DeclassifyEvent -< E0}
   {wsw1 wsw2 wsw3 : WithSubWord}
   {scP1 : semCallParams (wsw := wsw1) (pT := pT1)}
   {scP2 : semCallParams (wsw := wsw2) (pT := pT2)}

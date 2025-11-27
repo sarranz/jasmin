@@ -79,10 +79,7 @@ Module WArray.
     Proof. by apply (iffP andP); rewrite !zify. Qed.
 
     Definition is_init (m:array s) (i:pointer) :=
-      match Mz.get m.(arr_data) i with 
-      | Some _ => true 
-      | None   => false
-      end.
+      isSome (Mz.get m.(arr_data) i).
 
     Definition get8 (m:array s) (i:pointer) :=
       Let _ := assert (in_bound m i) ErrOob in
@@ -92,6 +89,14 @@ Module WArray.
     Definition set8 (m:array s) (i:pointer) (v:u8) : result _ (array s):=
       Let _ := assert (in_bound m i) ErrOob in
       ok {| arr_data := Mz.set m.(arr_data) i v |}.
+
+    Lemma get8_okP a i :
+      reflect (exists w, get8 a i = ok w) (in_bound a i && is_init a i).
+    Proof.
+    rewrite /get8; apply: (iffP andP).
+    - move=> [-> ->]; by eexists.
+    move=> [] ?; by t_xrbindP.
+    Qed.
 
     Lemma valid8P m p w : reflect (exists m', set8 m p w = ok m') (in_bound m p).
     Proof.
