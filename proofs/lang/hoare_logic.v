@@ -31,6 +31,10 @@ Require Import psem_core.
 
 Require Import it_sems_core core_logics.
 
+Notation Rdeclassify :=
+  (fun o P => if is_Odeclassify o is Some d then P d else True)
+  (only parsing).
+
 Notation PredT := (fun=>True).
 
 (* Definition of a relational logic over program *)
@@ -504,31 +508,37 @@ Proof.
   apply hwr.
 Qed.
 
-Definition preInvDeclassify (oe : option (DeclassifyEvent unit)) : Prop :=
-  if oe is Some e then preInv (subevent_withError e) else True.
+Definition preInvDeclassify (e : DeclassifyEvent unit) : Prop :=
+  preInv (subevent_withError e).
 
-Lemma preInvDeclassifyP :
-  khoare
-    preInvDeclassify
-    (fun t => if t is Some e then trigger e else Ret tt)
-    PredT.
-Proof. move=> [e|] h; first exact: (lutt_trigger h). by rewrite -lutt_Ret. Qed.
+Lemma preInvDeclassifyP : khoare preInvDeclassify (fun e => trigger e) PredT.
+Proof. move=> ? h; exact: (lutt_trigger h). Qed.
+
+Lemma trigger_opnP {Rve P Qerr d es} :
+  (forall s e , P s -> Qerr e -> rInvErr s e) ->
+  (rhoare P ((sem_pexprs true (p_globs p))^~ es) Rve Qerr) ->
+  (forall vs, Rve vs -> rhoare P (fun s => event_of_opn d (emem s) vs) preInvDeclassify Qerr) ->
+  khoare_io P (fun s => trigger_opn p s d es) (fun=> PredT).
+Proof.
+move=> herr he hev.
+- apply: khoare_io_bind; first exact: khoare_iresult herr he.
+move=> s hs; apply: khoare_bind preInvDeclassifyP => vs hvs.
+exact: (khoare_iresult herr (hev _ hvs)).
+Qed.
 
 Lemma hoare_opn {Rve Rvo P Q Qerr ii xs tag o es} :
   (forall s e, P s -> Qerr e -> rInvErr s e) ->
   rhoare P (fun s => sem_pexprs true (p_globs p) s es) Rve Qerr ->
-  (forall vs, Rve vs -> rhoare P (fun s => event_of_opn o (emem s) vs) preInvDeclassify Qerr) ->
+  (Rdeclassify o (fun d => forall vs, Rve vs -> rhoare P (fun s => event_of_opn d (emem s) vs) preInvDeclassify Qerr)) ->
   (forall s, P s -> rhoare Rve (exec_sopn o) Rvo Qerr) ->
   (forall vs, Rvo vs -> rhoare P (fun s => write_lvals true (p_globs p) s xs vs) Q Qerr) ->
   hoare P [:: MkI ii (Copn xs tag o es)] Q.
 Proof.
 move=> herr he hev ho hwr.
 apply: (khoare_bind (R := Q)); last exact: khoare_ret.
-apply: (khoare_io_bind (R := fun _ _ => True)).
-- apply: khoare_io_bind; first exact: khoare_iresult herr he.
-  move=> s hs; apply: khoare_bind preInvDeclassifyP => vs hvs.
-  exact: (khoare_iresult herr (hev _ hvs)).
-move=> s h _ _; move: s h.
+apply: (khoare_read (R := fun _ => True)) => [|[] _].
+- case: is_OdeclassifyP hev ho => [d|{}o] /= hev ho; last exact: khoare_ret.
+  exact: trigger_opnP herr he hev.
 apply/(khoare_iresult herr)/(rhoare_read _ hwr)/(rhoare_read he) => vs hvs.
 move=> s hs; exact: ho hs _ hvs.
 Qed.
@@ -834,7 +844,7 @@ Proof. by apply hoare_assgn. Qed.
 
 Lemma whoare_opn (Rve Rvo : Pred_vs) P Q ii xs tag o es :
   rhoare P (fun s => sem_pexprs true (p_globs p) s es) Rve PredT ->
-  (forall vs, Rve vs -> rhoare P (fun s => event_of_opn o (emem s) vs) (preInvDeclassify (iEr := invErrT)) PredT) ->
+  (Rdeclassify o (fun d => forall vs, Rve vs -> rhoare P (fun s => event_of_opn d (emem s) vs) (preInvDeclassify (iEr := invErrT)) PredT)) ->
   (forall s, P s -> rhoare Rve (exec_sopn o) Rvo PredT) ->
   (forall vs, Rvo vs -> rhoare P (fun s => write_lvals true (p_globs p) s xs vs) Q PredT) ->
   whoare p ev P [:: MkI ii (Copn xs tag o es)] Q.
@@ -1014,8 +1024,9 @@ Proof.
   + move=> xs tg o es ii s0.
     apply: (whoare_opn ev (Rve := PredT) (Rvo := PredT)).
     - exact: rhoare_true.
-    - move=> vs _ _ ->; case: event_of_opn => [[e|//]|//].
-      rewrite /= /preInv; by case: mfun1.
+    - case: is_OdeclassifyP => [d vs _|//].
+      move=> s _; case: event_of_opn => [e|//].
+      by rewrite /preInvDeclassify /preInv subevent_withErrorP.
     - move=> ??; exact: rhoare_true.
     move=> v _; apply wrhoareP => s s' <-.
     rewrite write_Ii write_i_opn; exact:vrvsP.

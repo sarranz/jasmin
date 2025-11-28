@@ -2,12 +2,13 @@
 From HB Require Import structures.
 From mathcomp Require Import ssreflect ssrfun ssrbool seq eqtype ssralg.
 
-Require Import
+Require Export
   pseudo_operator
-  sem_type
   shift_kind
+  slh_ops.
+Require Import
+  sem_type
   strings
-  slh_ops
   type
   values
   var.
@@ -150,6 +151,28 @@ Definition is_Oslh (op : sopn) : option slh_op :=
 Lemma is_OslhP op : is_reflect Oslh op (is_Oslh op).
 Proof. case: op; by constructor. Qed.
 
+Definition is_Odeclassify (o : sopn) : option (atype + positive) :=
+  if o is Opseudo_op (Odeclassify ty) then Some (inl ty)
+  else if o is Opseudo_op (Odeclassify_mem len) then Some (inr len)
+  else None.
+
+Section DECLASSIFY.
+
+Let mk := fun x =>
+    match x with
+    | inl ty => Opseudo_op (Odeclassify ty)
+    | inr n => Opseudo_op (Odeclassify_mem n)
+    end.
+
+Lemma is_OdeclassifyP op : is_reflect mk op (is_Odeclassify op).
+Proof.
+case: op => [[]||] >;
+  rewrite -?[_ (Odeclassify _)]/(mk (inl _))
+    -?[_ (Odeclassify_mem _)]/(mk (inr _));
+  by constructor.
+Qed.
+
+End DECLASSIFY.
 
 (* ------------------------------------------------------------- *)
 (* Descriptors for speudo operators                              *)
