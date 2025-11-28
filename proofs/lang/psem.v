@@ -679,13 +679,6 @@ Let Pc c :=
     (evm s1 =1 vm1)%vm ->
     exists2 vm2, esem p' ev c (with_vm s1 vm1) = ok (with_vm s2 vm2) & evm s2 =1 vm2.
 
-Lemma esem_trigger_opn_vm_eq {o es s vm} :
-  (evm s =1 vm)%vm ->
-  esem_trigger_opn p' o es (with_vm s vm) = esem_trigger_opn p o es s.
-Proof.
-by move=> /sem_pexprs_ext_eq; rewrite /esem_trigger_opn eq_globs => <-.
-Qed.
-
 Lemma esem_vm_eq s1 c s2 vm1:
   esem p ev c s1 = ok s2 ->
   (evm s1 =1 vm1)%vm ->
@@ -701,8 +694,7 @@ Proof.
     rewrite -(sem_pexpr_ext_eq true (p_globs p) _ heq) he /= htr /=.
     by have [vm2 ??] := write_lvar_ext_eq heq hw; exists vm2.
   + move=> xs t o es ii s1 s2 vm1 /=; rewrite /sem_sopn -eq_globs.
-    t_xrbindP=> hev vs' vs hes hop hw heq.
-    rewrite (esem_trigger_opn_vm_eq heq) hev /=.
+    t_xrbindP=> -> vs' vs hes hop hw heq /=.
     rewrite -(sem_pexprs_ext_eq _ _ _ heq) hes /= hop /=.
     by have [vm2 ??] := write_lvars_ext_eq heq hw; exists vm2.
   + move=> xs o es ii s1 s2 vm1 /=; rewrite /sem_syscall -eq_globs /upd_estate; t_xrbindP.

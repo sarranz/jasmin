@@ -31,20 +31,19 @@ Section ERROR.
 Import Exception.
 
 Context
-  {E E0}
+  {E E0 : Type -> Type}
   {wE : with_Error E E0}
-  {Err : error -> it_exec.error_data}
 .
 
 Lemma error_withErrorP {e} :
-  mfun1 (subevent void (Throw (Err e))) = inl1 (Throw (Err e)).
+  mfun1 (subevent void (Throw e)) = inl1 (Throw e).
 Proof. by rewrite /subevent_withError mid12. Qed.
 
 Lemma Is_Cut_error {e} :
   IsCut_
     (errcutoff (is_error wE))
     void
-    (subevent void (Throw (Err e))).
+    (subevent void (Throw e)).
 Proof. by rewrite /errcutoff /is_error /= error_withErrorP. Qed.
 
 End ERROR.
@@ -681,8 +680,7 @@ Proof.
   case: x1 => [ v1 | e1] hok.
   + have [v2 -> /=] := hok _ erefl.
     by apply: xrutt_Ret.
-  apply xrutt_CutL => //.
-  by rewrite /errcutoff /is_error /subevent /resum /fromErr mid12.
+  exact: xrutt_CutL Is_Cut_error.
 Qed.
 
 Lemma wkequiv_iresult {I1 I2 O1 O2} (P : rel I1 I2) (Q : rel O1 O2) (f1 : I1 -> estate1) (f2 : I2 -> estate2) F1 F2 :
@@ -704,8 +702,7 @@ Proof.
   move=> h s t /h{}h; rewrite /iresult.
   case heq: (F1 s) => [s' | e] /=.
   + by apply/xrutt_Ret/h.
-  apply xrutt_CutL.
-  by rewrite /errcutoff /is_error /subevent /= /resum /fromErr mid12.
+  exact: xrutt_CutL Is_Cut_error.
 Qed.
 
 End IRESULT.
@@ -891,8 +888,7 @@ Proof.
   + rewrite bind_ret_r.
     have [t' /esem_i_bodyP -> hQ /=] := h s t s' hP heq.
     by apply xrutt.xrutt_Ret.
-  rewrite bind_ret_r; apply xrutt_CutL => //.
-  by rewrite /errcutoff /is_error /subevent /resum /fromErr mid12.
+  rewrite bind_ret_r; exact: xrutt_CutL Is_Cut_error.
 Qed.
 
 Lemma wequiv_opn (Rve Rvo : rel_vs) P Q ii1 xs1 at1 o1 es1 ii2 xs2 at2 o2 es2 :
@@ -965,26 +961,19 @@ move=> _ _ _; exact: wrequiv_exec_sopn.
 Qed.
 
 Lemma wequiv_opn_esem (P Q : rel_c) ii1 xs1 tg1 o1 es1 c2 :
+  ~~ is_Odeclassify o1 ->
   wrequiv P
     (fun s => sem_sopn (p_globs p1) o1 s xs1 es1)
     (esem p2 ev2 c2) Q ->
   wequiv P [:: MkI ii1 (Copn xs1 tg1 o1 es1)] c2 Q.
 Proof.
-move=> h s t hP /=; have := h s t _ hP; rewrite /esem_trigger_opn /trigger_opn.
-case hes: sem_pexprs => [vs|?] /=; last first.
-- rewrite !bind_vis => _; exact: xrutt_CutL Is_Cut_error.
-rewrite bind_ret_l; case hev: event_of_opn => [e|?] /=; last first.
-- rewrite !bind_vis => _; exact: xrutt_CutL Is_Cut_error.
-rewrite bind_ret_l; case: e hev => [?|] hev.
+move=> /isNoneP ho h s t hP /=.
+rewrite ho bind_ret_l.
 case heq: sem_sopn => [s'|?] /=; last first.
-- rewrite !bind_vis.
-  rewrite bind_ret_l. => _. exact: xrutt_CutL Is_Cut_error.
-
-  + rewrite bind_ret_r.
-    have [t' /esem_i_bodyP -> hQ /=] := h s t s' hP heq.
-    by apply xrutt.xrutt_Ret.
-  rewrite bind_ret_r; apply xrutt_CutL => //.
-  by rewrite /errcutoff /is_error /subevent /resum /fromErr mid12.
+- rewrite bind_vis; exact: xrutt_CutL Is_Cut_error.
+rewrite bind_ret_l.
+have [t' /esem_i_bodyP -> hQ] := h _ _ _ hP heq.
+exact: xrutt_Ret.
 Qed.
 
 Lemma wequiv_syscall Rv Ro P Q ii1 xs1 sc1 es1 ii2 xs2 sc2 es2 :
@@ -1034,8 +1023,7 @@ Proof.
   + rewrite bind_ret_r.
     have [t' /esem_i_bodyP -> hQ /=] := h s t s' hP heq.
     by apply xrutt.xrutt_Ret.
-  rewrite bind_ret_r; apply xrutt_CutL => //.
-  by rewrite /errcutoff /is_error /subevent /resum /fromErr mid12.
+  rewrite bind_ret_r; exact: xrutt_CutL Is_Cut_error.
 Qed.
 
 Section ST_REL.
@@ -1145,8 +1133,7 @@ Proof.
   rewrite isem_cmd_cat !bind_ret_r/=.
   rewrite /isem_cond.
   case heq: sem_cond => [b | e] /=; last first.
-  + rewrite bind_vis; apply xrutt_CutL.
-    by rewrite /errcutoff /is_error /subevent /= /resum /fromErr mid12.
+  + rewrite bind_vis; exact: xrutt_CutL Is_Cut_error.
   move: heq; rewrite /sem_cond; t_xrbindP => v hse1 hto.
   have [t' [hsemc hP' hse2]] := he s t v hP hse1.
   rewrite bind_ret_l (esem_i_bodyP hsemc) /= bind_ret_l hse2 /= hto /= bind_ret_l bind_ret_r.
@@ -1186,9 +1173,7 @@ Proof.
   case heq: (sem_cond (p_globs p1) e1 s1) => [b' | err] /=.
   + rewrite bind_ret_r bind_ret_l.
     rewrite (he1 _ _ _ hP heq); apply: hc2 hP.
-  rewrite bind_bind bind_vis.
-  apply xrutt_CutL => //.
-  by rewrite /errcutoff /is_error /subevent /resum /fromErr mid12.
+  rewrite bind_bind bind_vis; exact: xrutt_CutL Is_Cut_error.
 Qed.
 
 Lemma wequiv_for P0 P Pi ii1 i1 d lo1 hi1 c1 ii2 i2 lo2 hi2 c2 :
@@ -1312,8 +1297,7 @@ Proof.
   move=> s t hI1 /=.
   rewrite /isem_cond.
   case heq: sem_cond => [b | e] /=; last first.
-  + rewrite bind_vis; apply xrutt_CutL.
-    by rewrite /errcutoff /is_error /subevent /= /resum /fromErr mid12.
+  + rewrite bind_vis; exact: xrutt_CutL Is_Cut_error.
   move: heq; rewrite /sem_cond; t_xrbindP => v hse1 hto.
   have [t' [hsemc hI' hse2]] := hcond s t v hI1 hse1.
   rewrite bind_ret_l -/(isem_cmd_ p2 ev2 c) (esem_i_bodyP hsemc) /=.
@@ -1442,8 +1426,7 @@ Proof.
   + rewrite /kget_fundef => ??.
     case: get_fundef hf => /= [fd1 |].
     + by move=> /(_ _ erefl) [fd2 ] -> _ _; apply xrutt_Ret.
-    move=> _ _; apply xrutt_CutL.
-    by rewrite /errcutoff /is_error /subevent /resum /fromErr mid12.
+    move=> _ _; exact: xrutt_CutL Is_Cut_error.
   move=> fd1 fd2 [+ hfd2].
   move=> {}/hf [fd2']; rewrite hfd2 => -[?] hf; subst fd2'.
   apply wkequiv_bind with (fun s1 s2 => initialize_funcall (dc:=dc1) p1 ev1 fd1 fs1 = ok s1 /\
@@ -1460,13 +1443,11 @@ Proof.
   move: hres => /(_ s1').
   move: hepilogue => /(_ s1' s1' s2').
   case: finalize_funcall => [ fs1' | err1 ]; last first.
-  + move => _ _; apply: xrutt_CutL => //.
-    by rewrite /errcutoff /is_error /subevent /resum /fromErr mid12.
+  + move => _ _; exact: xrutt_CutL Is_Cut_error.
   move => /(_ (conj erefl (conj hQ (ex_intro _ _ erefl)))) /= hepilogue /(_ _ _ _ erefl) hres.
   setoid_rewrite <- (bind_ret_l s1' (λ _, Ret fs1')).
-  apply: (xrutt_bind hepilogue).
-  move => _ s2'' [] -> /hres[] ? ->.
-  apply: xrutt_Ret.
+  apply: (xrutt_bind hepilogue) => _ s2'' [] -> /hres[] ? ->.
+  exact: xrutt_Ret.
 Qed.
 
 Definition wequiv_fun_body_hyp (RPreF:relPreF) fn1 fn2 (RPostF:relPostF) :=
@@ -1494,8 +1475,7 @@ Proof.
   + rewrite /kget_fundef => ??.
     case: get_fundef hf => /= [fd1 |].
     + by move=> /(_ _ erefl) [fd2 ] -> _ _; apply xrutt_Ret.
-    move=> _ _; apply xrutt_CutL.
-    by rewrite /errcutoff /is_error /subevent /resum /fromErr mid12.
+    move=> _ _; exact: xrutt_CutL Is_Cut_error.
   move=> fd1 fd2 [+ hfd2].
   move=> {}/hf [fd2']; rewrite hfd2 => -[?] hf; subst fd2'.
   apply wkequiv_bind with (fun s1 s2 => initialize_funcall (dc:=dc1) p1 ev1 fd1 fs1 = ok s1 /\
@@ -1625,21 +1605,19 @@ Qed.
 
 Lemma wequiv_opn_rel_uincl_R {d de d' ii1 xs1 tg1 o es1  ii2 xs2 tg2 es2} :
   check_es d es1 es2 de →
-  (forall vs1 vs2,
+  (Rdeclassify o (fun d => forall vs1 vs2,
     values_uincl vs1 vs2 ->
     wrequiv
       (R de)
-      (fun s => event_of_opn o (emem s) vs1)
-      (fun s => event_of_opn o (emem s) vs2)
-      preRelDeclassify) ->
+      (fun s => event_of_opn d (emem s) vs1)
+      (fun s => event_of_opn d (emem s) vs2)
+      preRelDeclassify)) ->
   check_lvals de xs1 xs2 d' →
   wequiv (R d) [:: MkI ii1 (Copn xs1 tg1 o es1)] [:: MkI ii2 (Copn xs2 tg2 o es2)] (R d').
 Proof.
-  move=> hes hev hxs.
-  apply: wequiv_opn_uincl; first exact: ucheck_esP hes.
-  - move=> vs1 vs2 hvs.
-    apply: (wrequiv_weaken (Q := preRelDeclassify)) (hev _ _ hvs) => //.
-    exact: check_esP_rel hes.
+  move=> hes hev hxs; apply: wequiv_opn_uincl; first exact: ucheck_esP hes.
+  + case: is_Odeclassify hev => [a|//] hev vs1 vs2 hvs.
+    apply: wrequiv_weaken (hev _ _ hvs) => //; exact: check_esP_rel hes.
   move=> v1 v2 hu; apply wrequiv_weaken with (R de) (R d') => //.
   + by apply: check_esP_rel hes.
   by apply: ucheck_lvalsP hxs v1 v2 hu.
@@ -1775,19 +1753,19 @@ Qed.
 
 Lemma wequiv_opn_rel_eq_R {d de d' ii1 xs1 tg1 o es1 ii2 xs2 tg2 es2} :
   check_es d es1 es2 de →
-  (forall vs,
+  (Rdeclassify o (fun a => forall vs,
     wrequiv
       (R de)
-      (fun s => event_of_opn o (emem s) vs)
-      (fun s => event_of_opn o (emem s) vs)
-      preRelDeclassify) ->
+      (fun s => event_of_opn a (emem s) vs)
+      (fun s => event_of_opn a (emem s) vs)
+      preRelDeclassify)) ->
   check_lvals de xs1 xs2 d' →
   wequiv (R d) [:: MkI ii1 (Copn xs1 tg1 o es1)] [:: MkI ii2 (Copn xs2 tg2 o es2)] (R d').
 Proof.
   move=> hes hev hxs.
   apply: wequiv_opn_eq; first exact: echeck_esP hes.
-  - move=> vs; apply: (wrequiv_weaken (Q := preRelDeclassify)) (hev _) => //.
-    exact: check_esP_rel hes.
+  + case: is_Odeclassify hev => [a|//] hev vs.
+    apply: wrequiv_weaken (hev _) => //; exact: check_esP_rel hes.
   move=> v; apply wrequiv_weaken with (R de) (R d') => //.
   + by apply: check_esP_rel hes.
   by apply: echeck_lvalsP hxs v.
@@ -1905,7 +1883,8 @@ Lemma wequiv_opn_rel_uincl d de d' ii1 xs1 tg1 o es1 ii2 xs2 tg2 es2 :
     (st_rel R d').
 Proof.
 move=> hes hxs; apply: (wequiv_opn_rel_uincl_R hes _ hxs).
-move=> vs1 vs2 uincl s1 s2 e [_ <- _]; exact: event_of_opn_uincl uincl.
+case: is_Odeclassify => [a|//] vs1 vs2 uincl s t e [_ <- _].
+exact: event_of_opn_uincl uincl.
 Qed.
 
 Lemma wequiv_if_rel_uincl d de d1 d2 d' ii e c1 c2 ii' e' c1' c2' :
@@ -1969,8 +1948,8 @@ Lemma wequiv_opn_rel_eq d de d' ii1 xs1 tg1 o es1 ii2 xs2 tg2 es2 :
     [:: MkI ii2 (Copn xs2 tg2 o es2) ]
     (st_rel R d').
 Proof.
-move=> hes hxs; apply: (wequiv_opn_rel_eq_R hes _ hxs) => vs s1 s2 e [_ <- _].
-exact: event_of_opn_eq.
+move=> hes hxs; apply: (wequiv_opn_rel_eq_R hes _ hxs).
+case: is_Odeclassify => [a|//] vs s t e [_ <- _]; exact: event_of_opn_eq.
 Qed.
 
 Lemma wequiv_if_rel_eq d de d1 d2 d' ii e c1 c2 ii' e' c1' c2' :
@@ -2319,10 +2298,8 @@ Proof.
       + by split => //; exists s1.
       have /= := hfd _ heq _ _ hpre'.
       by rewrite !isem_call_unfold /isem_fun_body /kget_fundef heq /= bind_ret_l heq1.
-    rewrite /= bind_vis; apply xrutt_CutL.
-    by rewrite /errcutoff /is_error /subevent /resum /fromErr mid12.
-  rewrite /= bind_vis; apply xrutt_CutL.
-  by rewrite /errcutoff /is_error /subevent /resum /fromErr mid12.
+    rewrite /= bind_vis; exact: xrutt_CutL Is_Cut_error.
+  rewrite /= bind_vis; exact: xrutt_CutL Is_Cut_error.
 Qed.
 
 End WEQUIV_FUN.
