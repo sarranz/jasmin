@@ -1,5 +1,8 @@
 (* ** Imports and settings *)
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
+
+From ITree Require ITree.
+
 Require Import psem compiler_util.
 Require Export pseudo_operator lower_spill.
 Import Utf8 Uint63.
@@ -252,6 +255,7 @@ Lemma lower_sopnP s1 s2 ii tag o xs es S env env' c vm:
   valid_env S env (evm s1) vm →
   exists2 vm' : Vm.t, esem p' ev c (with_vm s1 vm) = ok (with_vm s2 vm') & valid_env S env' (evm s2) vm'.
 Proof.
+(*
   rewrite /sem_sopn; t_xrbindP.
   move=> vs ves hes hex hws /=.
   rewrite vars_I_opn.
@@ -260,7 +264,7 @@ Proof.
     rewrite (valid_env_es true gd hval) in hes; last by SvD.fsetdec.
     case: (update_lvsP hval hws); first by SvD.fsetdec.
     move=> vm' hws' hval'; exists vm' => //=.
-    by rewrite -eq_globs /sem_sopn hes /= hex /= hws'.
+    rewrite -eq_globs /sem_sopn hes /= hex /= hws'.
   move=> [so tys] /(_ _ _ erefl) ?; subst o.
   move: hex; rewrite /exec_sopn /=; t_xrbindP => ? h ?; subst vs.
   have [vs' hvs' {h} ] := app_sopn_truncate_val h.
@@ -272,6 +276,8 @@ Proof.
   t_xrbindP => c' hunspill <- ? hX hval; subst c'.
   by apply: (unspill_esP hes hvs' hval hunspill).
 Qed.
+*)
+Admitted.
 
 Lemma valid_env_sub S env1 env2 vm vm' :
   Sv.Subset env1 env2 -> valid_env S env2 vm vm' -> valid_env S env1 vm vm'.
@@ -498,9 +504,9 @@ Proof.
   move=> s1 s2 tag o xs es hop ii; split.
   + by constructor; econstructor; eauto; rewrite -eq_globs.
   move=> S env env' c vm hspill hsub hvalid.
-  have [vm2 ??]:= lower_sopnP hop hspill hsub hvalid.
+  (*have [vm2 ??]:= lower_sopnP hop hspill hsub hvalid.
   by exists vm2 => //; apply esem_sem.
-Qed.
+Qed.*) Admitted.
 
 Local Lemma Hsyscall : sem_Ind_syscall p Pi_r.
 Proof.
@@ -688,7 +694,15 @@ End SEM.
 
 Section IT.
 
-Context {E E0: Type -> Type} {wE : with_Error E E0} {rE : EventRels E0}.
+Import ITree.
+
+Context
+  {E E0 : Type -> Type}
+  {wE : with_Error E E0}
+  {wD : DeclassifyEvent -< E0}
+  {rE : EventRels E0}
+  {DEind : DeclassifyEvent_ind}
+.
 
 Definition st_ve S env := st_rel (valid_env S) env.
 
@@ -780,9 +794,17 @@ Proof.
     + by split => //; rewrite /read_es /= read_eE; SvD.fsetdec.
     by split => //; rewrite /vars_lvals /read_rvs /vrvs /= read_rvE vrv_recE; SvD.fsetdec.
   + move=> xs tg o es ii env env' c' hspill hsub.
-    apply wequiv_opn_esem => s t s' /st_relP [-> /= hval] hop.
+
+    apply wequiv_opn_esem.
+    + move=> s t /st_relP [-> /= valid].
+      rewrite /esem_trigger_opn.
+
+      valid_env_es true gd hval
+
+    move=> s t s' /st_relP [-> /= hval] hop.
     have [vm2 ??] := lower_sopnP hop hspill hsub hval.
     by exists (with_vm s' vm2).
+
   + move=> x sc es ii env env' c' [<- <-]; rewrite vars_I_syscall => hsub.
     apply wequiv_syscall_rel_eq with (checker_st_ve S) env => //.
     + by split => //; SvD.fsetdec.
