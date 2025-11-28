@@ -744,7 +744,8 @@ apply/wrequiv_weaken/event_of_opn_uincl => // ?? ->; exact: values_uincl_refl.
 Qed.
 
 #[global]
-Instance RndE0_recall eS : DeclassifyEvent_ind (rE0 := relEvent_recCall eS).
+Instance DeclassifyEvent_ind_recall eS :
+  DeclassifyEvent_ind (rE0 := relEvent_recCall eS).
 Proof.
 constructor; rewrite /EPostRel0_ /= /resum;
   [exact: DEind_pre_val|exact: DEind_pre_mem].
@@ -936,7 +937,7 @@ move=> he hev; apply: (wequiv_opn (Rve := values_uincl)) => //.
 move=> _ _ _; exact: wrequiv_exec_sopn.
 Qed.
 
-(* TODO I think the first hypothesis is not necessary *)
+(* TODO The first hypothesis is only needed for Odeclassify_mem... *)
 Lemma wequiv_opn_esem (P Q : rel_c) ii1 xs1 tg1 o1 es1 c2 :
   (forall s1 s2, P s1 s2 -> esem_trigger_opn p1 o1 es1 s1 = ok tt) ->
   wrequiv P (fun s => sem_sopn (p_globs p1) o1 s xs1 es1)

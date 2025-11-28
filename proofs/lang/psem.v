@@ -679,6 +679,13 @@ Let Pc c :=
     (evm s1 =1 vm1)%vm ->
     exists2 vm2, esem p' ev c (with_vm s1 vm1) = ok (with_vm s2 vm2) & evm s2 =1 vm2.
 
+Lemma esem_trigger_opn_vm_eq {o es s vm} :
+  (evm s =1 vm)%vm ->
+  esem_trigger_opn p' o es (with_vm s vm) = esem_trigger_opn p o es s.
+Proof.
+by move=> /sem_pexprs_ext_eq; rewrite /esem_trigger_opn eq_globs => <-.
+Qed.
+
 Lemma esem_vm_eq s1 c s2 vm1:
   esem p ev c s1 = ok s2 ->
   (evm s1 =1 vm1)%vm ->
@@ -693,9 +700,10 @@ Proof.
     move=> v he v' htr hw heq.
     rewrite -(sem_pexpr_ext_eq true (p_globs p) _ heq) he /= htr /=.
     by have [vm2 ??] := write_lvar_ext_eq heq hw; exists vm2.
-  + move=> xs t o es ii s1 s2 vm1 /=; rewrite /sem_sopn -eq_globs; t_xrbindP.
-    move=> vs' vs hes hop hw heq.
-    rewrite -(sem_pexprs_ext_eq true (p_globs p) _ heq) hes /= hop /=.
+  + move=> xs t o es ii s1 s2 vm1 /=; rewrite /sem_sopn -eq_globs.
+    t_xrbindP=> hev vs' vs hes hop hw heq.
+    rewrite (esem_trigger_opn_vm_eq heq) hev /=.
+    rewrite -(sem_pexprs_ext_eq _ _ _ heq) hes /= hop /=.
     by have [vm2 ??] := write_lvars_ext_eq heq hw; exists vm2.
   + move=> xs o es ii s1 s2 vm1 /=; rewrite /sem_syscall -eq_globs /upd_estate; t_xrbindP.
     move=> vs hes fs ho hw heq.
@@ -722,13 +730,15 @@ End ESEM.
 
 Section REC.
 
-Context {E E0 : Type -> Type} {wE: with_Error E E0} {rE0 : EventRels E0}.
+Context
+  {E E0 : Type -> Type}
+  {wE: with_Error E E0}
+  {wD : DeclassifyEvent -< E0}
+  {rE0 : EventRels E0}
+  {DEind : DeclassifyEvent_ind}.
 
 Lemma wequiv_rec_st_eq c : wequiv_rec p p' ev ev' eq_spec (st_eq tt) c c (st_eq tt).
-Proof.
-  apply wequiv_st_eq.
-  by move=> ii f s t <-; apply xrutt_facts.xrutt_trigger.
-Qed.
+Proof. apply wequiv_st_eq => > <-; exact: xrutt_facts.xrutt_trigger. Qed.
 
 End REC.
 
@@ -736,8 +746,14 @@ End PROG.
 
 Section WIEQUIV_F.
 
-Context (p : prog) (ev: extra_val_t).
-Context {E E0 : Type -> Type} {wE: with_Error E E0} {rE0 : EventRels E0}.
+Context
+  (p : prog)
+  (ev: extra_val_t)
+  {E E0 : Type -> Type}
+  {wE: with_Error E E0}
+  {wD : DeclassifyEvent -< E0}
+  {rE0 : EventRels E0}
+  {DEind : DeclassifyEvent_ind}.
 
 Lemma st_eq_finalize fd fd' :
   f_tyout fd = f_tyout fd' ->
@@ -1035,7 +1051,13 @@ Qed.
 
 Section FUN.
 
-Context {E E0 : Type -> Type} {sem_F : sem_Fun E} {wE: with_Error E E0} {rE0 : EventRels E0}.
+Context
+  {E E0 : Type -> Type}
+  {sem_F : sem_Fun E}
+  {wE: with_Error E E0}
+  {wD : DeclassifyEvent -< E0}
+  {rE0 : EventRels E0}
+  {DEind : DeclassifyEvent_ind}.
 
 Let Pi i :=
   forall X, Sv.Subset (read_I i) X ->
@@ -1094,7 +1116,12 @@ End FUN.
 
 Section REC.
 
-Context {E E0 : Type -> Type} {wE: with_Error E E0} {rE0 : EventRels E0}.
+Context
+  {E E0 : Type -> Type}
+  {wE : with_Error E E0}
+  {wD : DeclassifyEvent -< E0}
+  {rE0 : EventRels E0}
+  {DEind : DeclassifyEvent_ind}.
 
 Lemma it_read_cP_rec X c :
   Sv.Subset (read_c c) X ->
@@ -1110,8 +1137,14 @@ End PROG.
 
 Section REFL.
 
-Context (p : prog) (ev: extra_val_t).
-Context {E E0 : Type -> Type} {wE: with_Error E E0} {rE0 : EventRels E0}.
+Context
+  (p : prog)
+  (ev: extra_val_t)
+  {E E0 : Type -> Type}
+  {wE : with_Error E E0}
+  {wD : DeclassifyEvent -< E0}
+  {rE0 : EventRels E0}
+  {DEind : DeclassifyEvent_ind}.
 
 Lemma it_read_cP X c :
   Sv.Subset (read_c c) X ->
@@ -1476,12 +1509,19 @@ Qed.
 
 Section PROG.
 
-Context (p p':prog) (ev ev': extra_val_t).
+Context
+  (p p' : prog)
+  (ev ev' : extra_val_t)
+  (eq_globs : p_globs p = p_globs p')
+  {E E0 : Type -> Type}
+  {sem_F : sem_Fun E}
+  {wE: with_Error E E0}
+  {wD : DeclassifyEvent -< E0}
+  {rE0 : EventRels E0}
+  {DEind : DeclassifyEvent_ind}.
 
 Local Notation gd := (p_globs p).
 Local Notation gd' := (p_globs p').
-
-Context (eq_globs : gd = gd').
 
 Lemma checker_st_uinclP : Checker_uincl p p' checker_st_uincl.
 Proof.
@@ -1490,8 +1530,6 @@ Proof.
   move=> wdb _ d xs1 xs2 d' /wdb_ok_eq <- <-; apply write_lvals_st_uincl.
 Qed.
 #[local] Hint Resolve checker_st_uinclP : core.
-
-Context {E E0 : Type -> Type} {sem_F : sem_Fun E} {wE: with_Error E E0} {rE0 : EventRels E0}.
 
 Let Pi i := wequiv p p' ev ev' (st_uincl tt) [::i] [::i] (st_uincl tt).
 
@@ -1524,8 +1562,14 @@ End PROG.
 
 Section REFL.
 
-Context (p : prog) (ev: extra_val_t).
-Context {E E0 : Type -> Type} {wE: with_Error E E0} {rE0 : EventRels E0}.
+Context
+  (p : prog)
+  (ev: extra_val_t)
+  {E E0 : Type -> Type}
+  {wE : with_Error E E0}
+  {wD : DeclassifyEvent -< E0}
+  {rE0 : EventRels E0}
+  {DEind : DeclassifyEvent_ind}.
 
 Definition uincl_spec : EquivSpec :=
   {| rpreF_ := fun (fn1 fn2 : funname) (fs1 fs2 : fstate) => fn1 = fn2 /\ fs_uincl fs1 fs2
@@ -1594,7 +1638,8 @@ Proof.
 apply wequiv_fun_ind => {}fn _ fs1 fs2 [<-] hu fd ->.
 exists fd => // s /(fs_uincl_initialize erefl erefl erefl erefl hu) [t] -> {}hu.
 exists t => //; exists (st_uincl tt), (st_uincl tt); split=> //.
-+ apply it_sem_uincl_aux => // ii fn' fs1' fs2' h; exact/wequiv_fun_rec.
++ apply it_sem_uincl_aux => //; first exact: DeclassifyEvent_ind_recall.
+  move=> > h; exact/wequiv_fun_rec.
 exact/fs_uincl_finalize.
 Qed.
 
@@ -1611,7 +1656,9 @@ Context
   {dc1 : DirectCall}
   {E E0 : Type -> Type}
   {wE : with_Error E E0}
+  {wD : DeclassifyEvent -< E0}
   {rE12 : EventRels E0}
+  {DEind : DeclassifyEvent_ind}
   {rE_trans : EventRels_trans rE12 rE12 rE12}
   {p1 : prog (pT := pT1)} {p2 : prog (pT := pT)}
   {ev1 : extra_val_t (progT := pT1)} {ev2 : extra_val_t (progT := pT)}
@@ -1772,6 +1819,7 @@ Context
   {pT1 pT2 pT3 : progT}
   {E E0 : Type -> Type}
   {wE : with_Error E E0}
+  {wD : DeclassifyEvent -< E0}
   {wsw1 wsw2 wsw3 : WithSubWord}
   {scP1 : semCallParams (wsw := wsw1) (pT := pT1)}
   {scP2 : semCallParams (wsw := wsw2) (pT := pT2)}
