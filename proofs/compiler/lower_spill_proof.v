@@ -26,8 +26,13 @@ Context
 
 Notation gd := (p_globs p).
 
-Lemma is_spill_opP o s tys : is_spill_op o = Some (s, tys) -> o = Opseudo_op (Ospill s tys).
-Proof. by case: o => // -[] // ?? [-> ->]. Qed.
+Lemma is_spill_opP o :
+  is_reflect (fun p => Opseudo_op (Ospill p.1 p.2)) o (is_spill_op o).
+Proof.
+case: o => [[]||]; try by constructor.
+move=> ?? /=; rewrite -[_ (Ospill _ _)]/((fun p => _ (Ospill p.1 p.2)) (_, _)).
+exact: Is_reflect_some.
+Qed.
 
 Lemma eq_globs : gd = p_globs p'.
 Proof. by move: spill_prog_ok; rewrite /spill_prog; t_xrbindP => ? _ <-. Qed.
@@ -249,35 +254,31 @@ Proof.
 Qed.
 
 Lemma lower_sopnP s1 s2 ii tag o xs es S env env' c vm:
+  is_Odeclassify o = None ->
   sem_sopn gd o s1 xs es = ok s2 →
   spill_i (get_spill S) env (MkI ii (Copn xs tag o es)) = ok (env', c) →
   Sv.Subset (vars_I (MkI ii (Copn xs tag o es))) (X S) →
   valid_env S env (evm s1) vm →
   exists2 vm' : Vm.t, esem p' ev c (with_vm s1 vm) = ok (with_vm s2 vm') & valid_env S env' (evm s2) vm'.
 Proof.
-(*
-  rewrite /sem_sopn; t_xrbindP.
-  move=> vs ves hes hex hws /=.
+  rewrite /sem_sopn; t_xrbindP=> ho vs ves hes hex hws /=.
   rewrite vars_I_opn.
-  case: is_spill_op (@is_spill_opP o); last first.
-  + move=> _ [<- <-] hX hval.
+  case: is_spill_opP ho hex => [[s tys]|{}o] ho hex; last first.
+  + move=> [<- <-] hX hval.
     rewrite (valid_env_es true gd hval) in hes; last by SvD.fsetdec.
     case: (update_lvsP hval hws); first by SvD.fsetdec.
     move=> vm' hws' hval'; exists vm' => //=.
-    rewrite -eq_globs /sem_sopn hes /= hex /= hws'.
-  move=> [so tys] /(_ _ _ erefl) ?; subst o.
+    by rewrite -eq_globs /sem_sopn hes /= hex /= hws' ho.
   move: hex; rewrite /exec_sopn /=; t_xrbindP => ? h ?; subst vs.
   have [vs' hvs' {h} ] := app_sopn_truncate_val h.
   have ? : s2 = s1; last subst s2.
   + by case: xs hws => // -[->].
-  case: so.
+  case: s ho => _.
   + move=> hspill hX hval.
     by apply: (spill_esP hes hvs' _ hval hspill); SvD.fsetdec.
   t_xrbindP => c' hunspill <- ? hX hval; subst c'.
   by apply: (unspill_esP hes hvs' hval hunspill).
 Qed.
-*)
-Admitted.
 
 Lemma valid_env_sub S env1 env2 vm vm' :
   Sv.Subset env1 env2 -> valid_env S env2 vm vm' -> valid_env S env1 vm vm'.
@@ -499,14 +500,28 @@ Proof.
   by apply sem_seq1; constructor; econstructor; eauto; rewrite -eq_globs.
 Qed.
 
+Lemma is_spill_op_is_Odeclassify o a :
+  is_Odeclassify o = Some a -> is_spill_op o = None.
+Proof. by case: o => [[]||]. Qed.
+
 Local Lemma Hopn : sem_Ind_opn p Pi_r.
 Proof.
   move=> s1 s2 tag o xs es hop ii; split.
   + by constructor; econstructor; eauto; rewrite -eq_globs.
-  move=> S env env' c vm hspill hsub hvalid.
-  (*have [vm2 ??]:= lower_sopnP hop hspill hsub hvalid.
+  move=> S env env' c vm hspill hsub hval.
+  case ho: (is_Odeclassify o) => [a|].
+  + move: ho hspill => /is_spill_op_is_Odeclassify /= -> [??]; subst env' c.
+    move: hop; rewrite /sem_sopn; t_xrbindP=> vs' vs + hex hwr.
+    rewrite /vars_I /read_I /write_I /= read_esE in hsub.
+    rewrite (valid_env_es true gd hval); last SvD.fsetdec.
+    move=> hes.
+    have [|vm' hwr' hva'] := update_lvsP hval hwr.
+    + rewrite /vars_lvals; SvD.fsetdec.
+    exists vm' => //; apply/sem_seq_ir/Eopn.
+    by rewrite /sem_sopn -eq_globs /sem_sopn hes /= hex /= hwr'.
+  have [vm2 ??]:= lower_sopnP ho hop hspill hsub hval.
   by exists vm2 => //; apply esem_sem.
-Qed.*) Admitted.
+Qed.
 
 Local Lemma Hsyscall : sem_Ind_syscall p Pi_r.
 Proof.
@@ -794,17 +809,17 @@ Proof.
     + by split => //; rewrite /read_es /= read_eE; SvD.fsetdec.
     by split => //; rewrite /vars_lvals /read_rvs /vrvs /= read_rvE vrv_recE; SvD.fsetdec.
   + move=> xs tg o es ii env env' c' hspill hsub.
-
-    apply wequiv_opn_esem.
-    + move=> s t /st_relP [-> /= valid].
-      rewrite /esem_trigger_opn.
-
-      valid_env_es true gd hval
-
+    case ho: (is_Odeclassify o) => [a|].
+    + move: ho hspill => /is_spill_op_is_Odeclassify /= -> [??]; subst env' c'.
+      rewrite /vars_I /read_I /= read_esE in hsub.
+      apply wequiv_opn_rel_eq with (checker_st_ve S) env => //.
+      + exact: DeclassifyEvent_ind_recall. (* TODO why can't this be inferred? it is inferred properly in psem *)
+      + split=> //; SvD.fsetdec.
+      + split=> //; rewrite /vars_lvals; SvD.fsetdec.
+    apply wequiv_opn_esem; first by rewrite ho.
     move=> s t s' /st_relP [-> /= hval] hop.
-    have [vm2 ??] := lower_sopnP hop hspill hsub hval.
+    have [vm2 ??] := lower_sopnP ho hop hspill hsub hval.
     by exists (with_vm s' vm2).
-
   + move=> x sc es ii env env' c' [<- <-]; rewrite vars_I_syscall => hsub.
     apply wequiv_syscall_rel_eq with (checker_st_ve S) env => //.
     + by split => //; SvD.fsetdec.

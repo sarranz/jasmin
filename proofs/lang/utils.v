@@ -2045,11 +2045,11 @@ Lemma oassertP_isSome {A b} {oa : option A} :
   b /\ isSome oa.
 Proof. by case: b. Qed.
 
-Lemma isSomeP {A : Type} {oa : option A} : oa -> exists a, oa = Some a.
-Proof. case: oa => [a|//]; by eexists. Qed.
+Lemma isSomeP {A : Type} {oa : option A} : reflect (exists a, oa = Some a) oa.
+Proof. case: oa => [a|//]; constructor; last by move=> []. by exists a. Qed.
 
-Lemma isNoneP {A : Type} {oa : option A} : ~~ oa -> oa = None.
-Proof. by case: oa. Qed.
+Lemma isNoneP {A : Type} {oa : option A} : reflect (oa = None) (~~ oa).
+Proof. case: oa; by constructor. Qed.
 
 Lemma o2rP {eT A} {err : eT} {oa : option A} {a} :
   o2r err oa = ok a ->
