@@ -2,7 +2,7 @@
 From HB Require Import structures.
 From mathcomp Require Import ssreflect ssrfun ssrbool seq eqtype ssralg.
 
-Require Export
+Require Import
   pseudo_operator
   shift_kind
   slh_ops.
