@@ -53,10 +53,11 @@ Context
   {msfsz : MSFsize}
   `{asmop : asmOp}
   {fcp : FlagCombinationParams}
+  (can_remove_if : instr_info -> bool)
   (is_move_op : asm_op_t -> bool).
 
-Let postprocess (p: uprog) : cexec uprog :=
-  let p := const_prop_prog p in
+Definition cpdce pT (p : prog (pT := pT)) : cexec prog :=
+  let p := const_prop_prog can_remove_if p in
   dead_code_prog is_move_op p false.
 
 (* FIXME: error really not clear for the user *)
@@ -67,13 +68,13 @@ Fixpoint unroll (n: nat) (p: uprog) : cexec uprog :=
   if n is S n' then
     let: (p', repeat) := unroll_prog p in
     if repeat then
-      Let: p'' := postprocess p' in
+      Let: p'' := cpdce p' in
       unroll n' p''
     else ok p
   else Error (loop_iterator "unrolling").
 
 Definition unroll_loop (p: uprog) :=
-  Let p := postprocess p in
+  Let p := cpdce p in
   unroll Loop.nb p.
 
 End IS_MOVE_OP.
@@ -199,6 +200,7 @@ Record compiler_params
   dead_vars_sfd    : _sfun_decl -> instr_info -> Sv.t;
     (* Same as dead_vars_ufd, but for _sfun_decl instead of _ufun_decl. *)
   pp_sr            : sub_region -> pp_error;
+  can_remove_if : instr_info -> bool;
 }.
 
 Context
@@ -277,7 +279,7 @@ Definition compiler_first_part (to_keep: seq funname) (p: uprog) : cexec uprog :
 
   Let p := inlining to_keep p in
 
-  Let p := unroll_loop (ap_is_move_op aparams) p in
+  Let p := unroll_loop (can_remove_if cparams) (ap_is_move_op aparams) p in
   Let: tt := check_no_for_loop p in
   Let: tt := check_no_inline_instr p in
   let p := cparams.(print_uprog) Unrolling p in
@@ -349,7 +351,9 @@ Definition compiler_third_part (returned_params: funname -> option (seq (option 
   Let pd := dead_code_prog (ap_is_move_op aparams) pa true in
   let pd := cparams.(print_sprog) DeadCode_RegAllocation pd in
 
-  ok pd.
+  Let p := cpdce (pT := progStack) predT (ap_is_move_op aparams) pd in
+
+  ok p.
 
 (* returns None if not reg ptr, Some false if reg const ptr, Some true if reg mut ptr *)
 Definition wptr_status (x : var_i) :=

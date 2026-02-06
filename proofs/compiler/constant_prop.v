@@ -471,7 +471,10 @@ Definition is_update_imm (xs:lvals) o es :=
 
 Section GLOBALS.
 
-Context (gd: glob_decls).
+Context
+   (can_remove_if : instr_info -> bool)
+  (gd: glob_decls)
+   .
 
 Fixpoint const_prop_ir (m:cpm) ii (ir:instr_r) : cpm * cmd :=
   match ir with
@@ -501,7 +504,8 @@ Fixpoint const_prop_ir (m:cpm) ii (ir:instr_r) : cpm * cmd :=
 
   | Cif b c1 c2 =>
     let b := const_prop_e without_globals m b in
-    match is_bool b with
+    let c := if can_remove_if ii then is_bool b else None in
+    match c with
     | Some b =>
       let c := if b then c1 else c2 in
       const_prop const_prop_i m c
@@ -545,11 +549,11 @@ End GLOBALS.
 
 Section Section.
 
-Context {pT: progT}.
+Context {pT: progT} (can_remove_if : instr_info -> bool).
 
 Definition const_prop_fun (gd: glob_decls) (f: fundef) :=
   let 'MkFun ii si p c so r ev := f in
-  let (_, c) := const_prop (const_prop_i gd) empty_cpm c in
+  let (_, c) := const_prop (const_prop_i can_remove_if gd) empty_cpm c in
   MkFun ii si p c so r ev.
 
 Definition const_prop_prog (p:prog) : prog := map_prog (const_prop_fun p.(p_globs)) p.

@@ -418,6 +418,7 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
       Compiler.dead_vars_ufd;
       Compiler.dead_vars_sfd;
       Compiler.pp_sr;
+      Compiler.can_remove_if = IInfo.can_remove_if;
     }
   in
 
