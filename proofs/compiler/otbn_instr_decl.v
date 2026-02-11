@@ -75,6 +75,8 @@ Variant rv_mnemonic : Type :=
 | LI  (* Load 32 bit immediate. *)
 | LA  (* Load address. *)
 
+| NOP
+
 (* TODO_OTBN missing CSRRS *)
 .
 
@@ -86,7 +88,7 @@ Canonical rv_mnemonic_eqType := ceqT_eqType (ceqT := eqTC_rv_mnemonic).
 
 Definition rv_mnemonics : seq rv_mnemonic :=
   [:: ADD; ADDI; SUB; AND; ANDI; OR; ORI; XOR; XORI; SLL; SLLI; SRL; SRLI; SRA
-    ; SRAI; LUI; LW; SW; LI; LA
+    ; SRAI; LUI; LW; SW; LI; LA; NOP
   ].
 
 Lemma rv_mnemonic_fin_axiom : Finite.axiom rv_mnemonics.
@@ -118,6 +120,7 @@ Definition rv_mnemonic_to_string (mn : rv_mnemonic) : string :=
   | SW => "SW"
   | LI => "LI"
   | LA => "LA"
+  | NOP => "NOP"
   end.
 
 (* -------------------------------------------------------------------------- *)
@@ -248,14 +251,19 @@ Definition otbn_op_to_string (op : otbn_op) : string :=
 
 Section I_ARGS_KINDS.
 
+  Definition ak_u2 := CAimm (CAimmC_otbn_nbits Unsigned 2) U8.
+  Definition ak_u8 := CAimm (CAimmC_otbn_nbits Unsigned 8) U8.
+  Definition ak_u10 := CAimm (CAimmC_otbn_nbits Unsigned 10) U32.
+  Definition ak_s12 := CAimm (CAimmC_otbn_nbits Signed 12) U32.
+  Definition ak_bn_shift := CAimm CAimmC_otbn_bn_shift U8.
+
   Let xreg := [:: CAxmm ].
-  Let imm_u8 := [:: CAimm (CAimmC_otbn_nbits Unsigned 8) U8 ].
-  Let imm_u10 := [:: CAimm (CAimmC_otbn_nbits Unsigned 10) U32 ].
-  Let imm_s12 := [:: CAimm (CAimmC_otbn_nbits Signed 12) U32 ].
+  Let imm_u8 := [:: ak_u8 ].
+  Let imm_u10 := [:: ak_u10 ].
+  Let imm_s12 := [:: ak_s12 ].
 
   (* Quarter word *)
-  Let imm_q := [:: CAimm (CAimmC_otbn_nbits Unsigned 2) U8 ].
-  Definition ak_bn_shift := CAimm CAimmC_otbn_bn_shift U8.
+  Let imm_q := [:: ak_u2 ].
   Let imm_bn_shift := [:: ak_bn_shift ].
   Let imm_mulqacc_shift := [:: CAimm CAimmC_otbn_mulqacc_shift U8 ].
 
@@ -323,6 +331,10 @@ End PP_ASM_OP.
    These instructions are unary or binary word operations, so we define generic
    instruction descriptions [desc_rv_unop] and [desc_rv_binop]. *)
 
+Definition acc_mod := [:: ACC; MOD ].
+Definition Ea n := ADExplicit (AK_mem Aligned) n (ACR_avoid_xreg acc_mod).
+Definition Ec n := ADExplicit AK_compute n (ACR_avoid_xreg acc_mod).
+
 Section RV_DESC.
 
 Context
@@ -343,12 +355,13 @@ Let pp_rv_op mn args := pp_otbn_op (RV32 mn) reg_size args.
 Definition rv_last_ak : arg_kind :=
   match mn with
   | ADD | SUB | AND | OR | XOR | SLL | SRL | SRA => CAreg
-  | ADDI | ANDI | ORI | XORI => CAimm (CAimmC_otbn_nbits Signed 12) U32
+  | ADDI | ANDI | ORI | XORI => ak_s12
   | SLLI | SRLI | SRAI => CAimm (CAimmC_otbn_nbits Unsigned 5) U8
   | LUI => CAimm (CAimmC_otbn_nbits Unsigned 20) U32
   | LW | SW => CAmem false
   | LI => CAimm (CAimmC_otbn_nbits Signed 32) U32
   | LA => CAmem true
+  | NOP => CAreg (* absurd *)
   end.
 
 Lemma check_dest_unop adout : all2 check_arg_dest [:: adout ] [:: lword ws ].
@@ -405,8 +418,28 @@ Definition desc_rv_binop
     id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
   |}.
 
-Definition wadd {ws : wsize} (x y : word ws) : word ws := x + y.
-Definition wsub {ws : wsize} (x y : word ws) : word ws := x - y.
+Definition desc_nop :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := [::];
+    id_in := [:: ];
+    id_tout := [::];
+    id_out := [::];
+    id_semi := ok tt;
+    id_args_kinds := [:: [::] ];
+    id_nargs := 0;
+    id_str_jas := pp_s (rv_mnemonic_to_string NOP);
+    id_pp_asm := pp_rv_op NOP;
+    (* proof *)
+    id_valid := true;
+    id_safe := [::];
+    id_eq_size := refl_equal;
+    id_check_dest := refl_equal;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+  |}.
+
 
 (* TODO_OTBN the reference states the reference defines the semantics in terms
    of integer arithmetic and masks rather than modular arithmetic, perhaps it we
@@ -426,6 +459,7 @@ Definition _desc_rv_mnemonic : instr_desc_t :=
   | SW => _desc_rv_unop (Ea 0) (Ea 1) id (* TODO_OTBN double check that it fails on unaligned *)
   | LI => desc_rv_unop id
   | LA => _desc_rv_unop (Ec 1) (Ea 0) id
+  | NOP => desc_nop
   end.
 
 End RV_DESC.
@@ -755,40 +789,42 @@ End BN_BASIC_SHIFT_DESC.
 
 Section MODULAR_OP.
 
-Definition semi_modular_binop
-  (ws : wsize)
-  (semiZ : Z -> Z -> Z) :
+Definition semi_modular_binop (ws : wsize) (semiZ : Z -> Z -> Z) :
   semi_type [:: lword ws; lword ws; lword ws ] [:: lword ws ] :=
   fun wx wy wm =>
     let m := wunsigned wm in
     let res := semiZ (wunsigned wx) (wunsigned wy) in
     let res_m :=
-      if res <=? 0
-      then res + m
-      else if res >=? m then res - m else res
+      if res <=? 0 then res + m
+      else if res >=? m then res - m
+      else res
     in
     ok (wrepr ws (res_m / wbase ws)).
 
 (* TODO_OTBN: Right now we only use ws = U256, but we define it
    generically. *)
+
 Definition _desc_otbn_op_modular_binop
   (mn : otbn_op) (ws : wsize) (semiZ : Z -> Z -> Z) : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := [:: lword ws; lword ws; lword ws ];
-    id_in := [:: E 1; E 2; Xreg MOD ];
+    id_in := [:: Ea 1; Ea 2; Xreg MOD ];
     id_tout := [:: lword ws ];
-    id_out := [:: E 0 ];
+    id_out := [:: Ea 0 ];
     id_semi := semi_modular_binop semiZ;
-    id_nargs := 3;
     id_args_kinds := ak_xreg_xreg_xreg;
-    id_eq_size := refl_equal;
-    id_tin_narr := refl_equal;
-    id_tout_narr := refl_equal;
-    id_check_dest := refl_equal;
+    id_nargs := 3;
     id_str_jas := pp_s (otbn_op_to_string mn);
-    id_safe := [::];
     id_pp_asm := pp_otbn_op mn xreg_size;
+    (* proof *)
+    id_valid := ws == U256;
+    id_safe := [::];
+    id_eq_size := refl_equal;
+    id_check_dest := refl_equal;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
   |}.
 
 Let desc_otbn_op_modular_binop mn := _desc_otbn_op_modular_binop mn U256.

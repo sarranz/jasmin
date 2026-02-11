@@ -238,14 +238,15 @@ HB.instance Definition _ := hasDecEq.Build msb_flag msb_flag_eqb_OK.
  *)
 Variant implicit_arg : Type :=
 | IArflag of rflag_t  (* Implicit flag. *)
-| IAreg   of reg_t.   (* Implicit register. *)
+| IAreg   of reg_t    (* Implicit register. *)
+| IAxreg of xreg_t    (* Implicit extended register. *)
+.
 
 (* TODO: can we get rid of this if we add the option to register equality to
    elpi.derive? *)
 Definition implicit_arg_beq (i1 i2 : implicit_arg) :=
   match i1, i2 with
-  | IArflag f1, IArflag f2 => f1 == f2 ::>
-  | IAreg r1, IAreg r2 => r1 == r2 ::>
+  | IArflag x, IArflag y | IAreg x, IAreg y | IAxreg x, IAxreg y => x == y ::>
   | _, _ => false
   end.
 
@@ -277,6 +278,7 @@ Variant arg_constrained_register :=
 | ACR_exact of reg_t
 | ACR_vector of xreg_t
 | ACR_subset of seq reg_t
+| ACR_avoid_xreg of seq xreg_t
 .
 
 Variant arg_desc :=
@@ -292,6 +294,7 @@ Definition Ea n   := ADExplicit (AK_mem Aligned) n ACR_any.
 Definition Eu n   := ADExplicit (AK_mem Unaligned) n ACR_any.
 Definition Ec n   := ADExplicit AK_compute n ACR_any.
 Definition Ef n r := ADExplicit (AK_mem Aligned) n (ACR_exact  r).
+Definition Xreg r := ADImplicit (IAxreg r).
 
 Definition check_oreg or ai :=
   match or, ai with
@@ -302,6 +305,8 @@ Definition check_oreg or ai :=
   | ACR_vector _, _      => false
   | ACR_subset s, Reg r  => r \notin (s : seq ceqT_eqType)
   | ACR_subset _, _      => false
+  | ACR_avoid_xreg s, XReg r => r \notin (s : seq ceqT_eqType)
+  | ACR_avoid_xreg _, _ => false
   | ACR_any, _           => true
   end.
 
