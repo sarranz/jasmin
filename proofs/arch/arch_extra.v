@@ -233,8 +233,7 @@ Proof. move=> [] hsize _; apply/eqP/reg_size_neq_xreg_size:hsize. Qed.
 
 Definition var_of_implicit_arg (i : implicit_arg) : var :=
   match i with
-  | IArflag r => to_var r
-  | IAreg r => to_var r
+  | IArflag x | IAreg x | IAxreg x => to_var x
   end.
 
 Definition sopn_constrained_register acr :=
@@ -242,7 +241,7 @@ Definition sopn_constrained_register acr :=
   | ACR_any      => sopn.ACR_any
   | ACR_exact x  => sopn.ACR_exact (to_var x)
   | ACR_vector x => sopn.ACR_exact (to_var x)
-  | ACR_subset s => sopn.ACR_subset (map to_var s)
+  | ACR_subset s | ACR_avoid_xreg s => sopn.ACR_subset (map to_var s)
   end.
 
 Definition sopn_arg_desc (ad:arg_desc) :=

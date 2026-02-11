@@ -422,6 +422,9 @@ Lemma wle_refl sz sg (w: word sz) :
   wle sg w w = true.
 Proof. case: sg; exact: Z.leb_refl. Qed.
 
+Definition wadd {sz} (x y : word sz) : word sz := x + y.
+Definition wsub {sz} (x y : word sz) : word sz := x - y.
+
 Definition wshr sz (x: word sz) (n: Z) : word sz :=
   mkword sz (Z.shiftr (wunsigned x) (Z.min (wsize_bits sz) n)).
 

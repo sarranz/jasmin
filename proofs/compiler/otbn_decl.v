@@ -222,7 +222,7 @@ Instance flag_toS : ToString lbool rflag :=
 
 #[only(eqbOK)] derive
 Variant condition :=
-| RVcond of bool & register & register
+| RVcond of bool & option register & option register
 | BNcond of rflag
 .
 
@@ -234,17 +234,10 @@ Canonical condition_eqType := @ceqT_eqType _ eqTC_condition.
 (* -------------------------------------------------------------------- *)
 (* Flag combinations. *)
 
+(* TODO_OTBN these don't seem to apply? *)
 Definition fc_of_cfc (cfc : combine_flags_core) : flag_combination :=
-  let vcf := FCVar0 in
-  let vmf := FCVar1 in
-  let vzf := FCVar3 in
-  let less := FCVar0 in
   match cfc with
-  | CFC_B => vcf
-  | CFC_E => vzf
-  | CFC_L => FCNot (FCEq vmf vcf)
-  | CFC_BE => FCOr vzf vcf
-  | CFC_LE => FCOr vzf less
+  | _ => TODO_OTBN "not implemented"
   end.
 
 #[global]
@@ -289,7 +282,6 @@ Instance otbn_decl : arch_decl register empty wide_register rflag condition :=
     check_CAimm := otbn_check_CAimm;
   }.
 
-(* TODO_OTBN check *)
 Definition otbn_call_conv : calling_convention :=
   let callee_saved_registers :=
     [:: X02; X08; X09; X18; X19; X20; X21; X22; X23; X24; X25; X26; X27 ]
