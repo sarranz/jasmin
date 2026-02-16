@@ -1,34 +1,30 @@
-From mathcomp Require Import
-  all_ssreflect
-  all_algebra.
+From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssralg.
+From Coq Require Import ZArith.
 
-Require Import utils values.
-Require Import arch_decl.
+Require Import utils word.
+Require Import
+  arch_decl
+  arch_utils.
 Require Import
   otbn_decl
   otbn_instr_decl.
-
-Set Implicit Arguments.
-Unset Strict Implicit.
-Unset Printing Implicit Defensive.
-
+Require riscv.
 
 Definition eval_cond
-  (get : asm_typed_reg -> values.value)
+  (getr : register -> u32)
+  (getf : rflag -> exec bool)
   (c : condition) :
   exec bool :=
   match c with
   | RVcond is_eq r0 r1 =>
-      let getr x := to_word reg_size (get (ARReg x)) in
-      Let w0 := getr r0 in
-      Let w1 := getr r1 in
+      let w0 := riscv.sem_cond_arg getr r0 in
+      let w1 := riscv.sem_cond_arg getr r1 in
       ok (if is_eq then w0 == w1 else w0 != w1)
-  | BNcond f => to_bool (get (ABReg f))
+  | BNcond f => getf f
   end.
 
 #[export]
-Instance otbn :
-  asm register register_ext wide_register flag condition otbn_op :=
+Instance otbn : asm register empty wide_register rflag condition otbn_op :=
   {
     eval_cond := eval_cond;
   }.

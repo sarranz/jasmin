@@ -90,13 +90,14 @@ compiler/makeReferenceArguments.v
 compiler/makeReferenceArguments_proof.v
 compiler/merge_varmaps.v
 compiler/merge_varmaps_proof.v
+compiler/otbn.v
+compiler/otbn_decl.v
 compiler/otbn_extra.v
+compiler/otbn_instr_decl.v
 compiler/otbn_lowering.v
 compiler/otbn_params.v
-compiler/otbn_decl.v
-compiler/otbn_instr_decl.v
+compiler/otbn_params_core.v
 compiler/otbn_params_proof.v
-compiler/otbn.v
 compiler/post_unrolling_check.v
 compiler/propagate_inline.v
 compiler/propagate_inline_proof.v
