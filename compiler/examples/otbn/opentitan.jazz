@@ -1,0 +1,190 @@
+/* Accessing limbs of a register */
+/* Maybe the syntax can be
+
+   reg u256 w8 as u64[4] [w8.0 w8.1 w8.2 w8.3];
+*/
+
+/* ---------------------------------------------------------------------- */
+/* Accumulator register.
+   https://docs.opentitan.org/hw/ip/otbn/doc/isa/#bnmulqacc
+*/
+
+/* ACC is a special register that is written by MULQACC. */
+reg u64 q0 q1;
+reg u256 w0;
+reg u256 acc;
+
+// We can initialize ACC with
+acc = w0;
+// This compiles to: bn.wsrw acc, w0
+// This instruction only reads/writes to special registers.
+
+// mulqacc also takes a shift, it can be 0, 64, 128, 192.
+// Maybe we omit the shift if it's 0?
+acc = #mulqacc(q0, q1, acc, 64);
+
+// This compiles to: bn.mulqacc w?.0, w?.0, 64
+
+// We can always initialize the ACC register before doing the operation
+// using bn.mulacc.z (even when using wo and soL and soU)
+
+// We can write ACC to w0 after performing the operation.
+w0, acc = #mulqacc_wo(q0, q1, acc);
+// This compiles to: bn.mulqacc.wo w0, w?.0, w?.0, 0
+
+// We write the lower 128 bits of ACC to the lower 128 bits of w0.
+// We keep the other bits in w0.
+w0, acc = #mulqacc_soL(q0, q1, acc);
+// This compiles to: bn.mulqacc.so w0.L, w?.0, w?.0, 0Jcc
+
+// We write the lower 128 bits of ACC to the higher 128 bits of w0.
+// We keep the other bits in w0.
+w0, acc = #mulqacc_soU(q0, q1, acc);
+// This compiles to: bn.mulqacc.so w0.U, w?.0, w?.0, 0
+
+// We can get the value of ACC into a register this way.
+q0 = 0;
+w0 = #MULQACC_wo(q0, q0, acc);
+
+// Also there is a dedicated instruciton: bn.wsrr
+w0 = acc;
+// This compiles to: bn.wsrr w0, acc
+
+/*
+  mulqacc does not set flags.
+  mulqacc.wo sets M L and Z flags.
+  mulqacc.soL sets L and Z flags.
+  mulqacc.soU sets M and Z flags.
+*/
+
+
+/* ---------------------------------------------------------------------- */
+/* Modulo register.
+   https://docs.opentitan.org/hw/ip/otbn/doc/isa/#bnaddm
+*/
+/* MOD is a special register that is used by modular operations. */
+
+// We can read/write to MOD with bn.wsrr and bn.wsrw
+// We can also write to an eighth of it (32 bits) with bn.csrw
+
+/* For the output to make sense for addition, the intermediate result (raw
+   addition) needs to be less than twice the modulus.
+*/
+
+reg u256 w0, w1, w2, mod;
+
+w0 = (w1 + w2) % mod;
+w0 = (w1 - w2) % mod;
+
+
+/* ---------------------------------------------------------------------- */
+/* Zero register. */
+/* The register x0 is hardwired to be zero and writes to it are ignored.
+   Maybe this is also an extended register?
+   It seems that we need to have a way of specifying that a variable must map to
+   this register, for instance to write a MOV as x = y + x0; */
+
+
+/* ---------------------------------------------------------------------- */
+/* Flag groups.
+   https://docs.opentitan.org/hw/ip/otbn/doc/#flags */
+
+/* We have two flag groups, some instructions set the flags in one of these
+   according to their result.
+   The developer can choose which flag group to use.
+   Examples are BN.ADD, BN.SUB, BN.CMP.
+
+   Compiler implementation:
+   Maybe the Prim constructor takes a boolean argument and based on that the
+   instruction description uses IAFlag CF0, MF0, ... or
+   IAFlag CF1, MF1, ... ?.
+
+   Could we omit underscores for flags? All (or most) arithmetic instructions
+   set them. */
+
+reg u256 w0 w1;
+reg bool cf0, mf0, lf0, zf0;
+reg bool cf1, mf1, lf1, zf1;
+
+cf0, mf0, lf0, zf0 = #CMP(w0, w1);
+cf0, mf0, lf0, zf0 = #CMP_FG0(w0, w1);
+
+/* cf0, mf0, lf0, zf0 are allocated to FG0, so here we can't use them.
+   It would give a register allocation error. */
+cf1, mf1, lf1, zf1 = #CMP_FG1(w0, w1);
+
+cf0, mf1, lf0, zf0 = #CMP_FG0(w0, w1);
+
+
+/* ---------------------------------------------------------------------- */
+/* Control flow. */
+/* Control flow involves setting flags with bn.cmp, bn.sub, etc (on wide
+   registers), reading them with csrrs (to 32b registers), masking the one
+   we need, and comparing to a constant.
+   We need scratch registers!
+
+bn.cmp x3, x4, FG?
+csrrs x2, 0x7c?, x0
+andi x2, x2, CONSTANT_SELECT
+li x5, CONSTANT_COMPARE (maybe the same as SELECT?)
+beq x2, x5, LABEL
+*/
+
+
+/* ---------------------------------------------------------------------- */
+/* Conditional moves.
+   https://docs.opentitan.org/hw/ip/otbn/doc/isa/#bnsel
+*/
+
+/* Conditional moves depend on flags
+   bn.sel w_dest, w_if1, w_if0, FG1.C
+   we specify FG?.C, FG?.Z, ... and omit FG0 */
+w0 = cf0 ? w1 : w2;
+
+
+/* ---------------------------------------------------------------------- */
+/* We can repeat a piece of code a fixed number of times (constant or register
+   value).
+   https://docs.opentitan.org/hw/ip/otbn/doc/#using-hardware-loops
+*/
+
+/* e is an expression that can be either an integer or a 32b register.
+   The register is only checked before the first iteration.
+
+   There are constraints on the last instruction of the loop that can be fixed
+   by the compiler adding NOPs.
+*/
+repeat e {
+    ...
+}
+
+/*
+  Loops can be nested.
+  https://docs.opentitan.org/hw/ip/otbn/doc/#loop-nesting
+  We can't have more than 8 nested loops.
+  We can make function calls inside the loop.
+  If we don't return to the loop, the loop stack is corrupted.
+*/
+
+
+/* ---------------------------------------------------------------------- */
+/* We can maybe add an annotation to count loop iterations and fail with UNIMP?
+   https://docs.opentitan.org/hw/ip/otbn/doc/isa/#unimp */
+
+
+/* ---------------------------------------------------------------------- */
+/* Register-indirect addressing.
+   https://docs.opentitan.org/hw/ip/otbn/doc/isa/#bnmovr
+*/
+
+/* We can read/write to wide registers idexed by the content of a 32b register.
+   This may cause issues because we don't know which register is no longer
+   undefined.
+   Usually we know the value of the 32b register.
+
+   bn.movr x3, x4
+   bn.movr x3++, x4
+   bn.movr x3, x4++
+
+   What would be the syntax for this?
+*/
