@@ -11,7 +11,7 @@ Require Import
 
 (* [None] is used to model register x0. If later we model it properly, this
    should not be needed anymore. *)
-Definition sem_cond_arg (get : register -> word riscv_reg_size) ro :=
+Definition sem_cond_arg A ws (get : A -> word ws) (ro : option A) : word ws :=
   match ro with
   | None => wrepr _ 0
   | Some r => get r

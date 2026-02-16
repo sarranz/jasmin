@@ -44,6 +44,24 @@ Section ASCII.
 
 End ASCII.
 
+Section PRIM.
+
+Context {asm_op : Type}.
+
+Let err : result string asm_op := Error "invalid OTBN suffix"%string.
+
+Definition prim_otbn_none op :=
+  PrimOTBN (fun s => if s is PV_otbn_none then ok op else err).
+Definition prim_otbn_ws f :=
+  PrimOTBN (fun s => if s is PV_otbn_ws ws then ok (f ws) else err).
+Definition prim_otbn_fg f :=
+  PrimOTBN (fun s => if s is PV_otbn_fg fg then ok (f fg) else err).
+Definition prim_otbn_mulqacc_so f :=
+  PrimOTBN
+    (fun s => if s is PV_otbn_mulqacc_so fg wb then ok (f fg wb) else err).
+
+End PRIM.
+
 (* -------------------------------------------------------------------------- *)
 (* 32-bit operations. *)
 
@@ -1252,18 +1270,8 @@ Section PRIM_STRING.
     : seq (string * prim_constructor otbn_op) :=
     map (fun a => (to_string a, to_prim a)) s.
 
-  Let err : result string otbn_op := Error "invalid OTBN suffix"%string.
-
-  Let prim_none op :=
-    PrimOTBN (fun s => if s is PV_otbn_none then ok op else err).
-  Let prim_fg f :=
-    PrimOTBN (fun s => if s is PV_otbn_fg fg then ok (f fg) else err).
-  Let prim_mulqacc_so f :=
-    PrimOTBN
-      (fun s => if s is PV_otbn_mulqacc_so fg wb then ok (f fg wb) else err).
-
-  Let prim_RV32 mn := prim_none (RV32 mn).
-  Let prim_BN_basic mn := prim_fg (BN_basic mn).
+  Let prim_RV32 mn := prim_otbn_none (RV32 mn).
+  Let prim_BN_basic mn := prim_otbn_fg (BN_basic mn).
 
   (* [LA] computes an address relative to the PC. *)
   Let rv_prim_string :=
@@ -1279,13 +1287,13 @@ Section PRIM_STRING.
   Let bn_fg_prim_string :=
     map_prim_string
       (fun mn => otbn_op_to_string (mn FG0))
-      prim_fg
+      prim_otbn_fg
       [:: BN_ADDI; BN_SUBI; BN_SEL ].
 
   Let bn_no_opt_prim_string :=
     map_prim_string
       otbn_op_to_string
-      prim_none
+      prim_otbn_none
       [:: BN_MOV; BN_RSHI; BN_ADDM; BN_SUBM; BN_ACCR; BN_ACCW; BN_MODR; BN_MODW
       ].
 
@@ -1299,12 +1307,12 @@ Section PRIM_STRING.
       let str_wo_z := otbn_op_to_string (BN_MULQACC_WO_Z fg) in
       let str_so := otbn_op_to_string (BN_MULQACC_SO fg wb) in
       let str_so_z := otbn_op_to_string (BN_MULQACC_SO_Z fg wb) in
-      [:: (str, prim_none BN_MULQACC)
-        ; (str_z, prim_none BN_MULQACC_Z)
-        ; (str_wo, prim_fg BN_MULQACC_WO)
-        ; (str_wo_z, prim_fg BN_MULQACC_WO_Z)
-        ; (str_so, prim_mulqacc_so BN_MULQACC_SO)
-        ; (str_so_z, prim_mulqacc_so BN_MULQACC_SO_Z)
+      [:: (str, prim_otbn_none BN_MULQACC)
+        ; (str_z, prim_otbn_none BN_MULQACC_Z)
+        ; (str_wo, prim_otbn_fg BN_MULQACC_WO)
+        ; (str_wo_z, prim_otbn_fg BN_MULQACC_WO_Z)
+        ; (str_so, prim_otbn_mulqacc_so BN_MULQACC_SO)
+        ; (str_so_z, prim_otbn_mulqacc_so BN_MULQACC_SO_Z)
       ].
 
   Definition otbn_prim_string : seq (string * prim_constructor otbn_op) :=
