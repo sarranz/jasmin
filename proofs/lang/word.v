@@ -2370,3 +2370,4 @@ Proof.
   apply Z.quot_le_lower_bound; Lia.nia.
 Qed.
 
+Definition w2b {ws : wsize} (x : word ws) : bool := (x != 0)%R.
