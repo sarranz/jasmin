@@ -3,6 +3,7 @@ From HB Require Import structures.
 From mathcomp Require Import ssreflect ssrfun ssrbool seq eqtype ssralg.
 
 Require Import
+  otbn_options
   pseudo_operator
   sem_type
   shift_kind
@@ -90,12 +91,21 @@ Variant prim_x86_suffix :=
   | PVvv of velem & wsize & velem & wsize
 .
 
+Variant prim_otbn_suffix :=
+| PV_otbn_none
+| PV_otbn_ws of wsize
+| PV_otbn_fg of bn_flag_group
+| PV_otbn_mulqacc_so of bn_flag_group & bn_halfword_writeback
+.
+
 Variant prim_constructor (asm_op:Type) :=
   | PrimX86 of seq prim_x86_suffix & (prim_x86_suffix -> option asm_op)
   | PrimARM of
     (bool                 (* set_flags *)
      -> bool              (* is_conditional *)
-     -> result string asm_op).
+     -> result string asm_op)
+  | PrimOTBN of prim_otbn_suffix -> result string asm_op
+.
 
 Class asmOp (asm_op : Type) := {
   _eqT           : eqTypeC asm_op
@@ -564,6 +574,7 @@ Definition map_prim_constructor {A B} (f: A -> B) (p : prim_constructor A) : pri
   match p with
   | PrimX86 a k => PrimX86 a (fun x => omap f (k x))
   | PrimARM mk => PrimARM (fun sf ic => Let y := mk sf ic in ok (f y))
+  | PrimOTBN k => PrimOTBN (fun s => Let y := k s in ok (f y))
   end.
 
 Definition primM {A: Type} f  := @PrimX86 A [::] (fun _ => Some f).
