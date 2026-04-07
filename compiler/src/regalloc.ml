@@ -749,6 +749,35 @@ module Regalloc (Arch : Arch_full.Arch)
           in
           cnf
 
+  let already_allocated nv (vars: int Hv.t) (a: A.allocation) (cnf: conflicts) =
+    let allocate_one x y =
+      if types_cannot_conflict Arch.reg_size x.v_kind x.v_ty y.v_kind y.v_ty
+      then hierror_reg ~loc:Lnone "variable %a (declared at %a with type “%a”) must be allocated to register %a from an incompatible bank"
+          (Printer.pp_var ~debug:true) x
+          L.pp_sloc x.v_dloc
+          PrintCommon.pp_ty x.v_ty
+          (Printer.pp_var ~debug:false) y;
+      let i =
+        try Hv.find vars x
+        with Not_found ->
+          hierror_reg ~loc:Lnone "CHANGE variable %a (declared at %a as “%a”) must be allocated to register %a but is unknown to the register allocator%s"
+            (Printer.pp_var ~debug:true) x
+            L.pp_sloc x.v_dloc
+            PrintCommon.pp_kind x.v_kind
+            (Printer.pp_var ~debug:false) y
+            (if is_reg_kind x.v_kind then "" else " (consider declaring this variable as “reg”)")
+      in
+      allocate_one nv vars L.i_dummy cnf x i y a
+    in
+    let is_allocated x : var option =
+      List.find_opt (fun r -> r.v_name = x.v_name) Arch.all_registers
+    in
+    Hv.iter (fun x _ ->
+      match is_allocated x with
+      | None -> ()
+      | Some r -> allocate_one x r
+    ) vars
+
 
 let stable_call_conv = "stable_call_conv"
 
@@ -1455,6 +1484,8 @@ let global_allocation return_addresses (funcs: ('info, 'asm) func list) :
       conflicts
       funcs
   in
+
+  already_allocated nv vars a conflicts;
 
   if !Glob_options.print_liveness then pp_liveness vars liveness_per_callsite liveness_table a;
 
