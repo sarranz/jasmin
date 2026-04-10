@@ -177,6 +177,8 @@ lang/psem_core.v
 lang/psem_of_sem_proof.v
 lang/pseudo_operator.v
 lang/psem_facts.v
+lang/dpsem.v
+lang/dsem_itree.v
 lang/relational_logic.v
 lang/sem_one_varmap.v
 lang/sem_op_typed.v
