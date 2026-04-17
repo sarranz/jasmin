@@ -749,34 +749,69 @@ module Regalloc (Arch : Arch_full.Arch)
           in
           cnf
 
-  let already_allocated nv (vars: int Hv.t) (a: A.allocation) (cnf: conflicts) =
-    let allocate_one x y =
+  let parse_register_annot name (x: var) =
+    let on_name loc _nid s =
+      match List.find_opt (fun r -> r.v_name = s) Arch.all_registers with
+      | Some r -> r
+      | None ->
+          hierror_reg ~loc:(Lone loc)
+            "unknown register “%s” in %s annotation on variable %a"
+            s name (Printer.pp_var ~debug:true) x
+    in
+    Annot.on_attribute
+      ~on_id:on_name
+      ~on_string:on_name
+      (fun loc _nid ->
+        hierror_reg ~loc:(Lone loc)
+          "the “%s” annotation on variable %a requires a register name"
+          name (Printer.pp_var ~debug:true) x)
+
+  let allocate_hints nv (vars: int Hv.t) tr (a: A.allocation) (cnf: conflicts) : conflicts =
+    let allocate_one x i y =
       if types_cannot_conflict Arch.reg_size x.v_kind x.v_ty y.v_kind y.v_ty
-      then hierror_reg ~loc:Lnone "variable %a (declared at %a with type “%a”) must be allocated to register %a from an incompatible bank"
+      then hierror_reg ~loc:Lnone
+             "variable %a (declared at %a with type \"%a\") must be allocated \
+                to register %a from an incompatible bank"
           (Printer.pp_var ~debug:true) x
           L.pp_sloc x.v_dloc
           PrintCommon.pp_ty x.v_ty
           (Printer.pp_var ~debug:false) y;
-      let i =
-        try Hv.find vars x
-        with Not_found ->
-          hierror_reg ~loc:Lnone "CHANGE variable %a (declared at %a as “%a”) must be allocated to register %a but is unknown to the register allocator%s"
-            (Printer.pp_var ~debug:true) x
-            L.pp_sloc x.v_dloc
-            PrintCommon.pp_kind x.v_kind
-            (Printer.pp_var ~debug:false) y
-            (if is_reg_kind x.v_kind then "" else " (consider declaring this variable as “reg”)")
-      in
       allocate_one nv vars L.i_dummy cnf x i y a
     in
-    let is_allocated x : var option =
-      List.find_opt (fun r -> r.v_name = x.v_name) Arch.all_registers
-    in
-    Hv.iter (fun x _ ->
-      match is_allocated x with
+    let apply_force_regalloc x i =
+      match
+        Annot.ensure_uniq1 "force_regalloc"
+          (parse_register_annot "force_regalloc" x) x.v_annot
+      with
       | None -> ()
-      | Some r -> allocate_one x r
-    ) vars
+      | Some r -> allocate_one x i r
+    in
+    let contradictory_annot x i r = (* fail early if annot is contradictory *)
+      match A.find i a with
+      | Some r' when V.equal r' r ->
+          hierror_reg ~loc:Lnone
+            "variable %a (declared at %a) is allocated to register %a but \
+               the force_regalloc_conflict annotation forbids it"
+            (Printer.pp_var ~debug:true) x
+            L.pp_sloc x.v_dloc
+            (Printer.pp_var ~debug:false) r
+      | _ -> ()
+    in
+    let apply_force_regalloc_conflict x i cnf =
+      let regs =
+        Annot.filter_attribute "force_regalloc_conflict"
+          (parse_register_annot "force_regalloc_conflict" x) x.v_annot
+      in
+      List.fold_left (fun cnf (_, r) ->
+        contradictory_annot x i r;
+        conflicts_add_one Arch.pointer_data Arch.reg_size Arch.asmOp
+          vars tr Lnone x r cnf)
+        cnf regs
+    in
+    Hv.fold (fun x i cnf ->
+      apply_force_regalloc x i;
+      apply_force_regalloc_conflict x i cnf
+    ) vars cnf
 
 
 let stable_call_conv = "stable_call_conv"
@@ -1485,7 +1520,7 @@ let global_allocation return_addresses (funcs: ('info, 'asm) func list) :
       funcs
   in
 
-  already_allocated nv vars a conflicts;
+  let conflicts = allocate_hints nv vars tr a conflicts in
 
   if !Glob_options.print_liveness then pp_liveness vars liveness_per_callsite liveness_table a;
 
