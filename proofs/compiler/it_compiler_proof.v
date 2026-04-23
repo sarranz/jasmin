@@ -410,7 +410,9 @@ Let post : relPostF :=
       , values_uincl (drop n ress) rest
       , it_extend_mem ms' mt'
       , mem_unchanged_params ms mt mt' (get_wptrs up fn) args argt
-      & fscs s' = fscs t'
+      , fscs s' = fscs t'
+      , stack_stable ms' mt'
+      & stack_stable mt mt'
     ].
 
 #[local]
@@ -453,12 +455,15 @@ apply: (
 ).
 - move=> s1 ? [? _]; by exists s1.
 - move=> s1 _ s3 r1 r3 [_ <-] [_ halloc hwf hptr hmem hscs] [] r2
-    [hscs1 hmem1 hval1] [] hptr' hres hmem' hparams hscs'.
-  split=> //; only 3,4: congruence.
+    [hscs1 hmem1 hval1] [] hptr' hres hmem' hparams hscs' hss1 hss2.
+  split=> //.
   + apply: Forall2_trans hptr'; first exact: value_uincl_value_in_mem_trans.
     exact: (Forall2_take hval1).
-  apply: Forall2_trans hres; first exact: value_uincl_trans.
-  exact: (Forall2_drop hval1).
+  + apply: Forall2_trans hres; first exact: value_uincl_trans.
+    exact: (Forall2_drop hval1).
+  + by rewrite hmem1.
+  + by rewrite hscs1 hscs'.
+  by rewrite hmem1.
 
 apply: (wequiv_fun_get (scP1 := sCP_unit) (scP2 := sCP_stack)) => /= fd1
   get_fd1.
@@ -585,11 +590,14 @@ apply: (
   have hn : get_nb_wptr up fn = n.
   - by rewrite /get_nb_wptr /get_wptrs /= get_fd seq.find_map.
 
-  split; last congruence.
+  split.
   - rewrite hn -vr2_wf -hmem2; exact: vr2_inmem.
   - rewrite hn vr2_eq -rminfo_vr2; exact: vr_vr1.
   - by rewrite -hmem2 /it_extend_mem sp_p3_extra -p2_p3_extra p2_p1_extra.
-  by rewrite /get_wptrs get_fd /= check_params -hmem2.
+  - by rewrite /get_wptrs get_fd /= check_params -hmem2.
+  - congruence.
+  - admit.
+  admit.
 
 apply: (
   wiequiv_f_trans
@@ -599,7 +607,7 @@ apply: (
 ).
 - exact: rpreF_trans_eq_eq_eq.
 by move=> s1 _ _ r1 r3 [_ <-] [_ <-] [_ <-] [hscs hmem] h'.
-Qed.
+Admitted.
 
 End FRONT_END.
 
@@ -1065,7 +1073,9 @@ Definition back_end_to_asm_post fn xfd s t s' t' :=
   [/\ values_uincl ress rest
     , match_mem ms' mt'
     , s'.(fscs) = t'.(asm_scs)
-    & zeroized_s fn ms mt mt'
+    , zeroized_s fn ms mt mt'
+    , asm_rip t' = asm_rip t
+    & stack_stable mt mt'
   ].
 
 Lemma it_compiler_back_end_to_asmP {fn} :
@@ -1146,13 +1156,15 @@ apply: (
   + by case: Meq' => /= _ <- _ _ _ _ _ _; exact: hmm'.
   + case: Meq' => /= heq_scs _ _ _ _ _ _ _.
     by rewrite hscs' heq_scs.
-  case: Meq  => /= _ heq_mem  _ _ _ _ _ _.
-  case: Meq' => /= _ heq_mem' _ _ _ _ _ _.
-  by rewrite -heq_mem -heq_mem'.
+  + case: Meq  => /= _ heq_mem  _ _ _ _ _ _.
+    case: Meq' => /= _ heq_mem' _ _ _ _ _ _.
+    by rewrite -heq_mem -heq_mem'.
+  + admit.
+  admit.
 (* bridge step: iasm_gen_exportcall *)
 move=> ls xm [hvm_init Meq].
 exact: (iasm_gen_exportcall (hap_hagp haparams) ok_xp fn hvm_init Meq).
-Qed.
+Admitted.
 
 End BACK_END_TO_ASM.
 

@@ -148,9 +148,11 @@ case: hpre => mi [hmga hesp hscs_eq hrsp_eq hwfa hfuim].
 (* Specialise FE and BE at rip := asm_rip xm (input-dependent).
    FE: haparams explicit; entries/up/sp/fn inferred from ok_sp/ok_fn.
    BE: all section vars explicit; rip := asm_rip xm. *)
-have FE := it_compiler_front_endP haparams print_uprogP print_sprogP ok_sp ok_fn.
+have FE := it_compiler_front_endP haparams print_uprogP print_sprogP
+             print_linearP ok_sp ok_fn.
 have [xfd2 [get_xfd2 _ BE]] :=
-  it_compiler_back_end_to_asmP haparams print_linearP (asm_rip xm) ok_xp ok_fn.
+  it_compiler_back_end_to_asmP haparams print_uprogP print_sprogP
+    print_linearP (asm_rip xm) ok_xp ok_fn.
 have heq_xfd : xfd2 = xfd by move: get_xfd2; rewrite get_xfd => [[->]].
 subst xfd2.
 
@@ -245,7 +247,7 @@ have [fs_sp [hsp_mem hsp_scs hsp_eqinmem hsp_uincl hsp_ptr_eq]] :
 (* ======================================================================= *)
 (* Prove FE's precondition [rpreF fn fn fs fs_sp], then feed it through
    [FE _ tt] to obtain the xrutt refinement [h_fe]. *)
-have/(FE _ tt) h_fe :
+have/(FE _ (asm_rip xm) tt) h_fe :
   rpreF (eS := FrontEndEquiv up sp (asm_rip xm)) fn fn fs fs_sp.
 - (* FE's precondition: 6 conjuncts below (one admit per missing piece). *)
   split.
@@ -362,11 +364,19 @@ apply: xrutt_weaken_v1;
                      zeroized_s fn (fmem fs_sp) (asm_mem xm) (asm_mem xm') ] *)
   move=> fs' xm' [] fs_sp' h_fe_post h_be_post.
   split.
-  + (* (1) mem_agreement (fmem fs') (asm_mem xm') (asm_rip xm') (asm_globs xp)
-            <- combine hmga.(ma_extend_mem) transported across FE-post's
-               it_extend_mem, BE-post's match_mem, and stack_stable
-               transitivity (mirrors compiler_proof.v:1303-1315). *)
-    admit.
+  + (* (1) mem_agreement (fmem fs') (asm_mem xm') (asm_rip xm') (asm_globs xp) *)
+    case: h_fe_post => _ _ hext _ _ hss_ms'mt' hss_mt.
+    case: h_be_post => _ hmm' _ _ hrip hss_asm.
+    exists (fmem fs_sp').
+    split.
+    - rewrite /it_extend_mem
+        -(compiler_back_end_to_asm_meta print_linearP ok_xp) -hrip
+        in hext.
+      exact: hext.
+    - exact: hmm'.
+    - exact: hss_ms'mt'.
+    rewrite -(ss_limit hss_mt) hsp_mem -(ss_top_stack hss_asm).
+    exact: hmga.(ma_stack_range).
   + (* (2) asm_scs xm' = fscs fs'
             <- transitivity of fscs equalities in both posts. *)
     admit.
