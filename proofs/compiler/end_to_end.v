@@ -226,12 +226,8 @@ Definition handleE : Handler (RndEvent unit) Rnd :=
     let* bs := unif_rV (Z.to_nat len) in
     Ret (tt, wseq_of_wvec bs).
 
-Definition translateE : itree (RndEvent unit) ~> itree Rnd :=
+Definition to_Rnd : itree (RndEvent unit) ~> itree Rnd :=
   fun _ t => interp handleE t.
-
-Lemma eutt_translateE T (RR : T -> T -> Prop) :
-  Proper (eutt RR ==> eutt RR) (translateE (T := T)).
-Proof. exact: eutt_interp'. Qed.
 
 Context
   {reg regx xreg rflag cond asm_op extra_op : Type}
@@ -278,12 +274,13 @@ Section DEFS.
 Class JazzIParams :=
   {
     entries : seq funname;
-    mI : mem;
-    ripI : pointer;
-    rmI : regmap;
-    rxmI : regxmap;
-    xrmI : xregmap;
-    rfmI : rflagmap;
+    mS : mem;
+    mT : mem;
+    ripT : pointer;
+    rmT : regmap;
+    rxmT : regxmap;
+    xrmT : xregmap;
+    rfmT : rflagmap;
   }.
 
 Context
@@ -291,20 +288,6 @@ Context
   (q : asm_prog)
   {JP : JazzIParams}
 .
-
-(* Source needs a memory, target needs all the rest except syscall_state. *)
-Definition _Mo : choiceType := {choice asmmem}.
-
-Definition _mi : _Mo :=
-  {|
-    asm_rip := ripI;
-    asm_scs := tt;
-    asm_mem := mI;
-    asm_reg := rmI;
-    asm_regx := rxmI;
-    asm_xreg := xrmI;
-    asm_flag := rfmI;
-  |}.
 
 Record export_fn :=
   {
@@ -314,31 +297,39 @@ Record export_fn :=
     efn_fd_ok : get_fundef (p_funcs p) _fn = Some efn_fd;
   }.
 
-Definition _No : choiceType := {choice export_fn}.
+Definition JNo : choiceType := {choice export_fn}.
 
 (* Safety should be proven assuming only that the shape coincides with initial
    memory. *)
 Record valid_input o :=
   {
     _args :> values;
-    vi_safe : safe_on p o mI _args;
-    vi_def : res_defined_on p o mI _args;
-    (* for each array, give me an address with enough space *)
+    vi_safe : safe_on p o mS _args;
+    vi_def : res_defined_on p o mS _args;
+    vi_ptrs : seq pointer;
+    (*vi_ptrs_ok :
+       forall i,
+         oseq.onth _args i = Some (Varr _ _) ->
+         exists2 p,
+           seq.onth vi_ptrs i = Some p
+           & ;*)
   }.
 
-Definition _In (o : _No) : choiceType := {choice valid_input o}.
+Definition JIn (o : JNo) : choiceType := {choice valid_input o}.
 
-Definition _Out (o : _No) : choiceType := seq wseq.
+Definition JOut (o : JNo) : choiceType := seq wseq.
 
 Instance JazzI : OracleSystemInterface :=
   {|
-    No := _No;
-    In := _In;
-    Out := _Out;
+    No := JNo;
+    In := JIn;
+    Out := JOut;
   |}.
 
 (* -------------------------------------------------------------------------- *)
 (* Source oracle system *)
+
+Definition MoS : choiceType := {choice mem}.
 
 Definition wseq_of_val (v : value) : wseq :=
   match v with
@@ -351,38 +342,77 @@ Definition unmkfs (fs : fstate) : seq wseq * mem :=
   ([seq wseq_of_val v | v <- fs.(fvals) ], fs.(fmem)).
 
 Definition isem_unit_res
-  (o : _No) (i : _In o) (m : _Mo) : itree E (_Out o * _Mo) :=
-  let fs := mkfs m.(asm_mem) i in
+  (o : JNo) (i : JIn o) (m : MoS) : itree E (JOut o * MoS) :=
+  let fs := mkfs m i in
   let* fs' := isem_unit p o fs in
   let (r, m') := unmkfs fs' in
-  Ret (r, xm_with_mem m' m).
+  Ret (r, m').
 
 #[global] Arguments isem_unit_res : clear implicits.
 
-(* TODO Why doesn't [|>] work for [translateE]? *)
-Definition _OoS (o : _No) (i : _In o) (m : _Mo) : itree Rnd (_Out o * _Mo) :=
-  let* ores := translateE (isem_unit_res o i m |> interp_Err) in
+(* TODO Why doesn't [|>] work for [to_Rnd]? *)
+Definition OoS (o : JNo) (i : JIn o) (m : MoS) : itree Rnd (JOut o * MoS) :=
+  let* ores := to_Rnd (isem_unit_res o i m |> interp_Err) in
   if ores is ESok res then Ret res
-  else Ret ([::], _mi). (* absurd *)
+  else Ret ([::], mS). (* absurd *)
 
 Instance Source : OracleSystem JazzI :=
   {|
-    Mo := _Mo;
-    Oo := _OoS;
-    mi := _mi;
+    Mo := MoS;
+    Oo := OoS;
+    mi := mS;
   |}.
 
 (* -------------------------------------------------------------------------- *)
 (* Target oracle system *)
 
-Definition xm_writes
-  (m : asmmem) (xs : seq asm_typed_reg) (args : values) : exec asmmem.
-Proof using. Admitted.
+Definition MoT : choiceType := {choice asmmem}.
 
-Definition mkxm (fn : funname) (m : asmmem) (args : values) : asmmem :=
+Definition xmT : asmmem :=
+  {|
+    asm_rip := ripT;
+    asm_scs := tt;
+    asm_mem := mT;
+    asm_reg := rmT;
+    asm_regx := rxmT;
+    asm_xreg := xrmT;
+    asm_flag := rfmT;
+  |}.
+
+Definition xm_write
+  (x : asm_typed_reg) (v : value) (ptr : pointer) (xm : asmmem) : exec asmmem :=
+  match x with
+  | ARReg r =>
+      if v is Varr _ a then
+        let m' := write_wseq xm.(asm_mem) ptr (wseq_of_arr a) in
+        ok (xm_with_mem m' xm)
+      else
+        Let w := to_word reg_size v in
+        ok (mem_write_reg MSB_CLEAR r w xm)
+  | ARegX rx =>
+      Let w := to_word reg_size v in
+      ok (mem_write_regx MSB_CLEAR rx w xm)
+  | AXReg xr =>
+      Let w := to_word xreg_size v in
+      ok (mem_write_xreg MSB_CLEAR xr w xm)
+  | ABReg f =>
+      Let b := to_bool v in
+      ok (mem_write_rflag xm f (Some b))
+  end.
+
+Definition xm_writes
+  (m : asmmem)
+  (xs : seq asm_typed_reg)
+  (args : values)
+  (ptrs : seq pointer) :
+  exec asmmem :=
+  foldM (fun x => xm_write x.1.1 x.1.2 x.2) m (zip (zip xs args) ptrs).
+
+Definition mkxm
+  (fn : funname) (m : asmmem) (args : values) (ptrs : seq pointer) : asmmem :=
   if get_fundef (asm_funcs q) fn is Some xfd then
-    rdflt _mi (xm_writes m xfd.(asm_fd_arg) args)
-  else _mi. (* absurd *)
+    rdflt xmT (xm_writes m xfd.(asm_fd_arg) args ptrs)
+  else xmT. (* absurd *)
 
 Definition xm_read (m : asmmem) (x : asm_typed_reg) : value.
 Proof using. Admitted.
@@ -393,22 +423,22 @@ Definition xget_res (fn : funname) (m : asmmem) : seq wseq :=
   else [::]. (* absurd *)
 
 Definition isem_asm_res
-  (o : _No) (i : _In o) (m : _Mo) : itree E (_Out o * _Mo) :=
-  let xm := mkxm o m i in
+  (o : JNo) (i : JIn o) (m : MoT) : itree E (JOut o * MoT) :=
+  let xm := mkxm o m i (vi_ptrs i) in
   let* xm' := isem_asm q o xm in
   Ret (xget_res o xm', xm').
 Arguments isem_asm_res : clear implicits.
 
-Definition _OoT (o : _No) (i : _In o) (m : _Mo) : itree Rnd (_Out o * _Mo) :=
-  let* ores := translateE (isem_asm_res o i m |> interp_Err) in
+Definition OoT (o : JNo) (i : JIn o) (m : MoT) : itree Rnd (JOut o * MoT) :=
+  let* ores := to_Rnd (isem_asm_res o i m |> interp_Err) in
   if ores is ESok res then Ret res
-  else Ret ([::], _mi) (* absurd *).
+  else Ret ([::], xmT) (* absurd *).
 
 Instance Target : OracleSystem JazzI :=
   {|
-    Mo := _Mo;
-    Oo := _OoT;
-    mi := _mi;
+    Mo := MoT;
+    Oo := OoT;
+    mi := xmT;
   |}.
 
 (* -------------------------------------------------------------------------- *)
@@ -439,25 +469,30 @@ Proof. exact: efn_fd_ok o. Qed.
   export_funname_get_fundef
   : core.
 
-Definition inv_mo : _Mo -> _Mo -> Prop.
+Definition inv_mo : MoS -> MoT -> Prop.
 Proof using. Admitted.
 
-Definition inv_eq {X : Type} (x y : X * _Mo) : Prop :=
-  [/\ x.1 = y.1 & inv_mo x.2 y.2 ].
+Definition inv_eq {X : Type} : X * MoS -> X * MoT -> Prop :=
+  eqR (X := X) inv_mo.
 
-Lemma inv_mo_mi : inv_mo _mi _mi.
+Lemma inv_mo_mi : inv_mo mS xmT.
 Proof using. Admitted.
 
 Lemma inv_mo_mem_equiv_mi ms mt :
   inv_mo ms mt ->
-  mem_equiv mI ms.(asm_mem).
+  mem_equiv mS ms.
 Proof using. Admitted.
 
 Definition post_isem
-  (fn : funname) (ms mt : asmmem) (fs' : fstate) (xm' : asmmem) : Prop :=
-  exists xfd i,
-    let: fs := mkfs ms.(asm_mem) i in
-    let: xm := mkxm fn mt i in
+  (fn : funname)
+  (ms : mem)
+  (mt : asmmem)
+  (fs' : fstate)
+  (xm' : asmmem) :
+  Prop :=
+  exists xfd vs ptrs,
+    let: fs := mkfs ms vs in
+    let: xm := mkxm fn mt vs ptrs in
     [/\ get_fundef q.(asm_funcs) fn = Some xfd
       , full_pre p q fn xfd fs xm
       & full_post cparams p q fn xfd fs xm fs' xm' ].
@@ -466,7 +501,7 @@ Lemma post_isemP fn ms mt fs xm :
   inv_mo ms mt ->
   post_isem fn ms mt fs xm ->
   inv_eq
-    ([seq wseq_of_val v | v <- fvals fs], xm_with_mem (fmem fs) ms)
+    ([seq wseq_of_val v | v <- fvals fs], fmem fs)
     (xget_res fn xm, xm).
 Proof using. Admitted.
 
@@ -522,30 +557,30 @@ by move=> s' t' hfin [].
 Qed.
 
 (* TODO missing hypotheses *)
-Lemma inv_mo_full_pre fn xfd i ms mt :
+Lemma inv_mo_full_pre fn xfd i ptrs ms mt :
   get_fundef (asm_funcs q) fn = Some xfd ->
   inv_mo ms mt ->
-  full_pre p q fn xfd (mkfs ms.(asm_mem) i) (mkxm fn mt i).
+  full_pre p q fn xfd (mkfs ms i) (mkxm fn mt i ptrs).
 Proof using. Admitted.
 
-Lemma eutt_isem_post fn fd ms mt i :
+Lemma eutt_isem_post fn fd ms mt i ptrs :
   fn \in entries ->
   get_fundef p.(p_funcs) fn = Some fd ->
-  safe_uprog p fn (mkfs ms.(asm_mem) i) ->
-  res_defined p fn (mkfs ms.(asm_mem) i) ->
+  safe_uprog p fn (mkfs ms i) ->
+  res_defined p fn (mkfs ms i) ->
   inv_mo ms mt ->
   eutt (post_isem fn ms mt)
-    (isem_unit p fn (mkfs (asm_mem ms) i))
-    (isem_asm q fn (mkxm fn mt i)).
+    (isem_unit p fn (mkfs ms i))
+    (isem_asm q fn (mkxm fn mt i ptrs)).
 Proof.
 move=> hfn hfd hsafe hdef hm.
 have [xfd hxfd heq] := correct_comp hfn hfd.
-have hpre := inv_mo_full_pre i hxfd hm.
+have hpre := inv_mo_full_pre i ptrs hxfd hm.
 apply: eutt_subrel; last first.
 - apply: heq; first exact: hsafe.
   + exact: hdef.
   exact: hpre.
-move=> fs xm hpost; by exists xfd, i.
+move=> fs xm hpost; by exists xfd, i, ptrs.
 Qed.
 
 Lemma eutt_isem_res o i ms mt :
@@ -559,6 +594,14 @@ move=> hm; apply: eutt_clo_bind.
 move=> fs xm h; apply eutt_Ret; exact/(post_isemP hm h).
 Qed.
 
+Definition exec_rel'
+  {X Y} (R : X -> Y -> Prop) (rx : execS X) (ry : execS Y) : Prop :=
+  match rx, ry with
+  | ESok x, ESok y => R x y
+  | ESerror e1, ESerror e2 => e1 = e2
+  | _, _ => False
+  end.
+
 Theorem compiler_preserves o i m1 m2 :
   inv_mo m1 m2 ->
   eutt inv_eq (Source.(Oo) o i m1) (Target.(Oo) o i m2).
@@ -568,8 +611,8 @@ have [xfd [hgetq _ heq]] := [elaborate
   it_compile_prog_to_asmP haparams print_uprogP print_sprogP print_linearP
     hcomp (efn_export o)].
 (* TODO we could prove that we always get OK instead of using exec_rel *)
-apply: (eutt_clo_bind _ (UU := exec_rel inv_eq)).
-- exact/eutt_translateE/interp_exec_eutt/eutt_isem_res/hm.
+apply (eutt_clo_bind _ (UU := exec_rel' inv_eq)).
+- exact/eutt_to_Rnd/interp_exec_eutt/eutt_isem_res/hm.
 move=> /= [[rs ms]|?] [[rt mt]|?] //=; last first.
 - move=> _; apply eutt_Ret; split=> //=; exact: inv_mo_mi.
 move=> [/= -> hm']; apply eutt_Ret; split=> //; exact: hm'.
