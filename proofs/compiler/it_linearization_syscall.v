@@ -92,6 +92,7 @@ Section PROOF.
      [isem_ir], …) come from [it_linearization_proof] / [linear_facts] /
      [it_sems_one_varmap], so the body of [Hsyscall] copied verbatim
      from the parent file should typecheck against this Pi_r. *)
+(* 
   Let Pi_r (i:instr_r) := ∀ ii lbl lbli P li Q,
     pre_i fn (MkI ii i) lbl lbli P li Q →
     wkequiv_io
@@ -100,7 +101,7 @@ Section PROOF.
       (mix_ilsteps p' (pc_between_c fn P li))
       (post_ir (P ++ li)).
 
-  (* ===================================================================
+  ===================================================================
    * PLAN — proving the 7 admits in [Hsyscall] below
    * ===================================================================
    *
@@ -465,7 +466,7 @@ Section PROOF.
    *
    * Estimated size: ~30–50 lines for admits 2–7; ~80–120 lines for
    * the helper + admit 1.
-   * =================================================================== *)
+   * ===================================================================
 
   Lemma Hsyscall : ∀ (xs : lvals) (o : syscall_t) (es : pexprs), Pi_r (Csyscall xs o es).
   Proof.
@@ -514,7 +515,7 @@ Section PROOF.
       move: (top_stack (emem s1)) h => sp.
       by have := wunsigned_range sp; lia.
     admit.
-  Admitted.
+  Admitted. *)
 
   End LINEAR_CMD.
 
