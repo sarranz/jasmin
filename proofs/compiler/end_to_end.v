@@ -669,7 +669,7 @@ move=> hfd hm [xfd [hxfd hpre hpost]]; split=> /=.
     admit.
     admit.
   rewrite /cast_vals_self hvs.
-  Search get_nb_wptr.
+Admitted.
 
 (* TODO missing hypotheses *)
 Lemma sim_full_pre fn xfd i ptrs ms mt :
