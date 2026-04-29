@@ -122,11 +122,99 @@ Definition res_defined (p : uprog) (fn : funname) (fs : fstate) : Prop :=
     (fun fs => all val_is_def (fvals fs))
     (isem_unit p fn fs).
 
+Lemma all_drop X p (s : seq X) n :
+  all p s ->
+  all p (drop n s).
+Proof. by rewrite -[in all p _](cat_take_drop n s) all_cat => /andP []. Qed.
+
+Lemma all_take X p (s : seq X) n :
+  all p s ->
+  all p (take n s).
+Proof. by rewrite -[in all p _](cat_take_drop n s) all_cat => /andP []. Qed.
+
+Definition wseq_of_val (t : ctype) (v : value) : wseq :=
+  let v' :=
+    match t with
+    | carr p => Let a := to_arr p v in ok (wseq_of_arr a)
+    | cword ws => Let w := to_word ws v in ok (split_vec 8 w)
+    | _ => ok [::]
+    end
+  in
+  rdflt [::] v'.
+
+Lemma value_uincl_is_def x y :
+  val_is_def x ->
+  value_uincl x y ->
+  wseq_of_val (type_of_val x) x = wseq_of_val (type_of_val x) y.
+Proof.
+case: x y => [b1|z1|len1 a1|ws1 w1|t1 ?] [b2|z2|len2 a2|ws2 w2|t2 ?] //=.
+- move=> hdef hu; rewrite /wseq_of_val.
+  have ? := WArray.uincl_len hu; subst len2.
+  rewrite /to_arr !WArray.castK /=.
+  have heq :
+    forall i : Z,
+      i \in ziota 0 len1 ->
+      exists2 w, WArray.get8 a1 i = ok w & WArray.get8 a2 i = ok w.
+  - move=> i hi.
+    have [|w hw] := elimT (valid_getP a1 i).
+    + apply/andP; split; last by move: hdef => /allP /(_ _ hi).
+      apply/WArray.in_boundP; rewrite in_ziota in hi; lia.
+    exists w => //.
+    have :=
+      WArray.uincl_get (aa := AAdirect) (al := Aligned) (i := i) (ws := U8)
+                       (w := w) hu.
+    rewrite /WArray.get /=.
+    rewrite /read /= is_align8 /= add_0 Z.mul_1_r hw /= decode_u8 => /(_ erefl).
+    by t_xrbindP=> w' ? -> <- <-; rewrite decode_u8.
+  rewrite /wseq_of_arr; f_equal; elim: ziota heq => //= i zs hi heq.
+  move: (heq i); rewrite in_cons eqxx => /(_ isT) [w -> ->] /=.
+  by rewrite hi // => j hj; apply: heq; rewrite in_cons hj orbT.
+move=> _ hu.
+rewrite /wseq_of_val /= truncate_word_u.
+by rewrite (word_uincl_truncate (w := w1) hu) // truncate_word_u.
+Qed.
+
+Definition cast_vals tys vs := [seq wseq_of_val x.1 x.2 | x <- zip tys vs ].
+
+Definition cast_vals_self vs := cast_vals (map type_of_val vs) vs.
+
+Lemma values_uincl_is_def s s' :
+  let: ty := map type_of_val s in
+  all val_is_def s ->
+  values_uincl s s' ->
+  cast_vals ty s = cast_vals ty s'.
+Proof.
+elim: s s' => [|x xs hi] [|y ys] //=.
+- by move=> _ /List_Forall2_inv.
+move=> /andP [hx hxs] /List_Forall2_inv [uxy uxys].
+rewrite /cast_vals /= (value_uincl_is_def hx uxy).
+f_equal.
+exact: (hi _ hxs uxys).
+Qed.
+
 Let REeq {E : Type -> Type} A1 A2 (e1: E A1) (e2: E A2) :=
   exists h : A2 = A1, e1 = eq_rect A2 E e2 A1 h.
 
 Let RAeq {E : Type -> Type} A1 A2 (e1: E A1) (a1: A1) (e2: E A2) (a2: A2) :=
   JMeq a1 a2.
+
+Definition aux_post p q fn xfd s t s' t' :=
+  let: args := s.(fvals) in
+  let: ms := s.(fmem) in
+  let: argt := get_typed_reg_values t xfd.(asm_fd_arg) in
+  let: mt := t.(asm_mem) in
+  let: ress := s'.(fvals) in
+  let: ms' := s'.(fmem) in
+  let: rest := get_typed_reg_values t' xfd.(asm_fd_res) in
+  let: mt' := t'.(asm_mem) in
+  let: n := get_nb_wptr p fn in
+  let: tys := [seq type_of_val x | x <- drop n ress ] in
+  [/\ mem_agreement ms' mt' t'.(asm_rip) q.(asm_globs)
+    , t'.(asm_scs) = s'.(fscs)
+    , zeroized_u cparams p fn args argt ms mt mt'
+    , List.Forall2 (value_in_mem mt') (take n ress) (take n argt)
+    & cast_vals tys (drop n ress) = cast_vals tys rest
+  ].
 
 Lemma correct_comp entries p q fn fd :
   compile_prog_to_asm aparams cparams entries p = ok q ->
@@ -139,7 +227,7 @@ Lemma correct_comp entries p q fn fd :
         res_defined p fn s ->
         full_pre p q fn xfd s t ->
         eutt
-          (full_post cparams p q fn xfd s t)
+          (aux_post p q fn xfd s t)
           (isem_unit p fn s) (isem_asm q fn t).
 Proof.
 move=> hcomp hfn hfd.
@@ -169,7 +257,9 @@ apply: (lutt_xrutt_trans_l'
   done.
 - done.
 - done.
-by move=> s' t' hfin [].
+move=> s' t' hfin [{}hdef [hm hscs hz hptr hres]]; split=> //.
+apply: values_uincl_is_def hres.
+by rewrite all_drop // hdef.
 Qed.
 
 End MOVE.
@@ -380,15 +470,9 @@ Instance JazzI : OracleSystemInterface :=
 
 Definition MoS : choiceType := {choice mem}.
 
-Definition wseq_of_val (v : value) : wseq :=
-  match v with
-  | Varr _ a => wseq_of_arr a
-  | Vword _ w => split_vec 8 w
-  | _ => [::]
-  end.
-
 Definition unmkfs (fs : fstate) : seq wseq * mem :=
-  ([seq wseq_of_val v | v <- fs.(fvals) ], fs.(fmem)).
+  let: tys := [seq type_of_val v | v <- fs.(fvals) ] in
+  (cast_vals tys fs.(fvals), fs.(fmem)).
 
 Definition isem_unit_res
   (o : JNo) (i : JIn o) (m : MoS) : itree E (JOut o * MoS) :=
@@ -464,18 +548,18 @@ Definition mkxm
   else xmT. (* absurd *)
 
 Definition xm_read
-  (xm : asmmem) (x : asm_typed_reg) (ty : atype) (ptr : pointer) : wseq :=
-  if ty is aarr ws len then
-    let len' := Z.to_pos (arr_size ws len) in
-    read_wseq xm.(asm_mem) ptr len'
-  else wseq_of_val (get_typed_reg_value xm x).
+  (xm : asmmem) (x : asm_typed_reg) (ty : ctype) (ptr : pointer) : wseq :=
+  if ty is carr len then
+    read_wseq xm.(asm_mem) ptr len
+  else wseq_of_val ty (get_typed_reg_value xm x).
 
 Definition xget_res
   (fn : funname) (m : asmmem) (ptrs : seq pointer) : seq wseq :=
   if get_fundef p.(p_funcs) fn is Some fd then
     if get_fundef q.(asm_funcs) fn is Some xfd then
-      [seq xm_read m x.1.1 x.1.2 x.2
-      | x <- zip (zip xfd.(asm_fd_res) fd.(f_tyout)) ptrs ]
+      let: tys := [seq eval_atype x | x <- fd.(f_tyout) ] in
+      [seq xm_read m x.2.1 x.1 x.2.2
+      | x <- zip tys (zip xfd.(asm_fd_res) ptrs) ]
     else [::] (* absurd *)
   else [::]. (* absurd *)
 
@@ -529,7 +613,7 @@ Proof. exact: efn_fd_ok o. Qed.
 Definition sim (ms : MoS) (mt : MoT) : Prop :=
   mem_equiv mS ms. (* TODO missing *)
 
-Definition inv_eq {X : Type} : X * MoS -> X * MoT -> Prop :=
+Definition eq_sim {X : Type} : X * MoS -> X * MoT -> Prop :=
   eqR (X := X) sim.
 
 Lemma sim_mS_xmT : sim mS xmT.
@@ -542,29 +626,50 @@ Proof. done. Qed.
 
 Definition post_isem
   (fn : funname)
+  (vs : values)
   (ptrs : seq pointer)
   (ms : mem)
   (mt : asmmem)
   (fs' : fstate)
   (xm' : asmmem) :
   Prop :=
-  exists xfd vs,
     let: fs := mkfs ms vs in
     let: xm := mkxm fn mt vs ptrs in
-    [/\ get_fundef q.(asm_funcs) fn = Some xfd
-      , full_pre p q fn xfd fs xm
-      & full_post cparams p q fn xfd fs xm fs' xm' ].
+    exists xfd,
+      [/\ get_fundef q.(asm_funcs) fn = Some xfd
+        , full_pre p q fn xfd fs xm
+        & aux_post cparams p q fn xfd fs xm fs' xm' ].
 
-Lemma post_isemP fn ptrs ms mt fs xm :
+Lemma take_zip X Y (xs : seq X) (ys : seq Y) n :
+  take n (zip xs ys) = zip (take n xs) (take n ys).
+Proof.
+by elim: xs ys n => [|x xs hi] [|y ys] [|n] //=; rewrite hi.
+Qed.
+
+Lemma post_isemP fn fd vs ptrs ms mt fs xm :
+  get_fundef p.(p_funcs) fn = Some fd ->
   sim ms mt ->
-  post_isem fn ptrs ms mt fs xm ->
-  inv_eq
-    ([seq wseq_of_val v | v <- fvals fs], fmem fs)
+  post_isem fn vs ptrs ms mt fs xm ->
+  eq_sim
+    (cast_vals_self fs.(fvals), fmem fs)
     (xget_res fn xm ptrs, xm).
 Proof.
-move=> hm [xfd [vs [hxfd hpre hpost]]]; split=> /=.
-- have [_ _ _] := hpost.
-Admitted.
+move=> hfd hm [xfd [hxfd hpre hpost]]; split=> /=.
+- have [_ _ _ hmem hvs] := hpost.
+  rewrite
+    -(cat_take_drop (get_nb_wptr p fn) (fvals fs))
+    -(cat_take_drop (get_nb_wptr p fn) (xget_res fn xm ptrs)).
+  rewrite /cast_vals_self /cast_vals map_cat.
+  rewrite zip_cat; last by rewrite size_map.
+  rewrite map_cat -![map _ _]/(cast_vals_self _).
+  f_equal.
+  - rewrite /xget_res hfd hxfd.
+    rewrite -map_take !take_zip.
+    have -> : take (get_nb_wptr p fn) [seq eval_atype x | x <- fd.(f_tyout) ] = [seq type_of_val i | i <- take (get_nb_wptr p fn) (fvals fs)].
+    admit.
+    admit.
+  rewrite /cast_vals_self hvs.
+  Search get_nb_wptr.
 
 (* TODO missing hypotheses *)
 Lemma sim_full_pre fn xfd i ptrs ms mt :
@@ -579,7 +684,7 @@ Lemma eutt_isem_post fn fd ms mt i ptrs :
   safe_uprog p fn (mkfs ms i) ->
   res_defined p fn (mkfs ms i) ->
   sim ms mt ->
-  eutt (post_isem fn ptrs ms mt)
+  eutt (post_isem fn i ptrs ms mt)
     (isem_unit p fn (mkfs ms i))
     (isem_asm q fn (mkxm fn mt i ptrs)).
 Proof.
@@ -587,21 +692,19 @@ move=> hfn hfd hsafe hdef hm.
 have [xfd hxfd heq] :=
   correct_comp haparams print_uprogP print_sprogP print_linearP hcomp hfn hfd.
 have hpre := sim_full_pre i ptrs hxfd hm.
-apply: eutt_subrel; last first.
-- apply: heq; first exact: hsafe.
-  + exact: hdef.
-  exact: hpre.
-move=> fs xm hpost; by exists xfd, i.
+have := heq _ _ hsafe hdef hpre.
+apply: eutt_subrel.
+by move=> fs xm [???? h]; exists xfd; split=> //.
 Qed.
 
 Lemma eutt_isem_res o i ms mt :
   sim ms mt ->
-  eutt inv_eq (isem_unit_res o i ms) (isem_asm_res o i mt).
+  eutt eq_sim (isem_unit_res o i ms) (isem_asm_res o i mt).
 Proof.
-move=> hm; apply: eutt_clo_bind.
-- apply: eutt_isem_post => //.
-  + exact/vi_safe/sim_mem_equiv_mi/hm.
-  exact/vi_def/sim_mem_equiv_mi/hm.
+move=> hm.
+have hsafe : safe_uprog p o (mkfs ms i) by apply/vi_safe/sim_mem_equiv_mi/hm.
+have hdef : res_defined p o (mkfs ms i) by apply/vi_def/sim_mem_equiv_mi/hm.
+apply: eutt_clo_bind; first exact: eutt_isem_post hsafe hdef hm.
 move=> fs xm h; apply eutt_Ret; exact: post_isemP hm h.
 Qed.
 
@@ -613,7 +716,7 @@ have [xfd [hgetq _ heq]] := [elaborate
   it_compile_prog_to_asmP haparams print_uprogP print_sprogP print_linearP
     hcomp (efn_export o)].
 (* TODO we could prove that we always get OK instead of using exec_rel *)
-apply (eutt_clo_bind _ (UU := exec_rel inv_eq)).
+apply (eutt_clo_bind _ (UU := exec_rel eq_sim)).
 - apply/eutt_interp_RR/interp_exec_eutt_gen/eutt_isem_res/hm.
 move=> /= [[rs ms]|?] [[rt mt]|?] //=; last first.
 - move=> _; apply eutt_Ret; split=> //=; exact/sim_mS_xmT.
@@ -821,7 +924,11 @@ Context
 
 Theorem mlkem_end_to_end :
   indcca_reduction (KEM_of_Jazz (Source p)) (KEM_of_Jazz (Target p q)).
-Proof. by apply/sim_indcca_adv/simulating_JKEM/compiler_preserves; eauto. Qed.
+Proof.
+apply/sim_indcca_adv/simulating_JKEM.
+exact:
+  (compiler_preserves haparams print_uprogP print_sprogP print_linearP hcomp).
+Qed.
 
 End INSTANTIATION.
 
