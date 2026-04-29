@@ -198,6 +198,16 @@ Let REeq {E : Type -> Type} A1 A2 (e1: E A1) (e2: E A2) :=
 Let RAeq {E : Type -> Type} A1 A2 (e1: E A1) (a1: A1) (e2: E A2) (a2: A2) :=
   JMeq a1 a2.
 
+Definition values_match p fn xfd t s' t' :=
+  let: argt := get_typed_reg_values t xfd.(asm_fd_arg) in
+  let: n := get_nb_wptr p fn in
+  let: mt' := t'.(asm_mem) in
+  let: ress := s'.(fvals) in
+  let: rest := get_typed_reg_values t' xfd.(asm_fd_res) in
+  let: tys := [seq type_of_val x | x <- drop n ress ] in
+  List.Forall2 (value_in_mem mt') (take n ress) (take n argt)
+  /\ cast_vals tys (drop n ress) = cast_vals tys rest.
+
 Definition aux_post p q fn xfd s t s' t' :=
   let: args := s.(fvals) in
   let: ms := s.(fmem) in
@@ -212,8 +222,7 @@ Definition aux_post p q fn xfd s t s' t' :=
   [/\ mem_agreement ms' mt' t'.(asm_rip) q.(asm_globs)
     , t'.(asm_scs) = s'.(fscs)
     , zeroized_u cparams p fn args argt ms mt mt'
-    , List.Forall2 (value_in_mem mt') (take n ress) (take n argt)
-    & cast_vals tys (drop n ress) = cast_vals tys rest
+    & values_match p fn xfd t s' t'
   ].
 
 Lemma correct_comp entries p q fn fd :
@@ -257,7 +266,7 @@ apply: (lutt_xrutt_trans_l'
   done.
 - done.
 - done.
-move=> s' t' hfin [{}hdef [hm hscs hz hptr hres]]; split=> //.
+move=> s' t' hfin [{}hdef [hm hscs hz hptr hres]]; split=> //; split=> //.
 apply: values_uincl_is_def hres.
 by rewrite all_drop // hdef.
 Qed.
@@ -408,6 +417,36 @@ Definition xm_with_mem (mem : mem) (m : asmmem) : asmmem :=
     asm_flag := m.(asm_flag);
   |}.
 
+Definition xm_write
+  (x : asm_typed_reg) (v : value) (ptr : pointer) (xm : asmmem) : exec asmmem :=
+  match x with
+  | ARReg r =>
+      if v is Varr _ a then
+        let xm' := mem_write_reg MSB_CLEAR r ptr xm in
+        let m' := write_wseq xm'.(asm_mem) ptr (wseq_of_arr a) in
+        ok (xm_with_mem m' xm')
+      else
+        Let w := to_word reg_size v in
+        ok (mem_write_reg MSB_CLEAR r w xm)
+  | ARegX rx =>
+      Let w := to_word reg_size v in
+      ok (mem_write_regx MSB_CLEAR rx w xm)
+  | AXReg xr =>
+      Let w := to_word xreg_size v in
+      ok (mem_write_xreg MSB_CLEAR xr w xm)
+  | ABReg f =>
+      Let b := to_bool v in
+      ok (mem_write_rflag xm f (Some b))
+  end.
+
+Definition xm_writes
+  (m : asmmem)
+  (xs : seq asm_typed_reg)
+  (args : values)
+  (ptrs : seq pointer) :
+  exec asmmem :=
+  foldM (fun x => xm_write x.1.1 x.1.2 x.2) m (zip (zip xs args) ptrs).
+
 Section DEFS.
 
 Class JazzIParams :=
@@ -428,6 +467,24 @@ Context
   {JP : JazzIParams}
 .
 
+Definition xmT : asmmem :=
+  {|
+    asm_rip := ripT;
+    asm_scs := tt;
+    asm_mem := mT;
+    asm_reg := rmT;
+    asm_regx := rxmT;
+    asm_xreg := xrmT;
+    asm_flag := rfmT;
+  |}.
+
+Definition mkxm
+  (fn : funname) (xm : asmmem) (args : values) (ptrs : seq pointer) : asmmem :=
+  if get_fundef (asm_funcs q) fn is Some xfd then
+    let xm' := mem_write_reg MSB_CLEAR ad_rsp (top_stack mS) xm in
+    rdflt xmT (xm_writes xm' xfd.(asm_fd_arg) args ptrs)
+  else xmT. (* absurd *)
+
 Record export_fn :=
   {
     _fn :> funname;
@@ -446,12 +503,14 @@ Record valid_input o :=
     vi_safe : safe_on p o mS _args;
     vi_def : res_defined_on p o mS _args;
     vi_ptrs : seq pointer;
-    (*vi_ptrs_ok :
-       forall i,
-         oseq.onth _args i = Some (Varr _ _) ->
-         exists2 p,
-           seq.onth vi_ptrs i = Some p
-           & ;*)
+
+    (* We only allow inputs where:
+       - Pointers need to be valid
+       - There is enough stack space in xmT *)
+    vi_ptrs_ok :
+      forall xfd,
+        get_fundef q.(asm_funcs) o = Some xfd ->
+        full_pre p q o xfd (mkfs mS _args) (mkxm o xmT _args vi_ptrs);
   }.
 
 Definition JIn (o : JNo) : choiceType := {choice valid_input o}.
@@ -478,15 +537,14 @@ Definition isem_unit_res
   (o : JNo) (i : JIn o) (m : MoS) : itree E (JOut o * MoS) :=
   let fs := mkfs m i in
   let* fs' := isem_unit p o fs in
-  let (r, m') := unmkfs fs' in
-  Ret (r, m').
+  let (r, _) := unmkfs fs' in
+  Ret (r, mS).
 
 #[global] Arguments isem_unit_res : clear implicits.
 
-(* TODO Why doesn't [|>] work for [to_Rnd]? *)
 Definition OoS (o : JNo) (i : JIn o) (m : MoS) : itree Rnd (JOut o * MoS) :=
   let* ores := to_Rnd (isem_unit_res o i m |> interp_Err) in
-  if ores is ESok res then Ret res
+  if ores is ESok (rs, _) then Ret (rs, mS)
   else Ret ([::], mS). (* absurd *)
 
 Instance Source : OracleSystem JazzI :=
@@ -501,73 +559,20 @@ Instance Source : OracleSystem JazzI :=
 
 Definition MoT : choiceType := {choice asmmem}.
 
-Definition xmT : asmmem :=
-  {|
-    asm_rip := ripT;
-    asm_scs := tt;
-    asm_mem := mT;
-    asm_reg := rmT;
-    asm_regx := rxmT;
-    asm_xreg := xrmT;
-    asm_flag := rfmT;
-  |}.
-
-Definition xm_write
-  (x : asm_typed_reg) (v : value) (ptr : pointer) (xm : asmmem) : exec asmmem :=
-  match x with
-  | ARReg r =>
-      if v is Varr _ a then
-        let m' := write_wseq xm.(asm_mem) ptr (wseq_of_arr a) in
-        ok (xm_with_mem m' xm)
-      else
-        Let w := to_word reg_size v in
-        ok (mem_write_reg MSB_CLEAR r w xm)
-  | ARegX rx =>
-      Let w := to_word reg_size v in
-      ok (mem_write_regx MSB_CLEAR rx w xm)
-  | AXReg xr =>
-      Let w := to_word xreg_size v in
-      ok (mem_write_xreg MSB_CLEAR xr w xm)
-  | ABReg f =>
-      Let b := to_bool v in
-      ok (mem_write_rflag xm f (Some b))
-  end.
-
-Definition xm_writes
-  (m : asmmem)
-  (xs : seq asm_typed_reg)
-  (args : values)
-  (ptrs : seq pointer) :
-  exec asmmem :=
-  foldM (fun x => xm_write x.1.1 x.1.2 x.2) m (zip (zip xs args) ptrs).
-
-Definition mkxm
-  (fn : funname) (m : asmmem) (args : values) (ptrs : seq pointer) : asmmem :=
-  if get_fundef (asm_funcs q) fn is Some xfd then
-    rdflt xmT (xm_writes m xfd.(asm_fd_arg) args ptrs)
-  else xmT. (* absurd *)
-
-Definition xm_read
-  (xm : asmmem) (x : asm_typed_reg) (ty : ctype) (ptr : pointer) : wseq :=
-  if ty is carr len then
-    read_wseq xm.(asm_mem) ptr len
-  else wseq_of_val ty (get_typed_reg_value xm x).
-
-Definition xget_res
-  (fn : funname) (m : asmmem) (ptrs : seq pointer) : seq wseq :=
-  if get_fundef p.(p_funcs) fn is Some fd then
-    if get_fundef q.(asm_funcs) fn is Some xfd then
-      let: tys := [seq eval_atype x | x <- fd.(f_tyout) ] in
-      [seq xm_read m x.2.1 x.1 x.2.2
-      | x <- zip tys (zip xfd.(asm_fd_res) ptrs) ]
-    else [::] (* absurd *)
-  else [::]. (* absurd *)
+(* We assume a function to read from target states. *)
+Context
+  (xget_res : funname -> asmmem -> seq pointer -> seq wseq)
+  (xget_resP :
+    forall xfd o (i : valid_input o) fs xm,
+      get_fundef q.(asm_funcs) o = Some xfd ->
+      values_match p o xfd (mkxm o xmT i (vi_ptrs i)) fs xm ->
+      cast_vals [seq type_of_val v | v <- fvals fs] (fvals fs) = xget_res o xm (vi_ptrs i)).
 
 Definition isem_asm_res
   (o : JNo) (i : JIn o) (m : MoT) : itree E (JOut o * MoT) :=
   let xm := mkxm o m i (vi_ptrs i) in
   let* xm' := isem_asm q o xm in
-  Ret (xget_res o xm' (vi_ptrs i), xm').
+  Ret (xget_res o xm' (vi_ptrs i), xmT).
 Arguments isem_asm_res : clear implicits.
 
 Definition OoT (o : JNo) (i : JIn o) (m : MoT) : itree Rnd (JOut o * MoT) :=
@@ -611,7 +616,7 @@ Proof. exact: efn_fd_ok o. Qed.
   : core.
 
 Definition sim (ms : MoS) (mt : MoT) : Prop :=
-  mem_equiv mS ms. (* TODO missing *)
+  ms = mS /\ mt = xmT.
 
 Definition eq_sim {X : Type} : X * MoS -> X * MoT -> Prop :=
   eqR (X := X) sim.
@@ -622,7 +627,7 @@ Proof. done. Qed.
 Lemma sim_mem_equiv_mi ms mt :
   sim ms mt ->
   mem_equiv mS ms.
-Proof. done. Qed.
+Proof. by move=> [-> _]. Qed.
 
 Definition post_isem
   (fn : funname)
@@ -640,61 +645,23 @@ Definition post_isem
         , full_pre p q fn xfd fs xm
         & aux_post cparams p q fn xfd fs xm fs' xm' ].
 
-Lemma take_zip X Y (xs : seq X) (ys : seq Y) n :
-  take n (zip xs ys) = zip (take n xs) (take n ys).
-Proof.
-by elim: xs ys n => [|x xs hi] [|y ys] [|n] //=; rewrite hi.
-Qed.
-
-Lemma post_isemP fn fd vs ptrs ms mt fs xm :
-  get_fundef p.(p_funcs) fn = Some fd ->
-  sim ms mt ->
-  post_isem fn vs ptrs ms mt fs xm ->
-  eq_sim
-    (cast_vals_self fs.(fvals), fmem fs)
-    (xget_res fn xm ptrs, xm).
-Proof.
-move=> hfd hm [xfd [hxfd hpre hpost]]; split=> /=.
-- have [_ _ _ hmem hvs] := hpost.
-  rewrite
-    -(cat_take_drop (get_nb_wptr p fn) (fvals fs))
-    -(cat_take_drop (get_nb_wptr p fn) (xget_res fn xm ptrs)).
-  rewrite /cast_vals_self /cast_vals map_cat.
-  rewrite zip_cat; last by rewrite size_map.
-  rewrite map_cat -![map _ _]/(cast_vals_self _).
-  f_equal.
-  - rewrite /xget_res hfd hxfd.
-    rewrite -map_take !take_zip.
-    have -> : take (get_nb_wptr p fn) [seq eval_atype x | x <- fd.(f_tyout) ] = [seq type_of_val i | i <- take (get_nb_wptr p fn) (fvals fs)].
-    admit.
-    admit.
-  rewrite /cast_vals_self hvs.
-Admitted.
-
-(* TODO missing hypotheses *)
-Lemma sim_full_pre fn xfd i ptrs ms mt :
-  get_fundef (asm_funcs q) fn = Some xfd ->
-  sim ms mt ->
-  full_pre p q fn xfd (mkfs ms i) (mkxm fn mt i ptrs).
-Proof using. Admitted.
-
-Lemma eutt_isem_post fn fd ms mt i ptrs :
+Lemma eutt_isem_post fn fd ms mt (i : valid_input fn) :
   fn \in entries ->
   get_fundef p.(p_funcs) fn = Some fd ->
   safe_uprog p fn (mkfs ms i) ->
   res_defined p fn (mkfs ms i) ->
   sim ms mt ->
-  eutt (post_isem fn i ptrs ms mt)
+  eutt (post_isem fn i (vi_ptrs i) ms mt)
     (isem_unit p fn (mkfs ms i))
-    (isem_asm q fn (mkxm fn mt i ptrs)).
+    (isem_asm q fn (mkxm fn mt i (vi_ptrs i))).
 Proof.
-move=> hfn hfd hsafe hdef hm.
+move=> hfn hfd hsafe hdef [??]; subst ms mt.
 have [xfd hxfd heq] :=
   correct_comp haparams print_uprogP print_sprogP print_linearP hcomp hfn hfd.
-have hpre := sim_full_pre i ptrs hxfd hm.
+have hpre := i.(vi_ptrs_ok) hxfd.
 have := heq _ _ hsafe hdef hpre.
 apply: eutt_subrel.
-by move=> fs xm [???? h]; exists xfd; split=> //.
+by move=> fs xm [??? [? h]]; exists xfd; split=> //.
 Qed.
 
 Lemma eutt_isem_res o i ms mt :
@@ -705,7 +672,9 @@ move=> hm.
 have hsafe : safe_uprog p o (mkfs ms i) by apply/vi_safe/sim_mem_equiv_mi/hm.
 have hdef : res_defined p o (mkfs ms i) by apply/vi_def/sim_mem_equiv_mi/hm.
 apply: eutt_clo_bind; first exact: eutt_isem_post hsafe hdef hm.
-move=> fs xm h; apply eutt_Ret; exact: post_isemP hm h.
+case: hm => ??; subst ms mt.
+move=> fs xm [xfd [hxfd hpre [hma hscs hz hargs]]]; apply eutt_Ret.
+split=> //=; exact: xget_resP hxfd hargs.
 Qed.
 
 Theorem compiler_preserves : simulating Source Target.
@@ -720,7 +689,8 @@ apply (eutt_clo_bind _ (UU := exec_rel eq_sim)).
 - apply/eutt_interp_RR/interp_exec_eutt_gen/eutt_isem_res/hm.
 move=> /= [[rs ms]|?] [[rt mt]|?] //=; last first.
 - move=> _; apply eutt_Ret; split=> //=; exact/sim_mS_xmT.
-move=> [/= -> hm']; apply eutt_Ret; split=> //; exact/hm'.
+move=> [/= -> hm']; apply eutt_Ret; split=> //; split=> //.
+by case: hm' => _ ->.
 Qed.
 
 End DEFS.
@@ -739,6 +709,7 @@ Context
   (export_encap : fn_encap \in entries)
   (export_decap : fn_decap \in entries)
   (p : uprog)
+  (q : asm_prog)
 .
 
 Definition pk0 := mkwvec pkbytes [::].
@@ -795,68 +766,16 @@ Definition efn_decap : export_fn p :=
 Section JKEM.
   (* The KEM induced by a Jasmin program. *)
 
-  Context (J : OracleSystem (JazzI p)).
+  Context (J : OracleSystem (JazzI p q)).
 
   Notation InK := (In (I := KEM)).
   Notation OutK := (Out (I := KEM)).
 
-  Definition vi_GenKey : valid_input p efn_kg :=
-    {|
-      _args := [:: Varr dummyp; Varr dummys ];
-      vi_safe := genkey_ok.1;
-      vi_def := genkey_ok.2;
-      vi_ptrs := [::];
-    |}.
-
-  Let mk_arr {n : positive} (s : wvec n) :=
-    Varr (rdflt (WArray.empty _) (WArray.fill n (wseq_of_wvec s))).
-
-  (* MOVE *)
-  Lemma size_ok_fill_ok (n : positive) bytes :
-    size bytes = Pos.to_nat n ->
-    exists a, WArray.fill n bytes = ok a.
-  Proof.
-  move=> h; rewrite /WArray.fill -h eqxx /=.
-  suff : exists z a, WArray.fill_aux n bytes = ok (z, a).
-  - by move=> [z [a {}h]]; rewrite h; exists a.
-  have := WArray.fill_aux_ok (len := n) (bytes := bytes).
-  rewrite h => /(_ (le_n _)).
-  by case: WArray.fill_aux => // [[z a] ?] /=; exists z, a.
-  Qed.
-
-  Lemma fill_ok_get len l a k :
-    WArray.fill len l = ok a ->
-    [&& 0 <=? k & k <? len ] ->
-    read a Aligned k U8 = ok (nth 0%R l (Z.to_nat k)).
-  Proof. by move=> /WArray.fill_get8 /(_ k) /[swap] ->. Qed.
-
-  Lemma arr_is_def_mk_arr (n : positive) (s : wvec n) :
-    arr_is_def (rdflt (WArray.empty _) (WArray.fill n (wseq_of_wvec s))).
-  Proof.
-    have [a h] := size_ok_fill_ok (size_wseq_of_wvec s).
-    rewrite h; apply/allP => /= i hi.
-    suff: exists w, WArray.get8 a i = ok w by move=> /valid_getP/andP [].
-    have := fill_ok_get (k := i) h.
-    rewrite -in_ziota hi => /(_ isT).
-    rewrite /read /= is_align8 /= add_0; t_xrbindP=> ? w -> _ _.
-    by exists w.
-  Qed.
-
-  Definition vi_Encap (i : InK OEncap) : valid_input p efn_encap :=
-    {|
-      _args := [:: Varr dummyc; Varr dummym; mk_arr i ];
-      vi_ptrs := [:: pmsg ];
-      vi_safe := (encap_ok (arr_is_def_mk_arr i)).1;
-      vi_def := (encap_ok (arr_is_def_mk_arr i)).2;
-    |}.
-
-  Definition vi_Decap (i : InK ODecap) : valid_input p efn_decap :=
-    {|
-      _args := [:: Varr dummym; mk_arr i.1; mk_arr i.2 ];
-      vi_ptrs := [:: pmsg; psk; pct ];
-      vi_safe := (decap_ok (arr_is_def_mk_arr i.2) (arr_is_def_mk_arr i.1)).1;
-      vi_def := (decap_ok (arr_is_def_mk_arr i.2) (arr_is_def_mk_arr i.1)).2;
-    |}.
+  Context
+    (vi_GenKey : valid_input p q efn_kg)
+    (vi_Encap : InK OEncap  -> valid_input p q efn_encap)
+    (vi_Decap : InK ODecap -> valid_input p q efn_decap)
+  .
 
   Let Oo_JKEM_GenKey
     (i : InK OGenKey) (m : Mo) : itree Rnd (OutK OGenKey * Mo) :=
@@ -893,9 +812,11 @@ Section JKEM.
 
 End JKEM.
 
-Lemma simulating_JKEM P Q :
+Lemma simulating_JKEM P Q vi_gk vi_enc vi_dec :
   simulating P Q ->
-  simulating (KEM_of_Jazz P) (KEM_of_Jazz Q).
+  simulating
+    (KEM_of_Jazz P vi_gk vi_enc vi_dec)
+    (KEM_of_Jazz Q vi_gk vi_enc vi_dec).
 Proof.
 move=> [sim hsim]; exists sim; split; first exact/hsim.(sim_mi).
 move=> [[] | pk | [sk ct]] m1 m2 hm.
@@ -911,7 +832,6 @@ by case: r => [| msg [|??]]; apply eutt_Ret.
 Qed.
 
 Context
-  (q : asm_prog)
   {lowering_options : Type}
   (aparams : architecture_params lowering_options)
   (haparams : h_architecture_params aparams)
@@ -920,14 +840,22 @@ Context
   (print_sprogP : forall s p, cparams.(print_sprog) s p = p)
   (print_linearP : forall s p, cparams.(print_linear) s p = p)
   (hcomp : compile_prog_to_asm aparams cparams entries p = ok q)
+  (xget_res : funname -> asmmem -> seq pointer -> seq wseq)
+  (xget_resP :
+    forall xfd o (i : valid_input p q o) fs xm,
+      get_fundef q.(asm_funcs) o = Some xfd ->
+      values_match p o xfd (mkxm q o xmT i (vi_ptrs i)) fs xm ->
+      cast_vals [seq type_of_val v | v <- fvals fs] (fvals fs) = xget_res o xm (vi_ptrs i))
 .
 
-Theorem mlkem_end_to_end :
-  indcca_reduction (KEM_of_Jazz (Source p)) (KEM_of_Jazz (Target p q)).
+Theorem mlkem_end_to_end vi_gk vi_enc vi_dec :
+  indcca_reduction
+    (KEM_of_Jazz (Source p q) vi_gk vi_enc vi_dec)
+    (KEM_of_Jazz (Target p q xget_res) vi_gk vi_enc vi_dec).
 Proof.
 apply/sim_indcca_adv/simulating_JKEM.
-exact:
-  (compiler_preserves haparams print_uprogP print_sprogP print_linearP hcomp).
+exact: (compiler_preserves
+          xget_resP haparams print_uprogP print_sprogP print_linearP hcomp).
 Qed.
 
 End INSTANTIATION.
