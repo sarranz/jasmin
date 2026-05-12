@@ -409,3 +409,6 @@ let fresh_var_ident =
         let x = V.mk n r ty i_loc.L.base_loc [] in
         Hashtbl.add memo k x;
         x
+
+let spill_to_mmx (v : Var0.Var.var) =
+  CoreIdent.Cident.spill_to_mmx v.Var0.Var.vname

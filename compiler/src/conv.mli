@@ -65,3 +65,4 @@ val error_of_cerror :
 
 (* ---------------------------------------------------- *)
 val fresh_var_ident : v_kind -> IInfo.t -> Uint63.t -> Name.t -> Type.atype -> var
+val spill_to_mmx : Var0.Var.var -> bool
