@@ -160,6 +160,7 @@ lang/fexpr.v
 lang/fexpr_facts.v
 lang/fexpr_sem.v
 lang/flag_combination.v
+lang/funname.v
 lang/gen_map.v
 lang/global.v
 lang/hoare_logic.v
@@ -197,7 +198,6 @@ lang/stack_zero_strategy.v
 lang/strings.v
 lang/syscall.v
 lang/syscall_sem.v
-lang/tagged.v
 lang/type.v
 lang/utils.v
 lang/values.v

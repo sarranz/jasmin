@@ -128,6 +128,8 @@ type funname = {
 }
 
 let funname_tag (f:funname) = f.fn_id
+let funname_eqb (f1:funname) (f2:funname) = Uint63.equal f1.fn_id f2.fn_id
+let funname_cmp (f1:funname) (f2:funname) = PrimInt63.compares f1.fn_id f2.fn_id
 
 module F = struct
   let mk fn_name =

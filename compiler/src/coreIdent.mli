@@ -127,6 +127,8 @@ type funname = private {
 }
 
 val funname_tag : funname -> Uint63.t
+val funname_eqb : funname -> funname -> bool
+val funname_cmp : funname -> funname -> Datatypes.comparison
 
 module F : sig
   val mk : Name.t -> funname

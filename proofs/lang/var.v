@@ -2,33 +2,10 @@
 From Coq Require Import Setoid Morphisms.
 From HB Require Import structures.
 From mathcomp Require Import ssreflect ssrfun ssrbool seq eqtype.
-Require Import strings utils gen_map type ident tagged.
+Require Export funname.
+Require Import strings utils gen_map type ident.
 From Coq Require Import Utf8.
 
-(* ------------------------------------------------------------------------- *)
-
-
-Module FunName : TaggedCore.
-  Import PrimInt63.
-  Definition t : Type := int.
-  Definition tag (x : t) : int := x.
-
-  Lemma tagI : injective tag.
-  Proof. done. Qed.
-
-End FunName.
-
-Module TFunName <: TAGGED with Definition t := FunName.t
-  := Tagged (FunName).
-
-#[global] Canonical funname_eqType  := Eval compute in TFunName.t_eqType.
-
-Module Mf  := TFunName.Mt.
-Module Sf  := TFunName.St.
-Module SfP := TFunName.StP.
-Module SfD := TFunName.StD.
-
-Definition funname := FunName.t.
 
 Definition get_fundef {T} (p: seq (funname * T)) (f: funname) :=
   xseq.assoc p f.
