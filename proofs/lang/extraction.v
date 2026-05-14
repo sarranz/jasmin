@@ -43,8 +43,17 @@ Extract Constant var.FunName.t   => "CoreIdent.funname".
 Extract Constant var.funname     => "CoreIdent.funname".
 Extract Constant var.FunName.tag => "CoreIdent.funname_tag".
 
-Extract Inductive ident.Cident.t => "CoreIdent.Cident.t"
-  [ "(fun _ _ _ -> failwith ""Cident.mkCident not callable from extracted code"")" ].
+(* The match function and the field projections [c_tag], [c_name], [c_kind]
+   could all be extracted soundly (via
+   [fun fmk x -> fmk (CoreIdent.Cident.tag x) ...] and the corresponding OCaml
+   accessors). This means that the extracted OCaml has no [failwith].
+   We deliberately fail in this cases: we want to use only [tag], [id_name],
+   [id_kind]. Anything that tries to pattern-match on [mkCident] or read
+   [c_tag]/[c_name]/[c_kind] is a bug. *)
+Extract Inductive ident.Cident.t =>
+  "CoreIdent.Cident.t"
+  [ "(fun _ _ _ -> failwith ""Cident.mkCident not callable from extracted code"")" ]
+  "(fun _ _ -> failwith ""Cident.t match not callable from extracted code"")".
 
 Extract Constant ident.Cident.c_tag  => "(fun _ -> failwith ""Cident.c_tag not callable from extracted code"")".
 Extract Constant ident.Cident.c_name => "(fun _ -> failwith ""Cident.c_name not callable from extracted code"")".
@@ -54,16 +63,8 @@ Extract Constant ident.Cident.tag => "CoreIdent.Cident.tag".
 Extract Constant ident.Cident.id_name => "CoreIdent.Cident.id_name".
 Extract Constant ident.Cident.id_kind => "CoreIdent.Cident.id_kind".
 
-Extract Constant ident.Tident.t_eqb => "CoreIdent.eqb".
-Extract Constant ident.Tident.t_eq_axiom =>
-  "(fun (_ : CoreIdent.Cident.t) (_ : CoreIdent.Cident.t) -> failwith ""Cident.c_kind not callable from extracted code"")".
-Extract Constant ident.Tident.cmp => "CoreIdent.cmp".
-
-Extract Constant ident.ident_eqType => "{
-  Coq_hasDecEq.eq_op = (fun x y -> CoreIdent.eqb (Obj.magic x) (Obj.magic y));
-  Coq_hasDecEq.eqP = (Obj.magic Tident.t_eq_axiom);
-}".
-
+Extract Constant ident.Cident.eqb => "CoreIdent.eqb".
+Extract Constant ident.Cident.cmp => "CoreIdent.cmp".
 
 Set Extraction Output Directory "lang/ocaml".
 
