@@ -1,16 +1,9 @@
 (* ** Imports and settings *)
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
-From Coq Require Import Uint63 Sint63 Utf8.
+From Coq Require Import Uint63 Sint63.
 From HB Require Import structures.
 Require Import strings utils gen_map tagged wsize.
 
-(* Concrete ident implementation.
-   [Cident.t] is the record type.  [WrapIdent.t] is a transparent alias;
-   [Extract Constant ident.WrapIdent.t] overrides the *type* name in every
-   OCaml function signature that mentions it, so [Tident.eqb] and
-   [Tident.cmp] extract as [CoreIdent.Cident.t -> CoreIdent.Cident.t -> ...].
-   [Tident.CmpT] is nested so the extractor does not collapse it to [Cident],
-   preserving the [Obj.magic] bridge that [Mmake] needs. *)
 Module Cident.
 
   Record t := mkCident
@@ -78,7 +71,7 @@ Module Tident <: TAGGED.
 
   End CmpT.
 
-  Module Mt : MAP with Definition K.t := CmpT.t := Mmake CmpT.
+  Module Mt <: MAP with Definition K.t := CmpT.t := Mmake CmpT.
 
   Module St  := Smake CmpT.
   Module StP := MSetEqProperties.EqProperties St.

@@ -59,11 +59,10 @@ Extract Constant ident.Tident.t_eq_axiom =>
   "(fun (_ : CoreIdent.Cident.t) (_ : CoreIdent.Cident.t) -> failwith ""Cident.c_kind not callable from extracted code"")".
 Extract Constant ident.Tident.cmp => "CoreIdent.cmp".
 
-Extract Constant ident.ident_eqType =>
-  "{
-     Coq_hasDecEq.eq_op = (fun x y -> CoreIdent.eqb (Obj.magic x) (Obj.magic y));
-     Coq_hasDecEq.eqP = (Obj.magic Tident.t_eq_axiom);
-  }".
+Extract Constant ident.ident_eqType => "{
+  Coq_hasDecEq.eq_op = (fun x y -> CoreIdent.eqb (Obj.magic x) (Obj.magic y));
+  Coq_hasDecEq.eqP = (Obj.magic Tident.t_eq_axiom);
+}".
 
 
 Set Extraction Output Directory "lang/ocaml".
