@@ -43,14 +43,28 @@ Extract Constant var.FunName.t   => "CoreIdent.funname".
 Extract Constant var.funname     => "CoreIdent.funname".
 Extract Constant var.FunName.tag => "CoreIdent.funname_tag".
 
-(* Module Cident *)
+Extract Inductive ident.Cident.t => "CoreIdent.Cident.t"
+  [ "(fun _ _ _ -> failwith ""Cident.mkCident not callable from extracted code"")" ].
 
-Extract Constant ident.Cident.t       => "CoreIdent.Cident.t".
-Extract Constant ident.WrapIdent.t    => "CoreIdent.Cident.t".
+Extract Constant ident.Cident.c_tag  => "(fun _ -> failwith ""Cident.c_tag not callable from extracted code"")".
+Extract Constant ident.Cident.c_name => "(fun _ -> failwith ""Cident.c_name not callable from extracted code"")".
+Extract Constant ident.Cident.c_kind => "(fun _ -> failwith ""Cident.c_kind not callable from extracted code"")".
 
-Extract Constant ident.Cident.tag     => "CoreIdent.Cident.tag".
+Extract Constant ident.Cident.tag => "CoreIdent.Cident.tag".
 Extract Constant ident.Cident.id_name => "CoreIdent.Cident.id_name".
 Extract Constant ident.Cident.id_kind => "CoreIdent.Cident.id_kind".
+
+Extract Constant ident.Tident.t_eqb => "CoreIdent.eqb".
+Extract Constant ident.Tident.t_eq_axiom =>
+  "(fun (_ : CoreIdent.Cident.t) (_ : CoreIdent.Cident.t) -> failwith ""Cident.c_kind not callable from extracted code"")".
+Extract Constant ident.Tident.cmp => "CoreIdent.cmp".
+
+Extract Constant ident.ident_eqType =>
+  "{
+     Coq_hasDecEq.eq_op = (fun x y -> CoreIdent.eqb (Obj.magic x) (Obj.magic y));
+     Coq_hasDecEq.eqP = (Obj.magic Tident.t_eq_axiom);
+  }".
+
 
 Set Extraction Output Directory "lang/ocaml".
 

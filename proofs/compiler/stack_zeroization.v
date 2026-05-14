@@ -12,7 +12,7 @@ In export functions we set the [stk_max] field to a multiple of the size
 of a clearing step, so that the overwriting is done in an integer number of
 writes. *)
 
-From mathcomp Require Import ssreflect ssrfun ssrbool.
+From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
 From mathcomp Require Import word_ssrZ.
 From Coq Require Import ZArith.
 

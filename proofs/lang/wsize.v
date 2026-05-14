@@ -173,10 +173,13 @@ Variant reg_kind : Type :=
 | Normal
 | Extra.
 
+#[only(eqbOK)] derive
 Variant writable : Type := Constant | Writable.
 
+#[only(eqbOK)] derive
 Variant reference : Type := Direct | Pointer of writable.
 
+#[only(eqbOK)] derive
 Variant v_kind :=
 | Const            (* global parameter  *)
 | Stack of reference (* stack variable    *)
@@ -184,6 +187,111 @@ Variant v_kind :=
 | Inline           (* inline variable   *)
 | Global           (* global (in memory) constant *)
 .
+
+HB.instance Definition _ := hasDecEq.Build writable  writable_eqb_OK.
+HB.instance Definition _ := hasDecEq.Build reference reference_eqb_OK.
+HB.instance Definition _ := hasDecEq.Build v_kind    v_kind_eqb_OK.
+
+Definition reg_kind_cmp (x y : reg_kind) : comparison :=
+  match x, y with
+  | Normal, Normal => Eq
+  | Normal, Extra  => Lt
+  | Extra,  Normal => Gt
+  | Extra,  Extra  => Eq
+  end.
+
+#[global] Instance reg_kindO : Cmp reg_kind_cmp.
+Proof.
+  constructor.
+  + by move=> [] [].
+  + by move=> y x z c; case: x; case: y; case: z => //=; move=> [->].
+  + by move=> [] [].
+Qed.
+
+Definition writable_cmp (x y : writable) : comparison :=
+  match x, y with
+  | Constant, Constant => Eq
+  | Constant, Writable => Lt
+  | Writable, Constant => Gt
+  | Writable, Writable => Eq
+  end.
+
+#[global] Instance writableO : Cmp writable_cmp.
+Proof.
+  constructor.
+  + by move=> [] [].
+  + by move=> y x z c; case: x; case: y; case: z => //=; move=> [->].
+  + by move=> [] [].
+Qed.
+
+Definition reference_cmp (x y : reference) : comparison :=
+  match x, y with
+  | Direct,    Direct    => Eq
+  | Direct,    Pointer _ => Lt
+  | Pointer _, Direct    => Gt
+  | Pointer a, Pointer b => writable_cmp a b
+  end.
+
+#[global] Instance referenceO : Cmp reference_cmp.
+Proof.
+  constructor.
+  + case=> [|a] [|b] //=; apply: cmp_sym.
+  + move=> [|wy] [|wx] [|wz] //= c.
+    - by move=> [->].
+    - by move=> [->].
+    - by move=> [->].
+    - by apply: ctrans_Lt.
+    - by rewrite ctransC; apply: ctrans_Gt.
+    - by apply: cmp_ctrans.
+  + case=> [|a] [|b] //= /(@cmp_eq _ _ writableO) ->; reflexivity.
+Qed.
+
+Definition v_kind_idx (x : v_kind) : nat :=
+  match x with
+  | Const    => 0
+  | Stack _  => 1
+  | Reg _    => 2
+  | Inline   => 3
+  | Global   => 4
+  end.
+
+Definition v_kind_cmp (x y : v_kind) : comparison :=
+  match x, y with
+  | Const,     Const     => Eq
+  | Stack a,   Stack b   => reference_cmp a b
+  | Reg a,     Reg b     => Lex (reg_kind_cmp a.1 b.1) (reference_cmp a.2 b.2)
+  | Inline,    Inline    => Eq
+  | Global,    Global    => Eq
+  | _, _ => Nat.compare (v_kind_idx x) (v_kind_idx y)
+  end.
+
+Lemma v_kind_cmp_eq x y : reflect (x = y) (v_kind_cmp x y == Eq).
+Proof.
+by apply: (iffP idP) => [/eqP | ->];
+  case: x => [|[|[]]|[[] [|[]]]||];
+  case: y => [|[|[]]|[[] [|[]]]||].
+Qed.
+
+#[global] Instance v_kindO : Cmp v_kind_cmp.
+Proof.
+split; last by move=> ?? h; apply/v_kind_cmp_eq/eqP/h.
++ case=> [|a|[a1 a2]||] [|b|[b1 b2]||] //=.
+  - by apply: cmp_sym.
+  by rewrite !Lex_lex; apply: lex_sym; apply: cmp_sym.
+move=> y x z c; rewrite /ctrans.
+case xy: (v_kind_cmp x y).
++ by move: xy => /eqP /v_kind_cmp_eq -> [<-].
++ case yz: (v_kind_cmp y z) => // -[<-].
+  + by move: yz => /eqP /v_kind_cmp_eq <-.
+  case: x y z xy yz => [|r1|[k1 r1]||] [|r2|[k2 r2]||] [|r3|[k3 r3]||] //=;
+    first exact: cmp_trans.
+  by rewrite !Lex_lex; apply/cmp_trans/LexO.
+case yz: (v_kind_cmp y z) => // -[<-].
++ by move: yz => /eqP /v_kind_cmp_eq <-.
+case: x y z xy yz => [|r1|[k1 r1]||] [|r2|[k2 r2]||] [|r3|[k3 r3]||] //=;
+  first exact: cmp_trans.
+by rewrite !Lex_lex; apply/cmp_trans/LexO.
+Qed.
 
 (* -------------------------------------------------------------------- *)
 Variant safe_cond :=

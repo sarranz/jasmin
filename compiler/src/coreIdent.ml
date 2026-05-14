@@ -116,6 +116,9 @@ module Cident = struct
 
 end
 
+let eqb x y = Uint63.equal (Cident.tag x) (Cident.tag y)
+let cmp x y = PrimInt63.compares (Cident.tag x) (Cident.tag y)
+
 (* ------------------------------------------------------------------------ *)
 (* Function name                                                            *)
 

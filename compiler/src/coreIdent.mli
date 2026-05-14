@@ -117,6 +117,9 @@ module Cident : sig
   val spill_to_mmx : t -> bool
 end
 
+val eqb : Cident.t -> Cident.t -> bool
+val cmp : Cident.t -> Cident.t -> Datatypes.comparison
+
 (* -------------------------------------------------------------------- *)
 type funname = private {
   fn_name : Name.t;

@@ -1,4 +1,4 @@
-From mathcomp Require Import ssreflect ssrfun ssrbool.
+From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
 
 Require Import
   expr

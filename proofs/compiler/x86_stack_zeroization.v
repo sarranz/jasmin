@@ -1,3 +1,4 @@
+From mathcomp Require Import eqtype.
 Require Import
   expr
   fexpr
