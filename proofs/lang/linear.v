@@ -5,6 +5,7 @@ Require Import expr fexpr label sopn.
 
 Section ASM_OP.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context `{asmop:asmOp}.
 
 (* --------------------------------------------------------------------------- *)
@@ -41,7 +42,7 @@ Definition find_label (lbl : label) (c : seq linstr) :=
   if idx < size c then ok idx else type_error.
 
 Record lfundef := LFundef {
- lfd_info : fun_info;
+ lfd_info : fun_info_t;
  lfd_align : wsize;
  lfd_tyin : seq ltype;
  lfd_arg  : seq var_i;

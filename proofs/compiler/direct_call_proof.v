@@ -10,6 +10,8 @@ Import Utf8.
 
 Section WITH_PARAMS.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
 Context
   {wsw:WithSubWord}
   {asm_op syscall_state : Type}

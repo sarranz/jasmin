@@ -24,6 +24,8 @@ Local Open Scope seq_scope.
 
 Section SEM.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
 Context
   {asm_op syscall_state : Type}
   {ep : EstateParams syscall_state}

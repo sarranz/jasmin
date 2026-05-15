@@ -16,7 +16,7 @@ Module E.
 
 Definition pass_name := "linearization"%string.
 
-Definition my_error (msg:pp_error) :=
+Definition my_error {fun_info : Type} {FI : FunInfo fun_info} (msg:pp_error) :=
   {| pel_msg      := msg
    ; pel_fn       := None
    ; pel_fi       := None
@@ -27,7 +27,7 @@ Definition my_error (msg:pp_error) :=
   |}.
 
 (* FIXME: are there internal errors? *)
-Definition gen_error (internal: bool) (ii: option instr_info) (msg: pp_error) :=
+Definition gen_error {fun_info : Type} {FI : FunInfo fun_info} (internal: bool) (ii: option instr_info) (msg: pp_error) :=
   {| pel_msg      := msg
    ; pel_fn       := None
    ; pel_fi       := None
@@ -37,16 +37,16 @@ Definition gen_error (internal: bool) (ii: option instr_info) (msg: pp_error) :=
    ; pel_internal := internal
   |}.
 
-Definition ii_error (ii: instr_info) (msg: string) :=
+Definition ii_error {fun_info : Type} {FI : FunInfo fun_info} (ii: instr_info) (msg: string) :=
   gen_error false (Some ii) (pp_s msg).
 
-Definition error (msg: string) :=
+Definition error {fun_info : Type} {FI : FunInfo fun_info} (msg: string) :=
   gen_error false None (pp_s msg).
 
-Definition internal_error (msg: string) :=
+Definition internal_error {fun_info : Type} {FI : FunInfo fun_info} (msg: string) :=
   gen_error true None (pp_s msg).
 
-Definition assign_remains (ii : instr_info) (lv: lval) (e: pexpr) :=
+Definition assign_remains {fun_info : Type} {FI : FunInfo fun_info} (ii : instr_info) (lv: lval) (e: pexpr) :=
   gen_error false (Some ii)
     (pp_nobox [:: pp_s "The following assignment remains:"; PPEbreak;
       pp_lv lv; pp_s " = "; pp_e e; PPEbreak;
@@ -286,6 +286,7 @@ Context
   {pd : PointerData}
   {asmop : asmOp asm_op}
   (liparams : linearization_params).
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 
 (* Return a linear instruction that corresponds to copying a register.
    The linear instruction [lmove rd rs] corresponds to

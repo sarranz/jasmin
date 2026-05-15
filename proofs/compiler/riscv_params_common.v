@@ -23,6 +23,7 @@ Module RISCVFopn.
 
   Section WITH_PARAMS.
 
+  Context {fun_info : Type} {FI : FunInfo fun_info}.
   Context {atoI : arch_toIdent}.
 
   Definition to_opn '(d, o, e) : fopn_args := (d, Oasm (BaseOp(None, o)), e).

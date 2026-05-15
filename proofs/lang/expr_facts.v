@@ -109,6 +109,7 @@ Section ASM_OP.
 
 Context `{asmop:asmOp}.
 Context {pT: progT}.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 
 Lemma surj_prog (p:prog) :
   {| p_globs := p_globs p; p_funcs := p_funcs p; p_extra := p_extra p |} = p.
@@ -554,7 +555,8 @@ Lemma vars_I_call ii xs fn args:
   Sv.Equal (vars_I (MkI ii (Ccall xs fn args))) (Sv.union (vars_lvals xs) (read_es args)).
 Proof. rewrite /vars_I read_Ii write_Ii read_i_call write_i_call /vars_lvals; clear; SvD.fsetdec. Qed.
 
-Lemma vars_pP p fn fd : get_fundef p fn = Some fd -> Sv.Subset (vars_fd fd) (vars_p p).
+Lemma vars_pP p fn fd :
+  get_fundef p fn = Some fd -> Sv.Subset (vars_fd fd) (vars_p p).
 Proof.
   elim: p => //= -[fn' fd'] p hrec; case: eqP => [ _ [<-] | ]; first by clear; SvD.fsetdec.
   move=> _ /hrec; clear; SvD.fsetdec.

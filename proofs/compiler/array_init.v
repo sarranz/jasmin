@@ -8,6 +8,7 @@ Local Open Scope seq_scope.
 Section ASM_OP.
 
 Context `{asmop:asmOp}.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 
 (* ----------------------------------------------------------------------- *)
 (* Remove array initialisation                                             *)

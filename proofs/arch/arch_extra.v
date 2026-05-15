@@ -64,14 +64,19 @@ Qed.
 
 End ToIdent.
 Arguments ToIdent [t] T%_type_scope {tS}.
+Arguments to_ident {t} {T}%_type_scope {tS ToIdent} r.
 Arguments of_var {t} {T}%_type_scope {tS toI} v.
 Arguments to_var {t} {T}%_type_scope {tS toI} r.
 
 Module Type MkToIdent_T.
+  Section INFO.
+
+  Context {fun_info : Type} {FI : FunInfo fun_info}.
 
   Parameter mk : forall (t:ltype) (T:Type) {tS: ToString t T},
     (string -> Ident.ident) -> result pp_error_loc (ToIdent T).
 
+  End INFO.
 End MkToIdent_T.
 
 Module MkToIdent : MkToIdent_T.
@@ -79,6 +84,7 @@ Module MkToIdent : MkToIdent_T.
   Section Section.
   Import Ident.
 
+  Context {fun_info : Type} {FI : FunInfo fun_info}.
   Context (t:ltype) (T:Type) {tS: ToString t T}
         (mk_id : string -> ident).
 
@@ -146,6 +152,7 @@ Module MkToIdent : MkToIdent_T.
   End Section.
 
 End MkToIdent.
+Arguments MkToIdent.mk {fun_info FI t T tS}.
 
 Section ARCH.
 
@@ -165,16 +172,21 @@ Existing Instances toI_r toI_rx toI_x toI_f.
 End ARCH.
 
 Module Type AToIdent_T.
+  Section INFO.
+
+  Context {fun_info : Type} {FI : FunInfo fun_info}.
 
   Parameter mk :
     forall `{arch : arch_decl},
       (reg_kind -> ltype -> string -> Ident.ident) ->  result pp_error_loc arch_toIdent.
 
+  End INFO.
 End AToIdent_T.
 
 Module MkAToIdent : AToIdent_T.
 
   Section Section.
+  Context {fun_info : Type} {FI : FunInfo fun_info}.
   Context `{arch : arch_decl}.
 
   Section AUX.
@@ -258,6 +270,10 @@ End ARCH.
 (* Extra ops are non-existing architecture-specific asm instructions that we
  * replace by real asm instructions during the asmgen pass.
  *)
+Section ASM_EXTRA.
+
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
 Class asm_extra (reg regx xreg rflag cond asm_op extra_op : Type) :=
   { _asm   : asm reg regx xreg rflag cond asm_op
   ; _atoI  : arch_toIdent
@@ -275,6 +291,8 @@ Class asm_extra (reg regx xreg rflag cond asm_op extra_op : Type) :=
 Existing Instances _asm _atoI _extra.
 
 Definition extra_op_t {reg regx xreg rflag cond asm_op extra_op} {asm_e : asm_extra reg regx xreg rflag cond asm_op extra_op} := extra_op.
+
+End ASM_EXTRA.
 
 Section AsmOpI.
 

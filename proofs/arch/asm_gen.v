@@ -17,6 +17,9 @@ Module E.
 
 Definition pass_name := "asmgen"%string.
 
+Section INFO.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
 Definition gen_error (internal:bool) (ii:option instr_info) (vi: option var_info) (msg:pp_error) :=
   {| pel_msg      := msg
    ; pel_fn       := None
@@ -59,13 +62,21 @@ Definition werror ii e msg :=
   gen_error false (Some ii) None (pp_vbox [::pp_box [:: pp_s "invalid rexpr for oprd"; pp_re e];
                                              pp_s msg]).
 
+End INFO.
+
 End E.
+
+Section INFO.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 
 Definition fail ii (msg: string) :=
   asm_gen.E.error ii (pp_box [:: pp_s "store-label:"; pp_s msg]).
 
+End INFO.
+
 Section TOIDENT.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context `{tI : ToIdent}.
 
 (* move ? *)
@@ -93,6 +104,7 @@ End TOIDENT.
 
 Section OF_TO.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context {reg regx xreg rflag cond} `{arch : arch_decl reg regx xreg rflag cond} {atoI : arch_toIdent}.
 
 Definition to_reg   : var -> option reg_t   := of_var.
@@ -142,6 +154,7 @@ End OF_TO.
 
 Section ASM_EXTRA.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context `{asm_e : asm_extra} {call_conv: calling_convention}.
 
 (* -------------------------------------------------------------------- *)

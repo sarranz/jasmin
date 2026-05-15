@@ -1,10 +1,14 @@
 From elpi.apps Require Import derive.std.
 From HB Require Import structures.
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat eqtype div ssralg.
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
+Set Uniform Inductive Parameters.
 Require Import oseq.
 From Coq Require Export ZArith Setoid Morphisms.
 From mathcomp Require Import word_ssrZ.
-Require Export strings word utils type ident var global sem_type slh_ops sopn syscall operators.
+Require Export strings word utils type ident var global sem_type slh_ops sopn syscall operators info.
 Require Import xseq.
 Import Utf8 ZArith.
 
@@ -215,20 +219,6 @@ Definition type_of_opN_safety (op: opN_safety) : seq atype * atype :=
 
 (* ** Expressions
  * -------------------------------------------------------------------- *)
-(* Used only by the ocaml compiler *)
-(** A “tag” is a non-empty type, extracted to plain OCaml [int] *)
-Module Type TAG.
-  Parameter t : Type.
-  Parameter witness : t.
-End TAG.
-
-Module VarInfo : TAG.
-  Definition t := positive.
-  Definition witness : t := 1%positive.
-End VarInfo.
-
-Definition var_info := VarInfo.t.
-Definition dummy_var_info : var_info := VarInfo.witness.
 
 Record var_i := VarI {
   v_var :> var;
@@ -352,28 +342,6 @@ Definition wrange d (n1 n2 : Z) :=
   | DownTo => [seq (Z.sub n2 (Z.of_nat i)) | i <- iota 0 n]
   end.
 
-Module Type InstrInfoT <: TAG.
-  Include TAG.
-  Parameter with_location : t -> t.
-  Parameter is_inline : t -> bool.
-  Parameter var_info_of_ii : t -> var_info.
-End InstrInfoT.
-
-Module InstrInfo : InstrInfoT.
-  Definition t := positive.
-  Definition witness : t := 1%positive.
-  Definition with_location (ii : t) := ii.
-  Definition is_inline (_ : t) : bool := false.
-  Definition var_info_of_ii (_ : t) : var_info := dummy_var_info.
-End InstrInfo.
-
-Definition instr_info := InstrInfo.t.
-Definition dummy_instr_info : instr_info := InstrInfo.witness.
-Definition ii_with_location (ii : instr_info) : instr_info :=
-  InstrInfo.with_location ii.
-Definition ii_is_inline (ii : instr_info) : bool := InstrInfo.is_inline ii.
-Definition var_info_of_ii (ii : instr_info) : var_info := InstrInfo.var_info_of_ii ii.
-
 #[only(eqbOK)] derive
 Variant assgn_tag :=
   | AT_none       (* assignment introduced by the developer that can be removed *)
@@ -472,26 +440,10 @@ Section CMD_RECT.
 
 End CMD_RECT.
 
-Module Type FunInfoT <: TAG.
-  Include TAG.
-  Parameter entry_info : t -> instr_info.
-  Parameter ret_info : t -> instr_info.
-End FunInfoT.
-
-Module FunInfo : FunInfoT.
-  Definition t := positive.
-  Definition witness : t := 1%positive.
-  Definition entry_info (_: t) := dummy_instr_info.
-  Definition ret_info (_: t) := dummy_instr_info.
-End FunInfo.
-
-Definition fun_info := FunInfo.t.
-Definition entry_info_of_fun_info (fi: fun_info) : instr_info := FunInfo.entry_info fi.
-Definition ret_info_of_fun_info (fi: fun_info) : instr_info := FunInfo.ret_info fi.
-
 Section ASM_OP.
 
 Context `{asmop:asmOp}.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 
 (* ** Functions
  * -------------------------------------------------------------------- *)
@@ -510,7 +462,7 @@ Record fun_contract := MkContra {
   }.
 
 Record _fundef (extra_fun_t: Type) := MkFun {
-  f_info   : fun_info;
+  f_info   : fun_info_t; (* force typeclass argument *)
   f_contract : option fun_contract;
   f_tyin   : seq atype;
   f_params : seq var_i;
@@ -556,6 +508,7 @@ Section ASM_OP.
 
 Context {pd: PointerData}.
 Context `{asmop:asmOp}.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 
 (* ** Programs before stack/memory allocation
  * -------------------------------------------------------------------- *)
@@ -566,10 +519,10 @@ Definition progUnit : progT :=
      extra_prog_t := unit;
   |}.
 
-Definition ufundef     := @fundef _ _ progUnit.
-Definition ufun_decl   := @fun_decl _ _ progUnit.
-Definition ufun_decls  := seq (@fun_decl _ _ progUnit).
-Definition uprog       := @prog _ _ progUnit.
+Definition ufundef    := fundef (pT := progUnit).
+Definition ufun_decl  := fun_decl (pT := progUnit).
+Definition ufun_decls := seq (fun_decl (pT := progUnit)).
+Definition uprog      := prog (pT := progUnit).
 
 (* For extraction *)
 Definition _ufundef    := _fundef unit.
@@ -679,10 +632,10 @@ Definition progStack : progT :=
      extra_val_t := pointer;
      extra_prog_t := sprog_extra  |}.
 
-Definition sfundef     := @fundef _ _ progStack.
-Definition sfun_decl   := @fun_decl _ _ progStack.
-Definition sfun_decls  := seq (@fun_decl _ _ progStack).
-Definition sprog       := @prog _ _ progStack.
+Definition sfundef    := fundef (pT := progStack).
+Definition sfun_decl  := fun_decl (pT := progStack).
+Definition sfun_decls := seq (fun_decl (pT := progStack)).
+Definition sprog      := prog (pT := progStack).
 
 (* For extraction *)
 
@@ -693,7 +646,7 @@ Definition _sprog      := _prog stk_fun_extra sprog_extra.
 Definition to_sprog (p:_sprog) : sprog := p.
 
 (* Update functions *)
-Definition with_body eft (fd:_fundef eft) (body : cmd) := {|
+Definition with_body eft (fd : _fundef eft) (body : cmd) := {|
   f_info     := fd.(f_info);
   f_contract := fd.(f_contract);
   f_tyin     := fd.(f_tyin);
@@ -721,6 +674,7 @@ Section ASM_OP.
 
 Context `{asmop:asmOp}.
 Context {pT: progT}.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 
 (* ** Some smart constructors
  * -------------------------------------------------------------------------- *)
@@ -978,7 +932,8 @@ Fixpoint vars_l (l: seq var_i) :=
   end.
 
 Definition vars_fd (fd:fundef) :=
-  Sv.union (vars_l fd.(f_params)) (Sv.union (vars_l fd.(f_res)) (vars_c fd.(f_body))).
+  Sv.union (vars_l fd.(f_params))
+           (Sv.union (vars_l fd.(f_res)) (vars_c fd.(f_body))).
 
 Definition vars_p (p: fun_decls) :=
   foldr (fun f x => let '(fn, fd) := f in Sv.union x (vars_fd fd)) Sv.empty p.

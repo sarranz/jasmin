@@ -29,6 +29,7 @@ Proof. by case: mn. Qed.
 
 Section WITH_PARAMS.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context
   {wsw : WithSubWord}
   {atoI : arch_toIdent}

@@ -15,6 +15,8 @@ Local Notation cpm := (Mvar.t const_v).
 
 Section WITH_PARAMS.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
 Context
   {wsw:WithSubWord}
   {dc:DirectCall}

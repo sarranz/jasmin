@@ -47,6 +47,8 @@ Proof. by apply size_of_gt0. Qed.
 
 Section WITH_PARAMS.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
 Context
   {wsw : WithSubWord}
   {dc:DirectCall}

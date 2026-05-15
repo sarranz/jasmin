@@ -44,6 +44,7 @@ Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then
 #[local] Existing Instance direct_c.
 
 Section Section.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context {atoI : arch_toIdent} {syscall_state : Type} {sc_sem : syscall_sem syscall_state}.
 
 
@@ -574,7 +575,7 @@ Proof.
         rewrite zero_extend0.
         set id := instr_desc_op (XOR U64).
         rewrite /SF_of_word msb0.
-        by have [s' -> /= ?]:= (@compile_lvals _ _ _ _ _ _ _ _ _ _ _
+        by have [s' -> /= ?]:= (@compile_lvals _ _ _ _ _ _ _ _ _ _ _ _ _
              rip ii m lvs m' s [:: Reg r; Reg r]
              id.(id_out) id.(id_tout)
              (let vf := Some false in let: vt := Some true in (::vf, vf, vf, vt, vt & (0%R: word U64)))
@@ -593,7 +594,7 @@ Proof.
       rewrite truncate_word_le // /x86_XOR /size_8_64 hsz64 /= wxor_xx.
       set id := instr_desc_op (XOR sz).
       rewrite /SF_of_word msb0.
-      by have [s' -> /= ?]:= (@compile_lvals _ _ _ _ _ _ _ _ _ _ _
+      by have [s' -> /= ?]:= (@compile_lvals _ _ _ _ _ _ _ _ _ _ _ _ _
              rip ii m lvs m' s [:: Reg r; Reg r]
              id.(id_out) id.(id_tout)
              (let vf := Some false in let: vt := Some true in (::vf, vf, vf, vt, vt & (0%R: word sz)))
@@ -617,7 +618,7 @@ Proof.
     rewrite /x86_VPXOR hidc /= /size_128_256 wsize_ge_U256.
     have -> /= : (U128 ≤ sz)%CMP by case: (sz) hsz64.
     rewrite wxor_xx; set id := instr_desc_op (VPXOR sz).
-    by have [s' -> /= ?] := (@compile_lvals _ _ _ _ _ _ _ _ _ _ _
+    by have [s' -> /= ?] := (@compile_lvals _ _ _ _ _ _ _ _ _ _ _ _ _
                rip ii m lvs m' s [:: a0; XReg r; XReg r]
                id.(id_out) id.(id_tout)
                (0%R: word sz)

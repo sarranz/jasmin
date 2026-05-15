@@ -16,6 +16,7 @@ Require Import compiler_util.
 
 Section STACK_ZEROIZATION.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context {atoI : arch_toIdent}.
 
 Section RSP.

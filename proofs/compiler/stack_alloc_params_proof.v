@@ -12,6 +12,8 @@ Notation spointer := (aword Uptr) (only parsing).
 
 Section WITH_PARAMS.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
 Context
   {wsw : WithSubWord}
   {dc:DirectCall}

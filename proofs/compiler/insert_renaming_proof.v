@@ -55,6 +55,7 @@ Section WITH_PARAMS.
       {sip: SemInstrParams asm_op syscall_state}
       {pT: progT}
       {sCP: semCallParams}.
+  Context {fun_info : Type} {FI : FunInfo fun_info}.
 
   Section PROOF.
 
@@ -217,7 +218,7 @@ Section WITH_PARAMS.
       sem_call p ev scs mem fn va scs' mem' vr →
       Pfun scs mem fn va scs' mem' vr.
     Proof.
-      apply: (@sem_call_Ind _ _ _ _ _ _ _ _ _ p ev Pc Pi_r Pi Pfor Pfun); clear.
+      apply: (@sem_call_Ind _ _ _ _ _ _ _ _ _ _ _ p ev Pc Pi_r Pi Pfor Pfun); clear.
       - by move => * > *; eexists; last constructor.
       - move => s1 s2 s3 i c _ hi _ hc vm1 hvm1.
         case: (hi vm1 hvm1) => vm2 hvm2 {}hi.
@@ -314,7 +315,7 @@ Section WITH_PARAMS.
       case/and3P: (do_insert) => _ /eqP wt_args /eqP wt_res.
       rewrite wt_args in ok_va'.
       have := insert_renaming_prologue (entry_info_of_fun_info (f_info fd)) ok_va'.
-      move => /(_ _ _ ok_s1' _ (vm_uincl_refl _)).
+      move => /(_ _ _ _ ok_s1' _ (vm_uincl_refl _)).
       case => vm2' s1'_vm2'.
       rewrite /= !with_vm_idem => prologue.
       case: (hbody _ (vm_uinclT hvm1 s1'_vm2')) => vm2 hvm2 hbody'.
@@ -323,7 +324,7 @@ Section WITH_PARAMS.
       case: (mapM2_dc_truncate_val ok_vr1 vrvr') => vr1' ok_vr1' vr1vr1'.
       rewrite wt_res in ok_vr1'.
       have := insert_renaming_epilogue (ret_info_of_fun_info (f_info fd)).
-      move => /(_ _ _ _ _ ok_vr1' _ hvm2 ok_vr')[] vm3 [] vr'' [] vm2_vm3 epilogue ok_vr'' vr'_vr''.
+      move => /(_ _ _ _ _ _ ok_vr1' _ hvm2 ok_vr')[] vm3 [] vr'' [] vm2_vm3 epilogue ok_vr'' vr'_vr''.
       case: (mapM2_dc_truncate_val ok_vr1' vr'_vr'') => vr1'' ok_vr1'' vr1'_vr1''.
       exists vr1''.
       - exact: Forall2_trans value_uincl_trans vr1vr1' vr1'_vr1''.

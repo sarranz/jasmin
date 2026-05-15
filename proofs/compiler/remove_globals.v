@@ -14,7 +14,9 @@ Definition type_of_glob_value (gv: glob_value) : atype :=
 
 Local Open Scope seq_scope.
 
-Module Import E.
+Module Import E. Section E.
+
+  Context {fun_info : Type} {FI : FunInfo fun_info}.
 
   Definition pass : string := "remove globals".
 
@@ -44,10 +46,11 @@ Module Import E.
 
   Definition rm_glob_ierror := pp_internal_error_s pass.
 
-End E.
+End E. End E.
 
 Section REMOVE.
 
+  Context {fun_info : Type} {FI : FunInfo fun_info}.
   Context `{asmop:asmOp}.
   Context {fcp : FlagCombinationParams}.
   Context {LC : LoopCounter}.

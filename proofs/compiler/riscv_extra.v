@@ -73,6 +73,9 @@ Module E.
 
 Definition pass_name := "asmgen"%string.
 
+Section INFO.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
 Definition internal_error (ii : instr_info) (msg : string) :=
   {|
     pel_msg := compiler_util.pp_s msg;
@@ -95,7 +98,12 @@ Definition error (ii : instr_info) (msg : string) :=
     pel_internal := false;
   |}.
 
+End INFO.
+
 End E.
+
+Section INFO.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 
 Definition asm_args_of_opn_args
   : seq RISCVFopn_core.opn_args -> seq (asm_op_msb_t * lexprs * rexprs) :=
@@ -150,6 +158,8 @@ Instance riscv_extra {atoI : arch_toIdent} :
 
 (* This concise name is convenient in OCaml code. *)
 Definition riscv_extended_op {atoI : arch_toIdent} :=
-  @extended_op _ _ _ _ _ _ _ riscv_extra.
+  @extended_op _ _ _ _ _ _ _ _ _ riscv_extra.
 
 Definition Oriscv {atoI : arch_toIdent} o : @sopn riscv_extended_op _ := Oasm (BaseOp (None, o)).
+
+End INFO.

@@ -22,6 +22,9 @@ Module E.
 
 Definition pass_name := "asmgen"%string.
 
+Section INFO.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
 Definition error (ii : instr_info) (msg : string) :=
   {|
     pel_msg := compiler_util.pp_s msg;
@@ -41,6 +44,8 @@ Definition se_protect_arguments (ii : instr_info) : pp_error_loc :=
 
 Definition se_protect_ptr (ii : instr_info) : pp_error_loc :=
   compiler_util.pp_internal_error_s_at pass_name ii "Found protect_ptr.".
+
+End INFO.
 
 End E.
 
@@ -66,6 +71,7 @@ HB.instance Definition _ := hasDecEq.Build x86_extra_op x86_extra_op_eqb_OK.
 Local Notation E n := (ADExplicit n ACR_any).
 
 Section Section.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context {atoI : arch_toIdent}.
 
 Definition Oset0_instr sz  :=
@@ -355,7 +361,7 @@ Instance x86_extra : asm_extra register register_ext xmm_register rflag condt x8
 
 (* This concise name is convenient in OCaml code. *)
 Definition x86_extended_op :=
-  @extended_op _ _ _ _ _ _ _ x86_extra.
+  @extended_op _ _ _ _ _ _ _ _ _ x86_extra.
 
 Definition Ox86 o : @sopn x86_extended_op _ := Oasm (BaseOp (None, o)).
 

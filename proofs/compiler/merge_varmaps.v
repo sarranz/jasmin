@@ -17,7 +17,7 @@ Module E.
 
 Definition pass_name := "one-varmap checker"%string.
 
-Definition gen_error (internal:bool) (ii:option instr_info) (msg:pp_error) :=
+Definition gen_error {fun_info : Type} {FI : FunInfo fun_info} (internal:bool) (ii:option instr_info) (msg:pp_error) :=
   {| pel_msg      := msg
    ; pel_fn       := None
    ; pel_fi       := None
@@ -27,19 +27,20 @@ Definition gen_error (internal:bool) (ii:option instr_info) (msg:pp_error) :=
    ; pel_internal := internal
   |}.
 
-Definition internal_error ii msg :=
+Definition internal_error {fun_info : Type} {FI : FunInfo fun_info} ii msg :=
   gen_error true (Some ii) (pp_s msg).
 
-Definition error ii msg :=
+Definition error {fun_info : Type} {FI : FunInfo fun_info} ii msg :=
   gen_error false (Some ii) (pp_s msg).
 
-Definition ii_loop_iterator :=
+Definition ii_loop_iterator {fun_info : Type} {FI : FunInfo fun_info} :=
   ii_loop_iterator pass_name.
 
 End E.
 
 Section PROG.
 Context {pd: PointerData} {syscall_state : Type} {asm_op} {asmop : asmOp asm_op} {ovm_i : one_varmap_info} {LC : LoopCounter}.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context (p: sprog).
 Context (var_tmp : Sv.t).
 

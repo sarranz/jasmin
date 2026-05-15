@@ -12,6 +12,8 @@ Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then
 
 Section PROG.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
 Context
   {asm_op syscall_state : Type}
   {ep : EstateParams syscall_state}

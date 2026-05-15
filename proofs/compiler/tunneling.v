@@ -7,19 +7,22 @@ Require Import seq_extra unionfind.
 
 
 
-Module Import E.
+Module Import E. Section E.
+
+  Context {fun_info : Type} {FI : FunInfo fun_info}.
 
   Definition pass : string := "tunneling".
 
   Definition tunneling_error := pp_internal_error_s pass.
 
-End E.
+End E. End E.
 
 
 Section ASM_OP.
 
 Context {pd : PointerData}.
 Context `{asmop : asmOp}.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 
 Section LprogSem.
 

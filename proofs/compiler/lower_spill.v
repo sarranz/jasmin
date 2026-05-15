@@ -9,9 +9,9 @@ Module Import E.
 
   Definition pass : string := "lower spilling instructions".
 
-  Definition ii_loop_iterator := ii_loop_iterator pass.
+  Definition ii_loop_iterator {fun_info : Type} {FI : FunInfo fun_info} := ii_loop_iterator pass.
 
-  Definition error ii (pp : pp_error) := {|
+  Definition error {fun_info : Type} {FI : FunInfo fun_info} ii (pp : pp_error) := {|
     pel_msg := pp;
     pel_fn := None;
     pel_fi := None;
@@ -26,6 +26,7 @@ End E.
 Section ASM_OP.
 
 Context `{asmop : asmOp}.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context {LC : LoopCounter}.
 Context (fresh_var_ident: v_kind -> instr_info -> int -> string -> atype -> Ident.ident).
 Context (spill_to_mmx : var -> bool).
@@ -228,6 +229,6 @@ Definition spill_prog (p: prog) : cexec prog :=
 End PROGT.
 
 Definition spill_uprog (p: _uprog) : cexec _uprog :=
-  spill_prog (p: @prog _ _ progUnit).
+  spill_prog (pT := progUnit) p.
 
 End ASM_OP.

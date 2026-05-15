@@ -26,7 +26,8 @@ Context
   {wa: WithAssert}
   {sip : SemInstrParams asm_op syscall_state}
   {pT : progT}
-  {scP : semCallParams}.
+  {scP : semCallParams}
+  {fun_info : Type} {FI : FunInfo fun_info}.
 
 Record fstate := { fscs : syscall_state_t; fmem : mem; fvals : values }.
 

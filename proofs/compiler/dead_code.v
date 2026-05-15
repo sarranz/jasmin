@@ -9,15 +9,18 @@ Module Import E.
 
   Definition pass : string := "dead code".
 
-  Definition ii_loop_iterator := ii_loop_iterator pass.
+  Definition ii_loop_iterator {fun_info : Type} {FI : FunInfo fun_info} :=
+    ii_loop_iterator pass.
 
-  Definition dead_code_error := pp_internal_error_s pass.
+  Definition dead_code_error {fun_info : Type} {FI : FunInfo fun_info} :=
+    pp_internal_error_s pass.
 
 End E.
 
 Section ASM_OP.
 
 Context `{asmop : asmOp}.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context {LC : LoopCounter}.
 
 Definition dead_code_c (dead_code_i: instr -> Sv.t -> cexec (Sv.t * cmd))

@@ -89,6 +89,8 @@ End TRIVIAL.
 
 Section Section.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
 Context
   {syscall_state : Type}
   {ep : EstateParams syscall_state}
@@ -1029,6 +1031,7 @@ Context
   {wsw : WithSubWord}
   {scP : semCallParams}
   {dc : DirectCall}.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 
 Context {E E0: Type -> Type} {sem_F : sem_Fun E} {wE: with_Error E E0}.
 

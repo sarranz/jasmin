@@ -1,4 +1,5 @@
 Require Import
+  info
   sem_params
   syscall.
 Require Import
@@ -7,6 +8,7 @@ Require Import
 
 Section SEM_PARAMS.
 
+  Context {fun_info : Type} {FI : FunInfo fun_info}.
   Context
     {reg regx xreg rflag cond asm_op extra_op : Type}
     {asm_e : asm_extra reg regx xreg rflag cond asm_op extra_op}

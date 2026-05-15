@@ -10,6 +10,8 @@ Local Open Scope seq_scope.
 
 Section INLINE.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
 Context
   {wsw : WithSubWord}
   {asm_op syscall_state : Type}

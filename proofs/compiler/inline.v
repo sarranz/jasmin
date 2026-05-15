@@ -9,7 +9,7 @@ Module Import E.
 
   Definition pass : string := "inlining".
 
-  Definition inline_error msg := {|
+  Definition inline_error {fun_info : Type} {FI : FunInfo fun_info} msg := {|
     pel_msg := msg;
     pel_fn := None;
     pel_fi := None;
@@ -29,6 +29,7 @@ Section INLINE.
 Context
   {asm_op syscall_state : Type}
   {asmop:asmOp asm_op}
+  {fun_info : Type} {FI : FunInfo fun_info}
   (extend_iinfo : instr_info -> instr_info -> instr_info)
 .
 

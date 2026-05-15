@@ -16,6 +16,8 @@ Proof. by move=> h1 h2 g v /h1 /h2. Qed.
 
 Module INCL. Section INCL.
 
+  Context {fun_info : Type} {FI : FunInfo fun_info}.
+
   Context
     {wsw : WithSubWord}
     {dc:DirectCall}
@@ -277,6 +279,7 @@ End INCL. End INCL. Import INCL.
 
 Module EXTEND. Section ASM_OP.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context `{asmop:asmOp}.
 Context {spp: SemPexprParams}.
 
@@ -391,6 +394,8 @@ End ASM_OP.
 End EXTEND. Import EXTEND.
 
 Module RGP. Section PROOFS.
+
+  Context {fun_info : Type} {FI : FunInfo fun_info}.
 
   Context
     {wsw : WithSubWord}

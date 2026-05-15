@@ -548,6 +548,7 @@ End GLOBALS.
 
 Section Section.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context {pT: progT}.
 
 Definition const_prop_fun (gd: glob_decls) (f: fundef) :=

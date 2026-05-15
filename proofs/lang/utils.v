@@ -213,6 +213,11 @@ Proof. by case: b. Qed.
 
 Arguments assertP {E b e u} _.
 
+Lemma o2rP {eT A} {err : eT} {oa : option A} {a} :
+  o2r err oa = ok a ->
+  oa = Some a.
+Proof. by case: oa => //= ? [->]. Qed.
+
 Lemma map_errP eT1 eT2 aT (f : eT1 -> eT2) (r : result eT1 aT) x :
   Result.map_err f r = ok x ->
   r = ok x.
@@ -255,6 +260,7 @@ Ltac t_xrbindP :=
       case; t_xrbindP
   | [ |- forall h, _ ] =>
       let hh := fresh h in move=> hh; t_xrbindP; move: hh
+  | [ |- o2r _ _ = ok _ -> _] => move=> /o2rP; t_xrbindP
   | _ => idtac
   end.
 
@@ -2071,11 +2077,6 @@ Lemma isSomeP {A : Type} {oa : option A} :
   isSome oa ->
   exists a, oa = Some a.
 Proof. case: oa; by [|eexists]. Qed.
-
-Lemma o2rP {eT A} {err : eT} {oa : option A} {a} :
-  o2r err oa = ok a ->
-  oa = Some a.
-Proof. by case: oa => //= ? [->]. Qed.
 
 Lemma cat_inj {T} (a b c d: seq T) :
   size a = size b →

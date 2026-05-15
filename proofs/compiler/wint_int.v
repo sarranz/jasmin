@@ -18,6 +18,9 @@ Module Import E.
 
   Definition pass : string := "wint_to_int".
 
+Section INFO.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
   Definition ierror_s := pp_internal_error_s pass.
 
   Definition ierror := pp_internal_error pass.
@@ -35,10 +38,13 @@ Module Import E.
   Definition ierror_lv lv :=
     ierror (pp_nobox [:: pp_s "ill typed left value "; pp_lv lv]).
 
+End INFO.
+
 End E.
 
 Section WITH_PARAMS.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context `{asmop:asmOp} {pd: PointerData} {msfsz : MSFsize}.
 
 Definition sc_op1 := sc_op1 (fun _ _ e => e).

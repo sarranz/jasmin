@@ -5,6 +5,8 @@ Import Utf8 ssrfun.
 
 Section REMOVE_ASSERT.
 
+  Context {fun_info : Type} {FI : FunInfo fun_info}.
+
   Context
     {wsw:WithSubWord}
     {dc:DirectCall}

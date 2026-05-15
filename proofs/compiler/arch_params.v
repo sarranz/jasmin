@@ -14,6 +14,9 @@ Require
   asm_gen.
 
 
+Section INFO.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
 Record lowering_params
   `{asmop : asmOp} (lowering_options : Type) :=
   {
@@ -78,3 +81,5 @@ Record architecture_params
        This considers possible different instructions and argument sizes. *)
     ap_is_move_op : asm_op_t -> bool;
   }.
+
+End INFO.

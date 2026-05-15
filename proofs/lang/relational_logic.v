@@ -391,6 +391,8 @@ End WKEQUIV_WEAKEN.
 
 Section RELATIONAL.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
 Context
   {syscall_state : Type}
   {ep : EstateParams syscall_state}
@@ -2311,6 +2313,7 @@ Qed.
 
 Section SYSCALL.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context
   {syscall_state : Type}
   {ep : EstateParams syscall_state}
@@ -2362,13 +2365,13 @@ Qed.
 
 End SYSCALL.
 
-Arguments Checker_eq {syscall_state} {ep spp} {asm_op} {sip pT1 pT2 wsw1 wsw2 dc1 dc2}
+Arguments Checker_eq {fun_info FI} {syscall_state} {ep spp} {asm_op} {sip pT1 pT2 wsw1 wsw2 dc1 dc2}
   _ _ {D} [R] ce.
 
-Arguments Checker_a_eq {syscall_state} {ep spp} {asm_op} {sip pT1 pT2 wsw1 wsw2}
+Arguments Checker_a_eq {fun_info FI} {syscall_state} {ep spp} {asm_op} {sip pT1 pT2 wsw1 wsw2}
   _ _ {D} [R] ca.
 
-Arguments Checker_uincl {syscall_state} {ep spp} {asm_op} {sip pT1 pT2 wsw1 wsw2 dc1 dc2}
+Arguments Checker_uincl {fun_info FI} {syscall_state} {ep spp} {asm_op} {sip pT1 pT2 wsw1 wsw2 dc1 dc2}
   _ _ {D} [R] ce.
 
 
@@ -2381,6 +2384,7 @@ Class EventRels_trans {E0 : Type -> Type} (rE12 rE23 rE13 : EventRels E0) :=
 
 Section TRANSITIVITY.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context
   {syscall_state : Type}
   {ep : EstateParams syscall_state}

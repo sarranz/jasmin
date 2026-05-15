@@ -22,6 +22,7 @@ Open Scope vm_scope.
  * -------------------------------------------------------------------- *)
 
 Section WSW.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context {wsw:WithSubWord}.
 
 (* ** Instructions
@@ -2132,6 +2133,8 @@ Proof. by move=> [<- _] [<- [?? hvals1]] [] _ <- [?? hvals2]. Qed.
 End REL_COMPOSE.
 
 Section TRANS_UTILS.
+
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 
 Context
   {syscall_state : Type}

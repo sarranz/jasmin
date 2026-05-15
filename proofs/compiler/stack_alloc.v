@@ -13,6 +13,9 @@ Require Export stack_alloc_params.
 Local Open Scope seq_scope.
 
 Module Import E.
+  Section INFO.
+
+  Context {fun_info : Type} {FI : FunInfo fun_info}.
 
   Definition pass : string := "stack allocation".
 
@@ -49,6 +52,7 @@ Module Import E.
   Definition stk_error_no_var s := stk_error_no_var_box (pp_s s).
   Definition stk_ierror_no_var s := stk_error_no_var_gen true (pp_s s).
 
+  End INFO.
 End E.
 
 
@@ -333,6 +337,9 @@ Definition empty := {|
   var_region := Mvar.empty _;
   region_var := Mr.empty status_map;
 |}.
+
+Section INFO.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 
 Definition get_sub_region (rmap:region_map) (x:var_i) :=
   match Mvar.get rmap.(var_region) x with
@@ -728,6 +735,8 @@ Record table := {
     (* set of generated variables, to check that variables are really fresh *)
 }.
 
+End INFO.
+
 (* We need to combine [result] and [option], so let's use a new kind of "let" *)
 #[global] Notation "'Let%opt' x ':=' ox 'in' body" :=
   (if ox is Some x then body else ok None)
@@ -735,6 +744,7 @@ Record table := {
 
 Section CLONE.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context (clone : var -> int -> var).
 
 Definition table_fresh_var t x :=
@@ -856,6 +866,8 @@ Definition update_table table lv oe :=
 End CLONE.
 
 Section CHECK.
+
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 
 (* The code in this file is called twice.
    - First, it is called from the stack alloc OCaml oracle. Indeed, the oracle

@@ -52,6 +52,8 @@ Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then
 
 Section SHARED.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
 Context
   {syscall_state : Type} {sc_sem : syscall.syscall_sem syscall_state}
   `{asm_e : asm_extra} {call_conv : calling_convention} {asm_scsem : asm_syscall_sem}
@@ -193,6 +195,8 @@ End SHARED.
 
 
 Section PROOF.
+
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 
 Context
   {syscall_state : Type} {sc_sem : syscall.syscall_sem syscall_state}
@@ -390,7 +394,7 @@ Proof.
   exact: values_uincl_refl.
 Qed.
 
-Lemma compiler_third_partP returned_params (p p' : @sprog _pd _ _asmop) :
+Lemma compiler_third_partP returned_params (p p' : @sprog _pd _ _asmop _ _) :
   compiler_third_part aparams cparams returned_params p = ok p' →
   [/\
     ∀ fn (gd: pointer) scs m va scs' m' vr,
@@ -436,7 +440,7 @@ Proof.
   move: (alloc_pc _ get_fdc).
   have [_ _ ->]:= dead_code_fd_meta ok_fdc.
   rewrite /sf_total_stack.
-  have [ <- <- <- ] := [elaborate @check_fundef_meta _ _ _ _ _ _ _ _ _ (_, fda) _ _ _ ok_fdb].
+  have [ <- <- <- ] := [elaborate @check_fundef_meta _ _ _ _ _ _ _ _ _ _ _ (_, fda) _ _ _ ok_fdb].
   have [_ _ ->]:= dead_code_fd_meta ok_fda.
   done.
 Qed.
@@ -467,7 +471,7 @@ Qed.
 Lemma compiler_front_endP
   entries
   (p: prog)
-  (p': @sprog _pd _ _asmop)
+  (p': @sprog _pd _ _asmop _ _)
   (gd : pointer)
   scs m mi fn va scs' m' vr :
   compiler_front_end aparams cparams entries p = ok p' →
@@ -683,7 +687,7 @@ Qed.
 Lemma compiler_front_endP_uincl
   entries
   (p: prog)
-  (p': @sprog _pd _ _asmop)
+  (p': @sprog _pd _ _asmop _ _)
   (gd : pointer)
   scs m mi fn va scs' m' vr :
   compiler_front_end aparams cparams entries p = ok p' →
@@ -820,7 +824,7 @@ Import sem_one_varmap.
 
 Lemma compiler_back_endP
   entries
-  (p : @sprog _pd _ _asmop)
+  (p : @sprog _pd _ _asmop _ _)
   (tp : lprog)
   (rip : word Uptr)
   (scs : syscall_state)
@@ -1034,7 +1038,7 @@ Qed.
 
 Lemma compiler_back_end_to_asmP
   entries
-  (p : @sprog _pd _ _asmop)
+  (p : @sprog _pd _ _asmop _ _)
   (xp : asm_prog)
   (rip : word Uptr)
   scs (m : mem) scs' (m' : mem)

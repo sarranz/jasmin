@@ -22,6 +22,7 @@ Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then
 Local Open Scope seq_scope.
 
 Section PROOF.
+  Context {fun_info : Type} {FI : FunInfo fun_info}.
   Context
     {wsw : WithSubWord}
     {dc : DirectCall}

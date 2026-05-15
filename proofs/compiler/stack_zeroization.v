@@ -32,7 +32,7 @@ Module E.
 
   Definition pass : string := "stack zeroization".
 
-  Definition error msg : pp_error_loc :=
+  Definition error {fun_info : Type} {FI : FunInfo fun_info} msg : pp_error_loc :=
     {|
       pel_msg := msg;
       pel_fn := None;
@@ -47,7 +47,8 @@ End E.
 
 (* -------------------------------------------------------------------- *)
 (* Architecture-specific parameters. *)
-Record stack_zeroization_params {asm_op : Type} {asmop : asmOp asm_op} :=
+Record stack_zeroization_params {asm_op : Type} {asmop : asmOp asm_op}
+    {fun_info : Type} {FI : FunInfo fun_info} :=
   {
     szp_cmd :
       stack_zero_strategy -> (* zeroization strategy *)
@@ -66,7 +67,9 @@ Section STACK_ZEROIZATION.
 Context
   {pd: PointerData}
   {asm_op : Type} {asmop: asmOp asm_op}
-  {ovmi : one_varmap_info}
+  {ovmi : one_varmap_info}.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context
   (szparams : stack_zeroization_params)
   (szs_of_fn : funname -> option (stack_zero_strategy * wsize)).
 

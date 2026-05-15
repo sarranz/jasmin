@@ -9,6 +9,8 @@ Section PROOF.
 #[local] Existing Instance indirect_c.
 #[local] Existing Instance withsubword.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
 Context
   {asm_op syscall_state : Type}
   {ep : EstateParams syscall_state}

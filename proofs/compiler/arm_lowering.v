@@ -16,6 +16,7 @@ Require Import
   arm_instr_decl.
 
 Section Section.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context {atoI : arch_toIdent}.
 
 (* -------------------------------------------------------------------- *)

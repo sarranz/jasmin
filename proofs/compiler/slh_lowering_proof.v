@@ -272,6 +272,8 @@ End EnvP.
 
 Section WITH_PARAMS.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
 Context
   {asm_op syscall_state : Type}
   {wsw: WithSubWord}
@@ -485,11 +487,11 @@ Context
   {sCP : semCallParams}
   (shparams : sh_params)
   (hshparams : h_sh_params shparams)
-  (fun_info : funname -> seq slh_t * seq slh_t)
+  (fun_slh_info : funname -> seq slh_t * seq slh_t)
   (entries  : seq funname)
   (ev : extra_val_t)
   (p p' : prog)
-  (hp : lower_slh_prog shparams fun_info entries p = ok p').
+  (hp : lower_slh_prog shparams fun_slh_info entries p = ok p').
 
 Notation lower_slho := (lower_slho shparams).
 Notation lower_i := (lower_i shparams).
@@ -768,7 +770,7 @@ Section LOWER_SLHO.
 End LOWER_SLHO.
 
 Lemma lower_pP :
-  [/\ map_cfprog_name (lower_fd shparams fun_info) (p_funcs p) = ok (p_funcs p')
+  [/\ map_cfprog_name (lower_fd shparams fun_slh_info) (p_funcs p) = ok (p_funcs p')
     , p_globs p' = p_globs p
     & p_extra p' = p_extra p
   ].
@@ -830,11 +832,11 @@ Context
   {dc : DirectCall}
   (shparams : sh_params)
   (hshparams : h_sh_params shparams)
-  (fun_info : funname -> seq slh_t * seq slh_t)
+  (fun_slh_info : funname -> seq slh_t * seq slh_t)
   (entries  : seq funname)
   (ev : extra_val_t)
   (p p' : prog)
-  (hp : lower_slh_prog shparams fun_info entries p = ok p').
+  (hp : lower_slh_prog shparams fun_slh_info entries p = ok p').
 
 Notation lower_slho := (lower_slho shparams).
 Notation lower_i := (lower_i shparams).
@@ -843,28 +845,28 @@ Notation lower_cmd := (lower_cmd shparams).
 Let Pc (s : estate) (c : cmd) (s' : estate) : Prop :=
   forall env env' c',
     wf_env env (p_globs p) s
-    -> check_cmd fun_info env c = ok env'
+    -> check_cmd fun_slh_info env c = ok env'
     -> lower_cmd c = ok c'
     -> sem p' ev s c' s' /\ wf_env env' (p_globs p') s'.
 
 Let Pi_r (s : estate) (ir : instr_r) (s' : estate) : Prop :=
   forall ii env env' i',
     wf_env env (p_globs p) s
-    -> check_i fun_info (MkI ii ir) env = ok env'
+    -> check_i fun_slh_info (MkI ii ir) env = ok env'
     -> lower_i (MkI ii ir) = ok i'
     -> sem_I p' ev s i' s' /\ wf_env env' (p_globs p') s'.
 
 Let Pi (s : estate) (i : instr) (s' : estate) : Prop :=
   forall env env' i',
     wf_env env (p_globs p) s
-    -> check_i fun_info i env = ok env'
+    -> check_i fun_slh_info i env = ok env'
     -> lower_i i = ok i'
     -> sem_I p' ev s i' s' /\ wf_env env' (p_globs p') s'.
 
 Let Pfor (x : var_i) (rg : seq Z) (s : estate) (c : cmd) (s' : estate) : Prop :=
   forall env env' c',
     wf_env env (p_globs p) s
-    -> check_cmd fun_info (Env.after_assign_var env x) c = ok env'
+    -> check_cmd fun_slh_info (Env.after_assign_var env x) c = ok env'
     -> lower_cmd c = ok c'
     -> Env.le env env'
     -> sem_for p' ev x rg s c' s' /\ wf_env env (p_globs p') s'.
@@ -878,7 +880,7 @@ Let Pfun
   (m' : mem)
   (res : seq value) :
   Prop :=
-    let '(tin, tout) := fun_info fn in
+    let '(tin, tout) := fun_slh_info fn in
     List.Forall2 slh_t_spec args tin
     -> sem_call p' ev scs m fn args scs' m' res /\ List.Forall2 slh_t_spec res tout.
 
@@ -1070,7 +1072,7 @@ Proof.
   rewrite (hp_globs hp) in hwf1.
   have hwffix := wf_env_le hle1 hwf1.
   have hcheck :
-    check_i fun_info (MkI ii (Cwhile al c0 cond cond_info c1)) env_fix
+    check_i fun_slh_info (MkI ii (Cwhile al c0 cond cond_info c1)) env_fix
     = ok (Env.update_cond env0 (enot cond)).
   - by rewrite /= hmem /= loop_counterP /= hcheck0 /= hcheck1 /= hle1.
 
@@ -1159,7 +1161,7 @@ Lemma Hcall : sem_Ind_call p ev Pi_r Pfun.
 Proof.
   move=> s scs2 m2 s' lvs fn args vargs vargs' hsemargs _ hrec hwrite.
   move=> ? env env' c hwf /=.
-  case heq: fun_info => [tin tout]; t_xrbindP => t hargs hres <-.
+  case heq: fun_slh_info => [tin tout]; t_xrbindP => t hargs hres <-.
   move: hrec; rewrite /Pfun heq => /(_ (check_f_argsP hwf hargs hsemargs)) [h1 h2].
   split; first by constructor; econstructor; eauto; rewrite (hp_globs hp).
   move: hwf hwrite; rewrite -(hp_globs hp) => hwf hwrite.
@@ -1176,7 +1178,7 @@ Proof.
   move: (hp); rewrite /lower_slh_prog; t_xrbindP => hent fds hmap heq.
   have [fd' + hget]:= get_map_cfprog_name_gen hmap hf.
   rewrite /lower_fd /check_fd /= /Pfun.
-  case hinfo : fun_info => [tin tout]; t_xrbindP.
+  case hinfo : fun_slh_info => [tin tout]; t_xrbindP.
   move=> env1 hcp env2 hcb hcr _ c' hc ? hall; subst fd'.
   have [| hsem' hwf2]:= hrec _ _ _ _ hcb hc.
   + by apply: (init_envP hall hcp htargs hwargs); apply wf_env_empty.
@@ -1209,7 +1211,7 @@ Proof.
        Hfor_cons
        Hcall
        Hproc hsem.
-   rewrite /Pfun. case heq: fun_info => [tin tout] [] //.
+   rewrite /Pfun. case heq: fun_slh_info => [tin tout] [] //.
    have [fd [hget [vargs [_ [_ [_ [_ [hm _ _ _ _ ]]]]] ]]] := sem_callE hsem.
    move: (hp); rewrite /lower_slh_prog; t_xrbindP => /allP -/(_ _ hent).
    rewrite heq => /= hall fds hmap heq1.
@@ -1233,17 +1235,17 @@ Context
   {rE : EventRels E0}
   (shparams : sh_params)
   (hshparams : h_sh_params shparams)
-  (fun_info : funname -> seq slh_t * seq slh_t)
+  (fun_slh_info : funname -> seq slh_t * seq slh_t)
   (entries  : seq funname)
   (ev : extra_val_t)
   (p p' : prog)
-  (hp : lower_slh_prog shparams fun_info entries p = ok p')
+  (hp : lower_slh_prog shparams fun_slh_info entries p = ok p')
 .
 
 Notation lower_slho := (lower_slho shparams).
 Notation lower_i := (lower_i shparams).
 Notation lower_cmd := (lower_cmd shparams).
-Notation lower_fd := (lower_fd shparams fun_info).
+Notation lower_fd := (lower_fd shparams fun_slh_info).
 
 Notation hp_body := (hp_body hp).
 Notation hp_globs := (hp_globs hp).
@@ -1251,7 +1253,7 @@ Notation hp_extra := (hp_extra hp).
 
 Lemma lower_fdP fn fd fd' :
   lower_fd fn fd = ok fd' ->
-  [/\ check_fd fun_info fn fd = ok tt
+  [/\ check_fd fun_slh_info fn fd = ok tt
     , f_info fd' = f_info fd
     , f_tyin fd' = f_tyin fd
     , f_params fd' = f_params fd
@@ -1314,30 +1316,30 @@ Instance slh_spec : EquivSpec :=
       fun fn fn' fs fs' =>
         [/\ fn = fn'
           , fs = fs'
-          & size (fun_info fn).1 = size (fvals fs) ->
-            List.Forall2 slh_t_spec (fvals fs) (fun_info fn).1
+          & size (fun_slh_info fn).1 = size (fvals fs) ->
+            List.Forall2 slh_t_spec (fvals fs) (fun_slh_info fn).1
         ];
     rpostF_ :=
       fun fn _ _ _ fs fs' =>
-        [/\ fs = fs' & List.Forall2 slh_t_spec (fvals fs) (fun_info fn).2 ];
+        [/\ fs = fs' & List.Forall2 slh_t_spec (fvals fs) (fun_slh_info fn).2 ];
   |}.
 
 Let Pi i : Prop :=
   forall env env' i',
-    check_i fun_info i env = ok env' ->
+    check_i fun_slh_info i env = ok env' ->
     lower_i i = ok i' ->
     wequiv_rec_i p p' ev ev slh_spec (st_eq env) i i' (st_eq env').
 
 Let Pi_r i : Prop :=
   forall ii env env' i' ii',
-    check_i fun_info (MkI ii i) env = ok env' ->
+    check_i fun_slh_info (MkI ii i) env = ok env' ->
     lower_i (MkI ii i) = ok (MkI ii' i') ->
     wequiv_rec_ir
       p p' ev ev slh_spec (st_eq env) i ii i' ii' (st_eq env').
 
 Let Pc c : Prop :=
   forall env env' c',
-    check_cmd fun_info env c = ok env' ->
+    check_cmd fun_slh_info env c = ok env' ->
     lower_cmd c = ok c' ->
     wequiv_rec p p' ev ev slh_spec (st_eq env) c c' (st_eq env').
 
@@ -1423,12 +1425,12 @@ Qed.
 
 Lemma lower_it_call xs fn es : Pi_r (Ccall xs fn es).
 Proof.
-move=> ii env env' /=; rewrite (surjective_pairing (fun_info _)).
+move=> ii env env' /=; rewrite (surjective_pairing (fun_slh_info _)).
 t_xrbindP=> _ _ ? hchkes hchkxs <- <-; apply (
   wequiv_call
     (Pf := rpreF)
     (Qf := rpostF)
-    (Rv := fun vs vs' => vs = vs' /\ List.Forall2 slh_t_spec vs (fun_info fn).1)
+    (Rv := fun vs vs' => vs = vs' /\ List.Forall2 slh_t_spec vs (fun_slh_info fn).1)
 ) => //.
 - rewrite hp_globs => s _ vs [<- hwf] hsemes /=; exists vs => //; split=> //.
   exact: check_f_argsP hwf hchkes hsemes.
@@ -1442,7 +1444,7 @@ by rewrite (use_memP _ (s2 := s) _ _ hmem).
 Qed.
 
 Lemma it_lower_code c c' env env' :
-  check_cmd fun_info env c = ok env' ->
+  check_cmd fun_slh_info env c = ok env' ->
   lower_cmd c = ok c' ->
   wequiv_rec p p' ev ev slh_spec (st_eq env) c c' (st_eq env').
 Proof.
@@ -1492,7 +1494,7 @@ Lemma it_lower_call {fn} : wiequiv_f p p' ev ev rpreF fn fn rpostF.
 Proof.
 apply: wequiv_fun_ind => {}fn _ fs _ [<- <- htin] fd
   /(get_map_cfprog_name_gen hp_body) [] fd' /lower_fdP [].
-rewrite /check_fd /= (surjective_pairing (fun_info _)).
+rewrite /check_fd /= (surjective_pairing (fun_slh_info _)).
 t_xrbindP=> env henv env' hchk htout _ _ htyin hparams hlower htyout hret hextra
   hget.
 exists fd' => // => s hs; exists s.

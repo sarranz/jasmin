@@ -19,6 +19,10 @@ Variant box :=
   | HoVbox
   | Nobox.
 
+Section WITH_FI.
+
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
 Inductive pp_error :=
   | PPEstring  `(string)
   | PPEz       `(Z)
@@ -31,7 +35,7 @@ Inductive pp_error :=
 (*   | PPEexpr    `(pexpr) *)
   | PPElval  of lval
   | PPEfunname `(funname)
-  | PPEfuninfo `(fun_info)
+  | PPEfuninfo of fun_info_t
 (*   | PPEinstr   `(instr_r) *)
   | PPEiinfo   `(instr_info)
   | PPEexpr    `(pexpr)
@@ -39,6 +43,9 @@ Inductive pp_error :=
   | PPEfexpr of fexpr
   | PPEbox     `(box) `(seq pp_error)
   | PPEbreak.
+
+Notation pp_s := PPEstring.
+Notation pp_var := PPEvar.
 
 (* TODO: it was simpler to put pel_fn and pel_fi as separate fields; in the future,
    do we want to merge them?
@@ -57,15 +64,6 @@ Definition pp_hov  := PPEbox HoVbox.
 Definition pp_box  := PPEbox Hbox.
 Definition pp_vbox := PPEbox Vbox.
 Definition pp_nobox := PPEbox Nobox.
-
-Notation pp_s    := PPEstring.
-Notation pp_z    := PPEz.
-Notation pp_var  := PPEvar.
-Notation pp_e    := PPEexpr.
-Notation pp_re   := PPErexpr.
-Notation pp_fe   := PPEfexpr.
-Notation pp_fn   := PPEfunname.
-Notation pp_lv   := PPElval.
 
 Fixpoint pp_list {A} sep (pp : A -> pp_error) xs : pp_error :=
   match xs with
@@ -212,10 +210,6 @@ Definition map_cfprog_name_gen {T1 T2} (info: T1 -> fun_info) (F: funname -> T1 
 Definition map_cfprog_gen {T1 T2} (info : T1 -> fun_info) (F: T1 -> cexec T2) :=
   map_cfprog_name_gen info (fun _ t1 => F t1).
 
-(* Some notations to use in the common case where we manipulate [_fundef ?eft]. *)
-Notation map_cfprog_name := (map_cfprog_name_gen (@f_info _ _ _)).
-Notation map_cfprog := (map_cfprog_gen (@f_info _ _ _)).
-
 Lemma get_map_cfprog_name_gen {T1 T2} (info : T1 -> fun_info) (F: funname -> T1 -> cexec T2) p p' fn f:
   map_cfprog_name_gen info F p = ok p' ->
   get_fundef p fn = Some f ->
@@ -279,6 +273,28 @@ Definition pp_safety_remains pass :=
 Definition pp_safety_remains_at pass ii :=
   pp_internal_error_s_at pass ii safety_expression_remains.
 
+(* Predefined errors *)
+
+Definition gen_loop_iterator pass_name (ii:option instr_info) :=
+  {| pel_msg      := pp_s "loop iterator too small"
+   ; pel_fn       := None
+   ; pel_fi       := None
+   ; pel_ii       := ii
+   ; pel_vi       := None
+   ; pel_pass     := Some pass_name
+   ; pel_internal := true
+  |}.
+
+Definition loop_iterator pass_name :=
+  gen_loop_iterator pass_name None.
+
+Definition ii_loop_iterator pass_name ii :=
+  gen_loop_iterator pass_name (Some ii).
+
+Definition error_copy_remain := "array copy remain"%string.
+
+End WITH_FI.
+
 Class LoopCounter :=
   {
     loop_counter : nat;
@@ -300,13 +316,13 @@ Ltac t_xrbindP :=
       case; t_xrbindP
 
   | [ |- add_finfo _ _ = ok _ -> _] =>
-      move=> /add_finfoP; t_xrbindP
+      move=> /(add_finfoP (fi := _)); t_xrbindP
 
   | [ |- add_funname _ _ = ok _ -> _] =>
-      move=> /add_funnameP; t_xrbindP
+      move=> /(add_funnameP (fn := _)); t_xrbindP
 
   | [ |- add_iinfo _ _ = ok _ -> _] =>
-      move=> /add_iinfoP; t_xrbindP
+      move=> /(add_iinfoP (ii := _)); t_xrbindP
 
   | [ |- ok _ = ok _ -> _ ] =>
       case; t_xrbindP
@@ -319,22 +335,15 @@ Ltac t_xrbindP :=
   | _ => idtac
   end.
 
-(* Predefined errors *)
+Notation pp_s    := PPEstring.
+Notation pp_z    := PPEz.
+Notation pp_var  := PPEvar.
+Notation pp_e    := PPEexpr.
+Notation pp_re   := PPErexpr.
+Notation pp_fe   := PPEfexpr.
+Notation pp_fn   := PPEfunname.
+Notation pp_lv   := PPElval.
 
-Definition gen_loop_iterator pass_name (ii:option instr_info) :=
-  {| pel_msg      := pp_s "loop iterator too small"
-   ; pel_fn       := None
-   ; pel_fi       := None
-   ; pel_ii       := ii
-   ; pel_vi       := None
-   ; pel_pass     := Some pass_name
-   ; pel_internal := true
-  |}.
-
-Definition loop_iterator pass_name :=
-  gen_loop_iterator pass_name None.
-
-Definition ii_loop_iterator pass_name ii :=
-  gen_loop_iterator pass_name (Some ii).
-
-Definition error_copy_remain := "array copy remain"%string.
+(* Some notations to use in the common case where we manipulate [_fundef ?eft]. *)
+Notation map_cfprog_name := (map_cfprog_name_gen (f_info (extra_fun_t := _))).
+Notation map_cfprog := (map_cfprog_gen (f_info (extra_fun_t := _))).

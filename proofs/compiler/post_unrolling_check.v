@@ -7,7 +7,7 @@ Module Import E.
 
   Definition pass : string := "loop unrolling".
 
-  Definition for_loop_remains :=
+  Definition for_loop_remains {fun_info : Type} {FI : FunInfo fun_info} :=
     {| pel_msg := pp_s "for loops remain"
     ; pel_fn := None
     ; pel_fi := None
@@ -16,7 +16,7 @@ Module Import E.
     ; pel_pass := Some pass
     ; pel_internal := false |}.
 
-  Definition inline_instr_remains :=
+  Definition inline_instr_remains {fun_info : Type} {FI : FunInfo fun_info} :=
     {| pel_msg := pp_s "“inline”-annotated instructions remain"
     ; pel_fn := None
     ; pel_fi := None
@@ -30,6 +30,7 @@ End E.
 Section ASM_OP.
 
 Context `{asmop: asmOp}.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 
 Section CHECK_NO_FOR_LOOP_CMD.
   Context (check_no_for_loop_instr: instr → cexec unit).

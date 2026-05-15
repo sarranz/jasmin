@@ -14,6 +14,7 @@ Require Import compiler_util.
 
 Section STACK_ZEROIZATION.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context {atoI : arch_toIdent}.
 
 Let vflags := map (fun f => mk_var_i (to_var f)) [:: OF; CF; SF; PF; ZF ].

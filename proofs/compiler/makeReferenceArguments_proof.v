@@ -11,6 +11,8 @@ Local Open Scope seq_scope.
 
 Section SemInversion.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
 Context
   {wsw : WithSubWord}
   {dc:DirectCall}
@@ -49,6 +51,8 @@ End SemInversionSeq1.
 End SemInversion.
 
 Section WITH_PARAMS.
+
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 
 Context
   {wsw : WithSubWord}

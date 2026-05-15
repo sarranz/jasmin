@@ -57,6 +57,7 @@ Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then
 
 Section IT.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context
   {reg regx xreg rflag cond asm_op extra_op syscall_state : Type}
   {sc_sem : syscall.syscall_sem syscall_state}

@@ -97,6 +97,9 @@ Module E.
 
 Definition pass_name := "asmgen"%string.
 
+Section INFO.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
 Definition internal_error (ii : instr_info) (msg : string) :=
   {|
     pel_msg := compiler_util.pp_s msg;
@@ -123,7 +126,13 @@ Definition li_condition_modified ii :=
   error
     ii
     "assignment needs to be split but condition is modified by assignment".
+
+End INFO.
+
 End E.
+
+Section INFO.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 
 Definition asm_args_of_opn_args
   : seq ARMFopn_core.opn_args -> seq (asm_op_msb_t * lexprs * rexprs) :=
@@ -237,6 +246,8 @@ Instance arm_extra {atoI : arch_toIdent} :
 
 (* This concise name is convenient in OCaml code. *)
 Definition arm_extended_op {atoI : arch_toIdent} :=
-  @extended_op _ _ _ _ _ _ _ arm_extra.
+  @extended_op _ _ _ _ _ _ _ _ _ arm_extra.
 
 Definition Oarm {atoI : arch_toIdent} o : @sopn arm_extended_op _ := Oasm (BaseOp (None, o)).
+
+End INFO.

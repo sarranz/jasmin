@@ -6,6 +6,7 @@ Section LOWERING.
 Definition fresh_vars : Type := string -> atype -> Ident.ident.
 
 Context
+  {fun_info : Type} {FI : FunInfo fun_info}
   {asm_op lowering_options : Type}
   {asmop : asmOp asm_op}
   (lower_i0 :

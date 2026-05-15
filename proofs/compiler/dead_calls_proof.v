@@ -117,6 +117,7 @@ End CALLS.
 
 Section Section.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context {pT: progT} {sCP: semCallParams}.
 
 #[local]

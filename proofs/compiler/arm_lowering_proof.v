@@ -56,6 +56,8 @@ Qed.
 
 Section PROOF.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
 Context
   {wsw : WithSubWord}
   {dc : DirectCall}

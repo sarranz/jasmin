@@ -10,6 +10,8 @@ Local Open Scope seq_scope.
 
 Section WITH_PARAMS.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
 Context
   {wsw : WithSubWord}
   {dc  : DirectCall}
@@ -640,7 +642,7 @@ Proof.
   case ok_m: init_map => [ m _count ].
   t_xrbindP=> ? hcm [env' c'] hc' ?; subst f'.
   pose X := Sv.union (vars_l fp) (Sv.union (vars_l res) (vars_c c)).
-  pose get_spill := lower_spill.get_spill m.
+  pose get_spill := [elaborate lower_spill.get_spill m ].
   pose S := {| get_spill     := get_spill;
                X             := X;
                get_spillP    := lower_get_spillP ok_m hcm;

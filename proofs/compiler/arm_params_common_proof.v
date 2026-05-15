@@ -42,6 +42,8 @@ Module ARMFopnP.
 
 Section WITH_PARAMS.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
 Context
   {atoI  : arch_toIdent}
   {syscall_state : Type}
@@ -312,6 +314,8 @@ End WITH_PARAMS.
 End ARMFopnP.
 
 Section WITH_PARAMS.
+
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 
 Context
   {atoI  : arch_toIdent}

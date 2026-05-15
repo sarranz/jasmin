@@ -9,6 +9,10 @@ Import Utf8.
 Local Open Scope seq_scope.
 
 Module Import E.
+  Section INFO.
+
+  Context {fun_info : Type} {FI : FunInfo fun_info}.
+
   Definition pass : string := "array expansion".
 
   Definition reg_error (x:var_i) msg := {|
@@ -56,7 +60,12 @@ Module Import E.
 
   Definition reg_ierror_no_var := pp_internal_error_s pass.
 
+  End INFO.
 End E.
+
+Section WITH_FI.
+
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 
 Record varr_info := {
   vi_v : var;
@@ -67,7 +76,7 @@ Record varr_info := {
 Record expand_info := {
   vars : list var;
   arrs : list varr_info;
-  finfo : fun_info;
+  finfo : fun_info_t;
 }.
 
 Record array_info := {
@@ -347,7 +356,7 @@ Definition expand_fbody (fname: funname) (fs: ufundef * t) :=
 
 End FSIGS.
 
-Notation map_cfprog_name_cdata := (map_cfprog_name_gen (fun x => @f_info _ _ _ (fst (fst x)))).
+Notation map_cfprog_name_cdata := (map_cfprog_name_gen (fun x => f_info (fst (fst x)))).
 
 Definition expand_prog (fi : funname -> ufundef -> expand_info) (entries : seq funname) (p: uprog) : cexec uprog :=
   Let step1 := map_cfprog_name (expand_fsig fi entries) (p_funcs p) in
@@ -356,3 +365,5 @@ Definition expand_prog (fi : funname -> ufundef -> expand_info) (entries : seq f
   ok {| p_extra := p_extra p; p_globs := p_globs p; p_funcs := funcs |}.
 
 End ASM_OP.
+
+End WITH_FI.

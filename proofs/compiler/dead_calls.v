@@ -8,7 +8,8 @@ Module Import E.
 
   Definition pass : string := "dead calls".
 
-  Definition dead_calls_error := pp_internal_error_s pass.
+  Definition dead_calls_error {fun_info : Type} {FI : FunInfo fun_info} :=
+    pp_internal_error_s pass.
 
 End E.
 
@@ -40,6 +41,7 @@ Definition c_calls (c : Sf.t) (cmd : cmd) :=
 
 Section Section.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context {pT: progT}.
 
 Definition live_calls (s: Sf.t) (p: fun_decls) : Sf.t :=

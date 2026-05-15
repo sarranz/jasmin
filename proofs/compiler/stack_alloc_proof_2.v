@@ -31,6 +31,8 @@ Variable global_alloc : seq (var * wsize * Z).
 
 Let glob_size := Z.of_nat (size global_data).
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
 Context
   {wsw : WithSubWord}
   {dc:DirectCall}
@@ -4799,6 +4801,8 @@ End PROC.
 End INIT.
 
 Section HSAPARAMS.
+
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 
 Context
   {wsw : WithSubWord}

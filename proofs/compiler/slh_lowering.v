@@ -32,7 +32,7 @@ Notation internal_error ii s :=
   (pp_internal_error_s_at pass ii s)
   (only parsing).
 
-Definition pp_user_error ii vi (pp : pp_error) := {|
+Definition pp_user_error {fun_info : Type} {FI : FunInfo fun_info} ii vi (pp : pp_error) := {|
   pel_msg := pp_vbox [:: pp; pp_s "Did you run the speculative constant time checker first?"];
   pel_fn := None;
   pel_fi := None;
@@ -42,7 +42,8 @@ Definition pp_user_error ii vi (pp : pp_error) := {|
   pel_internal := false
 |}.
 
-Definition cond_not_found (ii : instr_info) oe e : pp_error_loc :=
+Definition cond_not_found {fun_info : Type} {FI : FunInfo fun_info}
+    (ii : instr_info) oe e : pp_error_loc :=
   let pp_oe :=
     match oe with
     | None => [:: pp_s "no condition are known"]
@@ -53,39 +54,46 @@ Definition cond_not_found (ii : instr_info) oe e : pp_error_loc :=
         [:: pp_hov ([:: pp_s "Not able to prove that"; pp_e e; pp_s "evaluate to true,"]);
             pp_hov pp_oe]).
 
-Definition lvar_variable (ii: instr_info) : pp_error_loc :=
+Definition lvar_variable {fun_info : Type} {FI : FunInfo fun_info}
+    (ii: instr_info) : pp_error_loc :=
   pp_user_error (Some ii) None
      (pp_s "misspeculation flag should be stored into register").
 
-Definition expr_variable (ii: instr_info) e : pp_error_loc :=
+Definition expr_variable {fun_info : Type} {FI : FunInfo fun_info}
+    (ii: instr_info) e : pp_error_loc :=
   pp_user_error (Some ii) None
      (pp_vbox [:: pp_s "only register allowed for misspeculation flag:";
                   pp_e e]).
 
-Definition msf_not_found_r (x:var_i) (known : Sv.t) : pp_error_loc :=
+Definition msf_not_found_r {fun_info : Type} {FI : FunInfo fun_info}
+    (x:var_i) (known : Sv.t) : pp_error_loc :=
    pp_user_error None (Some (v_info x))
      (pp_vbox [:: pp_box [:: pp_s "Variable"; pp_var x; pp_s "is not a misspeculation flag"];
                   pp_box [:: pp_s "Known are"; pp_Sv known]]).
 
-Definition msf_not_found (ii : instr_info) (x:var_i) (known : Sv.t) : pp_error_loc :=
+Definition msf_not_found {fun_info : Type} {FI : FunInfo fun_info}
+    (ii : instr_info) (x:var_i) (known : Sv.t) : pp_error_loc :=
   pp_at_ii ii (msf_not_found_r x known).
 
-Definition invalid_nb_args :=
+Definition invalid_nb_args {fun_info : Type} {FI : FunInfo fun_info} :=
   pp_internal_error_s pass "invalid number of arguments".
 
-Definition invalid_nb_lvals :=
+Definition invalid_nb_lvals {fun_info : Type} {FI : FunInfo fun_info} :=
   pp_internal_error_s pass "invalid number of left values".
 
-Definition cond_uses_mem (ii : instr_info) e : pp_error_loc :=
+Definition cond_uses_mem {fun_info : Type} {FI : FunInfo fun_info}
+    (ii : instr_info) e : pp_error_loc :=
   pp_user_error (Some ii) None
     (pp_vbox [:: pp_s "Condition has a memory access:";
                  pp_e e]).
 
-Definition lowering_failed (ii : instr_info) : pp_error_loc :=
+Definition lowering_failed {fun_info : Type} {FI : FunInfo fun_info}
+    (ii : instr_info) : pp_error_loc :=
   pp_user_error (Some ii) None
     (pp_s "The architecture does not provides protection for selective speculative load hardening").
 
-Definition invalid_type_for_msf (ii : instr_info) : pp_error_loc :=
+Definition invalid_type_for_msf {fun_info : Type} {FI : FunInfo fun_info}
+    (ii : instr_info) : pp_error_loc :=
   pp_user_error (Some ii) None (pp_s "Invalid type for msf variable").
 
 Notation internal_error_ s :=
@@ -218,6 +226,7 @@ Context
   {fcparams : flag_combination.FlagCombinationParams}
   {pT : progT}
   {LC : LoopCounter}.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 
 Section CHECK_SLHO.
 
@@ -426,7 +435,7 @@ Record sh_params :=
 
 Context
   (shparams : sh_params)
-  (fun_info : funname -> seq slh_t * seq slh_t).
+  (fun_slh_info : funname -> seq slh_t * seq slh_t).
 
 (* We need to ensure that conditions don't depend on memory, since this makes it
    impossible to tell whether their value is still true after branching.
@@ -460,7 +469,7 @@ Fixpoint check_i (i : instr) (env : Env.t) : cexec Env.t :=
       check_while ii cond (check_cmd c0) (check_cmd c1) loop_counter env
 
   | Ccall xs fn es =>
-      let '(in_t, out_t) := fun_info fn in
+      let '(in_t, out_t) := fun_slh_info fn in
       Let _ := check_f_args ii env es in_t in
       check_f_lvs ii env xs out_t
   end.
@@ -469,7 +478,7 @@ Definition check_cmd (env : Env.t) (c : cmd) : cexec Env.t :=
   rec_check_cmd check_i c env.
 
 Definition check_fd (fn:funname) (fd : fundef) : cexec unit :=
-  let '(in_t, out_t) := fun_info fn in
+  let '(in_t, out_t) := fun_slh_info fn in
   Let env := init_fun_env Env.empty (f_params fd) (f_tyin fd) in_t in
   Let env := check_cmd env (f_body fd) in
   Let _ := check_res env (f_res fd) (f_tyout fd) out_t in
@@ -540,7 +549,7 @@ Definition lower_fd (fn:funname) (fd:fundef) :=
 Definition is_slh_none ty := if ty is Slh_None then true else false.
 
 Definition lower_slh_prog (entries : seq funname) (p : prog) : cexec prog :=
-   Let _ := assert (all (fun f => all is_slh_none (fst (fun_info f))) entries)
+   Let _ := assert (all (fun f => all is_slh_none (fst (fun_slh_info f))) entries)
                    (E.pp_user_error None None (pp_s "export function should not take a misspeculation flag as input")) in
    Let p_funcs := map_cfprog_name lower_fd (p_funcs p) in
    ok  {| p_funcs  := p_funcs;

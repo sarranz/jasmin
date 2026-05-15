@@ -23,18 +23,15 @@ Extract Constant strings.ascii_eqb => "Char.equal".
 Extract Constant strings.ascii_cmp =>
   "(fun x y -> let c = Char.compare x y in if c = 0 then Datatypes.Eq else if c < 0 then Datatypes.Lt else Datatypes.Gt)".
 
-Extract Constant expr.VarInfo.t => "Location.t".
-Extract Constant expr.VarInfo.witness => "Location._dummy".
-Extract Constant expr.var_info => "Location.t".
-Extract Constant expr.InstrInfo.t => "IInfo.t".
-Extract Constant expr.InstrInfo.witness => "IInfo.dummy".
-Extract Constant expr.InstrInfo.with_location => "IInfo.with_location".
-Extract Constant expr.InstrInfo.is_inline => "IInfo.is_inline".
-Extract Constant expr.InstrInfo.var_info_of_ii => "IInfo.var_info_of_ii".
-Extract Constant expr.instr_info => "IInfo.t".
-Extract Constant expr.fun_info => "FInfo.t".
-Extract Constant expr.entry_info_of_fun_info => "FInfo.entry_info".
-Extract Constant expr.ret_info_of_fun_info => "FInfo.ret_info".
+Extract Constant info.VarInfo.t => "Location.t".
+Extract Constant info.VarInfo.witness => "Location._dummy".
+Extract Constant info.var_info => "Location.t".
+Extract Constant info.InstrInfo.t => "IInfo.t".
+Extract Constant info.InstrInfo.witness => "IInfo.dummy".
+Extract Constant info.InstrInfo.with_location => "IInfo.with_location".
+Extract Constant info.InstrInfo.is_inline => "IInfo.is_inline".
+Extract Constant info.InstrInfo.var_info_of_ii => "IInfo.var_info_of_ii".
+Extract Constant info.instr_info => "IInfo.t".
 Extract Constant waes.MixColumns => "(fun _ -> failwith ""MixColumns is not implemented"")".
 Extract Constant waes.InvMixColumns => "(fun _ -> failwith ""InvMixColumns not implemented"")".
 

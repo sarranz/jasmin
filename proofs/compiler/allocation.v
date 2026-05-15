@@ -12,8 +12,9 @@ Module E.
 Definition pass_name := "allocation"%string.
 
 (* FIXME: are there internal errors? *)
-Definition gen_error (internal:bool) (ii:option instr_info) (msg:string) := 
-  {| pel_msg      := pp_s msg
+Definition gen_error {fun_info : Type} {FI : FunInfo fun_info}
+    (internal:bool) (ii:option instr_info) (msg:string) :=
+  {| pel_msg      := PPEstring msg
    ; pel_fn       := None
    ; pel_fi       := None
    ; pel_ii       := ii
@@ -22,11 +23,14 @@ Definition gen_error (internal:bool) (ii:option instr_info) (msg:string) :=
    ; pel_internal := internal
   |}.
 
-Definition error msg := gen_error true None msg.
+Definition error {fun_info : Type} {FI : FunInfo fun_info} msg :=
+  gen_error true None msg.
 
-Definition loop_iterator := loop_iterator pass_name.
+Definition loop_iterator {fun_info : Type} {FI : FunInfo fun_info} :=
+  loop_iterator pass_name.
 
-Definition fold2 := error "fold2".
+Definition fold2 {fun_info : Type} {FI : FunInfo fun_info} :=
+  error "fold2".
 
 End E.
 
@@ -406,6 +410,7 @@ End M.
 
 Section WSW.
 Context {wsw : WithSubWord}.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 
 Definition alloc_error := pp_internal_error_s "allocation".
 
