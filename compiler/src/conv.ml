@@ -346,7 +346,7 @@ let to_array ty p t =
 (* ---------------------------------------------------------------------------- *)
 
 (* This avoids printing dummy locations. Hope that it will not hide errors. *)
-let patch_vi_loc (e : Compiler_util.pp_error_loc) =
+let patch_vi_loc (e : FInfo.t Compiler_util.pp_error_loc) =
   match e.Compiler_util.pel_vi with
   | None -> e
   | Some vi ->

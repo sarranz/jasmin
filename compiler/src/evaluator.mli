@@ -1,12 +1,12 @@
-exception Eval_error of Expr.instr_info * Utils0.error
+exception Eval_error of Info.instr_info * Utils0.error
 
 val exec :
   'syscall_state Sem_params.coq_EstateParams ->
   Sem_params.coq_SemPexprParams ->
   ('asm_op, 'syscall_state) Sem_params.coq_SemInstrParams ->
   'syscall_state ->
-  'asm_op Expr.prog ->
-  Expr.instr_info ->
+  ('asm_op, FInfo.t) Expr.prog ->
+  Info.instr_info ->
   Prog.funname ->
   Values.values ->
   Low_memory.Memory.mem ->
@@ -24,9 +24,9 @@ val run :
       and type regx = 'regx
       and type rflag = 'rflag
       and type xreg = 'xreg) ->
-  ('reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op) Arch_extra.extended_op
-  Expr.uprog ->
-  Expr.instr_info ->
+  ((FInfo.t, 'reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op) Arch_extra.extended_op,
+   FInfo.t) Expr.uprog ->
+  Info.instr_info ->
   CoreIdent.funname ->
   Values.value list ->
   Low_memory.Memory.mem ->

@@ -25,8 +25,8 @@ module type Core_arch = sig
   type extra_op
   type lowering_options
 
-  val asm_e : (reg, regx, xreg, rflag, cond, asm_op, extra_op) asm_extra
-  val aparams : (reg, regx, xreg, rflag, cond, asm_op, extra_op, lowering_options) Arch_params.architecture_params
+  val asm_e : (FInfo.t, reg, regx, xreg, rflag, cond, asm_op, extra_op) asm_extra
+  val aparams : (FInfo.t, FInfo.t, reg, regx, xreg, rflag, cond, asm_op, extra_op, lowering_options) Arch_params.architecture_params
   val call_conv : (reg, regx, xreg, rflag, cond) calling_convention
   val alloc_stack_need_extra : Z.t -> bool
 
@@ -50,7 +50,7 @@ end
 module type Arch = sig
   include Core_arch
 
-  type extended_op = (reg, regx, xreg, rflag, cond, asm_op, extra_op) Arch_extra.extended_op
+  type extended_op = (FInfo.t, reg, regx, xreg, rflag, cond, asm_op, extra_op) Arch_extra.extended_op
 
   val reg_size : Wsize.wsize
   val pointer_data : Wsize.wsize
@@ -97,7 +97,7 @@ module Arch_from_Core_arch (A : Core_arch) :
      and type extra_op = A.extra_op = struct
   include A
 
-  type extended_op = (reg, regx, xreg, rflag, cond, asm_op, extra_op) Arch_extra.extended_op
+  type extended_op = (FInfo.t, reg, regx, xreg, rflag, cond, asm_op, extra_op) Arch_extra.extended_op
 
   let arch_decl = A.asm_e._asm._arch_decl
   let reg_size = arch_decl.reg_size
@@ -108,7 +108,7 @@ module Arch_from_Core_arch (A : Core_arch) :
   (* not sure it is the best place to define [rip], but we need to know [reg_size] *)
   let rip = V.mk "RIP" (Reg (Normal, Direct)) (tu reg_size) L._dummy []
 
-  let asmOp = Arch_extra.asm_opI A.asm_e
+  let asmOp = Arch_extra.asm_opI FInfo.instance A.asm_e
   let asmOp_sopn = Sopn.asmOp_sopn pointer_data msf_size asmOp
 
   let var_of_reg (r:reg) : var = atoI.toI_r.to_ident r

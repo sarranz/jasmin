@@ -7,6 +7,7 @@ open Var0
 open Varmap
 open Low_memory
 open Expr
+open Info
 open Psem_defs
 open Values
 open Sem_params
@@ -38,13 +39,13 @@ let of_val_b ii v : bool =
 
 (* ----------------------------------------------------------------- *)
 type 'asm stack =
-  | Sempty of instr_info * 'asm fundef * value list
+  | Sempty of instr_info * ('asm, FInfo.t) fundef * value list
   | Scall of
-      instr_info * 'asm fundef * value list * lval list * Vm.t * 'asm instr list * 'asm stack
+      instr_info * ('asm, FInfo.t) fundef * value list * lval list * Vm.t * 'asm instr list * 'asm stack
   | Sfor of instr_info * var_i * coq_Z list * 'asm instr list * 'asm instr list * 'asm stack
 
 type ('syscall_state, 'asm) state =
-  { s_prog : 'asm prog;
+  { s_prog : ('asm, FInfo.t) prog;
     s_cmd  : 'asm instr list;
     s_estate : 'syscall_state estate;
     s_stk  : 'asm stack;
@@ -190,12 +191,12 @@ let run (type reg regx xreg rflag cond asm_op extra_op)
                and type asm_op = asm_op
                and type extra_op = extra_op)
       (p :
-         (reg, regx, xreg, rflag, cond, asm_op, extra_op) Arch_extra.extended_op
-           Expr.uprog) ii fn args m =
-  let ep = Sem_params_of_arch_extra.ep_of_asm_e A.asm_e Syscall_ocaml.sc_sem in
-  let spp = Sem_params_of_arch_extra.spp_of_asm_e A.asm_e in
+         ((FInfo.t, reg, regx, xreg, rflag, cond, asm_op, extra_op) Arch_extra.extended_op,
+          FInfo.t) Expr.uprog) ii fn args m =
+  let ep = Sem_params_of_arch_extra.ep_of_asm_e FInfo.instance A.asm_e Syscall_ocaml.sc_sem in
+  let spp = Sem_params_of_arch_extra.spp_of_asm_e FInfo.instance A.asm_e in
   let sip =
-    Sem_params_of_arch_extra.sip_of_asm_e A.asm_e Syscall_ocaml.sc_sem
+    Sem_params_of_arch_extra.sip_of_asm_e FInfo.instance A.asm_e Syscall_ocaml.sc_sem
   in
   let scs0 = Syscall_ocaml.initial_state () in
   exec ep spp sip scs0 p ii fn args m

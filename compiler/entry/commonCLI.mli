@@ -22,7 +22,8 @@ val parse_and_compile :
   string ->
   (string * string) list ->
   ( unit,
-    ( 'reg,
+    ( FInfo.t,
+      'reg,
       'regx,
       'xreg,
       'rflag,

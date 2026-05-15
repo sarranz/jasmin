@@ -31,9 +31,9 @@ module type ArchWithAnalyze = sig
   module A : Arch_full.Arch
   val analyze :
     ?fmt:Format.formatter ->
-    (unit, (A.reg, A.regx, A.xreg, A.rflag, A.cond, A.asm_op, A.extra_op) Arch_extra.extended_op) func ->
-    (unit, (A.reg, A.regx, A.xreg, A.rflag, A.cond, A.asm_op, A.extra_op) Arch_extra.extended_op) func ->
-    (unit, (A.reg, A.regx, A.xreg, A.rflag, A.cond, A.asm_op, A.extra_op) Arch_extra.extended_op) prog ->
+    (unit, (FInfo.t, A.reg, A.regx, A.xreg, A.rflag, A.cond, A.asm_op, A.extra_op) Arch_extra.extended_op) func ->
+    (unit, (FInfo.t, A.reg, A.regx, A.xreg, A.rflag, A.cond, A.asm_op, A.extra_op) Arch_extra.extended_op) func ->
+    (unit, (FInfo.t, A.reg, A.regx, A.xreg, A.rflag, A.cond, A.asm_op, A.extra_op) Arch_extra.extended_op) prog ->
     bool
 end
 

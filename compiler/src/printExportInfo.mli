@@ -2,10 +2,11 @@ open Prog
 
 val pp_export_info_json :
   Format.formatter ->
-  ('reg, 'regx, 'xreg, 'rglag, 'cond, 'asm_op, 'extra_op) Arch_extra.extended_op
+  (FInfo.t, 'reg, 'regx, 'xreg, 'rglag, 'cond, 'asm_op, 'extra_op) Arch_extra.extended_op
   Pretyping.Env.env ->
   ( unit,
-    ( 'reg,
+    ( FInfo.t,
+      'reg,
       'regx,
       'xreg,
       'rflag,
