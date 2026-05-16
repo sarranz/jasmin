@@ -75,6 +75,14 @@ let load_and_analyze ~fmt expect path arch =
           module Safety = SafetyMain.Make (Jasmin_checksafety.Riscv_safety.Riscv_safety (A))
           let analyze = Safety.analyze
         end)
+    | OTBN ->
+       (module struct
+          module C = CoreArchFactory.Core_arch_OTBN
+          module A = Arch_full.Arch_from_Core_arch (C)
+          open Jasmin_checksafety
+          module Safety = SafetyMain.Make (Jasmin_checksafety.Otbn_safety.Otbn_safety (A))
+          let analyze = Safety.analyze
+        end)
   in
   let module Arch = P.A in
   Format.fprintf fmt "File %s (on arch %s):@." path (architecture_to_string arch);

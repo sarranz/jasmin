@@ -102,6 +102,14 @@ let main () =
             module Safety = SafetyMain.Make (Jasmin_checksafety.Riscv_safety.Riscv_safety (A))
             let analyze = Safety.analyze ?fmt:None
           end)
+      | OTBN ->
+         (module struct
+            module C = CoreArchFactory.Core_arch_OTBN
+            module A = Arch_full.Arch_from_Core_arch (C)
+            open Jasmin_checksafety
+            module Safety = SafetyMain.Make (Jasmin_checksafety.Otbn_safety.Otbn_safety (A))
+            let analyze = Safety.analyze ?fmt:None
+          end)
     in
     let module Arch = P.A in
 

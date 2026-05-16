@@ -52,7 +52,7 @@ Let err : result string asm_op := Error "invalid OTBN suffix"%string.
 
 Definition prim_otbn_none op :=
   PrimOTBN (fun s => if s is PV_otbn_none then ok op else err).
-Definition prim_otbn_ws f :=
+Definition prim_otbn_ws f := (* unused for now *)
   PrimOTBN (fun s => if s is PV_otbn_ws ws then ok (f ws) else err).
 Definition prim_otbn_fg f :=
   PrimOTBN (fun s => if s is PV_otbn_fg fg then ok (f fg) else err).

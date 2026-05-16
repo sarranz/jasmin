@@ -105,6 +105,8 @@ type architecture =
   | X86_64
   | ARM_M4
   | RISCV
+  | OTBN
+
 val architecture_to_string : architecture -> string
 
 (* -------------------------------------------------------------------- *)

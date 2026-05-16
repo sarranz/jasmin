@@ -25,6 +25,8 @@ module type Core_arch = sig
   type extra_op
   type lowering_options
 
+  val arch : architecture
+
   val asm_e : (reg, regx, xreg, rflag, cond, asm_op, extra_op) asm_extra
   val aparams : (reg, regx, xreg, rflag, cond, asm_op, extra_op, lowering_options) Arch_params.architecture_params
   val call_conv : (reg, regx, xreg, rflag, cond) calling_convention
@@ -205,6 +207,7 @@ module Arch_from_Core_arch (A : Core_arch) :
     | ByReg { call; return } -> ByReg { call = Option.map var_of_reg call; return }
 
   let arch_info = Pretyping.{
+      arch = arch;
       pd = reg_size;
       asmOp = asmOp_sopn;
       known_implicits = known_implicits;

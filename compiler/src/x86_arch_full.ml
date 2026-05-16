@@ -30,6 +30,8 @@ module X86_core = struct
   type extra_op = X86_extra.x86_extra_op
   type lowering_options = X86_lowering.lowering_options
 
+  let arch = Utils.X86_64
+
   let atoI = atoI x86_decl
   let asm_e = X86_extra.x86_extra atoI
   let aparams = X86_params.x86_params atoI

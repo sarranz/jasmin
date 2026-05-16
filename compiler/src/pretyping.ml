@@ -12,6 +12,14 @@ module P = Prog
 module W = Wsize
 module T = Type
 
+type ('a, 'b, 'c, 'd, 'e, 'f, 'g) arch_info = {
+  arch : architecture;
+  pd : Wsize.wsize;
+  asmOp : ('a, 'b, 'c, 'd, 'e, 'f, 'g) Arch_extra.extended_op Sopn.sopn Sopn.asmOp;
+  known_implicits : (CoreIdent.Name.t * string) list;
+  flagnames: CoreIdent.Name.t list;
+}
+
 (* -------------------------------------------------------------------- *)
 let loc_of_tuples default locs =
   List.fold_left L.merge default locs
@@ -1657,13 +1665,15 @@ let check_deprecated_intrinsic (old_name: string) (loc:L.t) =
   | Some new_name ->
     warning Deprecated (L.i_loc0 loc) "Intrinsic operator '%s' is deprecated. Please use '%s' instead." old_name new_name
 
-
-let tt_prim asmOp id =
+(* TODO_OTBN: Pseudo-operators have [PrimX86] for all architectures. So we first
+   match with X86.Maybe these should go in a different list? *)
+let tt_prim arch_info id =
   let { L.pl_loc = loc ; L.pl_desc = s } = id in
   let name, sz = extract_size s in
   check_deprecated_intrinsic name loc;
+  let ps = arch_info.asmOp.prim_string in
   let c =
-    match List.assoc name asmOp.Sopn.prim_string with
+    match List.assoc name ps with
     | PrimX86 (valid_suffixes, preop) ->
       begin match match sz with
           | None -> default_suffix valid_suffixes |> preop
@@ -1677,10 +1687,12 @@ let tt_prim asmOp id =
         with | Some d -> d
             | None -> rs_tyerror ~loc (PrimWrongSuffix (name, valid_suffixes))
     end
-    | PrimARM _ | exception Not_found ->
-       let err msg = tyerror ~loc (UnknownPrim(s, msg)) in
-       Tt_arm_m4.tt_prim err asmOp.Sopn.prim_string name sz
-    | PrimOTBN _ -> assert false (* TODO_OTBN *)
+    | _ | exception Not_found ->
+      let err msg = tyerror ~loc (UnknownPrim(s, msg)) in
+      match arch_info.arch with
+      | ARM_M4 -> Tt_arm_m4.tt_prim err ps name sz
+      | OTBN -> Tt_otbn.tt_prim err ps name sz
+      | _ -> raise (err "")
   in c
 
 let prim_of_op exn loc o =
@@ -1785,13 +1797,6 @@ let pexpr_of_plvalue exn l =
   | S.PLArray(al, aa,ws,x,e,len) -> L.mk_loc (L.loc l) (S.PEGet(al, aa,ws,x,e,len))
   | S.PLMem(al,ty,e) -> L.mk_loc (L.loc l) (S.PEFetch(al,ty,e))
 
-
-type ('a, 'b, 'c, 'd, 'e, 'f, 'g) arch_info = {
-  pd : Wsize.wsize;
-  asmOp : ('a, 'b, 'c, 'd, 'e, 'f, 'g) Arch_extra.extended_op Sopn.sopn Sopn.asmOp;
-  known_implicits : (CoreIdent.Name.t * string) list;
-  flagnames: CoreIdent.Name.t list;
-}
 
 let tt_lvalues arch_info env loc (pimp, pls) implicit tys =
   let pimp = Option.map (fun pimp -> L.mk_loc (L.loc pimp) (pannot_to_annotations (L.unloc pimp))) pimp in
@@ -2129,7 +2134,7 @@ let rec tt_instr arch_info (env : 'asm Env.env) ((pannot,pi) : S.pinstr) : 'asm 
       [mk_i (P.Copn([], AT_keep, op, es))]
 
   | ls, `Raw, { pl_desc = PEPrim (f, args) }, None ->
-      let p = tt_prim arch_info.asmOp f in
+      let p = tt_prim arch_info f in
       let tlvs, tes, arguments = prim_sig arch_info.asmOp p in
       let lvs, einstr = tt_lvalues arch_info env_lhs (L.loc pi) ls (Some arguments) tlvs in
       let es  = tt_exprs_cast arch_info.pd env_rhs (L.loc pi) args tes in
@@ -2143,7 +2148,7 @@ let rec tt_instr arch_info (env : 'asm Env.env) ((pannot,pi) : S.pinstr) : 'asm 
         | (ws, `Word _) -> ws
         | (_ws, `WInt _) -> rs_tyerror ~loc (string_error "invalid cast for asm operator")
         in
-      let p = tt_prim arch_info.asmOp f in
+      let p = tt_prim arch_info f in
       let id = Sopn.asm_op_instr arch_info.asmOp p in
       let p = cast_opn ~loc:(L.loc pi) id ws p in
       let tlvs, tes, arguments = prim_sig arch_info.asmOp p in

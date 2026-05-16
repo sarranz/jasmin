@@ -17,6 +17,8 @@ module Arm_core = struct
   type extra_op = Arm_extra.arm_extra_op
   type lowering_options = Arm_lowering.lowering_options
 
+  let arch = Utils.ARM_M4
+
   let atoI = X86_arch_full.atoI arm_decl
 
   let asm_e = Arm_extra.arm_extra atoI

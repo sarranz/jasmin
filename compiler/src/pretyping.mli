@@ -41,15 +41,19 @@ module Env : sig
   end
 end
 
-val tt_prim : 'op Sopn.asmOp -> Annotations.symbol Location.located -> 'op
-
 type ('a, 'b, 'c, 'd, 'e, 'f, 'g) arch_info = {
+  arch : Utils.architecture;
   pd : Wsize.wsize;
   asmOp :
     ('a, 'b, 'c, 'd, 'e, 'f, 'g) Arch_extra.extended_op Sopn.sopn Sopn.asmOp;
   known_implicits : (CoreIdent.Name.t * string) list;
   flagnames : CoreIdent.Name.t list;
 }
+
+val tt_prim :
+  ('a, 'b, 'c, 'd, 'e, 'f, 'g) arch_info ->
+  Annotations.symbol Location.located ->
+  ('a, 'b, 'c, 'd, 'e, 'f, 'g) Arch_extra.extended_op Sopn.sopn
 
 val tt_item :
   ('a, 'b, 'c, 'd, 'e, 'f, 'g) arch_info ->

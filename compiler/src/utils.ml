@@ -177,12 +177,14 @@ type architecture =
   | X86_64
   | ARM_M4
   | RISCV
+  | OTBN
 
 let architecture_to_string arch =
   match arch with
   | X86_64 -> "x86-64"
   | ARM_M4 -> "arm-m4"
   | RISCV -> "riscv"
+  | OTBN -> "otbn"
 
 (* -------------------------------------------------------------------- *)
 type system =
