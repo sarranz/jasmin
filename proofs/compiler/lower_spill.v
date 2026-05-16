@@ -9,9 +9,12 @@ Module Import E.
 
   Definition pass : string := "lower spilling instructions".
 
-  Definition ii_loop_iterator {fun_info : Type} {FI : FunInfo fun_info} := ii_loop_iterator pass.
+  Section INFO.
+  Context {fun_info : Type} {FI : FunInfo fun_info}.
 
-  Definition error {fun_info : Type} {FI : FunInfo fun_info} ii (pp : pp_error) := {|
+  Definition ii_loop_iterator := ii_loop_iterator pass.
+
+  Definition error ii (pp : pp_error) := {|
     pel_msg := pp;
     pel_fn := None;
     pel_fi := None;
@@ -21,6 +24,7 @@ Module Import E.
     pel_internal := false
   |}.
 
+  End INFO.
 End E.
 
 Section ASM_OP.

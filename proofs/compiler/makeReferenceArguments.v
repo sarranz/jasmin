@@ -9,8 +9,12 @@ Module Import E.
 
   Definition pass : string := "make reference arguments".
 
-  Definition make_ref_error {fun_info : Type} {FI : FunInfo fun_info} := pp_internal_error_s_at pass.
+  Section INFO.
+  Context {fun_info : Type} {FI : FunInfo fun_info}.
 
+  Definition make_ref_error := pp_internal_error_s_at pass.
+
+  End INFO.
 End E.
 
 Section Section.

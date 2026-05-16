@@ -19,7 +19,7 @@ Variant box :=
   | HoVbox
   | Nobox.
 
-Section WITH_FI.
+Section INFO.
 
 Context {fun_info : Type} {FI : FunInfo fun_info}.
 
@@ -293,7 +293,7 @@ Definition ii_loop_iterator pass_name ii :=
 
 Definition error_copy_remain := "array copy remain"%string.
 
-End WITH_FI.
+End INFO.
 
 Class LoopCounter :=
   {

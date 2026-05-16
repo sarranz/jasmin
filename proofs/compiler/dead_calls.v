@@ -8,9 +8,12 @@ Module Import E.
 
   Definition pass : string := "dead calls".
 
-  Definition dead_calls_error {fun_info : Type} {FI : FunInfo fun_info} :=
-    pp_internal_error_s pass.
+  Section INFO.
+  Context {fun_info : Type} {FI : FunInfo fun_info}.
 
+  Definition dead_calls_error := pp_internal_error_s pass.
+
+  End INFO.
 End E.
 
 Section ASM_OP.

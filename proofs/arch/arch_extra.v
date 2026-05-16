@@ -270,7 +270,7 @@ End ARCH.
 (* Extra ops are non-existing architecture-specific asm instructions that we
  * replace by real asm instructions during the asmgen pass.
  *)
-Section ASM_EXTRA.
+Section INFO.
 
 Context {fun_info : Type} {FI : FunInfo fun_info}.
 
@@ -292,7 +292,7 @@ Existing Instances _asm _atoI _extra.
 
 Definition extra_op_t {reg regx xreg rflag cond asm_op extra_op} {asm_e : asm_extra reg regx xreg rflag cond asm_op extra_op} := extra_op.
 
-End ASM_EXTRA.
+End INFO.
 
 Section AsmOpI.
 

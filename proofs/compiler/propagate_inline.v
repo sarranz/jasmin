@@ -11,9 +11,12 @@ Module Import E.
 
   Definition pass : string := "propagate inline".
 
-  Definition ii_loop_iterator {fun_info : Type} {FI : FunInfo fun_info} :=
-    ii_loop_iterator pass.
+  Section INFO.
+  Context {fun_info : Type} {FI : FunInfo fun_info}.
 
+  Definition ii_loop_iterator := ii_loop_iterator pass.
+
+  End INFO.
 End E.
 
 (* -------------------------------------------------------------------------- *)

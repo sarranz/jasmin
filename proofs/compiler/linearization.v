@@ -16,7 +16,10 @@ Module E.
 
 Definition pass_name := "linearization"%string.
 
-Definition my_error {fun_info : Type} {FI : FunInfo fun_info} (msg:pp_error) :=
+Section INFO.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
+Definition my_error (msg:pp_error) :=
   {| pel_msg      := msg
    ; pel_fn       := None
    ; pel_fi       := None
@@ -27,7 +30,7 @@ Definition my_error {fun_info : Type} {FI : FunInfo fun_info} (msg:pp_error) :=
   |}.
 
 (* FIXME: are there internal errors? *)
-Definition gen_error {fun_info : Type} {FI : FunInfo fun_info} (internal: bool) (ii: option instr_info) (msg: pp_error) :=
+Definition gen_error (internal: bool) (ii: option instr_info) (msg: pp_error) :=
   {| pel_msg      := msg
    ; pel_fn       := None
    ; pel_fi       := None
@@ -37,22 +40,24 @@ Definition gen_error {fun_info : Type} {FI : FunInfo fun_info} (internal: bool) 
    ; pel_internal := internal
   |}.
 
-Definition ii_error {fun_info : Type} {FI : FunInfo fun_info} (ii: instr_info) (msg: string) :=
+Definition ii_error (ii: instr_info) (msg: string) :=
   gen_error false (Some ii) (pp_s msg).
 
-Definition error {fun_info : Type} {FI : FunInfo fun_info} (msg: string) :=
+Definition error (msg: string) :=
   gen_error false None (pp_s msg).
 
-Definition internal_error {fun_info : Type} {FI : FunInfo fun_info} (msg: string) :=
+Definition internal_error (msg: string) :=
   gen_error true None (pp_s msg).
 
-Definition assign_remains {fun_info : Type} {FI : FunInfo fun_info} (ii : instr_info) (lv: lval) (e: pexpr) :=
+Definition assign_remains (ii : instr_info) (lv: lval) (e: pexpr) :=
   gen_error false (Some ii)
     (pp_nobox [:: pp_s "The following assignment remains:"; PPEbreak;
       pp_lv lv; pp_s " = "; pp_e e; PPEbreak;
       pp_s "Is there an instruction in the target architecture that can implement it?"; PPEbreak;
       pp_s "More information may be found online: https://jasmin-lang.readthedocs.io/en/stable/misc/faq.html#linearization"
   ]).
+
+End INFO.
 
 End E.
 

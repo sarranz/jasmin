@@ -9,12 +9,14 @@ Module Import E.
 
   Definition pass : string := "dead code".
 
-  Definition ii_loop_iterator {fun_info : Type} {FI : FunInfo fun_info} :=
-    ii_loop_iterator pass.
+  Section INFO.
+  Context {fun_info : Type} {FI : FunInfo fun_info}.
 
-  Definition dead_code_error {fun_info : Type} {FI : FunInfo fun_info} :=
-    pp_internal_error_s pass.
+  Definition ii_loop_iterator := ii_loop_iterator pass.
 
+  Definition dead_code_error := pp_internal_error_s pass.
+
+  End INFO.
 End E.
 
 Section ASM_OP.

@@ -7,7 +7,10 @@ Module Import E.
 
   Definition pass : string := "loop unrolling".
 
-  Definition for_loop_remains {fun_info : Type} {FI : FunInfo fun_info} :=
+  Section INFO.
+  Context {fun_info : Type} {FI : FunInfo fun_info}.
+
+  Definition for_loop_remains :=
     {| pel_msg := pp_s "for loops remain"
     ; pel_fn := None
     ; pel_fi := None
@@ -16,8 +19,8 @@ Module Import E.
     ; pel_pass := Some pass
     ; pel_internal := false |}.
 
-  Definition inline_instr_remains {fun_info : Type} {FI : FunInfo fun_info} :=
-    {| pel_msg := pp_s "“inline”-annotated instructions remain"
+  Definition inline_instr_remains :=
+    {| pel_msg := pp_s """inline""-annotated instructions remain"
     ; pel_fn := None
     ; pel_fi := None
     ; pel_ii := None
@@ -25,6 +28,7 @@ Module Import E.
     ; pel_pass := Some pass
     ; pel_internal := false |}.
 
+  End INFO.
 End E.
 
 Section ASM_OP.

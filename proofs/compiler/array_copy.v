@@ -16,9 +16,12 @@ all y[i] is init (ok u)
 Module Import E.
   Definition pass : string := "array copy".
 
-  Definition error {fun_info : Type} {FI : FunInfo fun_info} :=
-    pp_internal_error_s pass "fresh variables are not fresh ...".
+  Section INFO.
+  Context {fun_info : Type} {FI : FunInfo fun_info}.
 
+  Definition error := pp_internal_error_s pass "fresh variables are not fresh ...".
+
+  End INFO.
 End E.
 
 Section Section.

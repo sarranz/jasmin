@@ -17,7 +17,10 @@ Module E.
 
 Definition pass_name := "one-varmap checker"%string.
 
-Definition gen_error {fun_info : Type} {FI : FunInfo fun_info} (internal:bool) (ii:option instr_info) (msg:pp_error) :=
+Section INFO.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
+Definition gen_error (internal:bool) (ii:option instr_info) (msg:pp_error) :=
   {| pel_msg      := msg
    ; pel_fn       := None
    ; pel_fi       := None
@@ -27,14 +30,16 @@ Definition gen_error {fun_info : Type} {FI : FunInfo fun_info} (internal:bool) (
    ; pel_internal := internal
   |}.
 
-Definition internal_error {fun_info : Type} {FI : FunInfo fun_info} ii msg :=
+Definition internal_error ii msg :=
   gen_error true (Some ii) (pp_s msg).
 
-Definition error {fun_info : Type} {FI : FunInfo fun_info} ii msg :=
+Definition error ii msg :=
   gen_error false (Some ii) (pp_s msg).
 
-Definition ii_loop_iterator {fun_info : Type} {FI : FunInfo fun_info} :=
+Definition ii_loop_iterator :=
   ii_loop_iterator pass_name.
+
+End INFO.
 
 End E.
 

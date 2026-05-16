@@ -32,7 +32,10 @@ Notation internal_error ii s :=
   (pp_internal_error_s_at pass ii s)
   (only parsing).
 
-Definition pp_user_error {fun_info : Type} {FI : FunInfo fun_info} ii vi (pp : pp_error) := {|
+Section INFO.
+Context {fun_info : Type} {FI : FunInfo fun_info}.
+
+Definition pp_user_error ii vi (pp : pp_error) := {|
   pel_msg := pp_vbox [:: pp; pp_s "Did you run the speculative constant time checker first?"];
   pel_fn := None;
   pel_fi := None;
@@ -42,8 +45,7 @@ Definition pp_user_error {fun_info : Type} {FI : FunInfo fun_info} ii vi (pp : p
   pel_internal := false
 |}.
 
-Definition cond_not_found {fun_info : Type} {FI : FunInfo fun_info}
-    (ii : instr_info) oe e : pp_error_loc :=
+Definition cond_not_found (ii : instr_info) oe e : pp_error_loc :=
   let pp_oe :=
     match oe with
     | None => [:: pp_s "no condition are known"]
@@ -54,47 +56,42 @@ Definition cond_not_found {fun_info : Type} {FI : FunInfo fun_info}
         [:: pp_hov ([:: pp_s "Not able to prove that"; pp_e e; pp_s "evaluate to true,"]);
             pp_hov pp_oe]).
 
-Definition lvar_variable {fun_info : Type} {FI : FunInfo fun_info}
-    (ii: instr_info) : pp_error_loc :=
+Definition lvar_variable (ii: instr_info) : pp_error_loc :=
   pp_user_error (Some ii) None
      (pp_s "misspeculation flag should be stored into register").
 
-Definition expr_variable {fun_info : Type} {FI : FunInfo fun_info}
-    (ii: instr_info) e : pp_error_loc :=
+Definition expr_variable (ii: instr_info) e : pp_error_loc :=
   pp_user_error (Some ii) None
      (pp_vbox [:: pp_s "only register allowed for misspeculation flag:";
                   pp_e e]).
 
-Definition msf_not_found_r {fun_info : Type} {FI : FunInfo fun_info}
-    (x:var_i) (known : Sv.t) : pp_error_loc :=
+Definition msf_not_found_r (x:var_i) (known : Sv.t) : pp_error_loc :=
    pp_user_error None (Some (v_info x))
      (pp_vbox [:: pp_box [:: pp_s "Variable"; pp_var x; pp_s "is not a misspeculation flag"];
                   pp_box [:: pp_s "Known are"; pp_Sv known]]).
 
-Definition msf_not_found {fun_info : Type} {FI : FunInfo fun_info}
-    (ii : instr_info) (x:var_i) (known : Sv.t) : pp_error_loc :=
+Definition msf_not_found (ii : instr_info) (x:var_i) (known : Sv.t) : pp_error_loc :=
   pp_at_ii ii (msf_not_found_r x known).
 
-Definition invalid_nb_args {fun_info : Type} {FI : FunInfo fun_info} :=
+Definition invalid_nb_args :=
   pp_internal_error_s pass "invalid number of arguments".
 
-Definition invalid_nb_lvals {fun_info : Type} {FI : FunInfo fun_info} :=
+Definition invalid_nb_lvals :=
   pp_internal_error_s pass "invalid number of left values".
 
-Definition cond_uses_mem {fun_info : Type} {FI : FunInfo fun_info}
-    (ii : instr_info) e : pp_error_loc :=
+Definition cond_uses_mem (ii : instr_info) e : pp_error_loc :=
   pp_user_error (Some ii) None
     (pp_vbox [:: pp_s "Condition has a memory access:";
                  pp_e e]).
 
-Definition lowering_failed {fun_info : Type} {FI : FunInfo fun_info}
-    (ii : instr_info) : pp_error_loc :=
+Definition lowering_failed (ii : instr_info) : pp_error_loc :=
   pp_user_error (Some ii) None
     (pp_s "The architecture does not provides protection for selective speculative load hardening").
 
-Definition invalid_type_for_msf {fun_info : Type} {FI : FunInfo fun_info}
-    (ii : instr_info) : pp_error_loc :=
+Definition invalid_type_for_msf (ii : instr_info) : pp_error_loc :=
   pp_user_error (Some ii) None (pp_s "Invalid type for msf variable").
+
+End INFO.
 
 Notation internal_error_ s :=
   (pp_internal_error_s pass s).

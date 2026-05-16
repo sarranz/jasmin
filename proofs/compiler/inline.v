@@ -9,7 +9,10 @@ Module Import E.
 
   Definition pass : string := "inlining".
 
-  Definition inline_error {fun_info : Type} {FI : FunInfo fun_info} msg := {|
+  Section INFO.
+  Context {fun_info : Type} {FI : FunInfo fun_info}.
+
+  Definition inline_error msg := {|
     pel_msg := msg;
     pel_fn := None;
     pel_fi := None;
@@ -19,6 +22,7 @@ Module Import E.
     pel_internal := true
   |}.
 
+  End INFO.
 End E.
 
 (* ** inlining

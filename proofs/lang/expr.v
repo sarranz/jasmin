@@ -1,10 +1,6 @@
 From elpi.apps Require Import derive.std.
 From HB Require Import structures.
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat eqtype div ssralg.
-Set Implicit Arguments.
-Unset Strict Implicit.
-Unset Printing Implicit Defensive.
-Set Uniform Inductive Parameters.
 Require Import oseq.
 From Coq Require Export ZArith Setoid Morphisms.
 From mathcomp Require Import word_ssrZ.
@@ -462,7 +458,7 @@ Record fun_contract := MkContra {
   }.
 
 Record _fundef (extra_fun_t: Type) := MkFun {
-  f_info   : fun_info_t; (* force typeclass argument *)
+  f_info   : fun_info_t;
   f_contract : option fun_contract;
   f_tyin   : seq atype;
   f_params : seq var_i;
@@ -646,7 +642,7 @@ Definition _sprog      := _prog stk_fun_extra sprog_extra.
 Definition to_sprog (p:_sprog) : sprog := p.
 
 (* Update functions *)
-Definition with_body eft (fd : _fundef eft) (body : cmd) := {|
+Definition with_body eft (fd:_fundef eft) (body : cmd) := {|
   f_info     := fd.(f_info);
   f_contract := fd.(f_contract);
   f_tyin     := fd.(f_tyin);
@@ -932,8 +928,7 @@ Fixpoint vars_l (l: seq var_i) :=
   end.
 
 Definition vars_fd (fd:fundef) :=
-  Sv.union (vars_l fd.(f_params))
-           (Sv.union (vars_l fd.(f_res)) (vars_c fd.(f_body))).
+  Sv.union (vars_l fd.(f_params)) (Sv.union (vars_l fd.(f_res)) (vars_c fd.(f_body))).
 
 Definition vars_p (p: fun_decls) :=
   foldr (fun f x => let '(fn, fd) := f in Sv.union x (vars_fd fd)) Sv.empty p.

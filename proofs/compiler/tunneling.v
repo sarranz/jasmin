@@ -7,7 +7,8 @@ Require Import seq_extra unionfind.
 
 
 
-Module Import E. Section E.
+Module Import E.
+Section INFO.
 
   Context {fun_info : Type} {FI : FunInfo fun_info}.
 
@@ -15,7 +16,8 @@ Module Import E. Section E.
 
   Definition tunneling_error := pp_internal_error_s pass.
 
-End E. End E.
+End INFO.
+End E.
 
 
 Section ASM_OP.

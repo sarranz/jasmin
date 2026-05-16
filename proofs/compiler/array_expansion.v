@@ -63,7 +63,7 @@ Module Import E.
   End INFO.
 End E.
 
-Section WITH_FI.
+Section INFO.
 
 Context {fun_info : Type} {FI : FunInfo fun_info}.
 
@@ -366,4 +366,4 @@ Definition expand_prog (fi : funname -> ufundef -> expand_info) (entries : seq f
 
 End ASM_OP.
 
-End WITH_FI.
+End INFO.
