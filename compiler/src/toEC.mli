@@ -6,11 +6,11 @@ type amodel =
 val ty_expr : Prog.expr -> Prog.ty
 val ty_lval : Prog.lval -> Prog.ty
 val extract :
-  ('info, (FInfo.t, 'reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op) Arch_extra.extended_op) Prog.prog ->
+  ('info, ('finfo, 'reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op) Arch_extra.extended_op) Prog.prog ->
   Utils.architecture ->
   Wsize.wsize ->
   Wsize.wsize ->
-  (FInfo.t, 'reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op) Arch_extra.extended_op Sopn.asmOp ->
+  ('finfo, 'reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op) Arch_extra.extended_op Sopn.asmOp ->
   Utils.model ->
   amodel ->
   string list ->

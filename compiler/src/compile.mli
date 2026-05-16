@@ -13,13 +13,13 @@ val preprocess :
     Raises `Typing.TyError`. *)
 
 val parse_file :
-  ('reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op) Pretyping.arch_info ->
+  ('finfo, 'reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op) Pretyping.arch_info ->
   ?idirs:(string * string) list ->
   string ->
-  (FInfo.t, 'reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op) Arch_extra.extended_op
+  ('finfo, 'reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op) Arch_extra.extended_op
   Pretyping.Env.env
   * ( unit,
-      ( FInfo.t,
+      ( 'finfo,
         'reg,
         'regx,
         'xreg,

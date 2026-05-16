@@ -38,17 +38,17 @@ let of_val_b ii v : bool =
   Obj.magic (exn_exec ii (of_val Coq_cbool v))
 
 (* ----------------------------------------------------------------- *)
-type 'asm stack =
-  | Sempty of instr_info * ('asm, FInfo.t) fundef * value list
+type ('asm, 'finfo) stack =
+  | Sempty of instr_info * ('asm, 'finfo) fundef * value list
   | Scall of
-      instr_info * ('asm, FInfo.t) fundef * value list * lval list * Vm.t * 'asm instr list * 'asm stack
-  | Sfor of instr_info * var_i * coq_Z list * 'asm instr list * 'asm instr list * 'asm stack
+      instr_info * ('asm, 'finfo) fundef * value list * lval list * Vm.t * 'asm instr list * ('asm, 'finfo) stack
+  | Sfor of instr_info * var_i * coq_Z list * 'asm instr list * 'asm instr list * ('asm, 'finfo) stack
 
-type ('syscall_state, 'asm) state =
-  { s_prog : ('asm, FInfo.t) prog;
+type ('syscall_state, 'asm, 'finfo) state =
+  { s_prog : ('asm, 'finfo) prog;
     s_cmd  : 'asm instr list;
     s_estate : 'syscall_state estate;
-    s_stk  : 'asm stack;
+    s_stk  : ('asm, 'finfo) stack;
   }
 
 exception Final of Memory.mem * values
