@@ -502,19 +502,19 @@ fail/common/inline-remains.jazz:
 
 "fail/common/inline-remains.jazz", line 4 (2) to line 8 (3):
 compilation error in function main:
-loop unrolling: “inline”-annotated instructions remain
+loop unrolling: "inline"-annotated instructions remain
 
 fail/common/inline-remains.jazz:
 
 "fail/common/inline-remains.jazz", line 4 (2) to line 8 (3):
 compilation error in function main:
-loop unrolling: “inline”-annotated instructions remain
+loop unrolling: "inline"-annotated instructions remain
 
 fail/common/inline-remains.jazz:
 
 "fail/common/inline-remains.jazz", line 4 (2) to line 8 (3):
 compilation error in function main:
-loop unrolling: “inline”-annotated instructions remain
+loop unrolling: "inline"-annotated instructions remain
 
 fail/common/not-unrollable-for-loop.jazz:
 
@@ -1451,7 +1451,7 @@ fail/unroll/x86-64/bug_150.jazz:
 
 "fail/unroll/x86-64/bug_150.jazz", line 8 (4) to line 10 (5):
 compilation error in function main:
-loop unrolling: “inline”-annotated instructions remain
+loop unrolling: "inline"-annotated instructions remain
 
 fail/unroll/x86-64/bug_29.jazz:
 

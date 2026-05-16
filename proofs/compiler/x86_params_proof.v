@@ -575,10 +575,10 @@ Proof.
         rewrite zero_extend0.
         set id := instr_desc_op (XOR U64).
         rewrite /SF_of_word msb0.
-        by have [s' -> /= ?]:= (@compile_lvals _ _ _ _ _ _ _ _ _ _ _ _ _
-             rip ii m lvs m' s [:: Reg r; Reg r]
-             id.(id_out) id.(id_tout)
-             (let vf := Some false in let: vt := Some true in (::vf, vf, vf, vt, vt & (0%R: word U64)))
+        by have [s' -> /= ?]:= (compile_lvals (rip := rip) (ii := ii) (m := m)
+             (lvs := lvs) (m' := m') (s := s) (loargs := [:: Reg r; Reg r])
+             (id_out := id.(id_out)) (id_tout := id.(id_tout))
+             (vt := let vf := Some false in let: vt := Some true in (::vf, vf, vf, vt, vt & (0%R: word U64)))
              MSB_CLEAR (refl_equal _) hw hlo hcd id.(id_check_dest)); eauto.
       t_xrbindP => -[op' asm_args] hass <- hlo /=.
       assert (h := assemble_asm_opI hass); case: h=> hca hcd hidc -> /= {hass}.
@@ -594,10 +594,10 @@ Proof.
       rewrite truncate_word_le // /x86_XOR /size_8_64 hsz64 /= wxor_xx.
       set id := instr_desc_op (XOR sz).
       rewrite /SF_of_word msb0.
-      by have [s' -> /= ?]:= (@compile_lvals _ _ _ _ _ _ _ _ _ _ _ _ _
-             rip ii m lvs m' s [:: Reg r; Reg r]
-             id.(id_out) id.(id_tout)
-             (let vf := Some false in let: vt := Some true in (::vf, vf, vf, vt, vt & (0%R: word sz)))
+      by have [s' -> /= ?]:= (compile_lvals (rip := rip) (ii := ii) (m := m)
+             (lvs := lvs) (m' := m') (s := s) (loargs := [:: Reg r; Reg r])
+             (id_out := id.(id_out)) (id_tout := id.(id_tout))
+             (vt := let vf := Some false in let: vt := Some true in (::vf, vf, vf, vt, vt & (0%R: word sz)))
              (reg_msb_flag sz) (refl_equal _) hw hlo hcd id.(id_check_dest)); eauto.
     case: xs => // ok_xs /ok_inj <-{ys} hw.
     case: rev => [ // | [ // | d ] ds ] /ok_inj <-{ops} /=.
@@ -618,10 +618,10 @@ Proof.
     rewrite /x86_VPXOR hidc /= /size_128_256 wsize_ge_U256.
     have -> /= : (U128 ≤ sz)%CMP by case: (sz) hsz64.
     rewrite wxor_xx; set id := instr_desc_op (VPXOR sz).
-    by have [s' -> /= ?] := (@compile_lvals _ _ _ _ _ _ _ _ _ _ _ _ _
-               rip ii m lvs m' s [:: a0; XReg r; XReg r]
-               id.(id_out) id.(id_tout)
-               (0%R: word sz)
+    by have [s' -> /= ?] := (compile_lvals (rip := rip) (ii := ii) (m := m)
+               (lvs := lvs) (m' := m') (s := s) (loargs := [:: a0; XReg r; XReg r])
+               (id_out := id.(id_out)) (id_tout := id.(id_tout))
+               (vt := (0%R: word sz))
                MSB_CLEAR (refl_equal _) hw hlo hcd id.(id_check_dest)); eauto.
   (* Oconcat128 *)
   + by apply assemble_extra_concat128.

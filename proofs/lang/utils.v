@@ -9,10 +9,6 @@ Require Import xseq oseq.
 From mathcomp Require Import word_ssrZ.
 
 Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then remove the line when requiring MathComp >= 2.6 *)
-Set Uniform Inductive Parameters.
-Set Implicit Arguments.
-Unset Strict Implicit.
-Unset Printing Implicit Defensive.
 
 Local Open Scope Z_scope.
 
@@ -1587,9 +1583,6 @@ Proof.
     by apply: Z.lt_trans H2 H1.
   apply Z.compare_eq.
 Qed.
-
-(* -------------------------------------------------------------------- *)
-(* Comparison instance for Uint63.int via Sint63. Used by Cident.cmp.   *)
 
 Definition int_cmp (x y : PrimInt63.int) : comparison := (x ?= y)%sint63.
 

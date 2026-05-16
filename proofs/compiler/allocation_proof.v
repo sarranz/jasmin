@@ -222,7 +222,7 @@ Qed.
 
 Lemma check_varP wdb r1 r1' vm1 vm2 vm1' x1 x2 v1 v2 (h:M.v_compat_type x1 x2):
   eq_alloc r1 vm1 vm2 ->
-  @check_var_aux _ _ _ x1 x2 r1 h = ok r1' ->
+  check_var_aux (x1 := x1) (x2 := x2) r1 h = ok r1' ->
   set_var wdb vm1 x1 v1 = ok vm1' ->
   value_uincl v1 v2 ->
   exists2 vm2' : Vm.t,

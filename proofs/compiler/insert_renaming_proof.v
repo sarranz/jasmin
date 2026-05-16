@@ -218,7 +218,7 @@ Section WITH_PARAMS.
       sem_call p ev scs mem fn va scs' mem' vr →
       Pfun scs mem fn va scs' mem' vr.
     Proof.
-      apply: (@sem_call_Ind _ _ _ _ _ _ _ _ _ _ _ p ev Pc Pi_r Pi Pfor Pfun); clear.
+      apply: (sem_call_Ind (P := p) (ev := ev) (Pc := Pc) (Pi_r := Pi_r) (Pi := Pi) (Pfor := Pfor) (Pfun := Pfun)); clear.
       - by move => * > *; eexists; last constructor.
       - move => s1 s2 s3 i c _ hi _ hc vm1 hvm1.
         case: (hi vm1 hvm1) => vm2 hvm2 {}hi.

@@ -361,7 +361,7 @@ Instance x86_extra : asm_extra register register_ext xmm_register rflag condt x8
 
 (* This concise name is convenient in OCaml code. *)
 Definition x86_extended_op :=
-  @extended_op _ _ _ _ _ _ _ _ _ x86_extra.
+  extended_op (asm_e := x86_extra).
 
 Definition Ox86 o : @sopn x86_extended_op _ := Oasm (BaseOp (None, o)).
 

@@ -394,7 +394,7 @@ Proof.
   exact: values_uincl_refl.
 Qed.
 
-Lemma compiler_third_partP returned_params (p p' : @sprog _pd _ _asmop _ _) :
+Lemma compiler_third_partP returned_params (p p' : sprog (pd := _pd) (asmop := _asmop)) :
   compiler_third_part aparams cparams returned_params p = ok p' →
   [/\
     ∀ fn (gd: pointer) scs m va scs' m' vr,
@@ -440,7 +440,7 @@ Proof.
   move: (alloc_pc _ get_fdc).
   have [_ _ ->]:= dead_code_fd_meta ok_fdc.
   rewrite /sf_total_stack.
-  have [ <- <- <- ] := [elaborate @check_fundef_meta _ _ _ _ _ _ _ _ _ _ _ (_, fda) _ _ _ ok_fdb].
+  have [ <- <- <- ] := [elaborate check_fundef_meta (ffd1 := (_, fda)) ok_fdb].
   have [_ _ ->]:= dead_code_fd_meta ok_fda.
   done.
 Qed.
@@ -471,7 +471,7 @@ Qed.
 Lemma compiler_front_endP
   entries
   (p: prog)
-  (p': @sprog _pd _ _asmop _ _)
+  (p': sprog (pd := _pd) (asmop := _asmop))
   (gd : pointer)
   scs m mi fn va scs' m' vr :
   compiler_front_end aparams cparams entries p = ok p' →
@@ -687,7 +687,7 @@ Qed.
 Lemma compiler_front_endP_uincl
   entries
   (p: prog)
-  (p': @sprog _pd _ _asmop _ _)
+  (p': sprog (pd := _pd) (asmop := _asmop))
   (gd : pointer)
   scs m mi fn va scs' m' vr :
   compiler_front_end aparams cparams entries p = ok p' →
@@ -824,7 +824,7 @@ Import sem_one_varmap.
 
 Lemma compiler_back_endP
   entries
-  (p : @sprog _pd _ _asmop _ _)
+  (p : sprog (pd := _pd) (asmop := _asmop))
   (tp : lprog)
   (rip : word Uptr)
   (scs : syscall_state)
@@ -1038,7 +1038,7 @@ Qed.
 
 Lemma compiler_back_end_to_asmP
   entries
-  (p : @sprog _pd _ _asmop _ _)
+  (p : sprog (pd := _pd) (asmop := _asmop))
   (xp : asm_prog)
   (rip : word Uptr)
   scs (m : mem) scs' (m' : mem)
