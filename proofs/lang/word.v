@@ -15,6 +15,8 @@ Import word_ssrZ.
 Import GRing.Theory Num.Theory Order.POrderTheory Order.TotalTheory.
 Import ssrnat.
 
+Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then remove the line when requiring MathComp >= 2.6 *)
+
 Local Open Scope Z_scope.
 
 (* -------------------------------------------------------------- *)
@@ -690,13 +692,13 @@ Proof.
   case: leP => hic /=;
     last (rewrite wbit_lsl_lo //; apply/leP; lia).
   have eqi : (Z.to_nat c + (i - Z.to_nat c))%nat = i.
-   * by rewrite /addn /addn_rec; zify; rewrite Nat2Z.inj_sub; lia.
+   * by rewrite /addn; zify; rewrite Nat2Z.inj_sub; lia.
   have := wbit_lsl w (Z.to_nat c) (i - Z.to_nat c).
   by rewrite eqi => ->.
 Qed.
 
 Local Ltac lia :=
-  rewrite /addn /addn_rec /subn /subn_rec; Lia.lia.
+  rewrite /addn /subn; Lia.lia.
 
 Lemma wunsigned_wshl sz (x: word sz) c :
   wunsigned (wshl x (Z.of_nat c)) = (wunsigned x * 2 ^ Z.of_nat c) mod wbase sz.
@@ -1208,7 +1210,7 @@ have him' : (i <= m')%nat by apply/leP; lia.
 rewrite him' andbT.
 case: leP => //= hci.
 have -> // : (i - Z.to_nat c <= m)%nat.
-apply/leP; rewrite /subn /subn_rec; lia.
+apply/leP; lia.
 Qed.
 
 Lemma wand_zero_extend sz sz' (x y: word sz') :

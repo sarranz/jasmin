@@ -12,6 +12,8 @@ Require Export stack_alloc stack_alloc_proof_1.
 From mathcomp Require Import ring.
 From Coq Require Import Utf8 Lia.
 
+Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then remove the line when requiring MathComp >= 2.6 *)
+
 Local Open Scope seq_scope.
 Local Open Scope Z_scope.
 
@@ -36,6 +38,7 @@ Context
   {ep : EstateParams syscall_state}
   {spp : SemPexprParams}
   {sip : SemInstrParams asm_op syscall_state}
+  {LC : LoopCounter}
   (rip : pointer)
   (no_overflow_glob_size : no_overflow rip glob_size)
   (mglob : Mvar.t (Z * wsize))
@@ -156,9 +159,10 @@ Proof.
   + by have := size_slot_gt0 x; lia.
   + exists (l0 ++ rdata ++ vdata).
     rewrite heq -!catA; split => //.
-    have ? := size_slot_gt0 x.
-    rewrite -Nat2Z.inj_iff !size_cat !Nat2Z.inj_add Z2Nat.id //; last by lia.
-    by rewrite hsz1 hsz2 heqsz !Z2Nat.id //; first ring; lia.
+    have slot_x_gt0 := size_slot_gt0 x.
+    rewrite !size_cat hsz1 hsz2 heqsz; clear -hbase1 h1 slot_x_gt0.
+    do 2![rewrite -Z2Nat.z2nD /GRing.zero/=; [|by apply/ZleP; lia..]].
+    lia.
   move=> x1 ofs1 ws1.
   rewrite Mvar.setP.
   case: eqP => [|_].
@@ -3704,7 +3708,7 @@ Proof.
   have /= := Hwhile _ _ _ _ _ _ table2 rmap2 table3 rmap3 ii c hpmap hwf sao.
   have hsao3 := stack_stable_wf_sao (sem_stack_stable_sprog hs2) hsao2.
   have hext3 := valid_state_extend_mem hwf hvs2 hext2 hvs3 (sem_validw_stable_uprog hhi2) (sem_validw_stable_sprog hs2).
-  rewrite Loop.nbP /= hc1 /= he /= hc2 /= hinclt4 hinclr4 /=.
+  rewrite loop_counterP /= hc1 /= he /= hc2 /= hinclt4 hinclr4 /=.
   move=> /(_ erefl _ _ _ hvs3 hext3 hsao3) [s4' [vme4 [/sem_seq1_iff/sem_IE hs3 hvs4 vme_eq3]]].
   exists s4', vme4; split=> //.
   + by apply sem_seq1; constructor; apply: Ewhile_true; eassumption.
@@ -4450,7 +4454,7 @@ Proof.
     have /vs_top_stack -> := hvs.
     by apply is_align_m.
 
-  apply wequiv_call_core with sa_pre sa_post Rv.
+  apply wequiv_call_core_wa with sa_pre sa_post Rv => //.
   + move => _ _ vargs1 [-> ->] hvargs1.
     have [vargs2 [*]]:= alloc_call_argsP hwf_Slots.(wfsl_no_overflow) hwf_Slots.(wfsl_disjoint)
       hwf_Slots.(wfsl_align) hwf_Slots.(wfsl_not_glob) hwf_pmap hvs hcargs hvargs1.
@@ -4803,6 +4807,7 @@ Context
   {ep : EstateParams syscall_state}
   {spp : SemPexprParams}
   {sip : SemInstrParams asm_op syscall_state}
+  {LC : LoopCounter}
   (shparams : slh_lowering.sh_params)
   (hshparams : slh_lowering_proof.h_sh_params shparams)
   (saparams : stack_alloc_params)

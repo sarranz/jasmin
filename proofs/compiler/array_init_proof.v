@@ -4,6 +4,8 @@ Require Import psem_core psem compiler_util.
 Require Export array_init.
 Import Utf8.
 
+Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then remove the line when requiring MathComp >= 2.6 *)
+
 Local Open Scope seq_scope.
 
 Section WITH_PARAMS.
@@ -306,7 +308,7 @@ Proof.
     by apply hu.
   + by move=> xs tg o es ii; apply wequiv_opn_rel_uincl with checker_st_uincl tt.
   + by move=> xs sc es ii; apply wequiv_syscall_rel_uincl with checker_st_uincl tt.
-  + by move=> a ii; apply wequiv_assert_rel_uincl with checker_st_uincl.
+  + by move=> a ii; apply wequiv_noassert.
   + by move=> e c1 c2 hc1 hc2 ii; apply wequiv_if_rel_uincl with checker_st_uincl tt tt tt.
   + by move=> > hc ii; apply wequiv_for_rel_uincl with checker_st_uincl tt tt.
   + by move=> > ?? ii; apply wequiv_while_rel_uincl with checker_st_uincl tt.
@@ -699,7 +701,7 @@ Proof.
  rewrite /add_init_fd /=.
  set I := (I in add_init_c _ I _).
  set cm := add_init_c _ _ _.
- set fd' := {| f_info := _|}.
+ set fd' := with_body _ _.
  move=> s1 hinit.
  exists s1=> //; exists (cmpl_inv I), (cmpl_inv cm.2); split => //.
  + move: hinit; rewrite /initialize_funcall.

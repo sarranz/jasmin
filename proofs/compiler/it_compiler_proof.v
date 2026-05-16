@@ -53,6 +53,8 @@ Require Import
   asm_gen_proof
   sem_params_of_arch_extra.
 
+Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then remove the line when requiring MathComp >= 2.6 *)
+
 Section IT.
 
 Context
@@ -132,7 +134,7 @@ Lemma it_unrollP {dc : DirectCall} (fn : funname) (p p' : prog) ev :
   wiequiv_f (dc1 := dc) (dc2 := dc)
     p p' ev ev pre_incl fn fn post_incl.
 Proof.
-rewrite /unroll_loop; t_xrbindP; elim: Loop.nb p => [// | n hind] /= p pu hpu.
+rewrite /unroll_loop; t_xrbindP; elim: loop_counter p => [// | n hind] /= p pu hpu.
 case hu: unroll_prog => [pu' []]; last first.
 - move=> [<-]; exact: it_postprocessP hpu.
 move: hu; rewrite (surjective_pairing (unroll_prog pu)) => -[? _]; subst pu'.
@@ -193,7 +195,7 @@ apply: wiequiv_f_trans_UU_EU; first exact (it_wi2w_progP _ _ ok_paw).
 apply: wiequiv_f_trans_UU_EU; first exact: (it_insert_renaming_callP (insert_renaming cparams)).
 apply: wiequiv_f_trans_UU_EU; first exact: (it_array_copy_fdP _ ok_pa0).
 apply: wiequiv_f_trans_EE_EU; first exact: it_add_init_callP.
-apply: wiequiv_f_trans_EE_EU; first exact: (it_alloc_callP _ ok_pb).
+apply: wiequiv_f_trans_EE_EU; first exact: (it_lower_spill_fdP _ ok_pb).
 apply: wiequiv_f_trans_UU_EU.
 apply [elaborate it_inliningP (ev := ev) ok_fn ok_pa ].
 apply: wiequiv_f_trans_UU_EU; first exact: it_unrollP ok_pc.

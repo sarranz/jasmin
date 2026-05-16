@@ -49,8 +49,8 @@ End E.
 Section REMOVE.
 
   Context `{asmop:asmOp}.
-  Context (fresh_id : glob_decls -> var -> Ident.ident).
   Context {fcp : FlagCombinationParams}.
+  Context {LC : LoopCounter}.
 
   Notation venv := (Mvar.t var).
 
@@ -74,9 +74,10 @@ Section REMOVE.
   Definition add_glob ii (x: var) (gd: glob_decls) (gv: glob_value) :=
     if has (check gv) gd then ok gd
     else
-      let gx := {| vtype := vtype x; vname := fresh_id gd x |} in
-      if has (fun g' => g'.1 == gx) gd then Error (rm_glob_error_dup ii gx)
-      else ok ((gx, gv) :: gd).
+      (* at that point of the compiler, liverange splitting made variable names
+         unique, so we keep the same name *)
+      if has (fun g' => g'.1 == x) gd then Error (rm_glob_error_dup ii x)
+      else ok ((x, gv) :: gd).
 
   Definition evaluate_bytes ii x : pexprs -> result pp_error_loc values :=
     mapM (fun pe =>
@@ -302,8 +303,7 @@ Section REMOVE.
           Let es  := mapM (remove_glob_e ii env) es in
           ok (env, [::MkI ii (Csyscall lvs o es)])
         | Cassert a =>
-          Let a := sndM (remove_glob_e ii env) a in
-          ok (env, [::MkI ii (Cassert a)])
+          Error (pp_safety_remains_at E.pass ii)
         | Cif e c1 c2 =>
           Let e := remove_glob_e ii env e in
           Let envc1 := remove_glob remove_glob_i env c1 in
@@ -321,7 +321,7 @@ Section REMOVE.
             Let e := remove_glob_e ii env1 e in
             Let envc2 := remove_glob remove_glob_i env1 c2 in
             ok (Check2_r e envc1 envc2) in
-          Let lr := loop2 check_c Loop.nb env in
+          Let lr := loop2 check_c loop_counter env in
           let: (Loop2_r e c1 c2 env) := lr in
           ok (env, [::MkI ii (Cwhile a c1 e info c2)])
         | Cfor xi (d,e1,e2) c =>
@@ -330,7 +330,7 @@ Section REMOVE.
             Let e1 := remove_glob_e ii env e1 in
             Let e2 := remove_glob_e ii env e2 in
             let check_c env := remove_glob remove_glob_i env c in
-            Let envc := loop check_c Loop.nb env in
+            Let envc := loop check_c loop_counter env in
             let: (env, c) := envc in
             ok (env, [::MkI ii (Cfor xi (d,e1,e2) c)])
         | Ccall lvs fn es =>
@@ -349,15 +349,8 @@ Section REMOVE.
       Let _ := mapM check_var f.(f_params) in
       Let _ := mapM check_var f.(f_res) in
       Let envc := remove_glob remove_glob_i env f.(f_body) in
-      ok
-        {| f_info   := f.(f_info);
-           f_tyin   := f.(f_tyin);
-           f_params := f.(f_params);
-           f_body   := envc.2;
-           f_tyout  := f.(f_tyout);
-           f_res    := f.(f_res);
-           f_extra  := f.(f_extra);
-        |}.
+      ok (with_body f envc.2).
+
   End GD.
 
   Definition remove_glob_prog (p:uprog) :=

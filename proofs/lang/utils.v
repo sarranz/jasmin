@@ -8,6 +8,7 @@ From Coq Require Import ZArith Zwf Setoid Morphisms CMorphisms CRelationClasses 
 Require Import xseq oseq.
 From mathcomp Require Import word_ssrZ.
 
+Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then remove the line when requiring MathComp >= 2.6 *)
 
 Local Open Scope Z_scope.
 
@@ -1255,14 +1256,15 @@ Definition conc_mapM
 
 Section CTRANS.
 
-  Definition ctrans c1 c2 := nosimpl (
+  Definition ctrans c1 c2 :=
     match c1, c2 with
     | Eq, _  => Some c2
     | _ , Eq => Some c1
     | Lt, Lt => Some Lt
     | Gt, Gt => Some Gt
     | _ , _  => None
-    end).
+    end.
+  Arguments ctrans : simpl never.
 
   Lemma ctransI c : ctrans c c = Some c.
   Proof. by case: c. Qed.
@@ -1895,6 +1897,14 @@ Proof.
   by rewrite nth_default in hnth.
 Qed.
 
+Lemma onth_size (A:Type) (l:list A) n a :
+  onth l n = Some a -> (n < size l)%nat.
+Proof.
+  rewrite onth_nth => h.
+  rewrite - (size_map Some).
+  by apply (nth_not_default h).
+Qed.
+
 Lemma all_behead {A} {p : A -> bool} {xs : seq A} :
   all p xs -> all p (behead xs).
 Proof.
@@ -1935,8 +1945,6 @@ Variant and9 (P1 P2 P3 P4 P5 P6 P7 P8 P9 : Prop) : Prop :=
 Variant and10 (P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 : Prop) : Prop :=
   And10 of P1 & P2 & P3 & P4 & P5 & P6 & P7 & P8 & P9 & P10.
 
-Notation "[ /\ P1 , P2 , P3 , P4 , P5 & P6 ]" :=
-  (and6 P1 P2 P3 P4 P5 P6) : type_scope.
 Notation "[ /\ P1 , P2 , P3 , P4 , P5 & P6 ]" :=
   (and6 P1 P2 P3 P4 P5 P6) : type_scope.
 Notation "[ /\ P1 , P2 , P3 , P4 , P5 , P6 & P7 ]" :=

@@ -16,6 +16,8 @@ Require Import fexpr fexpr_sem fexpr_facts.
 Require Export linearization linear_sem linear_facts.
 Import Memory.
 
+Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then remove the line when requiring MathComp >= 2.6 *)
+
 #[local] Existing Instance withsubword.
 #[local] Opaque eval_jump.
 
@@ -2503,7 +2505,7 @@ Section PROOF.
     move: a => []; last by rewrite cats0 -hpc setpc_id.
     rewrite size_cat /= addn1.
     move=> hbody hpc' /lsem_split_start [? | [ls0 hsem1 hsem]].
-    - subst ls'. move: hpc. rewrite hpc' /addn /addn_rec. clear; lia.
+    - subst ls'. move: hpc. rewrite hpc' /addn. clear; lia.
     apply: (lsem_trans _ hsem).
     move: hsem1.
     rewrite /lsem1 /step (find_instr_skip0 hbody) //= -hpc.
@@ -2520,7 +2522,7 @@ Section PROOF.
     lsem p' (setpc ls (size P).+1) ls'.
   Proof.
     move=> hbody hpc' /lsem_split_start [? | [ls0 hsem1 hsem]].
-    - subst ls'. move: hpc. rewrite hpc' /addn /addn_rec. clear; lia.
+    - subst ls'. move: hpc. rewrite hpc' /addn. clear; lia.
     apply: (lsem_trans _ hsem).
     move: hsem1.
     rewrite /lsem1 /step (find_instr_skip0 hbody) //= -hpc.
@@ -2540,7 +2542,7 @@ Section PROOF.
     lsem p' (setpc ls (size P + size Q).+2) ls'.
   Proof.
     move=> hbody hpc' Dp Dq /lsem_split_start [? | [ls0 hsem1 hsem]].
-    - subst ls'. move: hpc. rewrite hpc' /addn /addn_rec. clear; lia.
+    - subst ls'. move: hpc. rewrite hpc' /addn. clear; lia.
     apply: (lsem_trans _ hsem).
     move: hsem1.
     rewrite /lsem1 /step (find_instr_skip0 hbody) //=.
@@ -3074,8 +3076,8 @@ Section PROOF.
 
   Local Lemma Hcall : sem_Ind_call p var_tmps Pi_r Pfun.
   Proof.
-    move=> ii k s1 s2 res fn' args xargs xres
-      ok_xargs ok_xres exec_call ih fn lbl /checked_iE[] fd ok_fd chk_call.
+    move=> ii k s1 s2 res fn' args
+      exec_call ih fn lbl /checked_iE[] fd ok_fd chk_call.
     case linear_eq: linear_i => [lbli li].
     move=> ls m1 vm2 P Q M X D C hpc hfn sp hsp S MAX.
     move: chk_call => /=.
@@ -4500,20 +4502,7 @@ Section PROOF.
           rewrite -ts_rsp (alloc_stack_top_stack ok_m1').
           rewrite top_stack_after_aligned_alloc // wrepr_opp.
           have := ass_ioff (alloc_stackP ok_m1'); rewrite -hioff => uptr_sz.
-          clear - stk_sz_pos stk_extra_sz_pos frame_noof uptr_sz.
-          have := round_ws_range (sf_align (f_extra fd)) (sf_stk_sz (f_extra fd) + sf_stk_extra_sz (f_extra fd)).
-          rewrite -/(stack_frame_allocation_size (f_extra fd)) => hround.
-          set L := stack_limit (emem s1).
-          have L_range := wunsigned_range L.
-          move: (stack_frame_allocation_size _) hround frame_noof => SF hround frame_noof.
-          move: (top_stack (emem s1)) => T above_limit.
-          have SF_range : (0 <= SF < wbase Uptr)%Z.
-          - by move: (sf_stk_sz (f_extra fd)) (sf_stk_extra_sz (f_extra fd)) stk_sz_pos stk_extra_sz_pos hround; lia.
-          have X : (wunsigned (T - wrepr Uptr SF) <= wunsigned T)%Z.
-          * move: (sf_stk_sz _) stk_sz_pos above_limit => n; lia.
-          have {X} TmS := wunsigned_sub_small SF_range X.
-          rewrite TmS in above_limit.
-          lia.
+          by clear -uptr_sz; lia.
         exists m1s; split=> //.
         + apply: (eval_lsem_step1 (pre := [:: P1 ]) ok_body) => //.
           apply: (spec_lstore hliparams) => //=.

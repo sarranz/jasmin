@@ -13,7 +13,8 @@ Context
   {asm_op syscall_state : Type}
   {ep : EstateParams syscall_state}
   {spp : SemPexprParams}
-  {sip : SemInstrParams asm_op syscall_state}.
+  {sip : SemInstrParams asm_op syscall_state}
+  {LC : LoopCounter}.
 
 Context
   (remove_wint_annot: funname -> fundef -> fundef)
@@ -345,7 +346,7 @@ Proof.
   + by rewrite get_map_prog Hfun.
   move=> {Hfun}.
   case: f htra Hi Hw Hc Hres Hfull Hfi hfun' => /=.
-  move=> info tyin params body tyout res extra htra hi hw hc hres hfull hfi hfun'.
+  move=> info fci tyin params body tyout res extra htra hi hw hc hres hfull hfi hfun'.
   have [vargs2 {}htra hu1] := mapM2_dc_truncate_val htra hu.
   have [vm1 {}hw hu2] := [elaborate write_vars_uincl (vm_uincl_refl _) hu1 hw].
   have [vm' {}hc hu3] := hc _ hu2.

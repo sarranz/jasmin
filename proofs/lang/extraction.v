@@ -52,8 +52,6 @@ Extract Constant ident.Cident.tag     => "CoreIdent.Cident.tag".
 Extract Constant ident.Cident.id_name => "CoreIdent.Cident.id_name".
 Extract Constant ident.Cident.id_kind => "CoreIdent.Cident.id_kind".
 
-Extract Constant ident.Cident.spill_to_mmx => "CoreIdent.Cident.spill_to_mmx".
-
 (*
 Extract Constant otbn_decl.TODO_OTBN =>
   "(fun msg -> failwith (""TODO_OTBN: "" ^ Conv.string_of_cstring msg))".
@@ -72,6 +70,7 @@ Separate Extraction
   stack_zero_strategy
   lower_spill.spill_uprog
   psem_defs
+  sem_params
   sem_params_of_arch_extra
   arch_decl
   arch_extra

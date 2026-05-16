@@ -1,9 +1,11 @@
 (* ** Imports and settings *)
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
-Require Import psem psem_facts constant_prop constant_prop_proof.
+Require Import psem psem_facts compiler_util constant_prop constant_prop_proof.
 Require Export propagate_inline.
 
 Import Utf8 ZArith Morphisms Classes.RelationClasses.
+
+Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then remove the line when requiring MathComp >= 2.6 *)
 
 Local Open Scope seq_scope.
 
@@ -19,6 +21,7 @@ Context
   {sip : SemInstrParams asm_op syscall_state}
   {pT : progT}
   {sCP : semCallParams}
+  {LC : LoopCounter}
 .
 
 Definition dfl_cel :=
@@ -479,7 +482,7 @@ Section PROOF.
     rewrite /=; t_xrbindP => -[[[pi2' c1'] e'] c2'] hl [<-] /=.
     have [pi [pi3 [hc1 hc2 he [hi1 hi2]]]]:= loop_whileP hl; subst e'.
     exists pi, pi3, c1', c2'; split => //.
-    by rewrite compiler_util.Loop.nbP /= hc1 /= hc2 /= hi1 /=.
+    by rewrite loop_counterP /= hc1 /= hc2 /= hi1 /=.
   Qed.
 
   Local Lemma loop_forP ii x c n pi1 pi c' :
@@ -709,10 +712,10 @@ Section PROOF.
 
   Local Lemma Hproc : sem_Ind_proc p1 ev Pc Pfun.
   Proof.
-    move=> scs1 m1 scs2 m2 fn [ii si p c so r ev0] /= vargs' vargs s0 s1 s2 vres vres'.
+    move=> scs1 m1 scs2 m2 fn fd /= vargs' vargs s0 s1 s2 vres vres'.
     move=> hget htr hinit hwr _ hc hres hrtr hscs hfin.
     have [fd2 /=]:= all_checked hget.
-    t_xrbindP => -[pi2 c'] hc_ ? hget2 vargs1 hvargs1; subst fd2.
+    rewrite /pi_fun; t_xrbindP => -[pi2 c'] hc_ ? hget2 vargs1 hvargs1; subst fd2.
     have [vargs1' {}htr hua] := mapM2_dc_truncate_val htr hvargs1.
     have [{hua hwr} vm1 hwr hu] := write_vars_uincl (vm_uincl_refl _) hua hwr.
     have [{hc hc_ hu}vm2 [hu' hv' hs]] := hc _ _ _ hc_ hu (valid_pi_empty _ _).
@@ -869,7 +872,7 @@ Section PROOF.
       + by rewrite /check_lvals /= /check_lvals_pi heq.
       by apply fs_uincl_syscall.
     + case => msg e ii d _ /ok_inj<-.
-      by apply wequiv_assert_rel_uincl with checker_pi.
+      by apply wequiv_noassert.
     + move=> e c1 c2 hc1 hc2 ii d di /=; t_xrbindP => di1 /hc1{}hc1 di2 /hc2{}hc2 <- /=.
       apply wequiv_if_rel_uincl_R with checker_pi d di1.1 di2.1 => //.
       + by apply/st_pi_incl/incl_merge_l.

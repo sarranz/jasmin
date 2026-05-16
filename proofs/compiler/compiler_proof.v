@@ -46,6 +46,8 @@ Require Import
 Import Utf8.
 Import wsize.
 
+Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then remove the line when requiring MathComp >= 2.6 *)
+
 #[local] Existing Instance withsubword.
 
 Section SHARED.
@@ -232,7 +234,7 @@ Lemma unrollP  {dc : DirectCall} (fn : funname) (p p' : prog) ev scs mem va va' 
        /\ List.Forall2 value_uincl vr vr'.
 Proof.
   rewrite /unroll_loop; t_xrbindP.
-  elim: Loop.nb p va va' vr => //= n Hn p va va' vr p1 ok_p1.
+  elim: loop_counter p va va' vr => //= n Hn p va va' vr p1 ok_p1.
   case e: unroll_prog => [ p2 [] ]; last first.
   { move/ok_inj => {n Hn} <- E A.
     have [ vr' {} E R ] := postprocessP ok_p1 E A.
@@ -434,7 +436,7 @@ Proof.
   move: (alloc_pc _ get_fdc).
   have [_ _ ->]:= dead_code_fd_meta ok_fdc.
   rewrite /sf_total_stack.
-  have [ <- <- <- ] := [elaborate @check_fundef_meta _ _ _ _ _ _ _ _ (_, fda) _ _ _ ok_fdb].
+  have [ <- <- <- ] := [elaborate @check_fundef_meta _ _ _ _ _ _ _ _ _ (_, fda) _ _ _ ok_fdb].
   have [_ _ ->]:= dead_code_fd_meta ok_fda.
   done.
 Qed.

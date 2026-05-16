@@ -11,6 +11,8 @@ Require
   expr_facts
   constant_prop_proof.
 
+Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then remove the line when requiring MathComp >= 2.6 *)
+
 Section CONST_PROP.
 
   Import constant_prop_proof.
@@ -207,7 +209,10 @@ Import Env.
 
 Section WITH_PARAMS.
 
-Context {fcparams : flag_combination.FlagCombinationParams}.
+Context
+  {LC : LoopCounter}
+  {fcparams : flag_combination.FlagCombinationParams}
+.
 
 Lemma empty_msf_vars x :
   ~~ is_msf_var empty x.
@@ -273,6 +278,7 @@ Context
   {ep : EstateParams syscall_state}
   {spp : SemPexprParams}
   {sip : SemInstrParams asm_op syscall_state}
+  {LC : LoopCounter}
 .
 
 Definition wf_vars (msf_vars: Sv.t) (vm:Vm.t) :=
@@ -638,7 +644,7 @@ Section LOWER_SLHO.
          split => //;
          apply: (hshp_spec_lower hshparams) hsemes hexec hwrite.
     move: hwf hcheck hsemes hexec hwrite.
-    clear.
+    clear hlower.
     case: slho => [|||ws|ws sz|ws sz].
     - exact: lower_SLHinit.
     - exact: lower_SLHupdate.
@@ -1066,7 +1072,7 @@ Proof.
   have hcheck :
     check_i fun_info (MkI ii (Cwhile al c0 cond cond_info c1)) env_fix
     = ok (Env.update_cond env0 (enot cond)).
-  - by rewrite /= hmem /= Loop.nbP /= hcheck0 /= hcheck1 /= hle1.
+  - by rewrite /= hmem /= loop_counterP /= hcheck0 /= hcheck1 /= hle1.
 
   have [hsem hwf0'] := hind _ _ _ _ hwffix hcheck hlower.
 
@@ -1165,7 +1171,7 @@ Qed.
 
 Lemma Hproc : sem_Ind_proc p ev Pc Pfun.
 Proof.
-  move=> scs1 m1 _ _ fn [f_i f_tyi f_p f_b f_tyo f_r f_e] /= vargs vargs' s0 s1 s2 vres vres'
+  move=> scs1 m1 _ _ fn fd /= vargs vargs' s0 s1 s2 vres vres'
     hf htargs hinit hwargs _ hrec hrres htres -> ->.
   move: (hp); rewrite /lower_slh_prog; t_xrbindP => hent fds hmap heq.
   have [fd' + hget]:= get_map_cfprog_name_gen hmap hf.
@@ -1208,7 +1214,7 @@ Proof.
    move: (hp); rewrite /lower_slh_prog; t_xrbindP => /allP -/(_ _ hent).
    rewrite heq => /= hall fds hmap heq1.
    have [fd' + hget'] := get_map_cfprog_name_gen hmap hget.
-   rewrite /lower_fd /check_fd /= heq; t_xrbindP=> z hz _ _ _ _ _ {heq hsem}.
+   rewrite /lower_fd /check_fd /= heq; t_xrbindP => z hz _ _ _ _ _ _ _ {heq hsem}.
    apply: all_is_slh_none hall.
    rewrite -(size_init_fun_env hz).
    by have := size_mapM2 hm; rewrite size_map => -[-> _].
@@ -1255,8 +1261,8 @@ Lemma lower_fdP fn fd fd' :
     & f_extra fd' = f_extra fd
   ].
 Proof.
-case: fd; case: fd'; rewrite /lower_fd;
-  by t_xrbindP=> /= > -> _ -> -> -> -> -> -> -> ->.
+case: fd; case: fd'; rewrite /lower_fd.
+by t_xrbindP=> /= > -> ? -> // *; subst.
 Qed.
 
 Definition st_eq (env : Env.t) (s t : estate) : Prop :=

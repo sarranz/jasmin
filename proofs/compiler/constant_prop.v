@@ -383,6 +383,8 @@ Fixpoint const_prop_e (m:cpm) e :=
   | Pif t e e1 e2 => s_if t (const_prop_e m e) (const_prop_e m e1) (const_prop_e m e2)
   end.
 
+Definition const_prop_assert (m:cpm) (e:eassert) := e.
+
 End GLOBALS.
 
 Definition empty_cpm : cpm := @Mvar.empty const_v.
@@ -497,7 +499,7 @@ Fixpoint const_prop_ir (m:cpm) ii (ir:instr_r) : cpm * cmd :=
     (m, [:: MkI ii (Csyscall xs o es) ])
 
   | Cassert a =>
-    let b := const_prop_e without_globals m a.2 in
+    let b := const_prop_assert m a.2 in
     (m, [:: MkI ii (Cassert (a.1, b)) ])
 
   | Cif b c1 c2 =>
@@ -549,9 +551,8 @@ Section Section.
 Context {pT: progT}.
 
 Definition const_prop_fun (gd: glob_decls) (f: fundef) :=
-  let 'MkFun ii si p c so r ev := f in
-  let (_, c) := const_prop (const_prop_i gd) empty_cpm c in
-  MkFun ii si p c so r ev.
+  let c := const_prop (const_prop_i gd) empty_cpm f.(f_body) in
+  with_body f c.2.
 
 Definition const_prop_prog (p:prog) : prog := map_prog (const_prop_fun p.(p_globs)) p.
 
