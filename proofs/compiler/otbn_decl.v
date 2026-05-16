@@ -246,20 +246,25 @@ Instance otbn_fcp : FlagCombinationParams := { fc_of_cfc := fc_of_cfc; }.
 (* -------------------------------------------------------------------------- *)
 (* Immediate checkers. *)
 
+Definition check_nbits
+  (s : signedness) (n : positive) (ws : wsize) (w : word ws) : bool :=
+  let '(lo, hi) := signedness_bounds s n in
+  let i := if s is Signed then wsigned w else wunsigned w in
+  [&& lo <=? i & i <? hi ]%Z.
+
+Definition check_bn_shift (i : Z) : bool :=
+  [&& 0 <=? i, i <=? 248 & i mod 8 == 0]%Z.
+
+Definition check_mulqacc_shift (i : Z) : bool :=
+  [&& 0 <=? i, i <=? 192 & i mod 64 == 0]%Z.
+
 Definition otbn_check_CAimm
   (checker : caimm_checker_s) (ws : wsize) (w : word ws) : bool :=
   match checker with
   | CAimmC_none => true
-  | CAimmC_otbn_nbits s n =>
-      let '(lo, hi) := signedness_bounds s n in
-      let i := if s is Signed then wsigned w else wunsigned w in
-      [&& lo <=? i & i <? hi ]%Z
-  | CAimmC_otbn_bn_shift =>
-      let i := wunsigned w in
-      [&& i <=? 248 & i mod 8 == 0]%Z
-  | CAimmC_otbn_mulqacc_shift =>
-      let i := wunsigned w in
-      [&& i <=? 192 & i mod 64 == 0]%Z
+  | CAimmC_otbn_nbits s n => check_nbits s n w
+  | CAimmC_otbn_bn_shift => check_bn_shift (wunsigned w)
+  | CAimmC_otbn_mulqacc_shift => check_mulqacc_shift (wunsigned w)
   | _ => false
   end.
 

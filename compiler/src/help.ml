@@ -12,6 +12,7 @@ let show_intrinsics asmOp fmt =
       | PVvv _ :: _ -> 5
       end
     | PrimARM _ -> 6
+    | PrimOTBN _ -> assert false (* TODO_OTBN *)
   in
   let headers = [|
       "no size suffix";

@@ -18,6 +18,7 @@ Require Import
   otbn_extra
   otbn_instr_decl
   otbn_lowering
+  otbn_params_core
 .
 Require
   asm_gen
@@ -63,28 +64,31 @@ Section SAPARAMS.
 
   Import stack_alloc.
 
+ (* TODO_OTBN use the smart constructors *)
+ (* TODO_OTBN: Is the LEA case correct? *)
   Definition mov_ofs
-    (x : lval)
-    (tag : assgn_tag)
-    (vpk : vptr_kind)
-    (y : pexpr)
-    (ofs : Z) :
+    (x : lval) (tag : assgn_tag) (movk : mov_kind) (y : pexpr) (ofs : pexpr) :
     option instr_r :=
-    let eofs := eword_of_int reg_size ofs in
     let '(op, args) :=
-      match mk_mov vpk with
-      | MK_LEA => (LA, [:: add y eofs ]) (* TODO_OTBN: Is this correct? *)
-      | MK_MOV => if (ofs == 0)%Z then (MOV, [:: y ]) else (ADDI, [:: y; eofs ])
+      match movk with
+      | MK_LEA => (BaseOp (None, RV32 LA), [:: add y ofs ])
+      | MK_MOV =>
+          if is_zero Uptr ofs then (ExtOp MOV, [:: y ])
+          else (BaseOp (None, RV32 ADDI), [:: y; ofs ])
       end in
-    Some (Copn [:: x ] tag (Ootbn (RV32 op)) args).
+    Some (Copn [:: x ] tag (Oasm op) args).
 
   Definition immediate (x : var_i) (imm : Z) : instr_r :=
-    instr_of_copn_args AT_none (COPN.li x imm).
+    Copn [:: Lvar x ] AT_none (Ootbn (RV32 LI)) [:: cast_const imm ].
+
+  Definition swap (t : assgn_tag) (x y z w : var_i) : instr_r :=
+    TODO_OTBN "swap not implemented".
 
   Definition saparams : stack_alloc_params :=
     {|
       sap_mov_ofs := mov_ofs;
       sap_immediate := immediate;
+      sap_swap := swap;
     |}.
 
 End SAPARAMS.
@@ -94,71 +98,87 @@ Section LIPARAMS.
   Import linearization.
 
   Definition vtmp : var := to_var X28. (* TODO_OTBN: Is this a good choice? *)
+  Definition vtmp2 : var := to_var X29. (* TODO_OTBN: Is this a good choice? *)
 
   Let vtmpi := mk_var_i vtmp.
+  Let vtmp2i := mk_var_i vtmp2.
 
-  Definition allocate_stack_frame (rspi : var_i) (sz : Z) : fopn_args :=
-    FOPN.subi rspi rspi sz.
+  Definition fopn_args_of_opn_args (oa : OTBNFopn_core.opn_args) : fopn_args :=
+    let '(le, op, re) := oa in (le, Ootbn op, re).
 
-  Definition free_stack_frame (rspi : var_i) (sz : Z) : fopn_args :=
-    FOPN.addi rspi rspi sz.
+  (* TODO_OTBN use the smart constructors? *)
+  Definition allocate_stack_frame
+    (rspi : var_i) (tmp : option var_i) (sz : Z) : seq fopn_args :=
+    let c := [:: OTBNFopn_core.subi rspi rspi sz ] in
+    let c' :=
+      let%opt aux := tmp in OTBNFopn_core.smart_subi_tmp rspi vtmpi sz
+    in
+    [seq fopn_args_of_opn_args x | x <- odflt c c' ].
+
+  Definition free_stack_frame
+    (rspi : var_i) (tmp : option var_i) (sz : Z) : seq fopn_args :=
+    let c := [:: OTBNFopn_core.addi rspi rspi sz ] in
+    let c' :=
+      let%opt aux := tmp in OTBNFopn_core.smart_addi_tmp rspi vtmpi sz
+    in
+    [seq fopn_args_of_opn_args x | x <- odflt c c' ].
+
+  (* TODO_OTBN move inside params_core *)
+  Definition smart_addi x y imm :=
+    let c := [:: OTBNFopn_core.addi x y imm ] in
+    let c' := OTBNFopn_core.smart_addi x y imm in
+    odflt c c'.
+
+  (* TODO_OTBN move inside params_core *)
+  Definition smart_subi x y imm :=
+    let c := [:: OTBNFopn_core.subi x y imm ] in
+    let c' := OTBNFopn_core.smart_subi x y imm in
+    odflt c c'.
 
   Definition set_up_sp_register
-    (rspi : var_i)
-    (sf_sz : Z)
-    (al : wsize)
-    (r : var_i) :
-    option (seq fopn_args) :=
-    if [&& 0 <=? sf_sz & sf_sz <? wbase reg_size ]
-    then
-      let c_copy := FOPN.smart_mov r rspi in
-      let c_sub := FOPN.smart_subi rspi rspi vtmpi sf_sz in
-      let c_align := FOPN.smart_align rspi rspi al in
-      Some (c_copy ++ c_sub ++ c_align)
-    else
-      None.
+    (rspi : var_i) (sf_sz : Z) (al : wsize) (r : var_i) (tmp : var_i):
+    seq fopn_args :=
+    let c_copy := OTBNFopn_core.smart_mov r rspi in
+    let c_sub := smart_subi rspi r sf_sz in
+    let c_align := [:: OTBNFopn_core.align rspi rspi al ] in
+    [seq fopn_args_of_opn_args a | a <- c_copy ++ c_sub ++ c_align ].
 
-  Definition set_up_sp_stack
-    (rspi : var_i)
-    (sf_sz : Z)
-    (al : wsize)
-    (off : Z) :
-    option (seq fopn_args) :=
-    if [&& 0 <=? sf_sz & sf_sz <? wbase reg_size ]
-    then
-      let c_sub := FOPN.smart_subi vtmpi rspi vtmpi sf_sz in
-      let c_align := FOPN.smart_align vtmpi vtmpi al in
-      let i_store := FOPN.sw reg_size vtmpi off rspi in
-      let c_move := FOPN.smart_mov rspi vtmpi
-      in Some (c_sub ++ c_align ++ i_store :: c_move)
-    else
-      None.
+  Definition lmove (xd xs : var_i) : fopn_args :=
+    fopn_args_of_opn_args (OTBNFopn_core.mov xd xs).
 
-  Definition lassign
-    (le : lexpr) (ws : wsize) (re : rexpr) : option fopn_args :=
-  let%opt (mn, re') :=
-    match le with
-    | LLvar _ =>
-        match re with
-        | Rexpr (Fapp1 (Oword_of_int U32) (Fconst _)) => Some (LI, re)
-        | Rexpr (Fvar _) => Some (MOV, re)
-        | Load _ _ _ => Some (LW, re)
-        | _ => None
-        end
-    | Store _ _ _ => Some (SW, re)
-    end
-  in
-  Some ([:: le ], Ootbn (RV32 mn), [:: re' ]).
+  Definition check_ws ws := ws == reg_size.
+
+  Definition lstore (xd : var_i) (ofs : Z) (xs : var_i) : fopn_args :=
+    let e := faddv reg_size xd (fconst reg_size ofs) in
+    fopn_args_of_opn_args (OTBNFopn_core.sw reg_size e xs).
+
+  Definition lload (xd : var_i) (xs : var_i) (ofs : Z) :=
+    let e := faddv reg_size xs (fconst reg_size ofs) in
+    fopn_args_of_opn_args (OTBNFopn_core.lw reg_size xd e).
+
+  Definition smart_addi_fopn x y imm :=
+    [seq fopn_args_of_opn_args a | a <- smart_addi x y imm ].
+
+  Definition lstores :=
+    lstores_imm_dfl vtmp2.(vname) lstore smart_addi_fopn is_arith_small.
+
+  Definition lloads :=
+    lloads_imm_dfl vtmp2.(vname) lload smart_addi_fopn is_arith_small.
 
   Definition liparams : linearization_params :=
     {|
       lip_tmp := vname vtmp;
+      lip_tmp2 := vname vtmp2;
       lip_not_saved_stack := [:: vname vtmp ];
       lip_allocate_stack_frame := allocate_stack_frame;
       lip_free_stack_frame := free_stack_frame;
       lip_set_up_sp_register := set_up_sp_register;
-      lip_set_up_sp_stack := set_up_sp_stack;
-      lip_lassign := lassign;
+      lip_lmove := lmove;
+      lip_check_ws := check_ws;
+      lip_lstore  := lstore;
+      lip_lload := lload;
+      lip_lstores := lstores;
+      lip_lloads := lloads;
     |}.
 
 End LIPARAMS.
@@ -173,43 +193,81 @@ Section LOPARAMS.
 
 End LOPARAMS.
 
+Definition is_fzero (ws : wsize) (e : fexpr) : bool :=
+  if e is Fapp1 (Oword_of_int ws') (Fconst 0) then ws' == ws else false.
+
+Definition is_fvar (e : fexpr) : option var_i :=
+  if e is Fvar x then Some x else None.
+
 Section AGPARAMS.
 
   Import asm_gen.
 
   Let err ii fe := E.berror ii fe "Can't assemble condition.".
 
-  Definition condt_not ii (c : condition) : cexec condition :=
+  Section AUX.
+    Context
+      (ii : instr_info)
+      (fe : fexpr)
+    .
+
+  Definition condt_not (c : condition) : cexec condition :=
     match c with
     | RVcond is_eq r0 r1 => ok (RVcond (~~ is_eq) r0 r1)
     | BNcond f => Error (err ii (Fvar (mk_var_i (to_var f))))
     end.
 
+  Definition sop2_is_eq (o : sop2) : cexec bool :=
+    let chk ws := assert (ws == reg_size) (err ii fe) in
+    match o with
+    | Oeq (Op_w ws) => Let _ := chk ws in ok true
+    | Oneq (Op_w ws) => Let _ := chk ws in ok false
+    | _ => Error (err ii fe)
+    end.
+
+  Definition oreg_of_fexpr (e : fexpr) : cexec (option register) :=
+    if is_fzero reg_size e then ok None
+    else if is_fvar e is Some x then Let r := of_var_e ii x in ok (Some r)
+    else Error (err ii fe).
+
+  Definition assemble_cond_app2 (o : sop2) (e0 e1 : fexpr) : cexec condition :=
+    Let is_eq := sop2_is_eq o in
+    Let r0 := oreg_of_fexpr e0 in
+    Let r1 := oreg_of_fexpr e1 in
+    ok (RVcond is_eq r0 r1).
+
+  End AUX.
+
   Fixpoint assemble_cond ii (fe : fexpr) : cexec condition :=
     match fe with
     | Fvar x => Let f := of_var_e ii x in ok (BNcond f)
     | Fapp1 Onot fe => Let c := assemble_cond ii fe in condt_not ii c
-    | Fapp2 op1 (Fvar x0) (Fvar x1) =>
-        Let is_eq :=
-          let chk ws := assert (ws == reg_size) (err ii fe) in
-          match op1 with
-          | Oeq (Op_w ws) => Let _ := chk ws in ok true
-          | Oneq (Op_w ws) => Let _ := chk ws in ok false
-          | _ => Error (err ii fe)
-          end
-        in
-        Let r0 := of_var_e ii x0 in
-        Let r1 := of_var_e ii x1 in
-        ok (RVcond is_eq r0 r1)
+    | Fapp2 o e0 e1 => assemble_cond_app2 ii fe o e0 e1
     | _ => Error (err ii fe)
+    end.
+
+  (* TODO_OTBN: Is this correct? It can be simplified *)
+  Definition is_valid_address (addr : reg_address) :=
+    match addr.(ad_disp) != 0%w, isSome addr.(ad_offset), addr.(ad_scale) != 0%N with
+    | false, false, false => true
+    | true, false, false => true
+    | _, _, _ => false
     end.
 
   Definition agparams : asm_gen_params :=
     {|
       agp_assemble_cond := assemble_cond;
+      agp_is_valid_address := is_valid_address;
     |}.
 
 End AGPARAMS.
+
+Section LAPARAMS.
+
+Definition laparams : lower_addressing_params :=
+  {| lap_lower_address := fun _ p => ok p; |}.
+
+End LAPARAMS.
 
 Section SHPARAMS.
 
@@ -222,7 +280,6 @@ Section SHPARAMS.
 
 End SHPARAMS.
 
-
 Section SZPARAMS.
 
   Import stack_zeroization.
@@ -234,15 +291,21 @@ Section SZPARAMS.
 
 End SZPARAMS.
 
-Definition is_move_op (eop : extended_op) : bool :=
-  if eop is BaseOp (None, op) then op \in [:: RV32 MOV; BN_MOV ] else false.
+(* TODO_OTBN could be smarter, include ADDI SUBI ... and LW SW *)
+Definition is_move_op (o : asm_op_t) : bool :=
+  match o with
+  | BaseOp (None, BN_MOV) | ExtOp MOV => true
+  | _ => false
+  end.
 
 Definition otbn_params : architecture_params lowering_options :=
   {|
     ap_sap := saparams;
     ap_lip := liparams;
+    ap_plp := false; (* TODO_OTBN: probably needs to be true *)
     ap_lop := loparams;
     ap_agp := agparams;
+    ap_lap := laparams;
     ap_shp := shparams;
     ap_szp := szparams;
     ap_is_move_op := is_move_op;

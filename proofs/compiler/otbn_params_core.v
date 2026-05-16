@@ -13,6 +13,9 @@ Require Import
   otbn_decl
   otbn_instr_decl.
 
+(* TODO_OTBN maybe all of these should also be extra ops, or make all the
+   options check and default to normal operation *)
+
 (* Whether [imm] is fits in 12 bits (signed). *)
 Definition is_arith_small (imm : Z) : bool :=
   [&& - Z.pow 2 11 <=? imm & imm <? Z.pow 2 11 ]%Z.
@@ -21,6 +24,8 @@ Definition is_arith_small_neg (imm : Z) : bool := is_arith_small (- imm).
 
 Module OTBNFopn_core.
 
+  (* TODO_OTBN double check preconditions, some do not apply if we fail
+     explicitly *)
   #[local] Open Scope Z.
 
   Section CORE.
@@ -28,10 +33,10 @@ Module OTBNFopn_core.
   Definition opn_args := (seq lexpr * otbn_op * seq rexpr)%type.
 
   Let op_gen mn x res : opn_args := ([:: LLvar x ], RV32 mn, res).
-  Let op_un_reg mn x y := op_gen mn x [:: rvar y ].
-  Let op_un_imm mn x imm := op_gen mn x [:: rconst reg_size imm ].
-  Let op_bin_reg mn x y z := op_gen mn x [:: rvar y; rvar z ].
-  Let op_bin_imm mn x y imm :=
+  Let op_un_reg mn x y : opn_args := op_gen mn x [:: rvar y ].
+  Let op_un_imm mn x imm : opn_args := op_gen mn x [:: rconst reg_size imm ].
+  Let op_bin_reg mn x y z : opn_args := op_gen mn x [:: rvar y; rvar z ].
+  Let op_bin_imm mn x y imm : opn_args :=
     op_gen mn x [:: rvar y; rconst reg_size imm ].
 
   Definition add := op_bin_reg ADD.
@@ -39,20 +44,22 @@ Module OTBNFopn_core.
 
   Definition li := op_un_imm LI.
   Definition addi := op_bin_imm ADDI.
-  Definition subi x y imm := addi x y (- imm).
+  Definition subi x y imm : opn_args := addi x y (- imm).
   Definition slli := op_bin_imm SLLI.
   Definition srli := op_bin_imm SRLI.
   Definition andi := op_bin_imm ANDI.
 
-  Definition mov x y := addi x y 0.
-  Definition smart_mov x y :=
+  Definition mov x y: opn_args := addi x y 0.
+  Definition smart_mov x y : seq opn_args :=
     if v_var x == v_var y then [::] else [:: mov x y ].
 
-  Definition sw ws e ii y :=
-    ([:: Lmem Aligned ws ii e ], RV32 SW, [:: rvar y ]).
+  Definition lw ws x e : opn_args :=
+    ([:: LLvar x ], RV32 LW, [::  Load Aligned ws e ]).
 
-  Definition align x y al := andi x y (- (wsize_size al)).
+  Definition sw ws e y : opn_args :=
+    ([:: Store Aligned ws e ], RV32 SW, [:: rvar y ]).
 
+  Definition align x y al : opn_args := andi x y (- (wsize_size al)).
 
   Let is_mov neutral imm := if neutral is Some n then (imm =? n)%Z else false.
 

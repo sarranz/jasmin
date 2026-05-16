@@ -1,7 +1,10 @@
-From mathcomp Require Import
-  all_ssreflect
-  all_algebra.
-Require oseq.
+(* Lowering pass for OTBN.
+   TODO_OTBN: we always use FG1 for dummies, such that if the source uses FG0
+   (the default), we get fewer conflicts. Maybe we should check and insert
+   according to whatever is not being used. *)
+
+From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssralg.
+From mathcomp Require Import word_ssrZ.
 
 Require Import
   compiler_util
@@ -105,37 +108,38 @@ Notation "'let%lr' x ':=' m 'in' body" :=
   (Let o := m in if o is Some x then body else skip)
   (x strict pattern, at level 25, only parsing).
 
-Definition otbn_args : Type := seq lval * otbn_op * seq pexpr.
+Definition otbn_args : Type := seq lval * extended_op * seq pexpr.
 
 Definition low_instr := lresult otbn_args.
 
-Definition li_issue
-  (lvs : seq lval)
-  (op : otbn_op)
-  (es : seq pexpr) :
-  low_instr :=
+Definition li_sissue
+  (lvs : seq lval) (op : extended_op) (es : seq pexpr) : low_instr :=
   issue (lvs, op, es).
 
+Definition li_issue lvs op es := li_sissue lvs (BaseOp (None, op)) es.
+Definition li_xissue lvs op es := li_sissue lvs (ExtOp op) es.
+
+Definition li_ssimple := li_sissue [::].
 Definition li_simple := li_issue [::].
 
-Definition low_cmd := lresult (seq otbn_args * seq lval * otbn_op * seq pexpr).
+Definition low_cmd :=
+  lresult (seq otbn_args * seq lval * extended_op * seq pexpr).
 
-Definition lc_issue
-  (pre : seq otbn_args)
-  (lvs : seq lval)
-  (op : otbn_op)
-  (es : seq pexpr) :
+Definition lc_sissue
+  (pre : seq otbn_args) (lvs : seq lval) (op : extended_op) (es : seq pexpr) :
   low_cmd :=
   issue (pre, lvs, op, es).
 
+Definition lc_issue pre lvs op es := lc_sissue pre lvs (BaseOp (None, op)) es.
+Definition lc_xissue pre lvs op es := lc_sissue pre lvs (ExtOp op) es.
+
 Definition no_pre (li : low_instr) : low_cmd :=
   let%lr (lvs, op, es) := li in
-  lc_issue [::] lvs op es.
+  lc_sissue [::] lvs op es.
 
 Definition with_pre (pre : seq otbn_args) (li : low_instr) : low_cmd :=
   let%lr (lvs, op, es) := li in
-  lc_issue pre lvs op es.
-
+  lc_sissue pre lvs op es.
 
 (* -------------------------------------------------------------------------- *)
 Section UTILS.
@@ -154,22 +158,11 @@ Section UTILS.
   Definition chk_reg_ws := chk_ws reg_size.
   Definition chk_xreg_ws := chk_ws xreg_size.
 
-  Definition chk_shift_amount (z : Z) : cexec unit :=
-    assert (is_range_steps z 0 248 8) (E.invalid_sham ii z).
+  Definition chk_bn_shift (z : Z) : cexec unit :=
+    assert (check_bn_shift z) (E.invalid_sham ii z).
 
   Definition chk_address_displacement (ws : wsize) (w : word ws) : cexec unit :=
-    assert (is_w12 (wsigned w)) (E.imm_out_of_range ii w).
-
-  (* TODO_OTBN: This is discarded until lowering can fail. *)
-  Definition chk_rv_imm_range
-    (mn : rv_mnemonic) (es : seq pexpr) : cexec unit :=
-    let '(_, chk) := rv_chk_args reg_size mn in
-    if ohead (rev es) is Some e
-    then
-      if is_wconst reg_size e is Some w
-      then assert (is_ok (chk w)) (E.imm_out_of_range ii w)
-      else ok tt
-    else ok tt.
+    assert (check_nbits Signed 12 w) (E.imm_out_of_range ii w).
 
   Definition reg_shift_of_sop2
     (ws : wsize) (op : sop2) : lresult bn_register_shift :=
@@ -187,7 +180,7 @@ Section UTILS.
     if e is Papp2 op (Pvar x) (Papp1 (Oword_of_int U8) (Pconst z))
     then
       let%lr sh := reg_shift_of_sop2 ws op in
-      Let _ := chk_shift_amount z in
+      Let _ := chk_bn_shift z in
       issue (Pvar x, sh, Papp1 (Oword_of_int U8) (Pconst z))
     else skip.
 
@@ -219,6 +212,8 @@ Section LOWER_OPN.
   (* ------------------------------------------------------------------------ *)
   (* [Copn] arguments. *)
 
+  (* Match the arguments of a basic OTBN operation and return the shift kind
+     if there is one, [skip] otherwise. *)
   Definition lower_basic_shift
     (mn : bn_basic_mnemonic) (es : seq pexpr) :
     lresult (bn_register_shift * seq pexpr) :=
@@ -235,10 +230,12 @@ Section LOWER_OPN.
     let%lr (ebase, sh, esham) := get_arg_shift ii xreg_size e in
     issue (sh, pre ++ ebase :: pos ++ [:: esham ]).
 
+  (* TODO_OTBN: use the checker from the instruction description to fail early
+     for unsafe programs. *)
   Definition lower_base_op
     (lvs : seq lval) (op : otbn_op) (es : seq pexpr) : low_instr :=
     match op with
-    | RV32 mn => Let _ := chk_rv_imm_range ii mn es in li_issue lvs op es
+    | RV32 mn => li_issue lvs op es
     | BN_basic mn fg =>
         let%lr (sh, es') := lower_basic_shift mn es in
         li_issue lvs (BN_basic_shift mn fg sh) es'
@@ -248,10 +245,14 @@ Section LOWER_OPN.
   (* ------------------------------------------------------------------------ *)
   (* Pseudo-operators. *)
 
+  (* Match [lvs] as [(carry, result)] and introduce dummies for the other
+     flags. *)
   Definition get_carry_lvals (lvs : seq lval) : cexec (seq lval) :=
     Let: (cf, r, _) := rsnoc2 (E.invalid_carry_lvals ii) lvs in
     ok [:: cf; lnoneb; lnoneb; lnoneb; r ].
 
+  (* Match [es] as [(e0, e1, carry)], check if the carry is constant [false],
+     and remove it if so. *)
   Definition get_carry_pexprs (es : seq pexpr) : cexec (bool * seq pexpr) :=
     Let: (e0, e1, cf, _) := rsnoc3 (E.invalid_carry_pexprs ii) es in
     match cf with
@@ -270,7 +271,7 @@ Section LOWER_OPN.
     Let lvs' := get_carry_lvals lvs in
     Let: (has_carry, es') := get_carry_pexprs es in
     let op := carry_op is_add has_carry in
-    li_issue lvs' (BN_basic op FG0) es'.
+    li_issue lvs' (BN_basic op FG1) es'.
 
   Definition lower_pseudo_operator
     (lvs : seq lval) (op : pseudo_operator) (es : seq pexpr) : low_instr :=
@@ -282,7 +283,7 @@ Section LOWER_OPN.
       | _ => skip
       end
     in
-    li_issue lvs' op' es'.
+    li_sissue lvs' op' es'.
 
   Definition lower_copn
     (lvs : seq lval) (op : sopn) (es : seq pexpr) : low_instr :=
@@ -297,6 +298,7 @@ End LOWER_OPN.
 
 (* -------------------------------------------------------------------------- *)
 (* Compute a condition (e.g. with [CMP]). *)
+
 Section LOWER_CONDITION.
 
   Context (ii : instr_info).
@@ -321,25 +323,19 @@ Section LOWER_ASSIGN.
   Definition lower_Pvar (ws : wsize) (v : gvar) : low_instr :=
     let op :=
       if (ws <= reg_size)%CMP
-      then RV32 (if is_var_in_memory (gv v) then LW else MOV)
-      else BN_MOV
+      then if is_var_in_memory (gv v) then BaseOp (None, RV32 LW) else ExtOp MOV
+      else BaseOp (None, BN_MOV)
     in
-    li_simple op [:: Pvar v ].
+    li_ssimple op [:: Pvar v ].
 
-  (* TODO_OTBN: Are these all the cases where we need to check that the
-     immediate is in range? *)
-  (* Try to match a memory access and return the base pointer and displacement
-     (in bytes). *)
-  Definition get_pexpr_memory_access (e : pexpr) : option (gvar * wreg) :=
+  (* Match a memory access and return the base pointer and displacement (in
+     bytes). *)
+  Definition get_mem_disp (e : pexpr) : option wreg :=
     match e with
-    | Pvar x => Some (x, 0%R)
-    | Pget _ ws x e' =>
-        (* We need to check that the final displacement (in bytes) is in
-           bounds. *)
+    | Pget _ _ ws x e' =>
         let%opt z := is_const e' in
-        Some (x, wrepr reg_size (z * wsize_size ws))
-    | Pload _ x e' =>
-        let%opt w := is_wconst reg_size e' in Some (mk_lvar x, w)
+        Some (wrepr reg_size (z * wsize_size ws))
+    | Pload _ _ e => is_wconst reg_size e
     | _ => None
     end.
 
@@ -347,21 +343,21 @@ Section LOWER_ASSIGN.
   Definition lower_load (ws : wsize) (e : pexpr) : low_instr :=
     Let _ := chk_reg_ws ii ws in
     Let _ :=
-      if get_pexpr_memory_access e is Some (_, wdisp)
-      then chk_address_displacement ii wdisp
+      if get_mem_disp e is Some wdisp then chk_address_displacement ii wdisp
       else ok tt
     in
     li_simple (RV32 LW) [:: e ].
 
-  (* Lower an expression of the form [<+> e]. *)
+  (* Lower an expression of the form [<+> e].
+     TODO_OTBN: lower [x = -y] as [SUB x, x0, y] *)
   Definition lower_Papp1 (ws : wsize) (op : sop1) (e : pexpr) : low_instr :=
     match op with
     | Oword_of_int ws =>
-        if (ws <= reg_size)%CMP
-        then li_simple (RV32 LI) [:: Papp1 op e ]
+        if (ws <= reg_size)%CMP then li_simple (RV32 LI) [:: Papp1 op e ]
         else Error (E.bn_immediate ii e)
-    | Olnot _ => li_issue lnone_mlz (BN_basic BN_NOT FG0) [:: e ]
-    | Oneg (Op_w _) => Let _ := chk_le_reg_ws ii ws in li_simple (RV32 NEG) [:: e ]
+    | Olnot _ =>
+        let%lr _ := ok (oassert (ws == xreg_size)) in
+        li_issue lnone_mlz (BN_basic BN_NOT FG1) [:: e ]
     | _ => Error (E.not_implemented ii)
     end.
 
@@ -398,16 +394,14 @@ Section LOWER_ASSIGN.
     | _ => skip
     end.
 
+  (* Lower a binary 32-bit operation. *)
   Definition lower_Papp2_small
     (ws : wsize) (op : sop2) (e0 e1 : pexpr) : low_instr :=
     let%lr (op, e1') :=
-      if e1 is Papp1 (Oword_of_int ws') (Pconst z)
+      if is_wconst ws e1 is Some w
       then
-        let%lr (mn, wimm) := rv_Imn_of_op2 op (wrepr ws' z) in
-        let '(_, chk) := rv_chk_args ws' mn in
-        if is_ok (chk wimm)
-        then issue (mn, wconst wimm)
-        else Error (E.imm_out_of_range ii wimm)
+        let%lr (mn, wimm) := rv_Imn_of_op2 op w in
+        issue (mn, wconst wimm)
       else rv_mn_of_op2 op e1
     in
     li_simple (RV32 op) [:: e0; e1' ].
@@ -450,7 +444,7 @@ Section LOWER_ASSIGN.
   Definition lower_pexpr_aux (ws : wsize) (e : pexpr) : low_instr :=
     match e with
     | Pvar v => lower_Pvar ws v
-    | Pget _ _ _ _ | Pload _ _ _ => lower_load ws e
+    | Pget _ _ _ _ _ | Pload _ _ _ => lower_load ws e
     | Papp1 op e => lower_Papp1 ws op e
     | Papp2 op a b => lower_Papp2 ws op a b
     | _ => skip
@@ -463,20 +457,29 @@ Section LOWER_ASSIGN.
     li_simple (BN_SEL FG0) [:: e0; e1; econd ].
 
   Definition lower_pexpr (ws : wsize) (e : pexpr) : low_cmd :=
-    if e is Pif (sword ws') econd e0 e1
+    if e is Pif (aword ws') econd e0 e1
     then
       Let _ := assert (ws == ws') (E.invalid_wsize ii) in
       Let: (pre, econd') := lower_condition ii econd in
       with_pre pre (lower_Pif ws econd' e0 e1)
     else no_pre (lower_pexpr_aux ws e).
 
+  Definition destruct_Lmem (e : pexpr) : option (var_i * wreg) :=
+    match e with
+    | Papp2 (Oadd _) (Pvar x) e' =>
+        let%opt w := is_wconst reg_size e in Some (x.(gv), w)
+    | Papp2 (Osub _) (Pvar x) e' =>
+        let%opt w := is_wconst reg_size e in Some (x.(gv), w)
+    | _ => None
+    end.
+
   (* Try to match a memory access and return the base pointer and
      displacement (in bytes). *)
   Definition get_lval_memory_access (lv : lval) : option (var_i * wreg) :=
     match lv with
     | Lvar x => Some (x, 0%R)
-    | Lmem _ x e => let%opt w := is_wconst reg_size e in Some (x, w)
-    | Laset _ ws x e =>
+    | Lmem _ _ _ e => destruct_Lmem e
+    | Laset _ _ ws x e =>
         (* We need to check that the final displacement (in bytes) is in
            bounds. *)
         let%opt z := is_const e in
@@ -509,7 +512,7 @@ Definition lowering_options := unit.
 Definition fresh_vars := unit.
 
 Let i_of_low_instr ii tag '(lvs, op, es) :=
-  MkI ii (instr_of_copn_args tag (lvs, Ootbn op, es)).
+  MkI ii (instr_of_copn_args tag (lvs, Oasm op, es)).
 
 Let c_of_low_cmd ii tag '(pre, lvs, op, es) :=
   map (i_of_low_instr ii tag) (rcons pre (lvs, op, es)).
@@ -532,15 +535,16 @@ Fixpoint lower_i_aux (i : instr) : cexec cmd :=
       Let c2' := conc_mapM lower_i c2 in
       ok [:: MkI ii (Cif e c1' c2') ]
 
-  | Cfor fi c =>
+  | Cfor i r c =>
       Let c' := conc_mapM lower_i c in
-      ok [:: MkI ii (Cfor fi c') ]
+      ok [:: MkI ii (Cfor i r c') ]
 
-  | Cwhile a c0 e c1 =>
+  | Cwhile a c0 e ii c1 =>
       Let c0' := conc_mapM lower_i c0 in
       Let c1' := conc_mapM lower_i c1 in
-      ok [:: MkI ii (Cwhile a c0' e c1') ]
+      ok [:: MkI ii (Cwhile a c0' e ii c1') ]
 
+  | Cassert _
   | Csyscall _ _ _
   | Ccall _ _ _ => ok [:: i ]
   end.

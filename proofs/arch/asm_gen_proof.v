@@ -327,6 +327,15 @@ Lemma var_of_regP rip E m s r v ty vt:
       & of_val ty v' = ok vt.
 Proof. move=> lom /(getreg lom) hg /(of_value_uincl hg) <-; eauto. Qed.
 
+Lemma var_of_xregP rip E m s r v ty vt:
+  lom_eqv rip m s
+  -> get_var true (evm m) (to_var r) = ok v
+  -> of_val ty v = ok vt
+  -> exists2 v' : value,
+      Ok E (Vword ((asm_xreg s) r)) = ok v'
+      & of_val ty v' = ok vt.
+Proof. by move=> lom /(getxreg lom) hg /(of_value_uincl hg) <-; eauto. Qed.
+
 Lemma var_of_regP_eq rip m s (r:reg_t) v vt:
   lom_eqv rip m s
   -> get_var true (evm m) (to_var r) = ok v
@@ -376,8 +385,10 @@ Proof.
   move=> eqm /check_sopn_argP /= h.
   case: h vt.
   + move=> i {}ty /is_implicitP[] vi -> vt /=.
-    case: i => /= [f | r]; first by apply: var_of_flagP eqm.
-    by apply: var_of_regP eqm.
+    case: i => /= [f | r | xr].
+    - by apply: var_of_flagP eqm.
+    - by apply: var_of_regP eqm.
+    by apply: var_of_xregP eqm.
   move=> k n o a a' [ | ws] //= ->.
   + case: e; first by [].
     t_xrbindP => e _ <- c hac <-.
@@ -485,6 +496,32 @@ Proof.
   by move=> ?; rewrite Vm.setP_neq.
 Qed.
 
+(* TODO_OTBN: generalize to the other registers... *)
+Lemma lom_eqv_write_var_xreg f rip s xs (x : var_i) sz (w : word sz) s' xr :
+  lom_eqv rip s xs
+  -> write_var true x (Vword w) s = ok s'
+  -> to_var xr = x
+  -> lom_eqv rip s' (mem_write_xreg f xr w xs).
+Proof.
+  case => eqscs eqm ok_rip [dr drx dx df] eqr eqrx eqx eqf.
+  case: x => x xi /=.
+  rewrite /mem_write_xreg => /write_varP [-> hdb htr] ?; subst x.
+  constructor => //=.
+  + by rewrite Vm.setP_neq //; apply /eqP.
+  + move=> r; rewrite Vm.setP_neq; first exact/eqr.
+    exact/eqP/nesym/to_var_reg_neq_xreg.
+  + move=> r; rewrite Vm.setP_neq; first exact/eqrx.
+    exact/eqP/nesym/to_var_regx_neq_xreg.
+  + move=> r'; rewrite Vm.setP /XRegMap.set ffunE eq_sym.
+    have -> : (to_var r' == to_var xr) = (r' == xr ::>).
+    + by apply/eqtype.inj_eq/inj_to_var.
+    case: eqP => [<- /= | hne]; last by apply eqx.
+    case: ifPn => hsz /=.
+    + by apply word_uincl_word_extend => //; apply cmp_lt_le.
+    by rewrite word_extend_big //;apply /negP.
+  by move=> ?; rewrite Vm.setP_neq.
+Qed.
+
 Lemma lom_eqv_write_reg rip msbf r s xs ws ws0 (w : word ws0) :
   lom_eqv rip s xs ->
   (ws0 = ws \/ msbf = MSB_CLEAR) ->
@@ -537,7 +574,7 @@ Lemma compile_lval rip ii msb_flag loargs ad ty (vt:sem_olt ty) m m' s lv1 e1:
   exists s', mem_write_val msb_flag loargs (ad, ty) (oto_val vt) s = ok s' /\ lom_eqv rip m' s'.
 Proof.
   move=> hlom; case:(hlom) => [hscs h1 hrip hnrip h2 h3 h4 h5]; case: ad => [ai _ | k n o]; rewrite /check_sopn_dest /=.
-  case: ai => [f | r].
+  case: ai => [f | r | xr].
   + case: lv1 => //=; first by move=> ???? <-.
     t_xrbindP => x vm hvm <- <- /is_implicitP[] xi [] ?; subst x.
     case: ty vt hvm => //= vt /set_varP [_ htr ->]; rewrite /mem_write_val /=.
@@ -562,6 +599,12 @@ Proof.
     case: ty vt hw=> //; first by case.
     move=> ws vt hw.
     have /(_ r erefl) := lom_eqv_write_var msb_flag hlom hw.
+    rewrite /mem_write_val /= truncate_word_u /=; eauto.
+  + case: lv1 => //=; first by move=> ???? <-.
+    move=> x hw <- /is_implicitP [] xi [] ?; subst x.
+    case: ty vt hw=> //; first by case.
+    move=> ws vt hw.
+    have /(_ xr erefl) := lom_eqv_write_var_xreg msb_flag hlom hw.
     rewrite /mem_write_val /= truncate_word_u /=; eauto.
   case heq1: onth => [a | //].
   case heq3: k => [ // | al ].
@@ -980,8 +1023,9 @@ Proof.
   case: ty v => // ws' v; rewrite /extend_size /wextend_size.
   case heq: (ws' ≤ ws)%CMP => //=.
   rewrite /mem_write_val /= !truncate_word_u /=.
-  case: ad => //= [[] // r _| k n or].
+  case: ad => //= [[// | r | xr] _ | k n or].
   + by rewrite /= /mem_write_reg !word_extend_CLEAR zero_extend_cut.
+  + by rewrite /= /mem_write_xreg !word_extend_CLEAR zero_extend_cut.
   case: onth => // -[] // r _; case: check_oreg => //=.
   + by rewrite /mem_write_reg !word_extend_CLEAR zero_extend_cut.
   + by rewrite /mem_write_regx !word_extend_CLEAR zero_extend_cut.
