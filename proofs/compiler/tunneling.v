@@ -22,9 +22,9 @@ End E.
 
 Section ASM_OP.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context {pd : PointerData}.
 Context `{asmop : asmOp}.
-Context {fun_info : Type} {FI : FunInfo fun_info}.
 
 Section LprogSem.
 

@@ -410,8 +410,8 @@ Module M.
 End M.
 
 Section WSW.
-Context {wsw : WithSubWord}.
 Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {wsw : WithSubWord}.
 
 Definition alloc_error := pp_internal_error_s "allocation".
 

@@ -438,8 +438,8 @@ End CMD_RECT.
 
 Section ASM_OP.
 
-Context `{asmop:asmOp}.
 Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context `{asmop:asmOp}.
 
 (* ** Functions
  * -------------------------------------------------------------------- *)
@@ -502,9 +502,9 @@ Notation fun_decls  := (seq fun_decl).
 
 Section ASM_OP.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context {pd: PointerData}.
 Context `{asmop:asmOp}.
-Context {fun_info : Type} {FI : FunInfo fun_info}.
 
 (* ** Programs before stack/memory allocation
  * -------------------------------------------------------------------- *)
@@ -668,9 +668,9 @@ End ASM_OP.
 
 Section ASM_OP.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context `{asmop:asmOp}.
 Context {pT: progT}.
-Context {fun_info : Type} {FI : FunInfo fun_info}.
 
 (* ** Some smart constructors
  * -------------------------------------------------------------------------- *)

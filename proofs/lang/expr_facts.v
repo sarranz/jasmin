@@ -107,9 +107,9 @@ End PEXPRS_IND.
 
 Section ASM_OP.
 
+Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context `{asmop:asmOp}.
 Context {pT: progT}.
-Context {fun_info : Type} {FI : FunInfo fun_info}.
 
 Lemma surj_prog (p:prog) :
   {| p_globs := p_globs p; p_funcs := p_funcs p; p_extra := p_extra p |} = p.

@@ -38,17 +38,17 @@ let of_val_b ii v : bool =
   Obj.magic (exn_exec ii (of_val Coq_cbool v))
 
 (* ----------------------------------------------------------------- *)
-type ('asm, 'finfo) stack =
-  | Sempty of instr_info * ('asm, 'finfo) fundef * value list
+type ('finfo, 'asm) stack =
+  | Sempty of instr_info * ('finfo, 'asm) fundef * value list
   | Scall of
-      instr_info * ('asm, 'finfo) fundef * value list * lval list * Vm.t * 'asm instr list * ('asm, 'finfo) stack
-  | Sfor of instr_info * var_i * coq_Z list * 'asm instr list * 'asm instr list * ('asm, 'finfo) stack
+      instr_info * ('finfo, 'asm) fundef * value list * lval list * Vm.t * 'asm instr list * ('finfo, 'asm) stack
+  | Sfor of instr_info * var_i * coq_Z list * 'asm instr list * 'asm instr list * ('finfo, 'asm) stack
 
-type ('syscall_state, 'asm, 'finfo) state =
-  { s_prog : ('asm, 'finfo) prog;
+type ('syscall_state, 'finfo, 'asm) state =
+  { s_prog : ('finfo, 'asm) prog;
     s_cmd  : 'asm instr list;
     s_estate : 'syscall_state estate;
-    s_stk  : ('asm, 'finfo) stack;
+    s_stk  : ('finfo, 'asm) stack;
   }
 
 exception Final of Memory.mem * values
@@ -191,8 +191,8 @@ let run (type reg regx xreg rflag cond asm_op extra_op)
                and type asm_op = asm_op
                and type extra_op = extra_op)
       (p :
-         ((FInfo.t, reg, regx, xreg, rflag, cond, asm_op, extra_op) Arch_extra.extended_op,
-          FInfo.t) Expr.uprog) ii fn args m =
+         (FInfo.t,
+          (FInfo.t, reg, regx, xreg, rflag, cond, asm_op, extra_op) Arch_extra.extended_op) Expr.uprog) ii fn args m =
   let ep = Sem_params_of_arch_extra.ep_of_asm_e FInfo.instance A.asm_e Syscall_ocaml.sc_sem in
   let spp = Sem_params_of_arch_extra.spp_of_asm_e FInfo.instance A.asm_e in
   let sip =

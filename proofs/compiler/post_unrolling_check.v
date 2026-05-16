@@ -33,8 +33,8 @@ End E.
 
 Section ASM_OP.
 
-Context `{asmop: asmOp}.
 Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context `{asmop: asmOp}.
 
 Section CHECK_NO_FOR_LOOP_CMD.
   Context (check_no_for_loop_instr: instr → cexec unit).

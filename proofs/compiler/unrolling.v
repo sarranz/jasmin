@@ -38,8 +38,8 @@ End MAP_REPEAT.
 
 Section ASM_OP.
 
-Context `{asmop:asmOp}.
 Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context `{asmop:asmOp}.
 
 Definition unroll_cmd (unroll_i: instr -> cmd * bool) (c:cmd) : cmd * bool :=
   List.fold_right

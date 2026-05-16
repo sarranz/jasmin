@@ -45,16 +45,16 @@ val lval_of_clval : Expr.lval -> Prog.lval
 val cexpr_of_expr : Prog.expr -> Expr.pexpr
 val expr_of_cexpr : Expr.pexpr -> expr
 
-val cufdef_of_fdef : (unit, 'asm) func -> Funname.funname * ('asm, FInfo.t) Expr._ufundef
-val fdef_of_cufdef : Funname.funname * ('asm, FInfo.t) Expr._ufundef -> (unit, 'asm) func
+val cufdef_of_fdef : (unit, 'asm) func -> Funname.funname * (FInfo.t, 'asm) Expr._ufundef
+val fdef_of_cufdef : Funname.funname * (FInfo.t, 'asm) Expr._ufundef -> (unit, 'asm) func
 
-val cuprog_of_prog : (unit, 'asm) prog -> ('asm, FInfo.t) Expr._uprog
-val prog_of_cuprog : ('asm, FInfo.t) Expr._uprog -> (unit, 'asm) prog
+val cuprog_of_prog : (unit, 'asm) prog -> (FInfo.t, 'asm) Expr._uprog
+val prog_of_cuprog : (FInfo.t, 'asm) Expr._uprog -> (unit, 'asm) prog
 
-val csfdef_of_fdef : ('info, 'asm) sfundef -> Funname.funname * ('asm, FInfo.t) Expr._sfundef
-val fdef_of_csfdef : Funname.funname * ('asm, FInfo.t) Expr._sfundef -> (unit, 'asm) sfundef
+val csfdef_of_fdef : ('info, 'asm) sfundef -> Funname.funname * (FInfo.t, 'asm) Expr._sfundef
+val fdef_of_csfdef : Funname.funname * (FInfo.t, 'asm) Expr._sfundef -> (unit, 'asm) sfundef
 
-val prog_of_csprog : ('asm, FInfo.t) Expr._sprog -> (unit, 'asm) sprog
+val prog_of_csprog : (FInfo.t, 'asm) Expr._sprog -> (unit, 'asm) sprog
 
 val to_array : 
   Prog.ty -> BinNums.positive -> Warray_.WArray.array -> wsize * Z.t array

@@ -3,8 +3,8 @@ Require Import expr compiler_util.
 
 Section ASM_OP.
 
-Context `{asmop : asmOp}.
 Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context `{asmop : asmOp}.
 
 Definition remove_assert_c (remove_assert_i: instr -> cmd) c :  cmd :=
   foldr (fun i r =>

@@ -44,8 +44,8 @@ End INFO.
 End E.
 
 Section PROG.
-Context {pd: PointerData} {syscall_state : Type} {asm_op} {asmop : asmOp asm_op} {ovm_i : one_varmap_info} {LC : LoopCounter}.
 Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {pd: PointerData} {syscall_state : Type} {asm_op} {asmop : asmOp asm_op} {ovm_i : one_varmap_info} {LC : LoopCounter}.
 Context (p: sprog).
 Context (var_tmp : Sv.t).
 

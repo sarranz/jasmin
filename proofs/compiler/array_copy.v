@@ -26,8 +26,8 @@ End E.
 
 Section Section.
 
-Context `{asmop:asmOp}.
 Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context `{asmop:asmOp}.
 Context (fresh_var_ident: v_kind → instr_info -> string → atype → Ident.ident).
 
 Let fresh_counter fi : Ident.ident := fresh_var_ident Inline (entry_info_of_fun_info fi) "i__copy" aint.

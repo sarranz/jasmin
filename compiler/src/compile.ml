@@ -58,7 +58,7 @@ let warn_extra_fd pd msfsize asmOp (_, fd) = List.iter (warn_extra_i pd msfsize 
 
 let do_spill_unspill asmop ?(debug = false) cp =
   let p = Conv.cuprog_of_prog cp in
-  match Lower_spill.spill_uprog asmop FInfo.instance Compiler.default_LoopCounter Conv.fresh_var_ident Conv.spill_to_mmx p with
+  match Lower_spill.spill_uprog FInfo.instance asmop Compiler.default_LoopCounter Conv.fresh_var_ident Conv.spill_to_mmx p with
   | Utils0.Error msg -> Error (Conv.error_of_cerror (Printer.pp_err ~debug) msg)
   | Utils0.Ok p -> Ok (Conv.prog_of_cuprog p)
 
@@ -439,4 +439,4 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
 
   Compiler.compile_prog_to_asm FInfo.instance Arch.asm_e Arch.call_conv Arch.aparams cparams
     export_functions
-    (Expr.to_uprog Arch.asmOp FInfo.instance cprog)
+    (Expr.to_uprog FInfo.instance Arch.asmOp cprog)

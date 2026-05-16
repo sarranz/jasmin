@@ -5,7 +5,8 @@ module Arch : Arch_full.Arch
 val load_file :
   string ->
   (string, Prog.funname) Hashtbl.t
-  * ( ( FInfo.t,
+  * ( FInfo.t,
+    ( FInfo.t,
         Arch.reg,
         Arch.regx,
         Arch.xreg,
@@ -13,13 +14,13 @@ val load_file :
         Arch.cond,
         Arch.asm_op,
         Arch.extra_op )
-      Arch_extra.extended_op,
-      FInfo.t)
+      Arch_extra.extended_op)
     Expr._uprog
 
 val exec :
   (string, funname) Hashtbl.t
-  * ( ( FInfo.t,
+  * ( FInfo.t,
+    ( FInfo.t,
         Arch.reg,
         Arch.regx,
         Arch.xreg,
@@ -27,8 +28,7 @@ val exec :
         Arch.cond,
         Arch.asm_op,
         Arch.extra_op )
-      Arch_extra.extended_op,
-      FInfo.t)
+      Arch_extra.extended_op)
     Expr._uprog ->
   (Z.t * Z.t) list ->
   string ->

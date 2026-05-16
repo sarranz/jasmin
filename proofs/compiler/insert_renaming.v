@@ -4,8 +4,8 @@ Import Utf8.
 
 Section WITH_PARAMS.
 
-  Context {asm_op : Type} {asmop : asmOp asm_op} {pT: progT}.
   Context {fun_info : Type} {FI : FunInfo fun_info}.
+  Context {asm_op : Type} {asmop : asmOp asm_op} {pT: progT}.
 
   Definition rename_var_r (x: var_i) : instr_r :=
     Cassgn (Lvar x) AT_none (vtype x) (Pvar (mk_lvar x)).

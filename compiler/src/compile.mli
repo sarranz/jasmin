@@ -85,7 +85,7 @@ val compile :
   prog ->
   unit) ->
   _ prog ->
-  ((FInfo.t, 'reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op) Arch_extra.extended_op,
-   FInfo.t) Expr._uprog ->
+  (FInfo.t,
+   (FInfo.t, 'reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op) Arch_extra.extended_op) Expr._uprog ->
   (FInfo.t, ('reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op) Arch_decl.asm_prog)
   Compiler_util.cexec

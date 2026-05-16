@@ -18,8 +18,8 @@ Module Import E.
 End E.
 
 Section Section.
-Context `{asmop:asmOp}.
 Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context `{asmop:asmOp}.
 Context (fresh_reg_ptr : instr_info -> int -> string -> atype -> Ident.ident).
 Context (p : uprog).
 

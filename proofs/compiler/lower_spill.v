@@ -29,8 +29,8 @@ End E.
 
 Section ASM_OP.
 
-Context `{asmop : asmOp}.
 Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context `{asmop : asmOp}.
 Context {LC : LoopCounter}.
 Context (fresh_var_ident: v_kind -> instr_info -> int -> string -> atype -> Ident.ident).
 Context (spill_to_mmx : var -> bool).

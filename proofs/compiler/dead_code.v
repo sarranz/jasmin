@@ -21,8 +21,8 @@ End E.
 
 Section ASM_OP.
 
-Context `{asmop : asmOp}.
 Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context `{asmop : asmOp}.
 Context {LC : LoopCounter}.
 
 Definition dead_code_c (dead_code_i: instr -> Sv.t -> cexec (Sv.t * cmd))
