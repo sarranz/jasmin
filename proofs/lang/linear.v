@@ -77,11 +77,12 @@ End ASM_OP.
 
 Notation fopn_args := (lexprs * sopn * rexprs)%type.
 
-Definition li_of_fopn_args
-  {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}
-  {asm_op : Type}
-  {asmop : asmOp asm_op}
-  (ii : instr_info_t)
-  (p : fopn_args) :
-  linstr :=
+Section FOPN_ARGS.
+
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context {asm_op : Type} {asmop : asmOp asm_op}.
+
+Definition li_of_fopn_args (ii : instr_info_t) (p : fopn_args) : linstr :=
   MkLI ii (Lopn p.1.1 p.1.2 p.2).
+
+End FOPN_ARGS.

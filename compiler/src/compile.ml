@@ -58,7 +58,7 @@ let warn_extra_fd pd msfsize asmOp (_, fd) = List.iter (warn_extra_i pd msfsize 
 
 let do_spill_unspill asmop ?(debug = false) cp =
   let p = Conv.cuprog_of_prog cp in
-  match Lower_spill.spill_uprog FInfo.compiler_instance asmop Compiler.default_LoopCounter Conv.fresh_var_ident Conv.spill_to_mmx p with
+  match Lower_spill.spill_uprog CInfo.instance asmop Compiler.default_LoopCounter Conv.fresh_var_ident Conv.spill_to_mmx p with
   | Utils0.Error msg -> Error (Conv.error_of_cerror (Printer.pp_err ~debug) msg)
   | Utils0.Ok p -> Ok (Conv.prog_of_cuprog p)
 
@@ -102,7 +102,7 @@ let do_wint_int
     Conv.csv_of_sv fv ,info
   in
   let cp = Conv.cuprog_of_prog prog in
-  let cp = Wint_int.wi2i_prog FInfo.compiler_instance Arch.asmOp Arch.pointer_data Arch.msf_size get_info cp in
+  let cp = Wint_int.wi2i_prog CInfo.instance Arch.asmOp Arch.pointer_data Arch.msf_size get_info cp in
   let cp = catch_error cp in
   let (gd, fdso) = Conv.prog_of_cuprog cp in
   (* Restore type of array in the functions signature *)
@@ -148,12 +148,12 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
   (* Kind of duplicate of pp_sub_region... *)
   let pp_sr sr =
     let open Compiler_util in
-    pp_vbox FInfo.compiler_instance [
-      pp_nobox FInfo.compiler_instance [
+    pp_vbox CInfo.instance [
+      pp_nobox CInfo.instance [
         PPEstring "{ region = ";
         PPEstring (Format.asprintf "%a" (Pp_stack_alloc.pp_region ~debug:!debug) sr.Stack_alloc.sr_region);
         PPEstring ";"];
-      pp_nobox FInfo.compiler_instance [
+      pp_nobox CInfo.instance [
         PPEstring "  zone = ";
         PPEstring (Format.asprintf "%a" (Pp_stack_alloc.pp_symbolic_zone ~debug:!debug) sr.Stack_alloc.sr_zone);
         PPEstring " }"]];
@@ -437,6 +437,6 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
       (snd prog) []
   in
 
-  Compiler.compile_prog_to_asm FInfo.compiler_instance Arch.asm_e Arch.call_conv Arch.aparams cparams
+  Compiler.compile_prog_to_asm CInfo.instance Arch.asm_e Arch.call_conv Arch.aparams cparams
     export_functions
-    (Expr.to_uprog FInfo.compiler_instance Arch.asmOp cprog)
+    (Expr.to_uprog CInfo.instance Arch.asmOp cprog)

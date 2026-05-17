@@ -2363,4 +2363,4 @@ Instance arm_op_decl : asm_op_decl arm_op :=
   |}.
 
 Definition arm_prog {instr_info : Type} {II : InstrInfo instr_info} :=
-  @asm_prog _ _ _ _ _ _ _ _ _ arm_op_decl.
+  asm_prog (asm_op_d := arm_op_decl).

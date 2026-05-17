@@ -2447,4 +2447,4 @@ Instance x86_op_decl : asm_op_decl x86_op := {
 }.
 
 Definition x86_prog {instr_info : Type} {II : InstrInfo instr_info} :=
-  @asm_prog _ _ register _ _ _ _ _ _ x86_op_decl.
+  asm_prog (asm_op_d := x86_op_decl).

@@ -146,17 +146,17 @@ Definition with_pel_msg (e : pp_error_loc) (msg : pp_error) : pp_error_loc :=
     pel_internal := e.(pel_internal)
   |}.
 
-Lemma add_iinfoP {A a} ii (e:cexec A):
+Lemma add_iinfoP {A a ii} {e : cexec A} :
   add_iinfo ii e = ok a ->
   e = ok a.
 Proof. by case: e. Qed.
 
-Lemma add_finfoP {A a} fi (e:cexec A):
+Lemma add_finfoP {A a fi} {e : cexec A} :
   add_finfo fi e = ok a ->
   e = ok a.
 Proof. by case: e. Qed.
 
-Lemma add_funnameP {A a} fn (e:cexec A):
+Lemma add_funnameP {A a fn} {e : cexec A} :
   add_funname fn e = ok a ->
   e = ok a.
 Proof. by case: e. Qed.
@@ -316,13 +316,13 @@ Ltac t_xrbindP :=
       case; t_xrbindP
 
   | [ |- add_finfo _ _ = ok _ -> _] =>
-      move=> /(add_finfoP (fi := _)); t_xrbindP
+      move=> /add_finfoP; t_xrbindP
 
   | [ |- add_funname _ _ = ok _ -> _] =>
-      move=> /(add_funnameP (fn := _)); t_xrbindP
+      move=> /add_funnameP; t_xrbindP
 
   | [ |- add_iinfo _ _ = ok _ -> _] =>
-      move=> /(add_iinfoP (ii := _)); t_xrbindP
+      move=> /add_iinfoP; t_xrbindP
 
   | [ |- ok _ = ok _ -> _ ] =>
       case; t_xrbindP

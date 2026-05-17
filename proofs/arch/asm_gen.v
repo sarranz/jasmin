@@ -105,7 +105,7 @@ End TOIDENT.
 Section OF_TO.
 
 Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
-Context {reg regx xreg rflag cond} `{arch : arch_decl reg regx xreg rflag cond} {atoI : arch_toIdent}.
+Context {reg regx xreg rflag cond} {arch : arch_decl reg regx xreg rflag cond} {atoI : arch_toIdent}.
 
 Definition to_reg   : var -> option reg_t   := of_var.
 Definition to_regx  : var -> option regx_t  := of_var.
@@ -155,7 +155,9 @@ End OF_TO.
 Section ASM_EXTRA.
 
 Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
-Context `{asm_e : asm_extra (instr_info := instr_info) (fun_info := fun_info) (CI := CI)}
+Context
+  {reg regx xreg rflag cond asm_op extra_op : Type}
+  {asm_e : asm_extra reg regx xreg rflag cond asm_op extra_op}
   {call_conv: calling_convention}.
 
 (* -------------------------------------------------------------------- *)

@@ -240,20 +240,19 @@ Context
   {pT : progT}
   {asmop : Type}
   {asm_op : asmOp asmop}
-  (all_fresh_vars : seq Ident.ident)
-  (fvars : Sv.t).
+  {p : prog}
+  {all_fresh_vars : seq Ident.ident}
+  {fvars : Sv.t}.
 
 Notation disj_fvars := (disj_fvars fvars).
 Notation fvars_correct := (fvars_correct all_fresh_vars fvars).
 
-Context
-  (p : prog)
-  (fv_correct : fvars_correct (p_funcs p)).
+Context (fv_correct : fvars_correct (p_funcs p)).
 
 Lemma fvars_fresh : disj_fvars (vars_p (p_funcs p)).
 Proof. by move: fv_correct => /andP []. Qed.
 
-Lemma disj_fvars_read_e_Papp2 op e0 e1 :
+Lemma disj_fvars_read_e_Papp2 {op e0 e1} :
   disj_fvars (read_e (Papp2 op e0 e1))
   -> disj_fvars (read_e e0) /\ disj_fvars (read_e e1).
 Proof.
@@ -262,7 +261,7 @@ Proof.
   by move=> /disjoint_union [h0 h1].
 Qed.
 
-Lemma disj_fvars_read_e_Pif ty c e0 e1 :
+Lemma disj_fvars_read_e_Pif {ty c e0 e1} :
   disj_fvars (read_e (Pif ty c e0 e1))
   -> [/\ disj_fvars (read_e c)
        , disj_fvars (read_e e0)
@@ -276,14 +275,14 @@ Proof.
   by move=> /disjoint_union [he0 he1].
 Qed.
 
-Lemma disj_fvars_vars_c_cons i c :
+Lemma disj_fvars_vars_c_cons {i c} :
   disj_fvars (vars_c (i :: c))
   -> disj_fvars (vars_I i) /\ disj_fvars (vars_c c).
 Proof.
   rewrite /disj_fvars. rewrite vars_c_cons. exact: disjoint_union.
 Qed.
 
-Lemma disj_fvars_vars_I_Cassgn ii lv tag ty e :
+Lemma disj_fvars_vars_I_Cassgn {ii lv tag ty e} :
   disj_fvars (vars_I (MkI ii (Cassgn lv tag ty e)))
   -> disj_fvars (vars_lval lv) /\ disj_fvars (read_e e).
 Proof.
@@ -291,7 +290,7 @@ Proof.
   by move=> /disjoint_union.
 Qed.
 
-Lemma disj_fvars_vars_I_Copn ii lvs tag op es :
+Lemma disj_fvars_vars_I_Copn {ii lvs tag op es} :
   disj_fvars (vars_I (MkI ii (Copn lvs tag op es)))
   -> disj_fvars (vars_lvals lvs) /\ disj_fvars (read_es es).
 Proof.
@@ -299,7 +298,7 @@ Proof.
   by move=> /disjoint_union.
 Qed.
 
-Lemma disj_fvars_vars_I_Cif ii e c0 c1 :
+Lemma disj_fvars_vars_I_Cif {ii e c0 c1} :
   disj_fvars (vars_I (MkI ii (Cif e c0 c1)))
   -> [/\ disj_fvars (read_e e)
        , disj_fvars (vars_c c0)
@@ -310,7 +309,7 @@ Proof.
   by move=> /disjoint_union [] h0 /disjoint_union [h1 h2].
 Qed.
 
-Lemma disj_fvars_vars_I_Cwhile ii al c0 e ei c1 :
+Lemma disj_fvars_vars_I_Cwhile {ii al c0 e ei c1} :
   disj_fvars (vars_I (MkI ii (Cwhile al c0 e ei c1)))
   -> [/\ disj_fvars (vars_c c0)
        , disj_fvars (read_e e)
@@ -321,7 +320,7 @@ Proof.
   by move=> /disjoint_union [] h0 /disjoint_union [h1 h2].
 Qed.
 
-Lemma disj_fvars_vars_I_Cfor ii i d lo hi c :
+Lemma disj_fvars_vars_I_Cfor {ii i d lo hi c} :
   disj_fvars (vars_I (MkI ii (Cfor i (d, lo, hi) c)))
   -> [/\ disj_fvars (Sv.add i (vars_c c))
        , disj_fvars (read_e lo)
@@ -337,7 +336,7 @@ Proof.
   exact: SvP.MP.add_union_singleton.
 Qed.
 
-Lemma disj_fvars_vars_I_Ccall ii lvs fn args :
+Lemma disj_fvars_vars_I_Ccall {ii lvs fn args} :
   disj_fvars (vars_I (MkI ii (Ccall lvs fn args)))
   -> disj_fvars (vars_lvals lvs) /\ disj_fvars (read_es args).
 Proof.
@@ -345,7 +344,7 @@ Proof.
   by move=> /disjoint_union.
 Qed.
 
-Lemma disj_fvars_get_fundef fn fd :
+Lemma disj_fvars_get_fundef {fn fd} :
   get_fundef (p_funcs p) fn = Some fd
   -> [/\ disj_fvars (vars_l (f_params fd))
        , disj_fvars (vars_l (f_res fd))
@@ -357,7 +356,7 @@ Proof.
   by move=> /disjoint_union [] ? /disjoint_union [].
 Qed.
 
-Lemma disj_fvars_Cfor_c (i : var_i) xs :
+Lemma disj_fvars_Cfor_c {i : var_i} {xs} :
   disj_fvars (Sv.add i xs)
   -> disj_fvars (vars_lval (Lvar i)) /\ disj_fvars xs.
 Proof.
@@ -368,7 +367,7 @@ Proof.
   exact: vars_lval_Lvar.
 Qed.
 
-Lemma disj_fvars_vars_l_read_es xs :
+Lemma disj_fvars_vars_l_read_es {xs} :
   disj_fvars (vars_l xs)
   -> disj_fvars (read_es [seq Pvar (mk_lvar x) | x <- xs ]).
 Proof.

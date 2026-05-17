@@ -229,7 +229,7 @@ let main () =
                | Utils0.Error err -> raise (Evaluator.Eval_error (ii, err)))
               |> Evaluator.run
                    (module Arch)
-                   (Expr.to_uprog FInfo.compiler_instance Arch.asmOp cprog)
+                   (Expr.to_uprog CInfo.instance Arch.asmOp cprog)
                    ii f []
             in
 

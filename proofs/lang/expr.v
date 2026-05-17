@@ -1032,11 +1032,12 @@ Definition is_zero sz (e: pexpr) : bool :=
 
 Notation copn_args := (seq lval * sopn * seq pexpr)%type (only parsing).
 
-Definition instr_of_copn_args
-  {instr_info : Type} {II : InstrInfo instr_info}
-  {asm_op : Type}
-  {asmop : asmOp asm_op}
-  (tg : assgn_tag)
-  (args : copn_args)
-  : instr_r :=
+Section COPN_ARGS.
+
+Context {instr_info : Type} {II : InstrInfo instr_info}.
+Context {asm_op : Type} {asmop : asmOp asm_op}.
+
+Definition instr_of_copn_args (tg : assgn_tag) (args : copn_args) : instr_r :=
   Copn args.1.1 tg args.1.2 args.2.
+
+End COPN_ARGS.

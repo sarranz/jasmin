@@ -14,7 +14,7 @@ let atoI decl =
   let mk_var k t s =
     V.mk s (Reg(k,Direct)) (Conv.ty_of_cty (Type.atype_of_ltype t)) L._dummy [] in
 
-  match Arch_extra.MkAToIdent.mk FInfo.compiler_instance decl mk_var with
+  match Arch_extra.MkAToIdent.mk CInfo.instance decl mk_var with
   | Utils0.Error e ->
       let e = Conv.error_of_cerror (Printer.pp_err ~debug:true) e in
       raise (Utils.HiError e)
@@ -31,10 +31,10 @@ module X86_core = struct
   type lowering_options = X86_lowering.lowering_options
 
   let atoI = atoI x86_decl
-  let asm_e = X86_extra.x86_extra FInfo.compiler_instance atoI
-  let aparams = X86_params.x86_params FInfo.compiler_instance atoI
+  let asm_e = X86_extra.x86_extra CInfo.instance atoI
+  let aparams = X86_params.x86_params CInfo.instance atoI
 
-  let not_saved_stack = (X86_params.x86_liparams FInfo.compiler_instance atoI).lip_not_saved_stack
+  let not_saved_stack = (X86_params.x86_liparams CInfo.instance atoI).lip_not_saved_stack
 
   let pp_asm = Pp_x86.print_prog
 

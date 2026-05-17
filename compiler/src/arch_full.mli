@@ -29,10 +29,20 @@ module type Core_arch = sig
 
   val asm_e :
     (IInfo.t, FInfo.t, reg, regx, xreg, rflag, cond, asm_op, extra_op) asm_extra
+
   val aparams :
-    (IInfo.t, FInfo.t, IInfo.t, FInfo.t,
-     reg, regx, xreg, rflag, cond, asm_op, extra_op,
-     lowering_options) Arch_params.architecture_params
+    ( IInfo.t,
+      FInfo.t,
+      reg,
+      regx,
+      xreg,
+      rflag,
+      cond,
+      asm_op,
+      extra_op,
+      lowering_options )
+    Arch_params.architecture_params
+
   val call_conv : (reg, regx, xreg, rflag, cond) calling_convention
   val alloc_stack_need_extra : Z.t -> bool
 
@@ -41,7 +51,8 @@ module type Core_arch = sig
 
   val pp_asm :
     Format.formatter ->
-    (IInfo.t, reg, regx, xreg, rflag, cond, asm_op) Arch_decl.asm_prog -> unit
+    (IInfo.t, reg, regx, xreg, rflag, cond, asm_op) Arch_decl.asm_prog ->
+    unit
 
   val callstyle : reg callstyle
 

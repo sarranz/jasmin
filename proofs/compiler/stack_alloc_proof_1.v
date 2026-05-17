@@ -7129,7 +7129,7 @@ Lemma wfr_VARS_ZONE_alloc_syscall ii rmap rs o es rmap2 c vars :
   wfr_VARS_ZONE vars rmap ->
   wfr_VARS_ZONE vars rmap2.
 Proof.
-  rewrite /alloc_syscall => /(add_iinfoP (ii := _)).
+  rewrite /alloc_syscall => /add_iinfoP.
   case: o => [ws len].
   t_xrbindP=> _.
   case: rs => // -[] // x [] //.
@@ -7146,7 +7146,7 @@ Lemma wfr_VARS_STATUS_alloc_syscall ii rmap rs o es rmap2 c vars :
   wfr_VARS_STATUS vars rmap ->
   wfr_VARS_STATUS vars rmap2.
 Proof.
-  rewrite /alloc_syscall => /(add_iinfoP (ii := _)).
+  rewrite /alloc_syscall => /add_iinfoP.
   case: o => [ws len].
   t_xrbindP=> _.
   case: rs => // -[] // x [] //.
@@ -7170,7 +7170,7 @@ Lemma alloc_syscallP ii rmap rs o es rmap2 c table vme m0 s1 s2 ves scs m vs s1'
     valid_state (foldl remove_binding_lval table rs) rmap2 vme m0 s1' s2'.
 Proof.
   move=> halloc hvs.
-  move: halloc; rewrite /alloc_syscall; move=> /(add_iinfoP (ii := _)).
+  move: halloc; rewrite /alloc_syscall; move=> /add_iinfoP.
   case: o => [ws len].
   t_xrbindP=> /ZltP hlen.
   case: rs => // -[] // x [] //.

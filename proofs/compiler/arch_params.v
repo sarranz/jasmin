@@ -18,7 +18,7 @@ Section INFO.
 Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Record lowering_params
-  `{asmop : asmOp} (lowering_options : Type) :=
+  {asm_op : Type} {asmop : asmOp asm_op} (lowering_options : Type) :=
   {
     (* Lower an instruction to architecture-specific instructions. *)
     lop_lower_i :
@@ -40,14 +40,16 @@ Record lowering_params
 (* Lowering of complex addressing mode for RISC-V.
    It is the identity for the other architectures. *)
 Record lower_addressing_params
-  `{asm_e : asm_extra} :=
+  {reg regx xreg rflag cond asm_op extra_op : Type}
+  {asm_e : asm_extra reg regx xreg rflag cond asm_op extra_op} :=
   {
     lap_lower_address :
       (string -> atype -> Ident.ident) -> _sprog -> cexec _sprog;
   }.
 
 Record architecture_params
-  `{asm_e : asm_extra}
+  {reg regx xreg rflag cond asm_op extra_op : Type}
+  {asm_e : asm_extra reg regx xreg rflag cond asm_op extra_op}
   (lowering_options : Type) :=
   {
     (* Stack alloc parameters. See stack_alloc.v. *)

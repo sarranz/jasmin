@@ -2128,9 +2128,7 @@ Section PROOF.
     (* Assert *)
     + by move=> a ii _; apply wequiv_noassert with (ev1:=ev) (ii:=ii).
     (* If *)
-    + move=> e c1 c2 hc1 hc2 ii hfv /=.
-      have [hfve hfc1 hfc2] := disj_fvars_vars_I_Cif hfv.
-      have {}hc1 := hc1 hfc1. have {}hc2 := hc2 hfc2.
+    + move=> e c1 c2 hc1 hc2 ii /disj_fvars_vars_I_Cif [hfve /hc1{}hc1 /hc2{}hc2] /=.
       case heq: lower_condition => [pre e'].
       rewrite -cats1 map_cat /=.
       apply (wequiv_if_esem (sip:=sip)) with eq_exc_fresh.
@@ -2138,8 +2136,7 @@ Section PROOF.
         by apply: (lower_condition_corr ii (esym heq) heqfv (eeq_exc_sem_pexpr hfve heqfv he)).
       by move=> [].
     (* For *)
-    + move=> x dir lo hi c hc ii /= hfv.
-      have [hfvc hfvlo hfvhi] := disj_fvars_vars_I_Cfor hfv.
+    + move=> x dir lo hi c hc ii /= /disj_fvars_vars_I_Cfor [hfvc hfvlo hfvhi].
       apply (wequiv_for_rel_eq (sip:=sip)) with checker_st_eq_ex fvars fvars => //.
       + split => //.
         apply: (disjoint_equal_r (read_eE _ _)).
@@ -2149,16 +2146,13 @@ Section PROOF.
         by move=> z hz; move/disjointP: hfvc => /(_ z); SvD.fsetdec.
       by apply/hc/disjointP => z hz; move/disjointP: hfvc => /(_ z); SvD.fsetdec.
     (* While *)
-    + move=> al c e ii' c' hc hc' ii hfv /=.
-      have [hfc hfve hfc'] := disj_fvars_vars_I_Cwhile hfv.
-      have {}hc := hc hfc. have {}hc' := hc' hfc'.
+    + move=> al c e ii' c' hc hc' ii /disj_fvars_vars_I_Cwhile [/hc{}hc hfve /hc'{}hc'] /=.
       case heq: lower_condition => [pre e'].
       apply (wequiv_while_esem (sip:=sip)) with  eq_exc_fresh => //.
        move=> s t v heqfv he.
        by apply: (lower_condition_corr ii' (esym heq) heqfv (eeq_exc_sem_pexpr hfve heqfv he)).
     (* Call *)
-    move=> xs fn es ii hfv /=.
-    have [hdisjx hdisje] := disj_fvars_vars_I_Ccall hfv.
+    move=> xs fn es ii /disj_fvars_vars_I_Ccall [hdisjx hdisje] /=.
     apply (wequiv_call_rel_eq (sip:=sip)) with checker_st_eq_ex fvars => //.
     by move=> ???; apply: (wequiv_fun_rec (spec := eq_spec)).
   Qed.

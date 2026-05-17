@@ -27,10 +27,20 @@ module type Core_arch = sig
 
   val asm_e :
     (IInfo.t, FInfo.t, reg, regx, xreg, rflag, cond, asm_op, extra_op) asm_extra
+
   val aparams :
-    (IInfo.t, FInfo.t, IInfo.t, FInfo.t,
-     reg, regx, xreg, rflag, cond, asm_op, extra_op,
-     lowering_options) Arch_params.architecture_params
+    ( IInfo.t,
+      FInfo.t,
+      reg,
+      regx,
+      xreg,
+      rflag,
+      cond,
+      asm_op,
+      extra_op,
+      lowering_options )
+    Arch_params.architecture_params
+
   val call_conv : (reg, regx, xreg, rflag, cond) calling_convention
   val alloc_stack_need_extra : Z.t -> bool
 
@@ -39,7 +49,8 @@ module type Core_arch = sig
 
   val pp_asm :
     Format.formatter ->
-    (IInfo.t, reg, regx, xreg, rflag, cond, asm_op) Arch_decl.asm_prog -> unit
+    (IInfo.t, reg, regx, xreg, rflag, cond, asm_op) Arch_decl.asm_prog ->
+    unit
 
   val callstyle : reg callstyle
 
@@ -120,7 +131,7 @@ module Arch_from_Core_arch (A : Core_arch) :
   (* not sure it is the best place to define [rip], but we need to know [reg_size] *)
   let rip = V.mk "RIP" (Reg (Normal, Direct)) (tu reg_size) L._dummy []
 
-  let asmOp = Arch_extra.asm_opI FInfo.compiler_instance A.asm_e
+  let asmOp = Arch_extra.asm_opI CInfo.instance A.asm_e
   let asmOp_sopn = Sopn.asmOp_sopn pointer_data msf_size asmOp
 
   let var_of_reg (r:reg) : var = atoI.toI_r.to_ident r

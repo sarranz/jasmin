@@ -196,10 +196,10 @@ let run (type reg regx xreg rflag cond asm_op extra_op)
          (IInfo.t, FInfo.t,
           (IInfo.t, FInfo.t, reg, regx, xreg, rflag, cond, asm_op, extra_op)
           Arch_extra.extended_op) Expr.uprog) ii fn args m =
-  let ep = Sem_params_of_arch_extra.ep_of_asm_e FInfo.compiler_instance A.asm_e Syscall_ocaml.sc_sem in
-  let spp = Sem_params_of_arch_extra.spp_of_asm_e FInfo.compiler_instance A.asm_e in
+  let ep = Sem_params_of_arch_extra.ep_of_asm_e CInfo.instance A.asm_e Syscall_ocaml.sc_sem in
+  let spp = Sem_params_of_arch_extra.spp_of_asm_e CInfo.instance A.asm_e in
   let sip =
-    Sem_params_of_arch_extra.sip_of_asm_e FInfo.compiler_instance A.asm_e Syscall_ocaml.sc_sem
+    Sem_params_of_arch_extra.sip_of_asm_e CInfo.instance A.asm_e Syscall_ocaml.sc_sem
   in
   let scs0 = Syscall_ocaml.initial_state () in
   exec ep spp sip scs0 p ii fn args m

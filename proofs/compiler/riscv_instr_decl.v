@@ -616,4 +616,4 @@ Instance riscv_op_decl : asm_op_decl riscv_op :=
   |}.
 
 Definition riscv_prog {instr_info : Type} {II : InstrInfo instr_info} :=
-  @asm_prog _ _ _ _ _ _ _ _ _ riscv_op_decl.
+  asm_prog (asm_op_d := riscv_op_decl).

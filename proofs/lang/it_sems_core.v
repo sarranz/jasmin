@@ -33,7 +33,7 @@ Record fstate := { fscs : syscall_state_t; fmem : mem; fvals : values }.
 
 (* Recursion events (curried version of Call in ITree) *)
 Variant recCall : Type -> Type :=
- | RecCall (ii:instr_info_t) (f:funname) (fs:fstate) : recCall fstate.
+ | RecCall (ii : instr_info_t) (f : funname) (fs : fstate) : recCall fstate.
 
 Definition mk_error_data (s:estate) (e:error)  := (e, tt).
 
