@@ -11,7 +11,7 @@ Local Open Scope seq_scope.
 Module Import E.
   Section INFO.
 
-  Context {fun_info : Type} {FI : FunInfo fun_info}.
+  Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
   Definition pass : string := "array expansion".
 
@@ -65,7 +65,7 @@ End E.
 
 Section INFO.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Record varr_info := {
   vi_v : var;

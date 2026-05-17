@@ -10,7 +10,7 @@ Require Import seq_extra unionfind.
 Module Import E.
 Section INFO.
 
-  Context {fun_info : Type} {FI : FunInfo fun_info}.
+  Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
   Definition pass : string := "tunneling".
 
@@ -22,7 +22,7 @@ End E.
 
 Section ASM_OP.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context {pd : PointerData}.
 Context `{asmop : asmOp}.
 

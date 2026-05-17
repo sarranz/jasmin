@@ -23,7 +23,7 @@ Module E.
 Definition pass_name := "asmgen"%string.
 
 Section INFO.
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Definition error (ii : instr_info) (msg : string) :=
   {|
@@ -71,7 +71,7 @@ HB.instance Definition _ := hasDecEq.Build x86_extra_op x86_extra_op_eqb_OK.
 Local Notation E n := (ADExplicit n ACR_any).
 
 Section Section.
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context {atoI : arch_toIdent}.
 
 Definition Oset0_instr sz  :=

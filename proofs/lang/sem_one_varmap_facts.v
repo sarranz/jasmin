@@ -12,7 +12,7 @@ Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then
 
 Section PROG.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Context
   {asm_op syscall_state : Type}
@@ -168,14 +168,16 @@ Lemma sem_call_valid_RSP ii k s1 fn s2 :
   sem_call p var_tmp ii k s1 fn s2 →
   valid_RSP p (emem s1) (evm s2).
 Proof.
-  case/sem_callE => fd m s k' ok_fd ok_ra ok_ss ok_sp ok_RSP ok_m exec_body ok_RSP' -> /= _.
+  move=> h; have h' := sem_callE h.
+  case: h' => fd m s k' ok_fd ok_ra ok_ss ok_sp ok_RSP ok_m exec_body ok_RSP' -> /= _.
   rewrite /valid_RSP /set_RSP Vm.setP_eq /top_stack.
   have ok_alloc := Memory.alloc_stackP ok_m.
+  cbv zeta in exec_body.
   have /= ok_exec := sem_stack_stable exec_body.
   have ok_free := Memory.free_stackP (emem s).
-  rewrite (fss_frames ok_free) -(ss_frames ok_exec) (ass_frames ok_alloc).
-  rewrite (fss_root ok_free) -(ss_root ok_exec) (ass_root ok_alloc) -/(top_stack (emem s1)).
-  by rewrite cmp_le_refl.
+  rewrite cmp_le_refl /=.
+  rewrite (fss_root ok_free) -(ss_root ok_exec) (ass_root ok_alloc).
+  by rewrite (fss_frames ok_free) -(ss_frames ok_exec) (ass_frames ok_alloc) /=.
 Qed.
 
 (* The contents of variables that are not written are preserved. *)

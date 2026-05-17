@@ -107,6 +107,7 @@ Notation interp_safe_cond_lty tin id_safe id_semi :=
 
 Section DECL.
 
+Context {instr_info : Type} {II : InstrInfo instr_info}.
 Context {reg regx xreg rflag cond} `{arch : arch_decl reg regx xreg rflag cond}.
 
 Definition lreg := lword reg_size.
@@ -587,7 +588,7 @@ Variant asm_i_r : Type :=
   | Declassify_val of ltype & asm_arg
   | Declassify_mem of positive & address.
 
-Record asm_i : Type := MkAI { asmi_ii : instr_info; asmi_i : asm_i_r }.
+Record asm_i : Type := MkAI { asmi_ii : instr_info_t; asmi_i : asm_i_r }.
 
 Definition asm_code := seq asm_i.
 

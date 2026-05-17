@@ -10,7 +10,7 @@ Local Open Scope seq_scope.
 
 Section INLINE.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Context
   {wsw : WithSubWord}
@@ -200,6 +200,10 @@ Section SUBSET.
   Qed.
 
 End SUBSET.
+
+Arguments inline_c_subset  {p c X2 Xc} _.
+Arguments inline_i_subset  {p i ii X2 Xc} _.
+Arguments inline_i'_subset {p i X2 Xc} _.
 
 Lemma assgn_tuple_Lvar (p:uprog) (ev:unit) ii (xs:seq var_i) flag tys es vs vs' s s' :
   let xs := map Lvar xs in
@@ -596,7 +600,9 @@ Lemma inline_call_errP p p' f ev scs mem scs' mem' va va' vr:
 Proof.
   rewrite /inline_prog_err;case:ifP => //= Hu.
   t_xrbindP => fds Hi <-.
-  by apply: (inline_callP (p':= {|p_globs := p_globs p; p_funcs:= fds|}) Hu Hi).
+  exact: (inline_callP
+    (p' := {| p_funcs := fds; p_globs := p_globs p; p_extra := p_extra p |})
+    Hu Hi erefl).
 Qed.
 
 Section IT.
@@ -810,7 +816,9 @@ Proof.
   + apply /disjointP => z hz.
     move/disjointP: hdisj => /(_ z).
     rewrite /locals_p !read_writeE vrvs_recE; move: hz; clear; SvD.fsetdec.
-  have /(esem_i_bodyP (sem_F := sem_fun_rec E)) h := assgn_tuple_Lvar ev (ii_with_location ii) AT_rename hdisje hes' htr' hws'.
+  have hassgn : esem p2 ev (assgn_tuple (ii_with_location ii) (map Lvar (f_params ffd)) AT_rename (f_tyin ffd) es) t = ok (with_vm s1 vm2)
+    by apply: assgn_tuple_Lvar hdisje hes' htr' hws'.
+  have /(esem_i_bodyP (sem_F := sem_fun_rec E)) h := hassgn.
   rewrite {}h /=.
   rewrite ITree.Eq.Eqit.bind_ret_l isem_cmd_cat.
   have := [elaborate it_eq_cmdP_rec(p:=p1) (p':=p2) ev ev erefl (extend_iinfo_cmd_eq_cmd ii ((f_body ffd)))].
@@ -855,8 +863,10 @@ Proof.
     move/disjointP: hdisj => /(_ z).
     rewrite /locals_p vrvs_recE read_cE write_c_recE vars_l_read_es.
     by move: hz; clear; SvD.fsetdec.
-  have := assgn_tuple_Pvar _ (ii_with_location ii) AT_rename hdisjr hget' htr'.
-  move=> /(_ p2 ev t1' hws1) /(esem_i_bodyP (sem_F := sem_fun_rec E)) -> /=.
+  have hassgn2 : esem p2 ev (assgn_tuple (ii_with_location ii) xs AT_rename
+      (f_tyout ffd) [seq Plvar i | i <- f_res ffd]) t' = ok t1'
+    by apply: assgn_tuple_Pvar hdisjr hget' htr' hws1.
+  have /(esem_i_bodyP (sem_F := sem_fun_rec E)) -> /= := hassgn2.
   apply xrutt.xrutt_Ret.
   by apply: st_rel_weaken hpost; subst X1 => ??; apply: uincl_onI; SvD.fsetdec.
 Qed.
@@ -903,7 +913,7 @@ Lemma it_inline_call_errP p' fn :
 Proof.
   rewrite /inline_prog_err; case: ifP => //; t_xrbindP => huniq pfuncs h <-.
   have /(_ [::]) /= := inline_fd_consP h.
-  rewrite cats0 => /(_ huniq) [_ ]; apply => fn'; rewrite (surj_prog p).
+  rewrite cats0 => /(_ huniq) [_]; apply => fn'; rewrite (surj_prog p).
   apply it_sem_uincl_f.
 Qed.
 

@@ -56,7 +56,7 @@ module type S = sig
             - asm_line list : assembly program
 
     *)
-    val asm_of_prog : (reg, regx, xreg, rflag, cond, asm_op) Arch_decl.asm_prog -> PrintASM.asm_element list
+    val asm_of_prog : (IInfo.t, reg, regx, xreg, rflag, cond, asm_op) Arch_decl.asm_prog -> PrintASM.asm_element list
 end
 
 (**

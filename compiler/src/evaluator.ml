@@ -7,12 +7,11 @@ open Var0
 open Varmap
 open Low_memory
 open Expr
-open Info
 open Psem_defs
 open Values
 open Sem_params
 
-exception Eval_error of instr_info * Utils0.error
+exception Eval_error of IInfo.t * Utils0.error
 
 let pp_error fmt err =
   Format.fprintf fmt "%s" @@
@@ -26,7 +25,7 @@ let pp_error fmt err =
   | ErrSemUndef -> "undefined semantics"
   | ErrAssert _ -> "assertion violation"
 
-let exn_exec (ii:instr_info) (r: 't exec) =
+let exn_exec (ii:IInfo.t) (r: 't exec) =
   match r with
   | Ok r -> r
   | Error e -> raise (Eval_error(ii, e))
@@ -39,14 +38,17 @@ let of_val_b ii v : bool =
 
 (* ----------------------------------------------------------------- *)
 type ('finfo, 'asm) stack =
-  | Sempty of instr_info * ('finfo, 'asm) fundef * value list
+  | Sempty of IInfo.t * (IInfo.t, 'finfo, 'asm) fundef * value list
   | Scall of
-      instr_info * ('finfo, 'asm) fundef * value list * lval list * Vm.t * 'asm instr list * ('finfo, 'asm) stack
-  | Sfor of instr_info * var_i * coq_Z list * 'asm instr list * 'asm instr list * ('finfo, 'asm) stack
+      IInfo.t * (IInfo.t, 'finfo, 'asm) fundef * value list * lval list
+      * Vm.t * (IInfo.t, 'asm) instr list * ('finfo, 'asm) stack
+  | Sfor of IInfo.t * var_i * coq_Z list
+      * (IInfo.t, 'asm) instr list * (IInfo.t, 'asm) instr list
+      * ('finfo, 'asm) stack
 
 type ('syscall_state, 'finfo, 'asm) state =
-  { s_prog : ('finfo, 'asm) prog;
-    s_cmd  : 'asm instr list;
+  { s_prog : (IInfo.t, 'finfo, 'asm) prog;
+    s_cmd  : (IInfo.t, 'asm) instr list;
     s_estate : 'syscall_state estate;
     s_stk  : ('finfo, 'asm) stack;
   }
@@ -191,12 +193,13 @@ let run (type reg regx xreg rflag cond asm_op extra_op)
                and type asm_op = asm_op
                and type extra_op = extra_op)
       (p :
-         (FInfo.t,
-          (FInfo.t, reg, regx, xreg, rflag, cond, asm_op, extra_op) Arch_extra.extended_op) Expr.uprog) ii fn args m =
-  let ep = Sem_params_of_arch_extra.ep_of_asm_e FInfo.instance A.asm_e Syscall_ocaml.sc_sem in
-  let spp = Sem_params_of_arch_extra.spp_of_asm_e FInfo.instance A.asm_e in
+         (IInfo.t, FInfo.t,
+          (IInfo.t, FInfo.t, reg, regx, xreg, rflag, cond, asm_op, extra_op)
+          Arch_extra.extended_op) Expr.uprog) ii fn args m =
+  let ep = Sem_params_of_arch_extra.ep_of_asm_e FInfo.compiler_instance A.asm_e Syscall_ocaml.sc_sem in
+  let spp = Sem_params_of_arch_extra.spp_of_asm_e FInfo.compiler_instance A.asm_e in
   let sip =
-    Sem_params_of_arch_extra.sip_of_asm_e FInfo.instance A.asm_e Syscall_ocaml.sc_sem
+    Sem_params_of_arch_extra.sip_of_asm_e FInfo.compiler_instance A.asm_e Syscall_ocaml.sc_sem
   in
   let scs0 = Syscall_ocaml.initial_state () in
   exec ep spp sip scs0 p ii fn args m

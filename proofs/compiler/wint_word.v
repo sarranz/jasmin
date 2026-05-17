@@ -78,7 +78,7 @@ Context
   `{asmop:asmOp}
    {LC : LoopCounter}
 .
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Fixpoint wi2w_ir (ir:instr_r) : instr_r :=
   match ir with

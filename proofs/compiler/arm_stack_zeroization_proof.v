@@ -30,7 +30,7 @@ Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then
 (* FIXME: We should use the higher-level [eval_lsem] lemmas. *)
 Section FIXME.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context
   {asm_op syscall_state : Type}
   {ep : EstateParams syscall_state}
@@ -49,7 +49,7 @@ End FIXME.
 
 Section STACK_ZEROIZATION.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context {atoI : arch_toIdent} {syscall_state : Type} {sc_sem : syscall_sem syscall_state}.
 Context {call_conv : calling_convention}.
 

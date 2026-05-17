@@ -18,8 +18,8 @@ module Riscv_core = struct
 
   let atoI = X86_arch_full.atoI riscv_decl
 
-  let asm_e = Riscv_extra.riscv_extra FInfo.instance atoI
-  let aparams = Riscv_params.riscv_params FInfo.instance atoI
+  let asm_e = Riscv_extra.riscv_extra FInfo.compiler_instance atoI
+  let aparams = Riscv_params.riscv_params FInfo.compiler_instance atoI
   let known_implicits = []
 
   let alloc_stack_need_extra sz =
@@ -52,7 +52,7 @@ module Riscv (Lowering_params : Riscv_input) : Arch_full.Core_arch
 
   let lowering_opt = ()
 
-  let not_saved_stack = (Riscv_params.riscv_liparams FInfo.instance atoI).lip_not_saved_stack
+  let not_saved_stack = (Riscv_params.riscv_liparams FInfo.compiler_instance atoI).lip_not_saved_stack
 
   let pp_asm = Pp_riscv.print_prog
 

@@ -23,7 +23,7 @@ Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then
 
 Section WITH_PARAMS.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Context
   {asm_op syscall_state : Type}
@@ -3104,7 +3104,7 @@ Section PROOF.
 
     have h := encode_label_dom small_dom_p' lbl_valid.
     case ok_ptr: encode_label h => [ ptr | // ] _.
-    case/sem_callE: (exec_call) => ? m s' k'; rewrite ok_fd' => /Some_inj <- ra_sem ok_ss sp_aligned T ok_m exec_cbody T' s2_eq hk.
+    case: (sem_callE exec_call) => ? m s' k'; rewrite ok_fd' => /Some_inj <- ra_sem ok_ss sp_aligned T ok_m exec_cbody T' s2_eq hk.
     move: ok_stk_sz sp_aligned A {ok_save_stack};
       rewrite /top_stack_aligned (negbTE ok_ra) /= => ok_stk_sz sp_aligned [??]; subst lbli li.
     have s1_rsp : (evm s1).[vrsp] = Vword (top_stack (emem s1)).

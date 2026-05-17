@@ -18,6 +18,8 @@ Context
 
 Section CALLS.
 
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+
 Fixpoint i_Calls (i : instr) {struct i} : Sf.t :=
   let: MkI _ i := i in i_Calls_r i
 
@@ -117,7 +119,7 @@ End CALLS.
 
 Section Section.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context {pT: progT} {sCP: semCallParams}.
 
 #[local]

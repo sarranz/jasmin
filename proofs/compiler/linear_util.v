@@ -8,7 +8,7 @@ Notation map_cflprog := (map_cfprog_gen lfd_info).
 
 Section ASM_OP.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context {asm_op} {asmop : asmOp asm_op}.
 
 Definition map_lfundef (f : lcmd -> lcmd) (lfd : lfundef) : lfundef :=

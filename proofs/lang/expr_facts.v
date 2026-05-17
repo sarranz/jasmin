@@ -107,7 +107,7 @@ End PEXPRS_IND.
 
 Section ASM_OP.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context `{asmop:asmOp}.
 Context {pT: progT}.
 
@@ -898,6 +898,7 @@ Qed.
 
 Section EQ_CMD.
 
+Context {instr_info : Type} {II : InstrInfo instr_info}.
 Context {asm_op : Type} {asmop:asmOp asm_op}.
 
 Section REFL.
@@ -1148,7 +1149,12 @@ Qed.
 
 End TRANS.
 
+End EQ_CMD.
+
 Section WRITE_C.
+
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context {asm_op : Type} {asmop : asmOp asm_op}.
 
 Let Pr i := forall i2, eq_instr_r i i2 -> Sv.Equal (write_i i) (write_i i2).
 Let Pi i := forall i2, eq_instr i i2 -> Sv.Equal (write_I i) (write_I i2).
@@ -1233,8 +1239,6 @@ Proof.
 Qed.
 
 End WRITE_C.
-
-End EQ_CMD.
 
 (* -------------------------------------------------------------------- *)
 

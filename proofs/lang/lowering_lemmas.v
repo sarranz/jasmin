@@ -191,7 +191,7 @@ Definition checker_st_eq_ex : Checker_e st_eq_ex :=
      check_esP_rel := check_esP_R_st_eq_ex |}.
 
 Section CALL.
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context
   {dc:DirectCall}
   {sip : SemInstrParams asm_op syscall_state}
@@ -234,7 +234,7 @@ End ESTATE_EQ_EXCEPT.
 
 Section DISJ_FVARS.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Context
   {pT : progT}

@@ -26,27 +26,21 @@ Extract Constant strings.ascii_cmp =>
 Extract Constant info.VarInfo.t => "Location.t".
 Extract Constant info.VarInfo.witness => "Location._dummy".
 Extract Constant info.var_info => "Location.t".
-Extract Constant info.InstrInfo.t => "IInfo.t".
-Extract Constant info.InstrInfo.witness => "IInfo.dummy".
-Extract Constant info.InstrInfo.with_location => "IInfo.with_location".
-Extract Constant info.InstrInfo.is_inline => "IInfo.is_inline".
-Extract Constant info.InstrInfo.var_info_of_ii => "IInfo.var_info_of_ii".
-Extract Constant info.instr_info => "IInfo.t".
 Extract Constant waes.MixColumns => "(fun _ -> failwith ""MixColumns is not implemented"")".
 Extract Constant waes.InvMixColumns => "(fun _ -> failwith ""InvMixColumns not implemented"")".
 
 (* The match function and the field projections [c_tag], [c_name], [c_kind]
    could all be extracted soundly (via
    [fun fmk x -> fmk (CoreIdent.Cident.tag x) ...] and the corresponding OCaml
-   accessors). This means that the extracted OCaml has no [failwith].
-   We deliberately fail in this cases: we want to use only [tag], [id_name],
-   [id_kind]. Anything that tries to pattern-match on [mkCident] or read
-   [c_tag]/[c_name]/[c_kind] is a bug. *)
+   accessors). This means that the extracted OCaml needs no [failwith].
+
+   However, I deliberately fail in this cases: we want to use only [tag],
+   [id_name], [id_kind]. Anything that tries to pattern-match on [mkCident] or
+   read [c_tag]/[c_name]/[c_kind] is a bug. *)
 Extract Inductive ident.Cident.t =>
   "CoreIdent.Cident.t"
   [ "(fun _ _ _ -> failwith ""Cident.mkCident not callable "")" ]
   "(fun _ _ -> failwith ""Cident.t match not callable "")".
-
 Extract Constant ident.Cident.c_tag =>
   "(fun _ -> failwith ""Cident.c_tag not callable "")".
 Extract Constant ident.Cident.c_name =>
@@ -57,7 +51,6 @@ Extract Constant ident.Cident.c_kind =>
 Extract Constant ident.Cident.tag => "CoreIdent.Cident.tag".
 Extract Constant ident.Cident.id_name => "CoreIdent.Cident.id_name".
 Extract Constant ident.Cident.id_kind => "CoreIdent.Cident.id_kind".
-
 Extract Constant ident.Cident.eqb => "CoreIdent.eqb".
 Extract Constant ident.Cident.cmp => "CoreIdent.cmp".
 
@@ -66,7 +59,6 @@ Extract Inductive funname.FunName.t =>
   "CoreIdent.funname"
   [ "(fun _ _ -> failwith ""FunName.mkFunname not callable "")" ]
   "(fun _ _ -> failwith ""FunName.t match not callable "")".
-
 Extract Constant funname.FunName.fn_tag  =>
   "(fun _ -> failwith ""FunName.fn_tag not callable "")".
 Extract Constant funname.FunName.fn_name =>
@@ -107,4 +99,5 @@ Separate Extraction
   riscv_extra
   riscv_params
   compiler
-  wint_int.
+  wint_int
+.

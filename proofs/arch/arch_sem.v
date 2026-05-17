@@ -24,6 +24,7 @@ Require Import
   sem_type
   syscall syscall_sem
   label
+  info
   arch_decl
   while.
 
@@ -90,6 +91,7 @@ Notation rflagmap := RflagMap.map.
 (* -------------------------------------------------------------------- *)
 Section SEM.
 
+Context {instr_info : Type} {II : InstrInfo instr_info}.
 Context {syscall_state : Type} {sc_sem : syscall_sem syscall_state} `{asm_d : asm} {call_conv: calling_convention}.
 
 Record asmmem : Type := AsmMem {

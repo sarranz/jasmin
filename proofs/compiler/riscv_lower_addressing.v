@@ -23,7 +23,7 @@ Module E.
 Definition pass_name := "lower_addressing"%string.
 
 Section INFO.
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Definition error msg := {|
     pel_msg := pp_s msg;
@@ -40,7 +40,7 @@ End INFO.
 End E.
 
 Section Section.
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context {atoI: arch_toIdent} {pT: progT}.
 
 Section tmp.

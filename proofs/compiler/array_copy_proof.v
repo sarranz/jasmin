@@ -23,7 +23,7 @@ Context
   {pT : progT}
   {sCP : semCallParams}.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context (fresh_var_ident: v_kind → instr_info → string → atype → Ident.ident).
 
 Let fresh_counter fi : Ident.ident := fresh_var_ident Inline (entry_info_of_fun_info fi) "i__copy" aint.

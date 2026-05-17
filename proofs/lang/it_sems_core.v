@@ -27,13 +27,13 @@ Context
   {sip : SemInstrParams asm_op syscall_state}
   {pT : progT}
   {scP : semCallParams}.
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Record fstate := { fscs : syscall_state_t; fmem : mem; fvals : values }.
 
 (* Recursion events (curried version of Call in ITree) *)
 Variant recCall : Type -> Type :=
- | RecCall (ii:instr_info) (f:funname) (fs:fstate) : recCall fstate.
+ | RecCall (ii:instr_info_t) (f:funname) (fs:fstate) : recCall fstate.
 
 Definition mk_error_data (s:estate) (e:error)  := (e, tt).
 

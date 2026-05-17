@@ -4,6 +4,7 @@ Require Import expr.
 Import Utf8.
 
 Section DEFS.
+Context {instr_info : Type} {II : InstrInfo instr_info}.
 Context `{asmop:asmOp}.
 Context (m: var -> option (signedness * var)).
 

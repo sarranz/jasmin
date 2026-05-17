@@ -45,23 +45,34 @@ val lval_of_clval : Expr.lval -> Prog.lval
 val cexpr_of_expr : Prog.expr -> Expr.pexpr
 val expr_of_cexpr : Expr.pexpr -> expr
 
-val cufdef_of_fdef : (unit, 'asm) func -> Funname.funname * (FInfo.t, 'asm) Expr._ufundef
-val fdef_of_cufdef : Funname.funname * (FInfo.t, 'asm) Expr._ufundef -> (unit, 'asm) func
+val cufdef_of_fdef :
+  (unit, 'asm) func ->
+  Funname.funname * (IInfo.t, FInfo.t, 'asm) Expr._ufundef
+val fdef_of_cufdef :
+  Funname.funname * (IInfo.t, FInfo.t, 'asm) Expr._ufundef ->
+  (unit, 'asm) func
 
-val cuprog_of_prog : (unit, 'asm) prog -> (FInfo.t, 'asm) Expr._uprog
-val prog_of_cuprog : (FInfo.t, 'asm) Expr._uprog -> (unit, 'asm) prog
+val cuprog_of_prog :
+  (unit, 'asm) prog -> (IInfo.t, FInfo.t, 'asm) Expr._uprog
+val prog_of_cuprog :
+  (IInfo.t, FInfo.t, 'asm) Expr._uprog -> (unit, 'asm) prog
 
-val csfdef_of_fdef : ('info, 'asm) sfundef -> Funname.funname * (FInfo.t, 'asm) Expr._sfundef
-val fdef_of_csfdef : Funname.funname * (FInfo.t, 'asm) Expr._sfundef -> (unit, 'asm) sfundef
+val csfdef_of_fdef :
+  ('info, 'asm) sfundef ->
+  Funname.funname * (IInfo.t, FInfo.t, 'asm) Expr._sfundef
+val fdef_of_csfdef :
+  Funname.funname * (IInfo.t, FInfo.t, 'asm) Expr._sfundef ->
+  (unit, 'asm) sfundef
 
-val prog_of_csprog : (FInfo.t, 'asm) Expr._sprog -> (unit, 'asm) sprog
+val prog_of_csprog :
+  (IInfo.t, FInfo.t, 'asm) Expr._sprog -> (unit, 'asm) sprog
 
-val to_array : 
+val to_array :
   Prog.ty -> BinNums.positive -> Warray_.WArray.array -> wsize * Z.t array
 
 val error_of_cerror :
-  (Format.formatter -> FInfo.t Compiler_util.pp_error -> unit) ->
-   FInfo.t Compiler_util.pp_error_loc -> Utils.hierror
+  (Format.formatter -> (IInfo.t, FInfo.t) Compiler_util.pp_error -> unit) ->
+  (IInfo.t, FInfo.t) Compiler_util.pp_error_loc -> Utils.hierror
 
 (* ---------------------------------------------------- *)
 val fresh_var_ident : v_kind -> IInfo.t -> Uint63.t -> Name.t -> Type.atype -> var

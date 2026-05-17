@@ -26,7 +26,7 @@ Require Export stack_zeroization.
 
 Section WITH_PARAMS.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Context
   {asm_op syscall_state : Type}

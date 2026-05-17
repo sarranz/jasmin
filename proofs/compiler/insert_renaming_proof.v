@@ -55,7 +55,7 @@ Section WITH_PARAMS.
       {sip: SemInstrParams asm_op syscall_state}
       {pT: progT}
       {sCP: semCallParams}.
-  Context {fun_info : Type} {FI : FunInfo fun_info}.
+  Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
   Section PROOF.
 

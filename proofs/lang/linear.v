@@ -5,7 +5,7 @@ Require Import expr fexpr label sopn.
 
 Section ASM_OP.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context `{asmop:asmOp}.
 
 (* --------------------------------------------------------------------------- *)
@@ -26,7 +26,7 @@ Variant linstr_r :=
   | Lcond  : fexpr -> label -> linstr_r
 .
 
-Record linstr : Type := MkLI { li_ii : instr_info; li_i : linstr_r }.
+Record linstr : Type := MkLI { li_ii : instr_info_t; li_i : linstr_r }.
 
 Definition lcmd := seq linstr.
 
@@ -78,9 +78,10 @@ End ASM_OP.
 Notation fopn_args := (lexprs * sopn * rexprs)%type.
 
 Definition li_of_fopn_args
+  {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}
   {asm_op : Type}
   {asmop : asmOp asm_op}
-  (ii : instr_info)
+  (ii : instr_info_t)
   (p : fopn_args) :
   linstr :=
   MkLI ii (Lopn p.1.1 p.1.2 p.2).

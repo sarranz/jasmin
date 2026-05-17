@@ -18,7 +18,7 @@ Module E.
 Definition pass_name := "one-varmap checker"%string.
 
 Section INFO.
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Definition gen_error (internal:bool) (ii:option instr_info) (msg:pp_error) :=
   {| pel_msg      := msg
@@ -44,7 +44,7 @@ End INFO.
 End E.
 
 Section PROG.
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context {pd: PointerData} {syscall_state : Type} {asm_op} {asmop : asmOp asm_op} {ovm_i : one_varmap_info} {LC : LoopCounter}.
 Context (p: sprog).
 Context (var_tmp : Sv.t).

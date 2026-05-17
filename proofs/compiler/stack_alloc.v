@@ -15,7 +15,7 @@ Local Open Scope seq_scope.
 Module Import E.
   Section INFO.
 
-  Context {fun_info : Type} {FI : FunInfo fun_info}.
+  Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
   Definition pass : string := "stack allocation".
 
@@ -339,7 +339,7 @@ Definition empty := {|
 |}.
 
 Section INFO.
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Definition get_sub_region (rmap:region_map) (x:var_i) :=
   match Mvar.get rmap.(var_region) x with
@@ -744,7 +744,7 @@ End INFO.
 
 Section CLONE.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context (clone : var -> int -> var).
 
 Definition table_fresh_var t x :=
@@ -867,7 +867,7 @@ End CLONE.
 
 Section CHECK.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 (* The code in this file is called twice.
    - First, it is called from the stack alloc OCaml oracle. Indeed, the oracle

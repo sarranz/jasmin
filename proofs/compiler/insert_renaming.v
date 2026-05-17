@@ -4,7 +4,7 @@ Import Utf8.
 
 Section WITH_PARAMS.
 
-  Context {fun_info : Type} {FI : FunInfo fun_info}.
+  Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
   Context {asm_op : Type} {asmop : asmOp asm_op} {pT: progT}.
 
   Definition rename_var_r (x: var_i) : instr_r :=

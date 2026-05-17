@@ -22,7 +22,7 @@ Open Scope vm_scope.
  * -------------------------------------------------------------------- *)
 
 Section WSW.
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context {wsw:WithSubWord}.
 
 (* ** Instructions
@@ -577,7 +577,7 @@ Qed.
 
 Lemma write_iP i s1 s2 :
    sem_i P ev s1 i s2 -> s1.(evm) =[\ write_i i] s2.(evm).
-Proof. by move=> h; have /write_IP := EmkI dummy_instr_info h. Qed.
+Proof. by move=> h; have /write_IP := EmkI [elaborate dummy_instr_info ] h. Qed.
 
 End Write.
 
@@ -2134,7 +2134,7 @@ End REL_COMPOSE.
 
 Section TRANS_UTILS.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Context
   {syscall_state : Type}

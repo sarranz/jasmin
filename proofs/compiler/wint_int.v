@@ -19,7 +19,7 @@ Module Import E.
   Definition pass : string := "wint_to_int".
 
 Section INFO.
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
   Definition ierror_s := pp_internal_error_s pass.
 
@@ -44,7 +44,7 @@ End E.
 
 Section WITH_PARAMS.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context `{asmop:asmOp} {pd: PointerData} {msfsz : MSFsize}.
 
 Definition sc_op1 := sc_op1 (fun _ _ e => e).

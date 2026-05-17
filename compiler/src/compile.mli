@@ -13,13 +13,15 @@ val preprocess :
     Raises `Typing.TyError`. *)
 
 val parse_file :
-  ('finfo, 'reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op) Pretyping.arch_info ->
+  ('iinfo, 'finfo, 'reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op)
+  Pretyping.arch_info ->
   ?idirs:(string * string) list ->
   string ->
-  ('finfo, 'reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op) Arch_extra.extended_op
-  Pretyping.Env.env
+  ('iinfo, 'finfo, 'reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op)
+  Arch_extra.extended_op Pretyping.Env.env
   * ( unit,
-      ( 'finfo,
+      ( 'iinfo,
+        'finfo,
         'reg,
         'regx,
         'xreg,
@@ -54,10 +56,10 @@ val do_wint_int :
       and type asm_op = 'asm_op
       and type extra_op = 'extra_op) ->
   (unit,
-    (FInfo.t, 'reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op) Arch_extra.extended_op Sopn.asm_op_t)
+    (IInfo.t, FInfo.t, 'reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op) Arch_extra.extended_op Sopn.asm_op_t)
    prog ->
   (unit,
-    (FInfo.t, 'reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op) Arch_extra.extended_op Sopn.asm_op_t)
+    (IInfo.t, FInfo.t, 'reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op) Arch_extra.extended_op Sopn.asm_op_t)
    prog
 
 val compile :
@@ -72,7 +74,8 @@ val compile :
   (debug:bool ->
   Compiler.compiler_step ->
   ( unit,
-    ( FInfo.t,
+    ( IInfo.t,
+      FInfo.t,
       'reg,
       'regx,
       'xreg,
@@ -85,7 +88,9 @@ val compile :
   prog ->
   unit) ->
   _ prog ->
-  (FInfo.t,
-   (FInfo.t, 'reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op) Arch_extra.extended_op) Expr._uprog ->
-  (FInfo.t, ('reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op) Arch_decl.asm_prog)
+  (IInfo.t, FInfo.t,
+   (IInfo.t, FInfo.t, 'reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op)
+   Arch_extra.extended_op) Expr._uprog ->
+  (IInfo.t, FInfo.t,
+   (IInfo.t, 'reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op) Arch_decl.asm_prog)
   Compiler_util.cexec

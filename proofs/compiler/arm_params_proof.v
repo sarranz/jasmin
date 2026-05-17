@@ -49,7 +49,7 @@ Section Section.
 #[local] Existing Instance withsubword.
 #[local] Existing Instance direct_c.
 
-Context {fun_info : Type} {fi : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context
   {atoI  : arch_toIdent}
   {syscall_state : Type}

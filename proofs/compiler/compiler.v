@@ -47,7 +47,7 @@ Require
 
 (* FIXME: expr exports wsize, which overrides this. *)
 Section INFO.
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Definition pp_s := compiler_util.pp_s.
 End INFO.
 
@@ -60,7 +60,7 @@ Instance default_LoopCounter : LoopCounter :=
 
 Section IS_MOVE_OP.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context
   {msfsz : MSFsize}
   `{asmop : asmOp}
@@ -178,7 +178,7 @@ Record stack_alloc_oracles : Type :=
     ao_stack_alloc: funname → stk_alloc_oracle_t;
   }.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Record compiler_params
   {asm_op : Type}

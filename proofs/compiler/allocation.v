@@ -12,7 +12,7 @@ Module E.
 Definition pass_name := "allocation"%string.
 
 Section INFO.
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 (* FIXME: are there internal errors? *)
 Definition gen_error (internal:bool) (ii:option instr_info) (msg:string) := 
@@ -410,7 +410,7 @@ Module M.
 End M.
 
 Section WSW.
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context {wsw : WithSubWord}.
 
 Definition alloc_error := pp_internal_error_s "allocation".

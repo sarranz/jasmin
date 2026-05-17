@@ -56,7 +56,7 @@ Qed.
 
 Section PROOF.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Context
   {wsw : WithSubWord}
@@ -1622,7 +1622,8 @@ Proof.
   move=> s0 s1 lv tag ty e v v' hseme htrunc hwrite.
   move=> ii hfv s0' hs00.
 
-  move: hfv => /disj_fvars_vars_I_Cassgn [hfvlv hfve].
+  have [hfvlv hfve] :=
+    [elaborate disj_fvars_vars_I_Cassgn hfv]; clear hfv.
 
   have [s1' hwrite' hs11] := eeq_exc_write_lval hfvlv hs00 hwrite.
   clear hwrite.
@@ -1654,7 +1655,7 @@ Proof.
   move=> s0 s1 tag op lvs es hsem01.
   move=> ii hfv s0' hs00.
 
-  move: hfv => /disj_fvars_vars_I_Copn [hfvlvs hfve].
+  have [hfvlvs hfve] := disj_fvars_vars_I_Copn hfv.
 
   move: hsem01.
   rewrite /sem_sopn.
@@ -1702,7 +1703,7 @@ Proof.
   move=> s0 s1 e c0 c1 hseme _ hc.
   move=> ii hfv s0' hs00.
 
-  move: hfv => /disj_fvars_vars_I_Cif [hfve hfv0 _].
+  have [hfve hfv0 _] := disj_fvars_vars_I_Cif hfv.
 
   rewrite /=.
   case h: lower_condition => [pre e'].
@@ -1728,7 +1729,7 @@ Proof.
   move=> s0 s1 e c0 c1 hseme _ hc.
   move=> ii hfv s0' hs00.
 
-  move: hfv => /disj_fvars_vars_I_Cif [hfve _ hfv1].
+  have [hfve _ hfv1] := disj_fvars_vars_I_Cif hfv.
 
   rewrite /=.
   case h: lower_condition => [pre e'].
@@ -1787,7 +1788,7 @@ Proof.
   move=> s0 s1 al c0 e ei c1 _ hc0 hseme.
   move=> ii hfv s0' hs00.
 
-  move: hfv => /disj_fvars_vars_I_Cwhile [hfv0 hfve _].
+  have [hfv0 hfve _] := disj_fvars_vars_I_Cwhile hfv.
 
   rewrite /=.
   case h: lower_condition => [pre e'].
@@ -1810,7 +1811,7 @@ Proof.
   move=> s0 s1 i d lo hi c vlo vhi hlo hhi _ hfor.
   move=> ii hfv s0' hs00.
 
-  move: hfv => /disj_fvars_vars_I_Cfor [hfvc hfvlo hfvhi].
+  have [hfvc hfvlo hfvhi] := disj_fvars_vars_I_Cfor hfv.
 
   have [s1' hsemf01' hs11] := hfor hfvc s0' hs00.
 
@@ -1871,7 +1872,7 @@ Proof.
   have hwith_s0' : eq_fv (with_scs (with_mem s0 m0) scs0) (with_scs (with_mem s0' m0) scs0).
   - split=> //. move: hs0' => [_ _ hvm0']. exact: hvm0'.
 
-  move: hfv => /disj_fvars_vars_I_Ccall [hfvlvs hfvargs].
+  have [hfvlvs hfvargs] := disj_fvars_vars_I_Ccall hfv.
 
   have [s1' hwrite01' hs11] := eeq_exc_write_lvals hfvlvs hwith_s0' hwrite.
   clear hfvlvs hwith_s0' hwrite.
@@ -1974,7 +1975,8 @@ Proof.
     rewrite /lower_cmd /= /conc_map /= -cat1s.
     by apply (wequiv_cat (sip:=sip)) with eq_fv.
   (* Assgn *)
-  + move=> x tg ty e ii /disj_fvars_vars_I_Cassgn [hfvlv hfve].
+  + move=> x tg ty e ii hfv.
+    have [hfvlv hfve] := disj_fvars_vars_I_Cassgn hfv; clear hfv.
     apply (wequiv_assgn_esem (sip:=sip)).
     move=> s0 s0' s1 hs00; rewrite /sem_assgn; t_xrbindP => v hseme v' htrunc hwrite.
     have [s1' hwrite' hs11] := eeq_exc_write_lval hfvlv hs00 hwrite.
@@ -1995,7 +1997,8 @@ Proof.
       lower_cassgn_wordP h hseme htrunc hwrite' hs00 hfve hfvlv hassgn.
     by exists s2'; last exact: (eeq_excT hs11 hs12').
   (* Copn *)
-  + move=> lvs tag op es ii /disj_fvars_vars_I_Copn [hfvlvs hfve].
+  + move=> lvs tag op es ii hfv.
+    have [hfvlvs hfve] := disj_fvars_vars_I_Copn hfv.
     apply (wequiv_opn_esem (sip:=sip)) => s0 s0' s1 hs00.
     rewrite /sem_sopn; t_xrbindP=> vs xs hsemes hexec hwrite.
     have [s1' hwrite' hs11] := eeq_exc_write_lvals hfvlvs hs00 hwrite.
@@ -2022,14 +2025,17 @@ Opaque esem.
   (* Assert *)
   + by move=> ? ii _; apply wequiv_noassert with (ev1:=ev) (ii:=ii).
   (* If *)
-  + move=> e c1 c2 hc1 hc2 ii /disj_fvars_vars_I_Cif [hfve /hc1{}hc1 /hc2{}hc2] /=.
+  + move=> e c1 c2 hc1 hc2 ii hfv /=.
+    have [hfve hfc1 hfc2] := disj_fvars_vars_I_Cif hfv.
+    have {}hc1 := hc1 hfc1. have {}hc2 := hc2 hfc2.
     case heq: lower_condition => [pre e'].
     rewrite map_cat /=.
     apply (wequiv_if_esem (sip:=sip)) with eq_fv.
     + by move=> s t v heqfv; apply (sem_lower_condition ii heq).
     by move=> [].
   (* For *)
-  + move=> x dir lo hi c hc ii /= /disj_fvars_vars_I_Cfor [hfvc hfvlo hfvhi].
+  + move=> x dir lo hi c hc ii /= hfv.
+    have [hfvc hfvlo hfvhi] := disj_fvars_vars_I_Cfor hfv.
     apply (wequiv_for_rel_eq (sip:=sip)) with checker_st_eq_ex fvars fvars => //.
     + by split => //; apply disj_fvars_read_es2.
     split => //.
@@ -2037,12 +2043,15 @@ Opaque esem.
       by move=> z hz; move/disjointP: hfvc => /(_ z); SvD.fsetdec.
     by apply/hc/disjointP => z hz; move/disjointP: hfvc => /(_ z); SvD.fsetdec.
   (* While *)
-  + move=> al c e ii' c' hc hc' ii /disj_fvars_vars_I_Cwhile [/hc{}hc hfve /hc'{}hc'] /=.
+  + move=> al c e ii' c' hc hc' ii hfv /=.
+    have [hfc hfve hfc'] := disj_fvars_vars_I_Cwhile hfv.
+    have {}hc := hc hfc. have {}hc' := hc' hfc'.
     case heq: lower_condition => [pre e'].
     apply (wequiv_while_esem (sip:=sip)) with eq_fv => //.
     by move=> s t v heqfv; apply (sem_lower_condition ii' heq).
   (* Call *)
-  move=> xs fn es ii /disj_fvars_vars_I_Ccall [hdisjx hdisje] /=.
+  move=> xs fn es ii hfv /=.
+  have [hdisjx hdisje] := disj_fvars_vars_I_Ccall hfv.
   apply (wequiv_call_rel_eq (sip:=sip)) with checker_st_eq_ex fvars => //.
   by move=> ???; apply: (wequiv_fun_rec (spec := eq_spec)).
 Qed.

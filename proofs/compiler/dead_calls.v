@@ -9,7 +9,7 @@ Module Import E.
   Definition pass : string := "dead calls".
 
   Section INFO.
-  Context {fun_info : Type} {FI : FunInfo fun_info}.
+  Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
   Definition dead_calls_error := pp_internal_error_s pass.
 
@@ -18,6 +18,7 @@ End E.
 
 Section ASM_OP.
 
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context `{asmop:asmOp}.
 
 (* -------------------------------------------------------------------- *)
@@ -44,7 +45,6 @@ Definition c_calls (c : Sf.t) (cmd : cmd) :=
 
 Section Section.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context {pT: progT}.
 
 Definition live_calls (s: Sf.t) (p: fun_decls) : Sf.t :=

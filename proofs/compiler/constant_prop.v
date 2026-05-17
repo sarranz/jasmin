@@ -445,6 +445,7 @@ Definition add_cpm (m:cpm) (rv:lval) tag ty e :=
 
 Section ASM_OP.
 
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context {msfsz : MSFsize} `{asmop:asmOp}.
 
 Section CMD.
@@ -548,7 +549,6 @@ End GLOBALS.
 
 Section Section.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
 Context {pT: progT}.
 
 Definition const_prop_fun (gd: glob_decls) (f: fundef) :=

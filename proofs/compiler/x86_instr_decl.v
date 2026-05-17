@@ -2,7 +2,7 @@ From elpi.apps Require Import derive.std.
 From HB Require Import structures.
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat eqtype tuple.
 From mathcomp Require Import ssralg word word_ssrZ.
-Require Import utils strings word waes sha256 sem_type global oseq sopn.
+Require Import info utils strings word waes sha256 sem_type global oseq sopn.
 Import Utf8 Relation_Operators ZArith.
 
 Require Import arch_utils.
@@ -2446,4 +2446,5 @@ Instance x86_op_decl : asm_op_decl x86_op := {
    prim_string    := x86_prim_string;
 }.
 
-Definition x86_prog := @asm_prog register _ _ _ _ _ _ x86_op_decl.
+Definition x86_prog {instr_info : Type} {II : InstrInfo instr_info} :=
+  @asm_prog _ _ register _ _ _ _ _ _ x86_op_decl.

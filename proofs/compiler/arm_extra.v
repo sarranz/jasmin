@@ -98,7 +98,7 @@ Module E.
 Definition pass_name := "asmgen"%string.
 
 Section INFO.
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Definition internal_error (ii : instr_info) (msg : string) :=
   {|
@@ -132,7 +132,7 @@ End INFO.
 End E.
 
 Section INFO.
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Definition asm_args_of_opn_args
   : seq ARMFopn_core.opn_args -> seq (asm_op_msb_t * lexprs * rexprs) :=

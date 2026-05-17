@@ -652,7 +652,9 @@ module type Regalloc = sig
 end
 
 module Regalloc (Arch : Arch_full.Arch)
-  : Regalloc with type extended_op := (FInfo.t, Arch.reg, Arch.regx, Arch.xreg, Arch.rflag, Arch.cond, Arch.asm_op, Arch.extra_op) Arch_extra.extended_op = struct
+  : Regalloc with type extended_op :=
+    (IInfo.t, FInfo.t, Arch.reg, Arch.regx, Arch.xreg, Arch.rflag, Arch.cond,
+     Arch.asm_op, Arch.extra_op) Arch_extra.extended_op = struct
 
   let create_return_addresses get_internal_size (funcs: ('info, 'asm) sfundef list) : retaddr Hf.t =
       let return_addresses = Hf.create 17 in

@@ -8,7 +8,7 @@ Require Import
 
 Section SEM_PARAMS.
 
-  Context {fun_info : Type} {FI : FunInfo fun_info}.
+  Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
   Context
     {reg regx xreg rflag cond asm_op extra_op : Type}
     {asm_e : asm_extra reg regx xreg rflag cond asm_op extra_op}

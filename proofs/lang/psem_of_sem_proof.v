@@ -5,7 +5,7 @@ From mathcomp Require Import ssreflect ssrfun ssrbool.
 #[local] Existing Instance indirect_c.
 Section PROOF.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Context
   {asm_op syscall_state : Type}
@@ -380,7 +380,7 @@ End PROOF.
 
 Section INSTANCE.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Context
   {asm_op syscall_state : Type}

@@ -44,7 +44,7 @@ Module RISCVFopnP.
 
 Section WITH_PARAMS.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Context
   {atoI  : arch_toIdent}

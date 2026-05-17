@@ -44,7 +44,7 @@ Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then
 
 Section Section.
 
-Context {fun_info : Type} {fi : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context
   {atoI  : arch_toIdent}
   {syscall_state : Type}

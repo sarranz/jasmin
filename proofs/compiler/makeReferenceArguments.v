@@ -10,7 +10,7 @@ Module Import E.
   Definition pass : string := "make reference arguments".
 
   Section INFO.
-  Context {fun_info : Type} {FI : FunInfo fun_info}.
+  Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
   Definition make_ref_error := pp_internal_error_s_at pass.
 
@@ -18,7 +18,7 @@ Module Import E.
 End E.
 
 Section Section.
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context `{asmop:asmOp}.
 Context (fresh_reg_ptr : instr_info -> int -> string -> atype -> Ident.ident).
 Context (p : uprog).

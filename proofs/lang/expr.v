@@ -371,6 +371,7 @@ Definition assertions := seq assertion.
 
 Section ASM_OP.
 
+Context {instr_info : Type} {II : InstrInfo instr_info}.
 Context `{asmop:asmOp}.
 
 Inductive instr_r :=
@@ -383,7 +384,7 @@ Inductive instr_r :=
 | Cwhile   : align -> seq instr -> pexpr -> instr_info -> seq instr -> instr_r
 | Ccall    : lvals -> funname -> pexprs -> instr_r
 
-with instr := MkI : instr_info -> instr_r ->  instr.
+with instr := MkI : instr_info_t -> instr_r ->  instr.
 
 End ASM_OP.
 
@@ -391,6 +392,7 @@ Notation cmd := (seq instr).
 
 Section CMD_RECT.
 
+  Context {instr_info : Type} {II : InstrInfo instr_info}.
   Context `{asmop:asmOp}.
 
   Variables (Pr:instr_r -> Type) (Pi:instr -> Type) (Pc : cmd -> Type).
@@ -438,7 +440,7 @@ End CMD_RECT.
 
 Section ASM_OP.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context `{asmop:asmOp}.
 
 (* ** Functions
@@ -502,7 +504,7 @@ Notation fun_decls  := (seq fun_decl).
 
 Section ASM_OP.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context {pd: PointerData}.
 Context `{asmop:asmOp}.
 
@@ -668,7 +670,7 @@ End ASM_OP.
 
 Section ASM_OP.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context `{asmop:asmOp}.
 Context {pT: progT}.
 
@@ -986,6 +988,7 @@ Fixpoint eq_eassert (e e' : eassert) : bool :=
 
 Section EQ_INSTR.
 
+Context {instr_info : Type} {II : InstrInfo instr_info}.
 Context {asm_op : Type} {asmop : asmOp asm_op}.
 
 Fixpoint eq_instr_r (i1 i2:instr_r) :=
@@ -1030,6 +1033,7 @@ Definition is_zero sz (e: pexpr) : bool :=
 Notation copn_args := (seq lval * sopn * seq pexpr)%type (only parsing).
 
 Definition instr_of_copn_args
+  {instr_info : Type} {II : InstrInfo instr_info}
   {asm_op : Type}
   {asmop : asmOp asm_op}
   (tg : assgn_tag)

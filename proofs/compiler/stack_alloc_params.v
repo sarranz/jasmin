@@ -4,6 +4,7 @@ Require Import expr.
 Section WITH_PARAMS.
 
 Context
+  {instr_info : Type} {II : InstrInfo instr_info}
   {asm_op : Type}
   {asmop : asmOp asm_op}
 .

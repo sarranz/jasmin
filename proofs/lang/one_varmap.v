@@ -21,7 +21,7 @@ Definition syscall_kill {ovm_i : one_varmap_info} :=
 
 Section Section.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context {pd: PointerData} {asm_op} {asmop:asmOp asm_op} {ovm_i : one_varmap_info}
   (p: sprog)
 .

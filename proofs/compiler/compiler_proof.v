@@ -52,7 +52,7 @@ Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then
 
 Section SHARED.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Context
   {syscall_state : Type} {sc_sem : syscall.syscall_sem syscall_state}
@@ -196,7 +196,7 @@ End SHARED.
 
 Section PROOF.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Context
   {syscall_state : Type} {sc_sem : syscall.syscall_sem syscall_state}

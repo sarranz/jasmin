@@ -16,7 +16,7 @@ Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then
 
 Section WITH_PARAMS.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Context
   {asm_op syscall_state : Type}
@@ -972,7 +972,7 @@ Proof.
   move => vm args' ok_args' args_args' vm_rsp vm_gd.
   have := H vm args' vm_rsp vm_gd ok_args' args_args'.
   case => k [] vm2 [] res' [] texec ok_k ok_res' res_res'.
-  case/sem_one_varmap.sem_callE: texec.
+  case: (sem_one_varmap.sem_callE texec) => {texec}.
   rewrite ok_fd => ? m0 [scs1 m1 vm1] k' /Some_inj <-.
   rewrite /ra_valid /ra_undef_vm Export => rax_not_magic' ok_save_stack _ _ ok_m0 texec s1_rsp [] ????; subst.
   exists m0 k' m1 vm1 res'=> //.

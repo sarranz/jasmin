@@ -8,6 +8,7 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype fintype.
 From mathcomp Require Import ssralg word_ssrZ.
 
 Require Import
+  info
   sem_type
   shift_kind
   strings
@@ -2361,4 +2362,5 @@ Instance arm_op_decl : asm_op_decl arm_op :=
     prim_string := arm_prim_string;
   |}.
 
-Definition arm_prog := @asm_prog _ _ _ _ _ _ _ arm_op_decl.
+Definition arm_prog {instr_info : Type} {II : InstrInfo instr_info} :=
+  @asm_prog _ _ _ _ _ _ _ _ _ arm_op_decl.

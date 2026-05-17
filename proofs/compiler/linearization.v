@@ -17,7 +17,7 @@ Module E.
 Definition pass_name := "linearization"%string.
 
 Section INFO.
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Definition my_error (msg:pp_error) :=
   {| pel_msg      := msg
@@ -291,7 +291,7 @@ Context
   {pd : PointerData}
   {asmop : asmOp asm_op}
   (liparams : linearization_params).
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 (* Return a linear instruction that corresponds to copying a register.
    The linear instruction [lmove rd rs] corresponds to

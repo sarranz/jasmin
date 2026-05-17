@@ -12,7 +12,7 @@ Module Import E.
   Definition pass : string := "propagate inline".
 
   Section INFO.
-  Context {fun_info : Type} {FI : FunInfo fun_info}.
+  Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
   Definition ii_loop_iterator := ii_loop_iterator pass.
 
@@ -72,7 +72,7 @@ Context
   {asmop:asmOp asm_op}
   {fcp : FlagCombinationParams}
   {LC : LoopCounter}.
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Definition scfc (cf : combine_flags) (es : seq pexpr) : pexpr :=
   if es is [:: eof; ecf; esf; ezf ]

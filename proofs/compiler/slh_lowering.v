@@ -33,7 +33,7 @@ Notation internal_error ii s :=
   (only parsing).
 
 Section INFO.
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Definition pp_user_error ii vi (pp : pp_error) := {|
   pel_msg := pp_vbox [:: pp; pp_s "Did you run the speculative constant time checker first?"];
@@ -223,7 +223,7 @@ Context
   {fcparams : flag_combination.FlagCombinationParams}
   {pT : progT}
   {LC : LoopCounter}.
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Section CHECK_SLHO.
 

@@ -89,7 +89,7 @@ End TRIVIAL.
 
 Section Section.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Context
   {syscall_state : Type}
@@ -1031,7 +1031,7 @@ Context
   {wsw : WithSubWord}
   {scP : semCallParams}
   {dc : DirectCall}.
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Context {E E0: Type -> Type} {sem_F : sem_Fun E} {wE: with_Error E E0}.
 

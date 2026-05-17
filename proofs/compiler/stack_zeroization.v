@@ -33,7 +33,7 @@ Module E.
   Definition pass : string := "stack zeroization".
 
   Section INFO.
-  Context {fun_info : Type} {FI : FunInfo fun_info}.
+  Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
   Definition error msg : pp_error_loc :=
     {|
@@ -52,7 +52,7 @@ End E.
 (* -------------------------------------------------------------------- *)
 (* Architecture-specific parameters. *)
 Section INFO.
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Record stack_zeroization_params {asm_op : Type} {asmop : asmOp asm_op} :=
   {
@@ -71,7 +71,7 @@ End INFO.
 
 Section STACK_ZEROIZATION.
 
-Context {fun_info : Type} {FI : FunInfo fun_info}.
+Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context
   {pd: PointerData}
   {asm_op : Type} {asmop: asmOp asm_op}
