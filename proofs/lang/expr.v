@@ -352,6 +352,42 @@ Definition wrange d (n1 n2 : Z) :=
   | DownTo => [seq (Z.sub n2 (Z.of_nat i)) | i <- iota 0 n]
   end.
 
+Variant for_iteration :=
+  | FIrange of var_i & dir & pexpr & pexpr
+  | FIrepeat of pexpr
+.
+
+Definition map_pexpr_fi
+  (f : pexpr -> pexpr) (fi : for_iteration) : for_iteration :=
+  match fi with
+  | FIrange x d elo ehi => FIrange x d (f elo) (f ehi)
+  | FIrepeat e => FIrepeat (f e)
+  end.
+
+Definition mapM_pexpr_fi
+  {eT : Type}
+  (f : pexpr -> result eT pexpr)
+  (fi : for_iteration) :
+  result eT for_iteration :=
+  match fi with
+  | FIrange x d elo ehi =>
+      Let elo' := f elo in
+      Let ehi' := f ehi in
+      ok (FIrange x d elo' ehi')
+  | FIrepeat e =>
+      Let e' := f e in
+      ok (FIrepeat e')
+  end.
+
+Definition iterator_of_fi (fi : for_iteration) : option var_i :=
+  match fi with
+  | FIrange i _ _ _ => Some i
+  | FIrepeat _ => None
+  end.
+
+Definition sv_of_ovar_i (oi : option var_i) : Sv.t :=
+  if oi is Some i then Sv.singleton i else Sv.empty.
+
 Module Type InstrInfoT <: TAG.
   Include TAG.
   Parameter with_location : t -> t.
@@ -415,7 +451,7 @@ Inductive instr_r :=
 | Csyscall : lvals -> syscall_t -> pexprs -> instr_r
 | Cassert  : assertion -> instr_r
 | Cif      : pexpr -> seq instr -> seq instr  -> instr_r
-| Cfor     : var_i -> range -> seq instr -> instr_r
+| Cfor     : for_iteration -> seq instr -> instr_r
 | Cwhile   : align -> seq instr -> pexpr -> instr_info -> seq instr -> instr_r
 | Ccall    : lvals -> funname -> pexprs -> instr_r
 
@@ -438,7 +474,7 @@ Section CMD_RECT.
   Hypothesis Hsyscall : forall xs o es, Pr (Csyscall xs o es).
   Hypothesis Hassert : forall a, Pr (Cassert a).
   Hypothesis Hif  : forall e c1 c2, Pc c1 -> Pc c2 -> Pr (Cif e c1 c2).
-  Hypothesis Hfor : forall v dir lo hi c, Pc c -> Pr (Cfor v (dir,lo,hi) c).
+  Hypothesis Hfor : forall fi c, Pc c -> Pr (Cfor fi c).
   Hypothesis Hwhile : forall a c e info c', Pc c -> Pc c' -> Pr (Cwhile a c e info c').
   Hypothesis Hcall: forall xs f es, Pr (Ccall xs f es).
 
@@ -463,7 +499,7 @@ Section CMD_RECT.
     | Csyscall xs o es => Hsyscall xs o es
     | Cassert a => Hassert a
     | Cif e c1 c2  => @Hif e c1 c2 (cmd_rect_aux instr_Rect c1) (cmd_rect_aux instr_Rect c2)
-    | Cfor i (dir,lo,hi) c => @Hfor i dir lo hi c (cmd_rect_aux instr_Rect c)
+    | Cfor fi c => @Hfor fi c (cmd_rect_aux instr_Rect c)
     | Cwhile a c e info c'   => @Hwhile a c e info c' (cmd_rect_aux instr_Rect c) (cmd_rect_aux instr_Rect c')
     | Ccall xs f es => @Hcall xs f es
     end.
@@ -841,6 +877,14 @@ Definition vrvs := (vrvs_rec Sv.empty).
 Definition lv_write_mem (r:lval) : bool :=
   if r is Lmem _ _ _ _ then true else false.
 
+Definition write_fi_rec (s : Sv.t) (fi : for_iteration) : Sv.t :=
+  match fi with
+  | FIrange x _ _ _ => Sv.add x s
+  | FIrepeat _ => s
+  end.
+
+Definition write_fi := write_fi_rec Sv.empty.
+
 Fixpoint write_i_rec s (i:instr_r) :=
   match i with
   | Cassgn x _ _ _  => vrv_rec s x
@@ -848,7 +892,7 @@ Fixpoint write_i_rec s (i:instr_r) :=
   | Csyscall xs _ _ => vrvs_rec s xs
   | Cassert _       => s
   | Cif   _ c1 c2   => foldl write_I_rec (foldl write_I_rec s c2) c1
-  | Cfor  x _ c     => foldl write_I_rec (Sv.add x s) c
+  | Cfor fi c => foldl write_I_rec (write_fi_rec s fi) c
   | Cwhile _ c _ _ c' => foldl write_I_rec (foldl write_I_rec s c') c
   | Ccall x _ _   => vrvs_rec s x
   end
@@ -928,6 +972,14 @@ Fixpoint read_eassert_rec (s:Sv.t) (e:eassert) :=
 
 Definition read_eassert := read_eassert_rec Sv.empty.
 
+Definition read_fi_rec (s : Sv.t) (fi : for_iteration) : Sv.t :=
+  match fi with
+  | FIrange _ _ elo ehi => read_e_rec (read_e_rec s ehi) elo
+  | FIrepeat e => read_e_rec s e
+  end.
+
+Definition read_fi := read_fi_rec Sv.empty.
+
 Fixpoint read_i_rec (s:Sv.t) (i:instr_r) : Sv.t :=
   match i with
   | Cassgn x _ _ e => read_rv_rec (read_e_rec s e) x
@@ -938,9 +990,9 @@ Fixpoint read_i_rec (s:Sv.t) (i:instr_r) : Sv.t :=
     let s := foldl read_I_rec s c1 in
     let s := foldl read_I_rec s c2 in
     read_e_rec s b
-  | Cfor x (dir, e1, e2) c =>
+  | Cfor fi c =>
     let s := foldl read_I_rec s c in
-    read_e_rec (read_e_rec s e2) e1
+    read_fi_rec s fi
   | Cwhile a c e _ c' =>
     let s := foldl read_I_rec s c in
     let s := foldl read_I_rec s c' in
@@ -1031,6 +1083,15 @@ Fixpoint eq_eassert (e e' : eassert) : bool :=
   | _, _ => false
   end.
 
+Definition for_iteration_beq (fi1 fi2 : for_iteration) : bool :=
+  match fi1, fi2 with
+  | FIrange x1 d1 lo1 hi1, FIrange x2 d2 lo2 hi2 =>
+      [&& v_var x1 == v_var x2, d1 == d2,
+          eq_expr lo1 lo2 & eq_expr hi1 hi2 ]
+  | FIrepeat e1, FIrepeat e2 => eq_expr e1 e2
+  | _, _ => false
+  end.
+
 (* --------------------------------------------------------------------- *)
 (* Test the equality of two instructions modulo variable & instr info    *)
 
@@ -1049,8 +1110,8 @@ Fixpoint eq_instr_r (i1 i2:instr_r) :=
   | Cassert a1, Cassert a2 => (a1.1 == a2.1) && eq_eassert a1.2 a2.2
   | Cif e1 c11 c12, Cif e2 c21 c22 =>
     eq_expr e1 e2 && all2 eq_instr c11 c21 && all2 eq_instr c12 c22
-  | Cfor i1 (dir1,lo1,hi1) c1, Cfor i2 (dir2,lo2,hi2) c2 =>
-    (v_var i1 == v_var i2) && (dir1 == dir2) && eq_expr lo1 lo2 && eq_expr hi1 hi2 && all2 eq_instr c1 c2
+  | Cfor fi1 c1, Cfor fi2 c2 =>
+    for_iteration_beq fi1 fi2 && all2 eq_instr c1 c2
   | Cwhile a1 c1 e1 _ c1' , Cwhile a2 c2 e2 _ c2' =>
     (a1 == a2) && all2 eq_instr c1 c2 && eq_expr e1 e2 && all2 eq_instr c1' c2'
   | Ccall x1 f1 arg1, Ccall x2 f2 arg2 =>

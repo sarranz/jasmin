@@ -349,7 +349,7 @@ Section LOWER_ASSIGN.
     li_simple (RV32 LW) [:: e ].
 
   (* Lower an expression of the form [<+> e].
-     TODO_OTBN: lower [x = -y] as [SUB x, x0, y] *)
+     TODO_OTBN: introduce extra op for negation and lower [x = -y]. *)
   Definition lower_Papp1 (ws : wsize) (op : sop1) (e : pexpr) : low_instr :=
     match op with
     | Oword_of_int ws =>
