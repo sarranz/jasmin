@@ -40,20 +40,14 @@ let tt_prim err ps s sa =
     | Some (Sopn.PVp ws) -> (s, None, None, Some ws)
     | _ -> raise (err "internal error in Tt_otbn.tt_prim sa")
   in
-  let pv =
-    match (ows, owb, ofg) with
-    | Some ws, None, None -> Sopn.PV_otbn_ws ws
-    | None, Some wb, None -> PV_otbn_mulqacc_so (FG0, wb)
-    | None, Some wb, Some fg -> PV_otbn_mulqacc_so (fg, wb)
-    | None, None, Some fg -> PV_otbn_fg fg
-    | None, None, None -> PV_otbn_none
-    | _, _, _ -> raise (err "internal error in Tt_otbn.tt_prim opts")
-  in
   match List.assoc name ps with
   | Sopn.PrimOTBN pr -> begin
+      let pv =
+        { Sopn.otbn_suff_ws = ows; otbn_suff_fg = ofg; otbn_suff_wb = owb }
+      in
       match pr pv with
       | Ok op -> op
-      | Error msg -> raise (err (String.concat "" [ " ("; msg; ")" ]))
+      | Error msg -> raise (err msg)
     end
   | _ | (exception Not_found) ->
       raise (err "internal error in Tt_otbn.tt_prim assoc")

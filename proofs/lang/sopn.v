@@ -91,12 +91,12 @@ Variant prim_x86_suffix :=
   | PVvv of velem & wsize & velem & wsize
 .
 
-Variant prim_otbn_suffix :=
-| PV_otbn_none
-| PV_otbn_ws of wsize
-| PV_otbn_fg of bn_flag_group
-| PV_otbn_mulqacc_so of bn_flag_group & bn_halfword_writeback
-.
+Record prim_otbn_suffix :=
+  {
+    otbn_suff_ws : option wsize;
+    otbn_suff_fg : option bn_flag_group;
+    otbn_suff_wb : option bn_halfword_writeback;
+  }.
 
 Variant prim_constructor (asm_op:Type) :=
   | PrimX86 of seq prim_x86_suffix & (prim_x86_suffix -> option asm_op)

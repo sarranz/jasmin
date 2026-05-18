@@ -48,17 +48,50 @@ Section PRIM.
 
 Context {asm_op : Type}.
 
-Let err : result string asm_op := Error "invalid OTBN suffix"%string.
+Let err s : result string asm_op :=
+  Error ("invalid OTBN suffix, expected " ++ s)%string.
+
+Definition is_prim_otbn_none (s : prim_otbn_suffix) : bool :=
+  if s is {| otbn_suff_fg := None; otbn_suff_wb := None; |} then true
+  else false.
+
+Definition is_prim_otbn_suff_ws (s : prim_otbn_suffix) : option wsize :=
+  if s is {| otbn_suff_ws := ows; otbn_suff_fg := None; otbn_suff_wb := None; |}
+  then Some (odflt reg_size ows)
+  else None.
+
+Definition is_prim_otbn_suff_fg (s : prim_otbn_suffix) : option bn_flag_group :=
+  if s is {| otbn_suff_ws := None; otbn_suff_fg := ofg; otbn_suff_wb := None; |}
+  then Some (odflt FG0 ofg)
+  else None.
+
+Definition is_prim_otbn_suff_wb
+  (s : prim_otbn_suffix) : option (bn_flag_group * bn_halfword_writeback) :=
+  if s is
+    {| otbn_suff_ws := None; otbn_suff_fg := ofg; otbn_suff_wb := Some wb; |}
+  then Some (odflt FG0 ofg, wb)
+  else None.
 
 Definition prim_otbn_none op :=
-  PrimOTBN (fun s => if s is PV_otbn_none then ok op else err).
-Definition prim_otbn_ws f := (* unused for now *)
-  PrimOTBN (fun s => if s is PV_otbn_ws ws then ok (f ws) else err).
+  PrimOTBN (fun s => if is_prim_otbn_none s then ok op else err "no suffix").
+
+Definition prim_otbn_ws f :=
+  PrimOTBN (fun s =>
+    if is_prim_otbn_suff_ws s is Some ws then ok (f ws)
+    else err "only an optional word size"
+  ).
+
 Definition prim_otbn_fg f :=
-  PrimOTBN (fun s => if s is PV_otbn_fg fg then ok (f fg) else err).
+  PrimOTBN (fun s =>
+    if is_prim_otbn_suff_fg s is Some fg then ok (f fg)
+    else err "only an optional flag group"
+  ).
+
 Definition prim_otbn_mulqacc_so f :=
-  PrimOTBN
-    (fun s => if s is PV_otbn_mulqacc_so fg wb then ok (f fg wb) else err).
+  PrimOTBN (fun s =>
+    if is_prim_otbn_suff_wb s is Some (fg, wb) then ok (f fg wb)
+    else err "a writeback and an optional flag group"
+  ).
 
 End PRIM.
 
@@ -858,7 +891,7 @@ Definition desc_bn_binopI
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := [:: lword256; lword256 ];
-    id_in := [:: EXa 1; EXa 2 ];
+    id_in := [:: EXa 1; Ea 2 ];
     id_tout := ty_cmlz ++ [:: lword256 ];
     id_out := ad_cmlz fg ++ [:: EXa 0 ];
     id_semi := semi_binopI_cmlz semi semiZ;
@@ -900,7 +933,7 @@ Definition desc_BN_SEL (fg : bn_flag_group) : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := [:: lword256; lword256; lbool ];
-    id_in := [:: EXa 1; EXa 2; EXa 3 ];
+    id_in := [:: EXa 1; EXa 2; Ea 3 ];
     id_tout := [:: lword256 ];
     id_out := [:: EXa 0 ];
     id_semi := fun wn wm b => ok (if b then wn else wm);
@@ -929,7 +962,7 @@ Definition desc_BN_RSHI : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := [:: lword256; lword256; lword8 ];
-    id_in := [:: EXa 1; EXa 2; EXa 3 ];
+    id_in := [:: EXa 1; EXa 2; Ea 3 ];
     id_tout := [:: lword256 ];
     id_out := [:: EXa 0 ];
     id_semi := semi_BN_RSHI;
@@ -992,7 +1025,7 @@ Definition desc_BN_MULQACC : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := base_mulqacc_tin;
-    id_in := [:: EXa 0; EXa 1; EXa 2; EXa 3; Xreg ACC; EXa 4 ];
+    id_in := [:: EXa 0; Ea 1; EXa 2; Ea 3; Xreg ACC; Ea 4 ];
     id_tout := [:: lword256 ];
     id_out := [:: Xreg ACC ];
     id_semi := semi_BN_MULQACC;
@@ -1013,7 +1046,7 @@ Definition desc_BN_MULQACC_Z : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := base_mulqacc_z_tin;
-    id_in := [:: EXa 0; EXa 1; EXa 2; EXa 3; EXa 4 ];
+    id_in := [:: EXa 0; Ea 1; EXa 2; Ea 3; Ea 4 ];
     id_tout := [:: lword256 ];
     id_out := [:: Xreg ACC ];
     id_semi := fun x ix y iy sham => semi_BN_MULQACC x ix y iy 0%R sham;
@@ -1046,7 +1079,7 @@ Definition desc_BN_MULQACC_WO : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := base_mulqacc_tin;
-    id_in := [:: EXa 1; EXa 2; EXa 3; EXa 4; Xreg ACC; EXa 5 ];
+    id_in := [:: EXa 1; Ea 2; EXa 3; Ea 4; Xreg ACC; Ea 5 ];
     id_tout := ty_mlz ++ [:: lword256; lword256 ];
     id_out := ad_mlz fg ++ [:: EXa 0; Xreg ACC ];
     id_semi := semi_BN_MULQACC_WO;
@@ -1067,7 +1100,7 @@ Definition desc_BN_MULQACC_WO_Z : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := base_mulqacc_z_tin;
-    id_in := [:: EXa 1; EXa 2; EXa 3; EXa 4; EXa 5 ];
+    id_in := [:: EXa 1; Ea 2; EXa 3; Ea 4; Ea 5 ];
     id_tout := ty_mlz ++ [:: lword256; lword256 ];
     id_out := ad_mlz fg ++ [:: EXa 0; Xreg ACC ];
     id_semi := fun x ix y iy sham => semi_BN_MULQACC_WO x ix y iy 0%R sham;
@@ -1124,7 +1157,7 @@ Definition desc_BN_MULQACC_SO : instr_desc_t :=
     id_msb_flag := MSB_MERGE;
     id_tin := mulqacc_so_tin;
     id_in :=
-      ad_mlz fg ++ [:: EXa 0; EXa 1; EXa 2; EXa 3; EXa 4; Xreg ACC; EXa 5 ];
+      ad_mlz fg ++ [:: EXa 0; EXa 1; Ea 2; EXa 3; Ea 4; Xreg ACC; Ea 5 ];
     id_tout := mulqacc_so_tout;
     id_out := ad_mlz fg ++ [:: EXa 0; Xreg ACC ];
     id_semi := semi_BN_MULQACC_SO;
@@ -1145,7 +1178,7 @@ Definition desc_BN_MULQACC_SO_Z : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := ty_mlz ++ [:: lword256 ] ++ base_mulqacc_z_tin;
-    id_in := ad_mlz fg ++ [:: EXa 0; EXa 1; EXa 2; EXa 3; EXa 4; EXa 5 ];
+    id_in := ad_mlz fg ++ [:: EXa 0; EXa 1; Ea 2; EXa 3; Ea 4; Ea 5 ];
     id_tout := mulqacc_so_tout;
     id_out := ad_mlz fg ++ [:: EXa 0; Xreg ACC ];
     id_semi :=
@@ -1197,7 +1230,7 @@ Definition desc_BN_LID : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := [:: lword32; lword256 ];
-    id_in := [:: EXa 0; EXa 1 ];
+    id_in := [:: EXa 0; Ea 1 ];
     id_tout := [::];
     id_out := [::];
     id_semi := fun _ _ => Error E.no_semantics;
@@ -1218,7 +1251,7 @@ Definition desc_BN_SID : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := [:: lword32; lword256 ];
-    id_in := [:: EXa 0; EXa 1 ];
+    id_in := [:: Ea 0; EXa 1 ];
     id_tout := [::];
     id_out := [::];
     id_semi := fun _ _ => Error E.no_semantics;

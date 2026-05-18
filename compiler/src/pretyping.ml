@@ -1688,7 +1688,7 @@ let tt_prim arch_info id =
             | None -> rs_tyerror ~loc (PrimWrongSuffix (name, valid_suffixes))
     end
     | _ | exception Not_found ->
-      let err msg = tyerror ~loc (UnknownPrim(s, msg)) in
+      let err msg = tyerror ~loc (UnknownPrim(s, " (" ^ msg ^ ")")) in
       match arch_info.arch with
       | ARM_M4 -> Tt_arm_m4.tt_prim err ps name sz
       | OTBN -> Tt_otbn.tt_prim err ps name sz

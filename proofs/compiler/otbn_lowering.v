@@ -361,6 +361,15 @@ Section LOWER_ASSIGN.
     | _ => Error (E.not_implemented ii)
     end.
 
+  (* TODO_OTBN Maybe we could extract from [instr_desc_op], but we need to fix
+     the position of the immediate argument. *)
+  Definition rv_expected_Imn_size (op : sop2) : option wsize :=
+    match op with
+    | Oadd _ | Osub _ | Oland _ | Olor _ | Olxor _ => Some U32
+    | Olsl _ | Olsr _ | Oasr _ => Some U8
+    | _ => None
+    end.
+
   Definition rv_Imn_of_op2
     (op : sop2)
     (ws : wsize)
@@ -396,12 +405,13 @@ Section LOWER_ASSIGN.
 
   (* Lower a binary 32-bit operation. *)
   Definition lower_Papp2_small
-    (ws : wsize) (op : sop2) (e0 e1 : pexpr) : low_instr :=
+    (_ : wsize) (op : sop2) (e0 e1 : pexpr) : low_instr :=
     let%lr (op, e1') :=
-      if is_wconst ws e1 is Some w
-      then
-        let%lr (mn, wimm) := rv_Imn_of_op2 op w in
-        issue (mn, wconst wimm)
+      if rv_expected_Imn_size op is Some ws then
+        if is_wconst ws e1 is Some w then
+          let%lr (mn, wimm) := rv_Imn_of_op2 op w in
+          issue (mn, wconst wimm)
+        else rv_mn_of_op2 op e1
       else rv_mn_of_op2 op e1
     in
     li_simple (RV32 op) [:: e0; e1' ].
