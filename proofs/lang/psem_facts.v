@@ -808,6 +808,7 @@ End WITH_PARAMS.
 Section EQ_EX.
 
 Context {var_info : Type} {VI : VarInfo var_info}.
+
 Context
   {wsw:WithSubWord}
   {asm_op syscall_state : Type}

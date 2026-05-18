@@ -141,7 +141,9 @@ Proof.
 Qed.
 
 Section WSW.
+
 Context {var_info : Type} {VI : VarInfo var_info}.
+
 Context {wsw:WithSubWord}.
 
 (* ** State

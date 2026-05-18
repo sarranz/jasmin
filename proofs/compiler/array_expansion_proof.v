@@ -581,7 +581,12 @@ Proof.
              Mvar.get svm.2 x = Some ai ->
              xi \in (ai_elems ai) ->
              Sv.In xi svm.1)].
-  suff : forall l svm svm', wf_st svm -> foldM [elaborate init_array_info ] svm l = ok svm' -> wf_st svm'.
+  suff : [elaborate
+    forall l svm svm',
+      wf_st svm ->
+      foldM init_array_info svm l = ok svm' ->
+      wf_st svm'
+  ].
   + move=> h svm' /h []; first by split => //=.
     by move=> ? _ _ <-.
   elim => /= [ ??? [<-] // | vi vis hrec svm svm' hwf].
@@ -839,7 +844,6 @@ Proof.
   move=> finfo fci ftyin fparams fbody ftyout fres fextra.
   set fd := {| f_info := finfo |} => Hca Hw Hc Hres Hcr hinit.
   t_xrbindP => ins hparams outs hres <- ??; subst mt inout.
-  rewrite /expand_fbody /=.
   t_xrbindP => c hc ?; subst fd1.
   move=> expdin expdout; rewrite hsigs => -[??] vargs1 hexvs; subst expdin expdout.
   set (sempty := {| escs := scs1; emem := m1; evm := Vm.init |}).
@@ -1016,7 +1020,6 @@ Proof.
   move=> finfo fci ftyin fparams fbody ftyout fres fextra hget1.
   set fd := {| f_info := finfo |} => hinit.
   t_xrbindP => ins hparams outs hres <- ??; subst mt inout.
-  rewrite /expand_fbody /=.
   t_xrbindP => c hc ?; exists fd1; subst fd1 => // s1.
   rewrite /initialize_funcall /=; t_xrbindP; rewrite /estate0 => vs1 htr hw.
   rewrite -hscs -hmem hflat => {hflat}.

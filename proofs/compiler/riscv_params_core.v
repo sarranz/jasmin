@@ -21,6 +21,7 @@ Module RISCVFopn_core.
   Open Scope Z.
 
   Section WITH_PARAMS.
+
   Context {var_info : Type} {VI : VarInfo var_info}.
 
   Definition opn_args := (seq lexpr * riscv_op * seq rexpr)%type.

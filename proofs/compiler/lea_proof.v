@@ -13,7 +13,9 @@ Local Open Scope seq_scope.
 
 
 Section PROOF.
+
   Context {var_info : Type} {VI : VarInfo var_info}.
+
   Context
     {wsw : WithSubWord}
     {asm_op syscall_state : Type}

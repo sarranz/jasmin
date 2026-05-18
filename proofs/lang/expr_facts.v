@@ -19,7 +19,9 @@ Proof. by case: x => ? []. Qed.
 End INFO.
 
 Section PEXPR_IND.
+
   Context {var_info : Type} {VI : VarInfo var_info}.
+
   Context
     (P: pexpr → Prop)
     (Hconst: ∀ z, P (Pconst z))
@@ -63,7 +65,9 @@ Register Scheme pexpr_ind as ind_dep for pexpr.
 
 (* Mutual induction scheme for pexpr and pexprs *)
 Section PEXPRS_IND.
+
   Context {var_info : Type} {VI : VarInfo var_info}.
+
   Context
     (P: pexpr → Prop)
     (Q: pexprs → Prop)

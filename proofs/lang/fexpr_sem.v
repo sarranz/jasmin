@@ -6,6 +6,7 @@ Section SEM_EXPR.
 (* Semantic of expressions *)
 
   Context {var_info : Type} {VI : VarInfo var_info}.
+
   Context {wsw : WithSubWord} {pd: PointerData}.
   Context (m: mem) (vm: Vm.t).
 
@@ -29,6 +30,7 @@ End SEM_EXPR.
 Section SEM.
 
 Context {var_info : Type} {VI : VarInfo var_info}.
+
 Context
   {wsw : WithSubWord} {syscall_state : Type}
   {ep : EstateParams syscall_state}.

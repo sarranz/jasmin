@@ -118,6 +118,7 @@ End ESTATE_UTILS.
 Section SEM_PEXPR.
 
 Context {var_info : Type} {VI : VarInfo var_info}.
+
 Context
   {asm_op syscall_state : Type}
   {ep : EstateParams syscall_state}
@@ -210,6 +211,7 @@ End SEM_PEXPR.
 Section SEM_EASSERT.
 
 Context {var_info : Type} {VI : VarInfo var_info}.
+
 Context
   {wa:WithAssert}
   {asm_op syscall_state : Type}
@@ -247,6 +249,7 @@ End SEM_EASSERT.
 Section EXEC_ASM.
 
 Context {var_info : Type} {VI : VarInfo var_info}.
+
 Context
   {asm_op syscall_state : Type}
   {ep : EstateParams syscall_state}

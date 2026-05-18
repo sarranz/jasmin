@@ -28,6 +28,7 @@ End E.
 (* -------------------------------------------------------------------------- *)
 
 Section INFO.
+
 Context {var_info : Type} {VI : VarInfo var_info}.
 
 Record pi_cel := {

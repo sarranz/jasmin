@@ -217,6 +217,7 @@ Definition type_of_opN_safety (op: opN_safety) : seq atype * atype :=
  * -------------------------------------------------------------------- *)
 
 Section INFO.
+
 Context {var_info : Type} {VI : VarInfo var_info}.
 
 (* TODO problem: [SvD.fsetdec] does not understand [v_var].
@@ -291,7 +292,7 @@ Definition cf_of_condition (op : sop2) : option (combine_flags * wsize) :=
   | _ => None
   end.
 
-Definition pexpr_of_cf (cf : combine_flags) (vi : var_info_t) (flags : seq var) : pexpr :=
+Definition pexpr_of_cf (cf : combine_flags) (vi : var_info) (flags : seq var) : pexpr :=
   let eflags := [seq Plvar {| v_var := x; v_info := vi |} | x <- flags ] in
   PappN (Ocombine_flags cf) eflags.
 
@@ -313,9 +314,9 @@ Definition get_pvar (e: pexpr) : exec var :=
 Definition get_lvar (x: lval) : exec var :=
   if x is Lvar x then ok (v_var x) else type_error.
 
-Definition Lnone_b (vi : var_info_t) : lval := Lnone vi abool.
+Definition Lnone_b (vi : var_info) : lval := Lnone vi abool.
 
-Definition var_info_of_lval (x: lval) : var_info_t :=
+Definition var_info_of_lval (x: lval) : var_info :=
   match x with
   | Lnone i _ | Lmem _ _ i _ => i
   | Lvar x | Laset _ _ _ x _ | Lasub _ _ _ x _ => v_info x

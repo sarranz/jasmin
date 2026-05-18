@@ -1,4 +1,4 @@
-From mathcomp Require Import ssreflect eqtype.
+From mathcomp Require Import ssreflect.
 
 Require Import
   expr

@@ -1,4 +1,3 @@
-From mathcomp Require Import eqtype.
 Require Import compiler_util expr.
 
 Section LOWERING.

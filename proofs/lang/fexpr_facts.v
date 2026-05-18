@@ -5,6 +5,7 @@ Require Import fexpr fexpr_sem.
 Require Import expr psem.
 
 Section INFO.
+
 Context {var_info : Type} {VI : VarInfo var_info}.
 
 Lemma free_varsE e s :

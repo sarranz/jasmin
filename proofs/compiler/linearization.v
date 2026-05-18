@@ -68,6 +68,7 @@ End E.
 (* --------------------------------------------------------------------------- *)
 
 Section INFO.
+
 Context {var_info : Type} {VI : VarInfo var_info}.
 
 Record linearization_params {asm_op : Type} {asmop : asmOp asm_op} :=
@@ -255,7 +256,9 @@ End INFO.
    An architecture can define its own functions when there is something more
    efficient to do, and rely on one of these implementations in the default case. *)
 Section DEFAULT.
+
 Context {var_info : Type} {VI : VarInfo var_info}.
+
 Context {asm_op : Type} {pd : PointerData} {asmop : asmOp asm_op}.
 Context (lip_tmp2 : Ident.ident).
 Context (lip_lstore  : var_i -> Z -> var_i -> fopn_args)
