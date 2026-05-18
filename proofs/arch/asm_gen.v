@@ -18,7 +18,10 @@ Module E.
 Definition pass_name := "asmgen"%string.
 
 Section INFO.
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Definition gen_error (internal:bool) (ii:option instr_info) (vi: option var_info) (msg:pp_error) :=
   {| pel_msg      := msg
@@ -67,7 +70,10 @@ End INFO.
 End E.
 
 Section INFO.
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Definition fail ii (msg: string) :=
   asm_gen.E.error ii (pp_box [:: pp_s "store-label:"; pp_s msg]).
@@ -76,7 +82,10 @@ End INFO.
 
 Section TOIDENT.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 Context `{tI : ToIdent}.
 
 (* move ? *)
@@ -104,7 +113,10 @@ End TOIDENT.
 
 Section OF_TO.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 Context {reg regx xreg rflag cond} {arch : arch_decl reg regx xreg rflag cond} {atoI : arch_toIdent}.
 
 Definition to_reg   : var -> option reg_t   := of_var.
@@ -154,7 +166,10 @@ End OF_TO.
 
 Section ASM_EXTRA.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 Context
   {reg regx xreg rflag cond asm_op extra_op : Type}
   {asm_e : asm_extra reg regx xreg rflag cond asm_op extra_op}

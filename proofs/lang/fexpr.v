@@ -2,6 +2,10 @@ From mathcomp Require Import ssreflect ssrfun ssrbool.
 From Coq Require Import Utf8.
 Require Import expr.
 
+Section INFO.
+
+Context {var_info : Type} {VI : VarInfo var_info}.
+
 (* Expressions without memory accesses *)
 Inductive fexpr :=
 | Fconst of Z
@@ -30,8 +34,14 @@ Variant lexpr :=
   | Store of aligned & wsize & fexpr
   | LLvar of var_i.
 
+End INFO.
+
 Notation rexprs := (seq rexpr).
 Notation lexprs := (seq lexpr).
+
+Section INFO.
+
+Context {var_info : Type} {VI : VarInfo var_info}.
 
 (* -------------------------------------------------------------------------- *)
 Fixpoint fexpr_of_pexpr (e: pexpr) : option fexpr :=
@@ -85,3 +95,5 @@ Definition rvar (x : var_i) : rexpr := Rexpr (Fvar x).
 Definition rconst (ws : wsize) (z : Z) : rexpr := Rexpr (fconst ws z).
 Definition lstore {_ : PointerData} al ws x z :=
    Store al ws (Fapp2 (Oadd (Op_w Uptr)) (Fvar x) (fconst Uptr z)).
+
+End INFO.

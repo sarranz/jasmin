@@ -71,7 +71,10 @@ Arguments to_var {t} {T}%_type_scope {tS toI} r.
 Module Type MkToIdent_T.
   Section INFO.
 
-  Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+  Context
+    {var_info instr_info fun_info : Type}
+    {CI : CompilerInfo var_info instr_info fun_info}
+  .
 
   Parameter mk : forall (t:ltype) (T:Type) {tS: ToString t T},
     (string -> Ident.ident) -> result pp_error_loc (ToIdent T).
@@ -84,7 +87,10 @@ Module MkToIdent : MkToIdent_T.
   Section Section.
   Import Ident.
 
-  Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+  Context
+    {var_info instr_info fun_info : Type}
+    {CI : CompilerInfo var_info instr_info fun_info}
+  .
   Context (t:ltype) (T:Type) {tS: ToString t T}
         (mk_id : string -> ident).
 
@@ -152,7 +158,7 @@ Module MkToIdent : MkToIdent_T.
   End Section.
 
 End MkToIdent.
-Arguments MkToIdent.mk {instr_info fun_info CI t T tS}.
+Arguments MkToIdent.mk {var_info instr_info fun_info CI t T tS}.
 
 Section ARCH.
 
@@ -174,7 +180,10 @@ End ARCH.
 Module Type AToIdent_T.
   Section INFO.
 
-  Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+  Context
+    {var_info instr_info fun_info : Type}
+    {CI : CompilerInfo var_info instr_info fun_info}
+  .
 
   Parameter mk :
     forall `{arch : arch_decl},
@@ -186,7 +195,10 @@ End AToIdent_T.
 Module MkAToIdent : AToIdent_T.
 
   Section Section.
-  Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+  Context
+    {var_info instr_info fun_info : Type}
+    {CI : CompilerInfo var_info instr_info fun_info}
+  .
   Context `{arch : arch_decl}.
 
   Section AUX.
@@ -272,7 +284,10 @@ End ARCH.
  *)
 Section INFO.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Class asm_extra (reg regx xreg rflag cond asm_op extra_op : Type) :=
   { _asm   : asm reg regx xreg rflag cond asm_op

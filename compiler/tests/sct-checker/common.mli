@@ -4,7 +4,8 @@ module Arch : Arch_full.Arch
 val load_file :
   string ->
   ( unit,
-    ( IInfo.t,
+    ( VInfo.t,
+      IInfo.t,
       FInfo.t,
       Arch.reg,
       Arch.regx,

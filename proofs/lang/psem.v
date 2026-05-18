@@ -22,7 +22,10 @@ Open Scope vm_scope.
  * -------------------------------------------------------------------- *)
 
 Section WSW.
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 Context {wsw:WithSubWord}.
 
 (* ** Instructions
@@ -2134,7 +2137,10 @@ End REL_COMPOSE.
 
 Section TRANS_UTILS.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Context
   {syscall_state : Type}

@@ -59,6 +59,8 @@ Definition dc_truncate_val {dc:DirectCall} t v :=
 Section SEM_CALL_PARAMS.
 
 Context
+  {var_info : Type}
+  {VI : VarInfo var_info}
   {asm_op syscall_state : Type}
   {ep : EstateParams syscall_state}
   {sip : SemInstrParams asm_op syscall_state}.
@@ -139,6 +141,7 @@ Proof.
 Qed.
 
 Section WSW.
+Context {var_info : Type} {VI : VarInfo var_info}.
 Context {wsw:WithSubWord}.
 
 (* ** State

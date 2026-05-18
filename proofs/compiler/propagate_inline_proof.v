@@ -12,7 +12,10 @@ Local Open Scope seq_scope.
 
 Section WITH_PARAMS.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Context
   {wsw : WithSubWord}

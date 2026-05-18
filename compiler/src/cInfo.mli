@@ -1,1 +1,1 @@
-val instance : (IInfo.t, FInfo.t) Info.coq_CompilerInfo
+val instance : (VInfo.t, IInfo.t, FInfo.t) Info.coq_CompilerInfo

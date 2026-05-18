@@ -49,5 +49,5 @@ end
 
 module Regalloc (Arch : Arch_full.Arch) :
   Regalloc with type extended_op :=
-    (IInfo.t, FInfo.t, Arch.reg, Arch.regx, Arch.xreg, Arch.rflag, Arch.cond,
-     Arch.asm_op, Arch.extra_op) Arch_extra.extended_op
+    (VInfo.t, IInfo.t, FInfo.t, Arch.reg, Arch.regx, Arch.xreg, Arch.rflag,
+     Arch.cond, Arch.asm_op, Arch.extra_op) Arch_extra.extended_op

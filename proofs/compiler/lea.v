@@ -6,6 +6,10 @@ Require Import fexpr.
 
 (* -------------------------------------------------------------------- *)
 
+Section INFO.
+
+Context {var_info : Type} {VI : VarInfo var_info}.
+
 (* disp + base + scale * offset *)
 Record lea := MkLea {
   lea_disp   : Z;
@@ -86,6 +90,8 @@ Fixpoint mk_lea_rec (sz: wsize) e :=
 
 Definition mk_lea sz e :=
   obind (mk_lea_rec sz) (fexpr_of_pexpr e).
+
+End INFO.
 
 (* This function is useful to turn a product into a shift *)
 Definition shift_of_scale (z: Z) : option nat :=

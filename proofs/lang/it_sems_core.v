@@ -27,7 +27,10 @@ Context
   {sip : SemInstrParams asm_op syscall_state}
   {pT : progT}
   {scP : semCallParams}.
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Record fstate := { fscs : syscall_state_t; fmem : mem; fvals : values }.
 

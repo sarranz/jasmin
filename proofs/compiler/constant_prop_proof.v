@@ -15,7 +15,10 @@ Local Notation cpm := (Mvar.t const_v).
 
 Section WITH_PARAMS.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Context
   {wsw:WithSubWord}
@@ -477,8 +480,9 @@ Proof.
                       s_eqP, sneqP, sltP, sleP, sgtP, sgeP, ssem_sop2P.
 Qed.
 
-Lemma app_sopnP T0 ts o es x s :
-  @app_sopn T0 ts o es = ok x ->
+Lemma app_sopnP (T0 : Type) (ts : seq ctype) (o : sem_prod ts (exec T0))
+    (es : pexprs) (x : T0) (s : estate) :
+  app_sopn (ts := ts) o es = ok x ->
   sem_pexprs wdb gd s es >>= values.app_sopn ts o = ok x.
 Proof.
   elim: ts es o => /= [ | t ts ih ].

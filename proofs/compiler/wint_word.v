@@ -11,6 +11,9 @@ Require Import flag_combination.
 Local Open Scope seq_scope.
 Local Open Scope Z_scope.
 
+Section INFO.
+
+Context {var_info : Type} {VI : VarInfo var_info}.
 
 Definition wi2w_wiop1 s (o : wiop1) (e : pexpr) : pexpr :=
   match o with
@@ -72,13 +75,19 @@ Definition wi2w_lv (x : lval) : lval :=
   | Lasub aa ws len x e => Lasub aa ws len x (wi2w_e e)
   end.
 
+End INFO.
+
 Section WITH_PARAMS.
+
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Context
   `{asmop:asmOp}
    {LC : LoopCounter}
 .
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Fixpoint wi2w_ir (ir:instr_r) : instr_r :=
   match ir with

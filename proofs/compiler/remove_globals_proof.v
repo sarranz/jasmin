@@ -16,7 +16,10 @@ Proof. by move=> h1 h2 g v /h1 /h2. Qed.
 
 Module INCL. Section INCL.
 
-  Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+  Context
+    {var_info instr_info fun_info : Type}
+    {CI : CompilerInfo var_info instr_info fun_info}
+  .
 
   Context
     {wsw : WithSubWord}
@@ -279,7 +282,10 @@ End INCL. End INCL. Import INCL.
 
 Module EXTEND. Section ASM_OP.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 Context `{asmop:asmOp}.
 Context {spp: SemPexprParams}.
 
@@ -395,7 +401,10 @@ End EXTEND. Import EXTEND.
 
 Module RGP. Section PROOFS.
 
-  Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+  Context
+    {var_info instr_info fun_info : Type}
+    {CI : CompilerInfo var_info instr_info fun_info}
+  .
 
   Context
     {wsw : WithSubWord}

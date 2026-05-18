@@ -23,7 +23,10 @@ Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then
 
 Section WITH_PARAMS.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Context
   {asm_op syscall_state : Type}
@@ -559,7 +562,7 @@ Proof.
   elim: to_save s => /= [ | [x ofs] to_save ih] s hget.
   + by move=> [<-]; rewrite with_mem_same.
   t_xrbindP; case heq: vtype => [|||ws]// m' _ [<-] hchk w v hgetx htow hw hf.
-  have := lstore_correct (xd:= rspi) (xs:= VarI x dummy_var_info) _ hchk hget _ hw.
+  have := lstore_correct (xd:= rspi) (xs:= mk_var_i x) _ hchk hget _ hw.
   rewrite heq => /(_ (convertible_refl _)) ->.
   + by have /= -> := ih (with_mem s m') hget hf.
   by rewrite hgetx /= htow.
@@ -3118,7 +3121,7 @@ Section PROOF.
     set before :=  allocate_stack_frame _ _ _ _ _ _ rastack_before.
     set after :=  allocate_stack_frame _ _ _ _ _ _ rastack_after.
     move: C; set P' := P ++ _ => C.
-    pose Stmp := if tmpi_of_ra (sf_return_address (f_extra fd')) is Some x then Sv.singleton x else Sv.empty.
+    pose Stmp := if [elaborate tmpi_of_ra] (sf_return_address (f_extra fd')) is Some x then Sv.singleton x else Sv.empty.
     have StmpE : Sv.Equal Stmp (tmp_call (f_extra fd')).
     + by rewrite /tmp_call /Stmp /tmpi_of_ra; case: sf_return_address => //= [_ | _ _ _] [].
     move: (X vrsp); rewrite s1_rsp.

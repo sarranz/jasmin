@@ -65,9 +65,9 @@ let check_safety_p pd msf_size asmOp analyze s (p : (_, 'asm) Prog.prog) source_
 module type ArchWithAnalyze = sig
   module A : Arch_full.Arch
   val analyze :
-    (unit, (IInfo.t, FInfo.t, A.reg, A.regx, A.xreg, A.rflag, A.cond, A.asm_op, A.extra_op) Arch_extra.extended_op) func ->
-    (unit, (IInfo.t, FInfo.t, A.reg, A.regx, A.xreg, A.rflag, A.cond, A.asm_op, A.extra_op) Arch_extra.extended_op) func ->
-    (unit, (IInfo.t, FInfo.t, A.reg, A.regx, A.xreg, A.rflag, A.cond, A.asm_op, A.extra_op) Arch_extra.extended_op) prog ->
+    (unit, (VInfo.t, IInfo.t, FInfo.t, A.reg, A.regx, A.xreg, A.rflag, A.cond, A.asm_op, A.extra_op) Arch_extra.extended_op) func ->
+    (unit, (VInfo.t, IInfo.t, FInfo.t, A.reg, A.regx, A.xreg, A.rflag, A.cond, A.asm_op, A.extra_op) Arch_extra.extended_op) func ->
+    (unit, (VInfo.t, IInfo.t, FInfo.t, A.reg, A.regx, A.xreg, A.rflag, A.cond, A.asm_op, A.extra_op) Arch_extra.extended_op) prog ->
     bool
 end
 

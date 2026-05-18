@@ -1,53 +1,69 @@
 From Coq Require Export ZArith.
+From mathcomp Require Import ssreflect.
 
-(* Used only by the ocaml compiler *)
-(** A "tag" is a non-empty type, extracted to plain OCaml [int] *)
-Module Type TAG.
-  Parameter t : Type.
-  Parameter witness : t.
-End TAG.
+Class VarInfo (var_info : Type) : Type :=
+  {
+    dummy_var_info : var_info;
+  }.
 
-Module VarInfo : TAG.
-  Definition t := positive.
-  Definition witness : t := 1%positive.
-End VarInfo.
+(* Used to force typeclass dependency. *)
+Definition var_info_t {var_info : Type} {VI : VarInfo var_info} : Type :=
+  var_info.
 
-Definition var_info := VarInfo.t.
-Definition dummy_var_info : var_info := VarInfo.witness.
+Section IINFO.
+
+Context {var_info : Type} {VI : VarInfo var_info}.
 
 Class InstrInfo (instr_info : Type) : Type :=
   {
     dummy_instr_info : instr_info;
     ii_with_location : instr_info -> instr_info;
     ii_is_inline : instr_info -> bool;
-    var_info_of_ii : instr_info -> var_info;
+    var_info_of_ii : instr_info -> var_info_t;
   }.
 
+End IINFO.
+
+(* Used to force typeclass dependency. *)
 Definition instr_info_t
-  {instr_info : Type} {II : InstrInfo instr_info} : Type :=
+  {var_info instr_info : Type}
+  {VI : VarInfo var_info}
+  {II : InstrInfo instr_info} :
+  Type :=
   instr_info.
 
-(* [FunInfo] is a typeclass parameterized by the carrier types. Every section
-   that needs fun_info introduces
-   [Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}];
-   the implementation supplies the record fields directly. *)
-Class FunInfo (instr_info fun_info : Type) : Type :=
+Section FINFO.
+
+Context
+  {var_info instr_info : Type}
+  {VI : VarInfo var_info}
+  {II : InstrInfo instr_info}
+.
+
+Class FunInfo (fun_info : Type) : Type :=
   {
-    entry_info_of_fun_info : fun_info -> instr_info;
-    ret_info_of_fun_info : fun_info -> instr_info;
+    entry_info_of_fun_info : fun_info -> instr_info_t;
+    ret_info_of_fun_info : fun_info -> instr_info_t;
   }.
 
-Class CompilerInfo (instr_info fun_info : Type) : Type :=
+End FINFO.
+
+(* Used to force typeclass dependency. *)
+Definition fun_info_t
+  {var_info instr_info fun_info : Type}
+  {VI : VarInfo var_info}
+  {II : InstrInfo instr_info}
+  {FI : FunInfo fun_info} :
+  Type :=
+  fun_info.
+
+Class CompilerInfo (var_info instr_info fun_info : Type) : Type :=
   {
+    ci_var_info :> VarInfo var_info;
     ci_instr_info :> InstrInfo instr_info;
-    ci_fun_info :> FunInfo instr_info fun_info;
+    ci_fun_info :> FunInfo fun_info;
   }.
 
+#[global] Existing Instance ci_var_info.
 #[global] Existing Instance ci_instr_info.
 #[global] Existing Instance ci_fun_info.
-
-(* Used to force typeclass dependency to allow inference. *)
-Definition fun_info_t
-  {instr_info fun_info : Type}
-  {CI : CompilerInfo instr_info fun_info} : Type :=
-  fun_info.

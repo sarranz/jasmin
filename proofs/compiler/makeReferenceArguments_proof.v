@@ -11,7 +11,10 @@ Local Open Scope seq_scope.
 
 Section SemInversion.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Context
   {wsw : WithSubWord}
@@ -52,7 +55,10 @@ End SemInversion.
 
 Section WITH_PARAMS.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Context
   {wsw : WithSubWord}
@@ -250,14 +256,13 @@ Context
       rewrite /read_I_rec /write_I_rec [X in (Sv.inter (vrvs _) X)]/= /read_gvar
         [X in (Sv.inter (vrvs _) X)]/= read_rvE.
       case: lv wflv heqnw => //=.
-      + move=> x _ heqnw hrw hwr /write_var_spec -/(_ (with_vm s1' vm3)) [vmi] [-> hvmx hx].
+      + move=> [x xi] /= _ heqnw hrw hwr /write_var_spec -/(_ (with_vm s1' vm3)) [vmi] [/= -> hvmx hx].
         exists vmi; rewrite with_vm_idem; split => //.
-        move=> z; case: ((v_var x) =P z) => hxz.
+        move=> z; case: (x =P z) => hxz.
         + by subst z;rewrite hx; have -> //:= vrvsP hws; SvD.fsetdec.
         rewrite -hvmx; last by SvD.fsetdec.
-        rewrite evm_with_vm.
         by case (Sv_memP z (vrvs lvs)) => hz; [apply hvm3 | apply heqnw]; SvD.fsetdec.
-      move=> aa ws sc x e hnoload heqnw hrw hwr.
+      move=> aa ws sc [x xi] /= e hnoload heqnw hrw hwr.
       apply: on_arr_varP => sz t htyx hget.
       rewrite /write_var.
       t_xrbindP=>  zi vi he hvi t1 -> t1' hsub vms3 hset ?; subst s3; rewrite /on_arr_var.
@@ -269,8 +274,8 @@ Context
       + rewrite evm_with_vm; rewrite /with_vm /= in hw3 => z hz.
         by have /= -> // := vrvsP hw3; move: hwr; rewrite read_eE; SvD.fsetdec.
       rewrite /= hvi /= hsub /=.
-      have [vmi [-> hvmi hx]]:= set_var_spec vm3 hset; exists vmi; split => //.
-      move=> z; case: ((v_var x) =P z) => hxz.
+      have [vmi [/= -> hvmi hx]]:= set_var_spec vm3 hset; exists vmi; split => //.
+      move=> z; case: (x =P z) => hxz.
       + by subst z; rewrite hx; have /= -> // := vrvsP hws; SvD.fsetdec.
       rewrite -hvmi; last by SvD.fsetdec.
       by case (Sv_memP z (vrvs lvs)) => hz; [apply hvm3 | apply heqnw]; SvD.fsetdec.

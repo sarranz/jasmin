@@ -73,11 +73,17 @@ Arguments Estate {syscall_state}%_type_scope {ep} _ _ _%_vm_scope.
 (* ** Variable map
  * -------------------------------------------------------------------- *)
 
+Section INFO.
+
+Context {var_info : Type} {VI : VarInfo var_info}.
+
 Definition get_gvar (wdb : bool) (gd : glob_decls) (vm : Vm.t) (x : gvar) :=
   if is_lvar x then get_var wdb vm x.(gv)
   else get_global gd x.(gv).
 
 Definition get_var_is wdb vm := mapM (fun x => get_var wdb vm (v_var x)).
+
+End INFO.
 
 Definition on_arr_var A (v:exec value) (f:forall n, WArray.array n -> exec A) :=
   Let v := v  in
@@ -112,6 +118,8 @@ End ESTATE_UTILS.
 Section SEM_PEXPR.
 
 Context
+  {var_info : Type}
+  {VI : VarInfo var_info}
   {asm_op syscall_state : Type}
   {ep : EstateParams syscall_state}
   {spp : SemPexprParams}
@@ -203,6 +211,8 @@ End SEM_PEXPR.
 Section SEM_EASSERT.
 
 Context
+  {var_info : Type}
+  {VI : VarInfo var_info}
   {wa:WithAssert}
   {asm_op syscall_state : Type}
   {ep : EstateParams syscall_state}
@@ -239,6 +249,8 @@ End SEM_EASSERT.
 Section EXEC_ASM.
 
 Context
+  {var_info : Type}
+  {VI : VarInfo var_info}
   {asm_op syscall_state : Type}
   {ep : EstateParams syscall_state}
   {spp : SemPexprParams}

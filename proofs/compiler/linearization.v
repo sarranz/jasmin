@@ -17,7 +17,10 @@ Module E.
 Definition pass_name := "linearization"%string.
 
 Section INFO.
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Definition my_error (msg:pp_error) :=
   {| pel_msg      := msg
@@ -63,6 +66,9 @@ End E.
 
 
 (* --------------------------------------------------------------------------- *)
+
+Section INFO.
+Context {var_info : Type} {VI : VarInfo var_info}.
 
 Record linearization_params {asm_op : Type} {asmop : asmOp asm_op} :=
   {
@@ -241,12 +247,15 @@ Record linearization_params {asm_op : Type} {asmop : asmOp asm_op} :=
        be a result).
 *)
 
+End INFO.
+
 (* The following functions are defined here, so that they can be shared between
    the architectures. The proofs are shared too (see linearization_proof.v).
 
    An architecture can define its own functions when there is something more
    efficient to do, and rely on one of these implementations in the default case. *)
 Section DEFAULT.
+Context {var_info : Type} {VI : VarInfo var_info}.
 Context {asm_op : Type} {pd : PointerData} {asmop : asmOp asm_op}.
 Context (lip_tmp2 : Ident.ident).
 Context (lip_lstore  : var_i -> Z -> var_i -> fopn_args)
@@ -287,11 +296,13 @@ End DEFAULT.
 Section WITH_PARAMS.
 
 Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
   {asm_op : Type}
   {pd : PointerData}
   {asmop : asmOp asm_op}
-  (liparams : linearization_params).
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+  (liparams : linearization_params)
+.
 
 (* Return a linear instruction that corresponds to copying a register.
    The linear instruction [lmove rd rs] corresponds to

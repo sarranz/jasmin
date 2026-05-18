@@ -10,7 +10,10 @@ Module Import E.
   Definition pass : string := "dead code".
 
   Section INFO.
-  Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+  Context
+    {var_info instr_info fun_info : Type}
+    {CI : CompilerInfo var_info instr_info fun_info}
+  .
 
   Definition ii_loop_iterator := ii_loop_iterator pass.
 
@@ -21,7 +24,10 @@ End E.
 
 Section ASM_OP.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 Context `{asmop : asmOp}.
 Context {LC : LoopCounter}.
 

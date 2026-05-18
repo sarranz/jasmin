@@ -538,7 +538,7 @@ let pp_sprog ~debug pd msfsize asmOp fmt ((funcs, p_extra):('info, 'asm) Prog.sp
 let pp_warning_msg fmt = function
   | Compiler_util.Use_lea -> Format.fprintf fmt "LEA instruction is used"
 
-let pp_err ~debug fmt (pp_e : (IInfo.t, FInfo.t) Compiler_util.pp_error) =
+let pp_err ~debug fmt (pp_e : (VInfo.t, IInfo.t, FInfo.t) Compiler_util.pp_error) =
   let pp_var =
     if debug then pp_dvar ~debug else pp_var ~debug
   in

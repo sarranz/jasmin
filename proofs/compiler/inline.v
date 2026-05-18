@@ -10,7 +10,10 @@ Module Import E.
   Definition pass : string := "inlining".
 
   Section INFO.
-  Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+  Context
+    {var_info instr_info fun_info : Type}
+    {CI : CompilerInfo var_info instr_info fun_info}
+  .
 
   Definition inline_error msg := {|
     pel_msg := msg;
@@ -31,7 +34,8 @@ End E.
 Section INLINE.
 
 Context
-  {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
   {asm_op syscall_state : Type}
   {asmop:asmOp asm_op}
   (extend_iinfo : instr_info -> instr_info -> instr_info)

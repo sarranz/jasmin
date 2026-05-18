@@ -15,7 +15,10 @@ Require
 
 
 Section INFO.
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Record lowering_params
   {asm_op : Type} {asmop : asmOp asm_op} (lowering_options : Type) :=

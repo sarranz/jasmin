@@ -2446,5 +2446,14 @@ Instance x86_op_decl : asm_op_decl x86_op := {
    prim_string    := x86_prim_string;
 }.
 
-Definition x86_prog {instr_info : Type} {II : InstrInfo instr_info} :=
-  asm_prog (asm_op_d := x86_op_decl).
+Section INFO.
+
+Context
+  {var_info instr_info : Type}
+  {VI : VarInfo var_info}
+  {II : InstrInfo instr_info}
+.
+
+Definition x86_prog := asm_prog (asm_op_d := x86_op_decl).
+
+End INFO.

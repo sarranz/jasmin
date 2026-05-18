@@ -11,7 +11,10 @@ Local Open Scope seq_scope.
 Module Import E.
   Section INFO.
 
-  Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+  Context
+    {var_info instr_info fun_info : Type}
+    {CI : CompilerInfo var_info instr_info fun_info}
+  .
 
   Definition pass : string := "array expansion".
 
@@ -65,7 +68,10 @@ End E.
 
 Section INFO.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Record varr_info := {
   vi_v : var;
@@ -244,17 +250,15 @@ Definition expand_return m ex x :=
       Let ai := o2r (reg_error x "(not a reg array)") (Mvar.get m.(sarrs) x) in
       Let _ := assert [&& ws == ai_ty ai & len == ai_len ai]
                       (reg_error x "(type mismatch)") in
-      let vi := v_info x in
-      ok (map (fun v => Lvar (VarI v vi)) (ai_elems ai))
+      ok (map (fun v => Lvar (with_var x v)) (ai_elems ai))
     | Lasub aa ws' len' x e =>
       Let _ := assert (aa == AAscale) (reg_error x "(the default scale must be used)") in
       Let i := o2r (reg_error x "(the index is not a constant)") (is_const e) in
       Let ai := o2r (reg_error x "(not a reg array)") (Mvar.get m.(sarrs) x) in
       Let _ := assert [&& ws == ai_ty ai, ws' == ws & len == len']
                       (reg_error x "(type mismatch)") in
-      let vi := v_info x in
       let elems := take (Z.to_nat len) (drop (Z.to_nat i) (ai_elems ai)) in
-      ok (map (fun v => Lvar (VarI v vi)) elems)
+      ok (map (fun v => Lvar (with_var x v)) elems)
     | _ => Error (reg_ierror_no_var "only variables/sub-arrays/_ can be expanded in function return")
     end
   | None => rmap (fun x => [:: x]) (expand_lv m x)
@@ -318,7 +322,9 @@ Fixpoint expand_i (m : t) (i : instr) : cexec instr :=
 
 Definition expand_tyv m b s ty v :=
   if Mvar.get m.(sarrs) (v_var v) is Some ai then
-    Let _ := assert b (reg_error v ("(reg arrays are not allowed in " ++ s ++ " of export functions)")) in
+    Let _ := [elaborate
+      assert b (reg_error v ("(reg arrays are not allowed in " ++ s ++ " of export functions)"))
+    ] in
     let vi := v_info v in
     let vvars := map (fun v' => VarI v' vi) (ai_elems ai) in
     let vtypes := map vtype (ai_elems ai) in

@@ -15,7 +15,7 @@ let pp_sexpr ~debug fmt e =
     let open Expr in
     match e with
     | Sconst n -> Pconst n
-    | Svar x -> Pvar (mk_lvar (mk_var_i x))
+    | Svar x -> Pvar (mk_lvar VInfo.instance (mk_var_i VInfo.instance x))
     | Sof_int (ws, e) -> Papp1 (Oword_of_int ws, cexpr_of_sexpr e)
     | Sto_int (sg, ws, e) -> Papp1 (Oint_of_word (sg, ws), cexpr_of_sexpr e)
     | Sneg (opk, e) -> Papp1 (Oneg opk, cexpr_of_sexpr e)

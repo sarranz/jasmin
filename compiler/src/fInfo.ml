@@ -54,7 +54,7 @@ let entry_info (fi: t) : IInfo.t =
 let ret_info (fi: t) : IInfo.t =
   let (_, _, _, ri) = fi in (Location.i_loc0 ri.ret_loc, [])
 
-let instance : (IInfo.t, t) Info.coq_FunInfo =
+let instance : (VInfo.t, IInfo.t, t) Info.coq_FunInfo =
   {
     Info.entry_info_of_fun_info = entry_info;
     Info.ret_info_of_fun_info = ret_info;

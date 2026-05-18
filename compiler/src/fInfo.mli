@@ -27,4 +27,4 @@ type t = Location.t * f_annot * call_conv * return_info
 val f_annot_empty : f_annot
 val is_export    : call_conv -> bool
 val is_subroutine : call_conv -> bool
-val instance : (IInfo.t, t) Info.coq_FunInfo
+val instance : (VInfo.t, IInfo.t, t) Info.coq_FunInfo

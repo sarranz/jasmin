@@ -216,9 +216,16 @@ Definition type_of_opN_safety (op: opN_safety) : seq atype * atype :=
 (* ** Expressions
  * -------------------------------------------------------------------- *)
 
+Section INFO.
+Context {var_info : Type} {VI : VarInfo var_info}.
+
+(* TODO problem: [SvD.fsetdec] does not understand [v_var].
+   goals involving [v_var] need [move: (v_var x) => ?; SvD.fsetdec].
+   For example in makeReferenceArguments_proof. *)
+
 Record var_i := VarI {
   v_var :> var;
-  v_info : var_info
+  v_info : var_info_t;
 }.
 
 Definition mk_var_i (x : var) :=
@@ -226,9 +233,6 @@ Definition mk_var_i (x : var) :=
     v_var := x;
     v_info := dummy_var_info;
   |}.
-
-Notation vid ident :=
-  (mk_var_i {| vtype := aword Uptr; vname := ident%string; |}).
 
 #[only(eqbOK)] derive
 Variant v_scope :=
@@ -257,8 +261,6 @@ Inductive pexpr : Type :=
 | Papp2  : sop2 -> pexpr -> pexpr -> pexpr
 | PappN of opN & seq pexpr
 | Pif    : atype -> pexpr -> pexpr -> pexpr -> pexpr.
-
-Notation pexprs := (seq pexpr).
 
 Local Set Elimination Schemes.
 
@@ -289,7 +291,7 @@ Definition cf_of_condition (op : sop2) : option (combine_flags * wsize) :=
   | _ => None
   end.
 
-Definition pexpr_of_cf (cf : combine_flags) (vi : var_info) (flags : seq var) : pexpr :=
+Definition pexpr_of_cf (cf : combine_flags) (vi : var_info_t) (flags : seq var) : pexpr :=
   let eflags := [seq Plvar {| v_var := x; v_info := vi |} | x <- flags ] in
   PappN (Ocombine_flags cf) eflags.
 
@@ -297,15 +299,13 @@ Definition pexpr_of_cf (cf : combine_flags) (vi : var_info) (flags : seq var) : 
  * -------------------------------------------------------------------- *)
 
 Variant lval : Type :=
-| Lnone `(var_info) `(atype)
+| Lnone `(var_info_t) `(atype)
 | Lvar  `(var_i)
-| Lmem  of aligned & wsize & var_info & pexpr
+| Lmem  of aligned & wsize & var_info_t & pexpr
 | Laset of aligned & arr_access & wsize & var_i & pexpr
 | Lasub of arr_access & wsize & positive & var_i & pexpr.
 
 Coercion Lvar : var_i >-> lval.
-
-Notation lvals := (seq lval).
 
 Definition get_pvar (e: pexpr) : exec var :=
   if e is Pvar {| gv := x ; gs := Slocal |} then ok (v_var x) else type_error.
@@ -313,9 +313,9 @@ Definition get_pvar (e: pexpr) : exec var :=
 Definition get_lvar (x: lval) : exec var :=
   if x is Lvar x then ok (v_var x) else type_error.
 
-Definition Lnone_b (vi : var_info) : lval := Lnone vi abool.
+Definition Lnone_b (vi : var_info_t) : lval := Lnone vi abool.
 
-Definition var_info_of_lval (x: lval) : var_info :=
+Definition var_info_of_lval (x: lval) : var_info_t :=
   match x with
   | Lnone i _ | Lmem _ _ i _ => i
   | Lvar x | Laset _ _ _ x _ | Lasub _ _ _ x _ => v_info x
@@ -353,6 +353,21 @@ HB.instance Definition _ := hasDecEq.Build assgn_tag assgn_tag_eqb_OK.
 
 (* -------------------------------------------------------------------- *)
 
+Definition assertion := (assertion_label * eassert)%type.
+Definition assertions := seq assertion.
+
+End INFO.
+
+Notation vid ident :=
+  (mk_var_i {| vtype := aword Uptr; vname := ident%string; |}).
+
+(* Sometimes needed inside pattern matching, e.g., in array expansion. *)
+Notation with_var xi x := {| v_var := x; v_info := [elaborate xi.(v_info)]; |}
+  (only parsing).
+
+Notation pexprs := (seq pexpr).
+Notation lvals := (seq lval).
+
 Variant align :=
   | Align
   | NoAlign.
@@ -362,16 +377,14 @@ Variant align :=
 
 HB.instance Definition _ := hasDecEq.Build align align.eqb_OK.
 
-(* -------------------------------------------------------------------- *)
-
-Definition assertion := (assertion_label * eassert)%type.
-Definition assertions := seq assertion.
-
-(* -------------------------------------------------------------------- *)
-
 Section ASM_OP.
 
-Context {instr_info : Type} {II : InstrInfo instr_info}.
+Context
+  {var_info instr_info : Type}
+  {VI : VarInfo var_info}
+  {II : InstrInfo instr_info}
+.
+
 Context `{asmop:asmOp}.
 
 Inductive instr_r :=
@@ -381,7 +394,7 @@ Inductive instr_r :=
 | Cassert  : assertion -> instr_r
 | Cif      : pexpr -> seq instr -> seq instr  -> instr_r
 | Cfor     : var_i -> range -> seq instr -> instr_r
-| Cwhile   : align -> seq instr -> pexpr -> instr_info -> seq instr -> instr_r
+| Cwhile   : align -> seq instr -> pexpr -> instr_info_t -> seq instr -> instr_r
 | Ccall    : lvals -> funname -> pexprs -> instr_r
 
 with instr := MkI : instr_info_t -> instr_r ->  instr.
@@ -392,7 +405,11 @@ Notation cmd := (seq instr).
 
 Section CMD_RECT.
 
-  Context {instr_info : Type} {II : InstrInfo instr_info}.
+  Context
+    {var_info instr_info : Type}
+    {VI : VarInfo var_info}
+    {II : InstrInfo instr_info}
+  .
   Context `{asmop:asmOp}.
 
   Variables (Pr:instr_r -> Type) (Pi:instr -> Type) (Pc : cmd -> Type).
@@ -440,7 +457,10 @@ End CMD_RECT.
 
 Section ASM_OP.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 Context `{asmop:asmOp}.
 
 (* ** Functions
@@ -504,7 +524,10 @@ Notation fun_decls  := (seq fun_decl).
 
 Section ASM_OP.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 Context {pd: PointerData}.
 Context `{asmop:asmOp}.
 
@@ -670,7 +693,11 @@ End ASM_OP.
 
 Section ASM_OP.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info : Type}
+  {VI : VarInfo var_info}
+  {II : InstrInfo instr_info}
+.
 Context `{asmop:asmOp}.
 Context {pT: progT}.
 
@@ -929,6 +956,17 @@ Fixpoint vars_l (l: seq var_i) :=
   | h :: q => Sv.add h (vars_l q)
   end.
 
+End ASM_OP.
+
+Section ASM_OP.
+
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
+Context {asm_op : Type} {asmop : asmOp asm_op}.
+Context {pT: progT}.
+
 Definition vars_fd (fd:fundef) :=
   Sv.union (vars_l fd.(f_params)) (Sv.union (vars_l fd.(f_res)) (vars_c fd.(f_body))).
 
@@ -939,6 +977,10 @@ End ASM_OP.
 
 (* --------------------------------------------------------------------- *)
 (* Test the equality of two expressions modulo variable info             *)
+
+Section INFO.
+
+Context {var_info : Type} {VI : VarInfo var_info}.
 
 Definition eq_gvar x x' :=
   (x.(gs) == x'.(gs)) && (v_var x.(gv) == v_var x'.(gv)).
@@ -983,12 +1025,18 @@ Fixpoint eq_eassert (e e' : eassert) : bool :=
   | _, _ => false
   end.
 
+End INFO.
+
 (* --------------------------------------------------------------------- *)
 (* Test the equality of two instructions modulo variable & instr info    *)
 
 Section EQ_INSTR.
 
-Context {instr_info : Type} {II : InstrInfo instr_info}.
+Context
+  {var_info instr_info : Type}
+  {VI : VarInfo var_info}
+  {II : InstrInfo instr_info}
+.
 Context {asm_op : Type} {asmop : asmOp asm_op}.
 
 Fixpoint eq_instr_r (i1 i2:instr_r) :=
@@ -1020,6 +1068,11 @@ Definition eq_cmd c1 c2 := all2 eq_instr c1 c2.
 End EQ_INSTR.
 
 (* ------------------------------------------------------------------- *)
+
+Section INFO.
+
+Context {var_info : Type} {VI : VarInfo var_info}.
+
 Definition to_lvals (l:seq var) : seq lval :=
   map (fun x => Lvar (mk_var_i x)) l.
 
@@ -1030,11 +1083,17 @@ Definition is_false (e: pexpr) : bool :=
 Definition is_zero sz (e: pexpr) : bool :=
   if e is Papp1 (Oword_of_int sz') (Pconst Z0) then sz' == sz else false.
 
+End INFO.
+
 Notation copn_args := (seq lval * sopn * seq pexpr)%type (only parsing).
 
 Section COPN_ARGS.
 
-Context {instr_info : Type} {II : InstrInfo instr_info}.
+Context
+  {var_info instr_info : Type}
+  {VI : VarInfo var_info}
+  {II : InstrInfo instr_info}
+.
 Context {asm_op : Type} {asmop : asmOp asm_op}.
 
 Definition instr_of_copn_args (tg : assgn_tag) (args : copn_args) : instr_r :=

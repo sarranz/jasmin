@@ -31,7 +31,10 @@ Variable global_alloc : seq (var * wsize * Z).
 
 Let glob_size := Z.of_nat (size global_data).
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Context
   {wsw : WithSubWord}
@@ -4790,7 +4793,7 @@ Proof.
   rewrite /finalize_stk_mem.
   apply: (alloc_free_stack_stable hass _ hfss).
   apply: stack_stable_trans hstable.
-  rewrite (@write_vars_lvals _ _ _ _ _ [::]) in hs2.
+  rewrite (write_vars_lvals _ [::]) in hs2.
   apply: write_lvals_stack_stable hs2.
 Qed.
 
@@ -4802,7 +4805,10 @@ End INIT.
 
 Section HSAPARAMS.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Context
   {wsw : WithSubWord}

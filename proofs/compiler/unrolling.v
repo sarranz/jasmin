@@ -38,7 +38,10 @@ End MAP_REPEAT.
 
 Section ASM_OP.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 Context `{asmop:asmOp}.
 
 Definition unroll_cmd (unroll_i: instr -> cmd * bool) (c:cmd) : cmd * bool :=

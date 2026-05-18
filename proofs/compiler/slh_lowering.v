@@ -33,7 +33,10 @@ Notation internal_error ii s :=
   (only parsing).
 
 Section INFO.
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Definition pp_user_error ii vi (pp : pp_error) := {|
   pel_msg := pp_vbox [:: pp; pp_s "Did you run the speculative constant time checker first?"];
@@ -121,6 +124,10 @@ Module Env.
 
   Section WITH_PARAMS.
 
+  Context
+    {var_info instr_info fun_info : Type}
+    {CI : CompilerInfo var_info instr_info fun_info}
+  .
   Context {fcparams : flag_combination.FlagCombinationParams}.
 
   (* We keep track of the condition of the last conditional we entered, and of
@@ -223,7 +230,10 @@ Context
   {fcparams : flag_combination.FlagCombinationParams}
   {pT : progT}
   {LC : LoopCounter}.
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Section CHECK_SLHO.
 

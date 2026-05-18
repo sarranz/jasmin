@@ -22,7 +22,10 @@ Module ARMFopn.
 
   Section WITH_PARAMS.
 
-  Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+  Context
+    {var_info instr_info fun_info : Type}
+    {CI : CompilerInfo var_info instr_info fun_info}
+  .
   Context {atoI : arch_toIdent}.
 
   Definition to_opn '(d, o, e) : fopn_args := (d, Oarm o, e).

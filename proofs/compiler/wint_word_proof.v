@@ -9,7 +9,10 @@ Section PROOF.
 #[local] Existing Instance indirect_c.
 #[local] Existing Instance withsubword.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Context
   {asm_op syscall_state : Type}

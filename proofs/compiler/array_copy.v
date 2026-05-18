@@ -17,7 +17,10 @@ Module Import E.
   Definition pass : string := "array copy".
 
   Section INFO.
-  Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+  Context
+    {var_info instr_info fun_info : Type}
+    {CI : CompilerInfo var_info instr_info fun_info}
+  .
 
   Definition error := pp_internal_error_s pass "fresh variables are not fresh ...".
 
@@ -26,7 +29,10 @@ End E.
 
 Section Section.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 Context `{asmop:asmOp}.
 Context (fresh_var_ident: v_kind → instr_info -> string → atype → Ident.ident).
 

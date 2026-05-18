@@ -12,7 +12,10 @@ Module Import E.
   Definition pass : string := "propagate inline".
 
   Section INFO.
-  Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+  Context
+    {var_info instr_info fun_info : Type}
+    {CI : CompilerInfo var_info instr_info fun_info}
+  .
 
   Definition ii_loop_iterator := ii_loop_iterator pass.
 
@@ -22,6 +25,9 @@ End E.
 (* -------------------------------------------------------------------------- *)
 (* ** Data structure used for the analisys                                    *)
 (* -------------------------------------------------------------------------- *)
+
+Section INFO.
+Context {var_info : Type} {VI : VarInfo var_info}.
 
 Record pi_cel := {
   pi_def : pexpr; (* associate expression *)
@@ -61,6 +67,8 @@ Definition merge (pi1 pi2:pimap) :=
 Definition incl (pi1 pi2:pimap) :=
   Mvar.incl (fun _ c1 c2 => eq_expr c1.(pi_def) c2.(pi_def)) pi1 pi2.
 
+End INFO.
+
 (* -------------------------------------------------------------------------- *)
 (* ** Transformation                                                          *)
 (* -------------------------------------------------------------------------- *)
@@ -72,7 +80,10 @@ Context
   {asmop:asmOp asm_op}
   {fcp : FlagCombinationParams}
   {LC : LoopCounter}.
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Definition scfc (cf : combine_flags) (es : seq pexpr) : pexpr :=
   if es is [:: eof; ecf; esf; ezf ]

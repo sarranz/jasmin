@@ -28,10 +28,11 @@ module type Core_arch = sig
   type lowering_options
 
   val asm_e :
-    (IInfo.t, FInfo.t, reg, regx, xreg, rflag, cond, asm_op, extra_op) asm_extra
+    (VInfo.t, IInfo.t, FInfo.t, reg, regx, xreg, rflag, cond, asm_op, extra_op) asm_extra
 
   val aparams :
-    ( IInfo.t,
+    ( VInfo.t,
+      IInfo.t,
       FInfo.t,
       reg,
       regx,
@@ -51,7 +52,7 @@ module type Core_arch = sig
 
   val pp_asm :
     Format.formatter ->
-    (IInfo.t, reg, regx, xreg, rflag, cond, asm_op) Arch_decl.asm_prog ->
+    (VInfo.t, IInfo.t, reg, regx, xreg, rflag, cond, asm_op) Arch_decl.asm_prog ->
     unit
 
   val callstyle : reg callstyle
@@ -70,7 +71,7 @@ module type Arch = sig
   include Core_arch
 
   type extended_op =
-    (IInfo.t, FInfo.t, reg, regx, xreg, rflag, cond, asm_op, extra_op)
+    (VInfo.t, IInfo.t, FInfo.t, reg, regx, xreg, rflag, cond, asm_op, extra_op)
     Arch_extra.extended_op
 
   val reg_size : Wsize.wsize
@@ -101,7 +102,7 @@ module type Arch = sig
   val callstyle : var callstyle
 
   val arch_info :
-    (IInfo.t, FInfo.t, reg, regx, xreg, rflag, cond, asm_op, extra_op)
+    (VInfo.t, IInfo.t, FInfo.t, reg, regx, xreg, rflag, cond, asm_op, extra_op)
     Pretyping.arch_info
 
   val is_ct_sopn : ?doit:bool -> extended_op -> bool

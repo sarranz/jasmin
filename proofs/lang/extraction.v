@@ -23,9 +23,6 @@ Extract Constant strings.ascii_eqb => "Char.equal".
 Extract Constant strings.ascii_cmp =>
   "(fun x y -> let c = Char.compare x y in if c = 0 then Datatypes.Eq else if c < 0 then Datatypes.Lt else Datatypes.Gt)".
 
-Extract Constant info.VarInfo.t => "Location.t".
-Extract Constant info.VarInfo.witness => "Location._dummy".
-Extract Constant info.var_info => "Location.t".
 Extract Constant waes.MixColumns => "(fun _ -> failwith ""MixColumns is not implemented"")".
 Extract Constant waes.InvMixColumns => "(fun _ -> failwith ""InvMixColumns not implemented"")".
 

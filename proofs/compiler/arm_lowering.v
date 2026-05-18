@@ -16,7 +16,10 @@ Require Import
   arm_instr_decl.
 
 Section Section.
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 Context {atoI : arch_toIdent}.
 
 (* -------------------------------------------------------------------- *)

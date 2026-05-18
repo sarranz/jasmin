@@ -31,7 +31,7 @@ module type S = sig
     type cond
     type asm_op
 
-    val asm_of_prog : (IInfo.t,reg,regx,xreg,rflag,cond,asm_op) asm_prog -> asm_element list
+    val asm_of_prog : (VInfo.t,IInfo.t,reg,regx,xreg,rflag,cond,asm_op) asm_prog -> asm_element list
 end
 
 module Make(Target : AsmTarget) : S
@@ -85,7 +85,7 @@ module Make(Target : AsmTarget) : S
 
     let pp_functions funcs = List.concat_map pp_function funcs
 
-    let pp_function_decl (name, decl : CoreIdent.funname * (_,_,_,_,_,_,_) asm_fundef) =
+    let pp_function_decl (name, decl : CoreIdent.funname * (_,_,_,_,_,_,_,_) asm_fundef) =
         if decl.asm_fd_export then
             let fn = escape name.fn_name in
             [
@@ -105,7 +105,7 @@ module Make(Target : AsmTarget) : S
     else
         []
 
-    let asm_of_prog (asm: (IInfo.t,reg,regx,xreg,rflag,cond,asm_op) asm_prog) : asm_element list =
+    let asm_of_prog (asm: (VInfo.t,IInfo.t,reg,regx,xreg,rflag,cond,asm_op) asm_prog) : asm_element list =
         let headers = Target.headers in
         let functions_head = pp_functions_decl asm.asm_funcs in
         let functions_body = pp_functions asm.asm_funcs in

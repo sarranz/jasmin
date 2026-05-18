@@ -26,6 +26,8 @@ Module ARMFopn_core.
 
   Section WITH_PARAMS.
 
+  Context {var_info : Type} {VI : VarInfo var_info}.
+
   Definition opn_args := (seq lexpr * arm_op * seq rexpr)%type.
 
   Let op_gen mn x res : opn_args :=

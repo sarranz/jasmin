@@ -5,7 +5,7 @@ val exec :
   Sem_params.coq_SemPexprParams ->
   ('asm_op, 'syscall_state) Sem_params.coq_SemInstrParams ->
   'syscall_state ->
-  (IInfo.t, 'finfo, 'asm_op) Expr.prog ->
+  (VInfo.t, IInfo.t, 'finfo, 'asm_op) Expr.prog ->
   IInfo.t ->
   Prog.funname ->
   Values.values ->
@@ -24,8 +24,8 @@ val run :
       and type regx = 'regx
       and type rflag = 'rflag
       and type xreg = 'xreg) ->
-  (IInfo.t, FInfo.t,
-   (IInfo.t, FInfo.t, 'reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op)
+  (VInfo.t, IInfo.t, FInfo.t,
+   (VInfo.t, IInfo.t, FInfo.t, 'reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op)
    Arch_extra.extended_op) Expr.uprog ->
   IInfo.t ->
   CoreIdent.funname ->

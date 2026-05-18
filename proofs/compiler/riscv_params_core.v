@@ -20,6 +20,9 @@ Module RISCVFopn_core.
   #[local]
   Open Scope Z.
 
+  Section WITH_PARAMS.
+  Context {var_info : Type} {VI : VarInfo var_info}.
+
   Definition opn_args := (seq lexpr * riscv_op * seq rexpr)%type.
 
   Definition op_gen mn x res : opn_args :=
@@ -85,5 +88,7 @@ Module RISCVFopn_core.
   (* Compute [R[x] := R[x] - imm % 2^32].
     Precondition: if [imm] is large, [x <> tmp]. *)
   Definition smart_subi_tmp x tmp imm := gen_smart_opi_tmp is_arith_small_neg sub subi x tmp imm.
+
+  End WITH_PARAMS.
 
 End RISCVFopn_core.

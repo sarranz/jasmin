@@ -11,6 +11,10 @@ Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then
 Section ESTATE_EQ_EXCEPT.
 
 Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
+Context
   {wsw : WithSubWord}
   {asm_op syscall_state : Type}
   {ep : EstateParams syscall_state}
@@ -191,7 +195,6 @@ Definition checker_st_eq_ex : Checker_e st_eq_ex :=
      check_esP_rel := check_esP_R_st_eq_ex |}.
 
 Section CALL.
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 Context
   {dc:DirectCall}
   {sip : SemInstrParams asm_op syscall_state}
@@ -234,7 +237,10 @@ End ESTATE_EQ_EXCEPT.
 
 Section DISJ_FVARS.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Context
   {pT : progT}

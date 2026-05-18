@@ -14,7 +14,10 @@ Require Import compiler_util.
 
 Section STACK_ZEROIZATION.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 Context {atoI : arch_toIdent}.
 
 Let vflags := map (fun f => mk_var_i (to_var f)) [:: OF; CF; SF; PF; ZF ].

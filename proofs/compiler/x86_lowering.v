@@ -11,7 +11,10 @@ Require Import x86_decl x86_instr_decl x86_extra.
 
 Section Section.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 Context {atoI : arch_toIdent}.
 
 Definition is_regx_e (e:pexpr) := 
@@ -472,8 +475,8 @@ Definition lower_cassgn (ii:instr_info) (x: lval) (tg: assgn_tag) (ty: atype) (e
   | LowerLea sz (MkLea d b sc o) =>
     let de := wconst (wrepr Uptr d) in
     let sce := wconst (wrepr Uptr sc) in
-    let b := oapp Plvar (@wconst sz 0%w) b in
-    let o := oapp Plvar (@wconst sz 0%w) o in
+    let b := oapp Plvar (wconst (sz := sz) 0%w) b in
+    let o := oapp Plvar (wconst (sz := sz) 0%w) o in
     let lea tt :=
       let ii := warning ii Use_lea in
       let add := Papp2 (Oadd (Op_w sz)) in

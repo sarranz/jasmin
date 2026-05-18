@@ -435,7 +435,7 @@ module TranslateIntel = X86AsmTranslate(IntelSyntax)
 module ATTPrinter = AsmTargetBuilder.Make(TranslateATT)
 module InterPrinter = AsmTargetBuilder.Make(TranslateIntel)
 
-let asm_of_prog (asm : IInfo.t X86_instr_decl.x86_prog) =
+let asm_of_prog (asm : (VInfo.t, IInfo.t) X86_instr_decl.x86_prog) =
   match !Glob_options.assembly_style with
   | `ATT -> ATTPrinter.asm_of_prog asm
   | `Intel -> InterPrinter.asm_of_prog asm

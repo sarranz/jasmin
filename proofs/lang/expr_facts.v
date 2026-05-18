@@ -5,6 +5,10 @@ Require Export expr.
 
 Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then remove the line when requiring MathComp >= 2.6 *)
 
+Section INFO.
+
+Context {var_info : Type} {VI : VarInfo var_info}.
+
 Lemma var_i_surj x :
   x = {| v_var := v_var x; v_info := v_info x; |}.
 Proof. by move: x => []. Qed.
@@ -12,7 +16,10 @@ Proof. by move: x => []. Qed.
 Lemma is_lvar_is_glob x : is_lvar x = ~~is_glob x.
 Proof. by case: x => ? []. Qed.
 
+End INFO.
+
 Section PEXPR_IND.
+  Context {var_info : Type} {VI : VarInfo var_info}.
   Context
     (P: pexpr → Prop)
     (Hconst: ∀ z, P (Pconst z))
@@ -56,6 +63,7 @@ Register Scheme pexpr_ind as ind_dep for pexpr.
 
 (* Mutual induction scheme for pexpr and pexprs *)
 Section PEXPRS_IND.
+  Context {var_info : Type} {VI : VarInfo var_info}.
   Context
     (P: pexpr → Prop)
     (Q: pexprs → Prop)
@@ -107,7 +115,10 @@ End PEXPRS_IND.
 
 Section ASM_OP.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 Context `{asmop:asmOp}.
 Context {pT: progT}.
 
@@ -153,6 +164,17 @@ elim: s1 s2 l=> // [[fn fd] p IH] [|[fn' fd'] p'] // [|lh la] //.
     by case: ifP=> // /eqP.
 Qed.
 
+End ASM_OP.
+
+Section ASM_OP.
+
+Context
+  {var_info instr_info : Type}
+  {VI : VarInfo var_info}
+  {II : InstrInfo instr_info}
+.
+Context {asm_op : Type} {asmop : asmOp asm_op}.
+
 (* ** Some smart constructors
  * -------------------------------------------------------------------------- *)
 
@@ -186,7 +208,7 @@ Proof.
   by case; constructor.
 Qed.
 
-Lemma is_zeroP sz e : reflect (e = @wconst sz 0) (is_zero sz e).
+Lemma is_zeroP sz e : reflect (e = wconst (0 : word sz)) (is_zero sz e).
 Proof.
   case: e; try by right.
   case; try by right.
@@ -555,12 +577,6 @@ Lemma vars_I_call ii xs fn args:
   Sv.Equal (vars_I (MkI ii (Ccall xs fn args))) (Sv.union (vars_lvals xs) (read_es args)).
 Proof. rewrite /vars_I read_Ii write_Ii read_i_call write_i_call /vars_lvals; clear; SvD.fsetdec. Qed.
 
-Lemma vars_pP p fn fd : get_fundef p fn = Some fd -> Sv.Subset (vars_fd fd) (vars_p p).
-Proof.
-  elim: p => //= -[fn' fd'] p hrec; case: eqP => [ _ [<-] | ]; first by clear; SvD.fsetdec.
-  move=> _ /hrec; clear; SvD.fsetdec.
-Qed.
-
 Lemma vars_lval_Lvar i :
   Sv.Equal (vars_lval (Lvar i)) (Sv.singleton i).
 Proof.
@@ -574,8 +590,29 @@ Proof. by elim: xs => //= ?? ->. Qed.
 
 End ASM_OP.
 
+Section ASM_OP.
+
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
+Context `{asmop:asmOp}.
+Context {pT: progT}.
+
+Lemma vars_pP p fn fd : get_fundef p fn = Some fd -> Sv.Subset (vars_fd fd) (vars_p p).
+Proof.
+  elim: p => //= -[fn' fd'] p hrec; case: eqP => [ _ [<-] | ]; first by clear; SvD.fsetdec.
+  move=> _ /hrec; clear; SvD.fsetdec.
+Qed.
+
+End ASM_OP.
+
 (* --------------------------------------------------------------------- *)
 (* Test the equality of two expressions modulo variable info             *)
+
+Section INFO.
+
+Context {var_info : Type} {VI : VarInfo var_info}.
 
 Lemma eq_gvar_refl x : eq_gvar x x.
 Proof. by rewrite /eq_gvar ?eqxx. Qed.
@@ -731,13 +768,21 @@ Proof.
   exact: eq_eassert_trans.
 Qed.
 
+End INFO.
+
+Section INFO.
+
+Context {var_info : Type} {VI : VarInfo var_info}.
+
 (* Memory accesses are independent from variable info. *)
 Definition eq_expr_use_mem e0 e1 :
   eq_expr e0 e1
   -> use_mem e0 = use_mem e1.
 Proof.
-  suff : (∀ e e', eq_expr e e' → use_mem e = use_mem e') ∧
-           (∀ es es', all2 eq_expr es es' → has use_mem es = has use_mem es') by case; eauto.
+  suff : [elaborate
+    (∀ e e', eq_expr e e' → use_mem e = use_mem e') ∧
+    (∀ es es', all2 eq_expr es es' → has use_mem es = has use_mem es') ].
+  - by case; eauto.
   clear; apply: pexprs_ind_pair; split => //=
     [ | e he es hes |?|?|??|?|??????|??????|????|???|?????|???|???????] [] //.
   - by move => ?? /andP[] /he -> /hes ->.
@@ -762,7 +807,15 @@ Proof.
   rewrite /=; eauto.
 Qed.
 
+End INFO.
+
 Section EQ_EXPR_READ_E.
+
+  Context
+    {var_info instr_info : Type}
+    {VI : VarInfo var_info}
+    {II : InstrInfo instr_info}
+  .
 
   (* Read variables are independent from variable info. *)
 
@@ -843,6 +896,10 @@ Section EQ_EXPR_READ_E.
 
 End EQ_EXPR_READ_E.
 
+Section INFO.
+
+Context {var_info : Type} {VI : VarInfo var_info}.
+
 Lemma eq_lval_refl lv : eq_lval lv lv.
 Proof. by case: lv => //= *; rewrite ?eqxx ?eq_expr_refl. Qed.
 
@@ -896,9 +953,15 @@ Proof.
   by rewrite !vrvs_cons h hs.
 Qed.
 
+End INFO.
+
 Section EQ_CMD.
 
-Context {instr_info : Type} {II : InstrInfo instr_info}.
+Context
+  {var_info instr_info : Type}
+  {VI : VarInfo var_info}
+  {II : InstrInfo instr_info}
+.
 Context {asm_op : Type} {asmop:asmOp asm_op}.
 
 Section REFL.
@@ -1153,7 +1216,11 @@ End EQ_CMD.
 
 Section WRITE_C.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info : Type}
+  {VI : VarInfo var_info}
+  {II : InstrInfo instr_info}
+.
 Context {asm_op : Type} {asmop : asmOp asm_op}.
 
 Let Pr i := forall i2, eq_instr_r i i2 -> Sv.Equal (write_i i) (write_i i2).

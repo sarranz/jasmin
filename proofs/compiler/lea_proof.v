@@ -13,6 +13,7 @@ Local Open Scope seq_scope.
 
 
 Section PROOF.
+  Context {var_info : Type} {VI : VarInfo var_info}.
   Context
     {wsw : WithSubWord}
     {asm_op syscall_state : Type}
@@ -134,22 +135,25 @@ Section PROOF.
         /to_wordI' [? [? [hsz1 ? ->]]] ?
         /to_wordI' [? [? [hsz2 ? ->]]] ?.
       subst=> h1 h2 [<-]; rewrite wadd_zero_extend // !zero_extend_idem //.
-      exact (lea_addP hsz (He1 _ _ _ (cmp_le_trans hsz' hsz1) Heq1 h1)
-                           (He2 _ _ _ (cmp_le_trans hsz' hsz2) Heq2 h2) Hadd).
+      exact (lea_addP (sz := sz) hsz
+               (He1 _ _ _ (cmp_le_trans hsz' hsz1) Heq1 h1)
+               (He2 _ _ _ (cmp_le_trans hsz' hsz2) Heq2 h2) Hadd).
     + case Heq1: mk_lea_rec => [l1|]//;case Heq2: mk_lea_rec => [l2|]// Hmul.
       rewrite /sem_sop2 /=; t_xrbindP=> > + ? + ?
         /to_wordI' [? [? [hsz1 ? ->]]] ?
         /to_wordI' [? [? [hsz2 ? ->]]] ?.
       subst=> h1 h2 [<-]; rewrite wmul_zero_extend // !zero_extend_idem //.
-      exact (lea_mulP hsz (He1 _ _ _ (cmp_le_trans hsz' hsz1) Heq1 h1)
-                           (He2 _ _ _ (cmp_le_trans hsz' hsz2) Heq2 h2) Hmul).
+      exact (lea_mulP (sz := sz) hsz
+               (He1 _ _ _ (cmp_le_trans hsz' hsz1) Heq1 h1)
+               (He2 _ _ _ (cmp_le_trans hsz' hsz2) Heq2 h2) Hmul).
     case Heq1: mk_lea_rec => [l1|]//;case Heq2: mk_lea_rec => [l2|]// Hsub.
     rewrite /sem_sop2 /=; t_xrbindP=> > + ? + ?
         /to_wordI' [? [? [hsz1 ? ->]]] ?
         /to_wordI' [? [? [hsz2 ? ->]]] ?.
       subst=> h1 h2 [<-]; rewrite sub_wordE wsub_zero_extend // !zero_extend_idem //.
-    exact (lea_subP hsz (He1 _ _ _ (cmp_le_trans hsz' hsz1) Heq1 h1)
-                           (He2 _ _ _ (cmp_le_trans hsz' hsz2) Heq2 h2) Hsub).
+    exact (lea_subP (sz := sz) hsz
+             (He1 _ _ _ (cmp_le_trans hsz' hsz1) Heq1 h1)
+             (He2 _ _ _ (cmp_le_trans hsz' hsz2) Heq2 h2) Hsub).
   Qed.
 
   Lemma mk_leaP s e l sz sz' (w: word sz') :

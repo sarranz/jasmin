@@ -7,7 +7,10 @@ Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then
 
 Section WITH_PARAMS.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Context
   {wsw:WithSubWord}
@@ -804,6 +807,7 @@ End WITH_PARAMS.
 
 Section EQ_EX.
 
+Context {var_info : Type} {VI : VarInfo var_info}.
 Context
   {wsw:WithSubWord}
   {asm_op syscall_state : Type}

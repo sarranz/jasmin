@@ -12,7 +12,10 @@ Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then
 
 Section PROG.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Context
   {asm_op syscall_state : Type}

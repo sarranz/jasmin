@@ -4,7 +4,7 @@ let with_location (l, _) = (l, [])
 let is_inline (_, annot) = Annotations.has_symbol "inline" annot
 let var_info_of_ii (l, _) = Location.(l.base_loc)
 
-let instance : t Info.coq_InstrInfo =
+let instance : (VInfo.t, t) Info.coq_InstrInfo =
   {
     Info.dummy_instr_info = dummy;
     Info.ii_with_location = with_location;

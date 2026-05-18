@@ -35,44 +35,44 @@ val ty_of_cty : Type.atype -> Prog.ty
 (* -------------------------------------------------------------------- *)
 val cvar_of_var : var -> Var0.Var.var
 val var_of_cvar : Var0.Var.var -> var
-val vari_of_cvari : Expr.var_i -> var L.located
+val vari_of_cvari : VInfo.t Expr.var_i -> var L.located
 
 val csv_of_sv : Sv.t -> Var0.SvExtra.Sv.t
 val sv_of_csv : Var0.SvExtra.Sv.t -> Sv.t
 
-val lval_of_clval : Expr.lval -> Prog.lval
+val lval_of_clval : VInfo.t Expr.lval -> Prog.lval
 
-val cexpr_of_expr : Prog.expr -> Expr.pexpr
-val expr_of_cexpr : Expr.pexpr -> expr
+val cexpr_of_expr : Prog.expr -> VInfo.t Expr.pexpr
+val expr_of_cexpr : VInfo.t Expr.pexpr -> expr
 
 val cufdef_of_fdef :
   (unit, 'asm) func ->
-  Funname.funname * (IInfo.t, FInfo.t, 'asm) Expr._ufundef
+  Funname.funname * (VInfo.t, IInfo.t, FInfo.t, 'asm) Expr._ufundef
 val fdef_of_cufdef :
-  Funname.funname * (IInfo.t, FInfo.t, 'asm) Expr._ufundef ->
+  Funname.funname * (VInfo.t, IInfo.t, FInfo.t, 'asm) Expr._ufundef ->
   (unit, 'asm) func
 
 val cuprog_of_prog :
-  (unit, 'asm) prog -> (IInfo.t, FInfo.t, 'asm) Expr._uprog
+  (unit, 'asm) prog -> (VInfo.t, IInfo.t, FInfo.t, 'asm) Expr._uprog
 val prog_of_cuprog :
-  (IInfo.t, FInfo.t, 'asm) Expr._uprog -> (unit, 'asm) prog
+  (VInfo.t, IInfo.t, FInfo.t, 'asm) Expr._uprog -> (unit, 'asm) prog
 
 val csfdef_of_fdef :
   ('info, 'asm) sfundef ->
-  Funname.funname * (IInfo.t, FInfo.t, 'asm) Expr._sfundef
+  Funname.funname * (VInfo.t, IInfo.t, FInfo.t, 'asm) Expr._sfundef
 val fdef_of_csfdef :
-  Funname.funname * (IInfo.t, FInfo.t, 'asm) Expr._sfundef ->
+  Funname.funname * (VInfo.t, IInfo.t, FInfo.t, 'asm) Expr._sfundef ->
   (unit, 'asm) sfundef
 
 val prog_of_csprog :
-  (IInfo.t, FInfo.t, 'asm) Expr._sprog -> (unit, 'asm) sprog
+  (VInfo.t, IInfo.t, FInfo.t, 'asm) Expr._sprog -> (unit, 'asm) sprog
 
 val to_array :
   Prog.ty -> BinNums.positive -> Warray_.WArray.array -> wsize * Z.t array
 
 val error_of_cerror :
-  (Format.formatter -> (IInfo.t, FInfo.t) Compiler_util.pp_error -> unit) ->
-  (IInfo.t, FInfo.t) Compiler_util.pp_error_loc -> Utils.hierror
+  (Format.formatter -> (VInfo.t, IInfo.t, FInfo.t) Compiler_util.pp_error -> unit) ->
+  (VInfo.t, IInfo.t, FInfo.t) Compiler_util.pp_error_loc -> Utils.hierror
 
 (* ---------------------------------------------------- *)
 val fresh_var_ident : v_kind -> IInfo.t -> Uint63.t -> Name.t -> Type.atype -> var

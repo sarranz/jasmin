@@ -8,7 +8,10 @@ Module Import E.
   Definition pass : string := "loop unrolling".
 
   Section INFO.
-  Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+  Context
+    {var_info instr_info fun_info : Type}
+    {CI : CompilerInfo var_info instr_info fun_info}
+  .
 
   Definition for_loop_remains :=
     {| pel_msg := pp_s "for loops remain"
@@ -33,7 +36,10 @@ End E.
 
 Section ASM_OP.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 Context `{asmop: asmOp}.
 
 Section CHECK_NO_FOR_LOOP_CMD.

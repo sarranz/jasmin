@@ -15,7 +15,10 @@ Local Open Scope seq_scope.
 Module Import E.
   Section INFO.
 
-  Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+  Context
+    {var_info instr_info fun_info : Type}
+    {CI : CompilerInfo var_info instr_info fun_info}
+  .
 
   Definition pass : string := "stack allocation".
 
@@ -339,7 +342,10 @@ Definition empty := {|
 |}.
 
 Section INFO.
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Definition get_sub_region (rmap:region_map) (x:var_i) :=
   match Mvar.get rmap.(var_region) x with
@@ -744,7 +750,10 @@ End INFO.
 
 Section CLONE.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 Context (clone : var -> int -> var).
 
 Definition table_fresh_var t x :=
@@ -867,7 +876,10 @@ End CLONE.
 
 Section CHECK.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 (* The code in this file is called twice.
    - First, it is called from the stack alloc OCaml oracle. Indeed, the oracle
@@ -971,9 +983,6 @@ Definition check_var (x:var_i) :=
     Error (stk_error x (pp_box [::
       pp_var x; pp_s "is a stack variable, but a reg variable is expected"]))
   end.
-
-Definition with_var xi x :=
-  {| v_var := x; v_info := xi.(v_info) |}.
 
 Definition base_ptr sc :=
   match sc with

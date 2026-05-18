@@ -4,6 +4,9 @@ From mathcomp Require Import ssreflect ssrfun ssrbool.
 Require Import fexpr fexpr_sem.
 Require Import expr psem.
 
+Section INFO.
+Context {var_info : Type} {VI : VarInfo var_info}.
+
 Lemma free_varsE e s :
   Sv.Equal (free_vars_rec s e) (Sv.union (free_vars e) s).
 Proof.
@@ -162,3 +165,5 @@ Proof.
 Qed.
 
 End Section.
+
+End INFO.

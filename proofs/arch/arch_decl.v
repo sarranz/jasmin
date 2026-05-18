@@ -107,7 +107,11 @@ Notation interp_safe_cond_lty tin id_safe id_semi :=
 
 Section DECL.
 
-Context {instr_info : Type} {II : InstrInfo instr_info}.
+Context
+  {var_info instr_info : Type}
+  {VI : VarInfo var_info}
+  {II : InstrInfo instr_info}
+.
 Context {reg regx xreg rflag cond} `{arch : arch_decl reg regx xreg rflag cond}.
 
 Definition lreg := lword reg_size.

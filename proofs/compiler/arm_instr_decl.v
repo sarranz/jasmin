@@ -2362,5 +2362,14 @@ Instance arm_op_decl : asm_op_decl arm_op :=
     prim_string := arm_prim_string;
   |}.
 
-Definition arm_prog {instr_info : Type} {II : InstrInfo instr_info} :=
-  asm_prog (asm_op_d := arm_op_decl).
+Section INFO.
+
+Context
+  {var_info instr_info : Type}
+  {VI : VarInfo var_info}
+  {II : InstrInfo instr_info}
+.
+
+Definition arm_prog := asm_prog (asm_op_d := arm_op_decl).
+
+End INFO.

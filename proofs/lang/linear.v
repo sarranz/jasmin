@@ -5,7 +5,10 @@ Require Import expr fexpr label sopn.
 
 Section ASM_OP.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 Context `{asmop:asmOp}.
 
 (* --------------------------------------------------------------------------- *)
@@ -79,7 +82,10 @@ Notation fopn_args := (lexprs * sopn * rexprs)%type.
 
 Section FOPN_ARGS.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 Context {asm_op : Type} {asmop : asmOp asm_op}.
 
 Definition li_of_fopn_args (ii : instr_info_t) (p : fopn_args) : linstr :=

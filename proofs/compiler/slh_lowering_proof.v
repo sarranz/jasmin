@@ -15,6 +15,10 @@ Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then
 
 Section CONST_PROP.
 
+  Context
+    {var_info instr_info fun_info : Type}
+    {CI : CompilerInfo var_info instr_info fun_info}.
+
   Import constant_prop_proof.
 
   #[local]
@@ -180,6 +184,10 @@ Definition not_misspeculating_args {msfsize : MSFsize}
 Section H_SH_PARAMS.
 
   Context
+    {var_info instr_info fun_info : Type}
+    {CI : CompilerInfo var_info instr_info fun_info}.
+
+  Context
     {asm_op syscall_state : Type}
     {wsw: WithSubWord}
     {ep : EstateParams syscall_state}
@@ -208,6 +216,11 @@ Module EnvP.
 Import Env.
 
 Section WITH_PARAMS.
+
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Context
   {LC : LoopCounter}
@@ -272,7 +285,10 @@ End EnvP.
 
 Section WITH_PARAMS.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Context
   {asm_op syscall_state : Type}

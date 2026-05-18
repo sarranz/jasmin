@@ -717,8 +717,8 @@ let expr_equal a b =
     | RISCV  -> Riscv_decl.riscv_fcp
   in
   let normalize e =
-    e |> Conv.cexpr_of_expr |> Constant_prop.(const_prop_e fcp None empty_cpm) in
-  Expr.eq_expr (normalize a) (normalize b)
+    e |> Conv.cexpr_of_expr |> Constant_prop.(const_prop_e CInfo.instance fcp None empty_cpm) in
+  Expr.eq_expr VInfo.instance (normalize a) (normalize b)
 
 (* ------------------------------------------------------------- *)
 (* MSF status                                                    *)

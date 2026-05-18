@@ -10,7 +10,11 @@ Module Import E.
   Definition pass : string := "load constants in conditions".
 
   Section INFO.
-  Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+
+  Context
+    {var_info instr_info fun_info : Type}
+    {CI : CompilerInfo var_info instr_info fun_info}
+  .
 
   Definition load_constants_ref_error := pp_internal_error_s_at pass.
 
@@ -20,10 +24,14 @@ End E.
 Section ASM_OP.
 
 Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
+
+Context
   {asm_op : Type}
   {asmop:asmOp asm_op}
   {pT : progT}.
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
 
 Context (fresh_reg: instr_info -> int -> string -> atype -> Ident.ident).
 

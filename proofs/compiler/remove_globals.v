@@ -17,7 +17,10 @@ Local Open Scope seq_scope.
 Module Import E.
 Section INFO.
 
-  Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+  Context
+    {var_info instr_info fun_info : Type}
+    {CI : CompilerInfo var_info instr_info fun_info}
+  .
 
   Definition pass : string := "remove globals".
 
@@ -52,7 +55,10 @@ End E.
 
 Section REMOVE.
 
-  Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+  Context
+    {var_info instr_info fun_info : Type}
+    {CI : CompilerInfo var_info instr_info fun_info}
+  .
   Context `{asmop:asmOp}.
   Context {fcp : FlagCombinationParams}.
   Context {LC : LoopCounter}.

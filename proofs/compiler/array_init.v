@@ -7,7 +7,10 @@ Local Open Scope seq_scope.
 
 Section ASM_OP.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 Context `{asmop:asmOp}.
 
 (* ----------------------------------------------------------------------- *)
@@ -82,7 +85,7 @@ Definition add_init_aux ii x c :=
   match x.(vtype) with
   | aarr ws n =>
     if ~~ is_ptr x then
-      let x := VarI x (var_info_of_ii ii) in
+      let x := VarI x [elaborate var_info_of_ii ii] in
       MkI ii (Cassgn (Lvar x) AT_none (aarr ws n) (Parr_init ws n)) :: c
     else c
   | _ => c

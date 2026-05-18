@@ -1,3 +1,8 @@
+Set Uniform Inductive Parameters.
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
+Set Warnings "-notation-overridden,-extraction-reserved-identifier,-extraction-opaque-accessed,-ambiguous-paths,-redundant-canonical-projection,-projection-no-head-constant,-postfix-notation-not-level-1,-deprecated-since-mathcomp-2.4.0,-deprecated-since-mathcomp-2.5.0,-deprecated-from-Coq,-deprecated-dirpath-Coq,-deprecated-reference-since-9.1,-rewrite-rw".
 From Coq Require Import Lia.
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat eqtype ssralg.
 From mathcomp Require Import word_ssrZ.
@@ -42,7 +47,10 @@ Module ARMFopnP.
 
 Section WITH_PARAMS.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Context
   {atoI  : arch_toIdent}
@@ -146,7 +154,7 @@ Lemma subi_eval_instr {lp ls ii xname vi y imm wy} :
   eval_instr lp li ls = ok (next_vm_ls ls vm').
 Proof.
   move=> h1; set vm := _.[ _ <- _].
-  have := ARMFopn_coreP.subi_sem_fopn_args (s:=to_estate _) (xi:=(mkv xname vi).1) (imm:=imm) erefl (to_word_get_var h1).
+  have := ARMFopn_coreP.subi_sem_fopn_args (s:=to_estate _) (xi:=(mkv xname vi).1) imm erefl (to_word_get_var h1).
   by rewrite sem_fopn_equiv; apply: sem_fopn_args_eval_instr.
 Qed.
 
@@ -238,7 +246,7 @@ Lemma smart_addi_sem_fopn_args (xi:var_i) y imm s (w : wreg) :
 Proof.
   move=> hc hor hget; rewrite -sem_fopns_equiv.
   have := [elaborate ARMFopn_coreP.gen_smart_opi_sem_fopn_args (is_small:= is_arith_small) (neutral:= Some 0%Z)
-             (@ARMFopn_coreP.add_sem_fopn_args _ _) (@ARMFopn_coreP.addi_sem_fopn_args _ _)].
+             ARMFopn_coreP.add_sem_fopn_args ARMFopn_coreP.addi_sem_fopn_args].
   move=> /(_ _ xi xi y imm s w) [] //.
   + by move=> >; rewrite wrepr0 GRing.addr0.
   move=> vm' [hsem heq heqx] ; exists vm'; split => //=.
@@ -258,7 +266,7 @@ Proof.
   rewrite /=; set x := {| vname := _; |}; set xi := {| v_var := _; |}.
   move=> hor hget; rewrite -sem_fopns_equiv.
   have := [elaborate ARMFopn_coreP.gen_smart_opi_sem_fopn_args (is_small:= is_arith_small) (neutral:= Some 0%Z)
-              (@ARMFopn_coreP.sub_sem_fopn_args _ _) (@ARMFopn_coreP.subi_sem_fopn_args _ _)].
+              ARMFopn_coreP.sub_sem_fopn_args ARMFopn_coreP.subi_sem_fopn_args].
   move=> /(_ _ xi xi y imm s w) [] //.
   + by move=> >; rewrite wrepr0 GRing.subr0.
   move=> vm' [hsem heq heqx] ; exists vm'; split => //=.
@@ -279,7 +287,7 @@ Proof.
   rewrite /=; set x := {| vname := _; |}; set xi := {| v_var := _; |}.
   move=> hne hty hget; rewrite -sem_fopns_equiv.
   have := [elaborate ARMFopn_coreP.gen_smart_opi_sem_fopn_args (is_small:= is_arith_small) (neutral:= Some 0%Z)
-             (@ARMFopn_coreP.add_sem_fopn_args _ _) (@ARMFopn_coreP.addi_sem_fopn_args _ _)].
+             ARMFopn_coreP.add_sem_fopn_args ARMFopn_coreP.addi_sem_fopn_args].
   move=> /(_ _ tmp xi xi imm s w) [] //.
   + by move=> >; rewrite wrepr0 GRing.addr0.
   + by right => h; rewrite h in hne.
@@ -301,7 +309,7 @@ Proof.
   rewrite /=; set x := {| vname := _; |}; set xi := {| v_var := _; |}.
   move=> hne hty hget; rewrite -sem_fopns_equiv.
   have := [elaborate ARMFopn_coreP.gen_smart_opi_sem_fopn_args (is_small:= is_arith_small) (neutral:= Some 0%Z)
-              (@ARMFopn_coreP.sub_sem_fopn_args _ _) (@ARMFopn_coreP.subi_sem_fopn_args _ _)].
+              ARMFopn_coreP.sub_sem_fopn_args ARMFopn_coreP.subi_sem_fopn_args].
   move=> /(_ _ tmp xi xi imm s w) [] //.
   + by move=> >; rewrite wrepr0 GRing.subr0.
   + by right => h; rewrite h in hne.
@@ -315,7 +323,10 @@ End ARMFopnP.
 
 Section WITH_PARAMS.
 
-Context {instr_info fun_info : Type} {CI : CompilerInfo instr_info fun_info}.
+Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
 
 Context
   {atoI  : arch_toIdent}

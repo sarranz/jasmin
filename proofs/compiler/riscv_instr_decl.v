@@ -615,5 +615,14 @@ Instance riscv_op_decl : asm_op_decl riscv_op :=
     prim_string := riscv_prim_string;
   |}.
 
-Definition riscv_prog {instr_info : Type} {II : InstrInfo instr_info} :=
-  asm_prog (asm_op_d := riscv_op_decl).
+Section INFO.
+
+Context
+  {var_info instr_info : Type}
+  {VI : VarInfo var_info}
+  {II : InstrInfo instr_info}
+.
+
+Definition riscv_prog := asm_prog (asm_op_d := riscv_op_decl).
+
+End INFO.
