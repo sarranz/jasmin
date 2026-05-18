@@ -785,6 +785,8 @@ Definition eword_of_int (ws : wsize) (x : Z) : pexpr :=
 Definition wconst (sz: wsize) (n: word sz) : pexpr :=
   Papp1 (Oword_of_int sz) (Pconst (wunsigned n)).
 
+Definition wconst0 (sz : wsize) : pexpr := wconst (0 : word sz).
+
 Definition is_wconst (sz: wsize) (e: pexpr) : option (word sz) :=
   match e with
   | Papp1 (Oword_of_int sz') e =>

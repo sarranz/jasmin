@@ -208,7 +208,7 @@ Proof.
   by case; constructor.
 Qed.
 
-Lemma is_zeroP sz e : reflect (e = wconst (0 : word sz)) (is_zero sz e).
+Lemma is_zeroP sz e : reflect (e = wconst0 sz) (is_zero sz e).
 Proof.
   case: e; try by right.
   case; try by right.

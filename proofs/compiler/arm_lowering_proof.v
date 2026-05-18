@@ -949,7 +949,7 @@ Proof.
     all:
       try
         match goal with
-        | [ _ : ?e1 = wconst 0 |- _ ] => subst e1; move: hseme1; rewrite /sem_sop1 /= => /ok_inj/Vword_inj[] ??; subst => /=
+        | [ _ : ?e1 = wconst0 _ |- _ ] => subst e1; move: hseme1; rewrite /sem_sop1 /= => /ok_inj/Vword_inj[] ??; subst => /=
         end.
     3: rewrite /sem_shr /sem_shift wshr0.
     6: rewrite /sem_sar /sem_shift wsar0.

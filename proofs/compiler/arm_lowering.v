@@ -197,7 +197,7 @@ Definition lower_Papp1 (ws : wsize) (op : sop1) (e : pexpr) : low_expr :=
       let (op, es) := arg_shift MVN U32 [:: e ] in
       le_issue_aop op es
   | Oneg (Op_w U32) =>
-      le_issue RSB [:: e; wconst (wrepr U32 0) ]
+      le_issue RSB [:: e; wconst0 reg_size ]
   | _ =>
       le_skip
   end.

@@ -1,8 +1,3 @@
-Set Uniform Inductive Parameters.
-Set Implicit Arguments.
-Unset Strict Implicit.
-Unset Printing Implicit Defensive.
-Set Warnings "-notation-overridden,-extraction-reserved-identifier,-extraction-opaque-accessed,-ambiguous-paths,-redundant-canonical-projection,-projection-no-head-constant,-postfix-notation-not-level-1,-deprecated-since-mathcomp-2.4.0,-deprecated-since-mathcomp-2.5.0,-deprecated-from-Coq,-deprecated-dirpath-Coq,-deprecated-reference-since-9.1,-rewrite-rw".
 From Coq Require Import Lia.
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat eqtype ssralg.
 From mathcomp Require Import word_ssrZ.

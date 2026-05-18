@@ -192,11 +192,11 @@ Definition smul_w sz e1 e2 :=
   match is_wconst sz e1, is_wconst sz e2 with
   | Some n1, Some n2 => wconst (n1 * n2)%w
   | Some n, _ =>
-    if n == 0%w then wconst (0 : word sz)
+    if n == 0%w then wconst0 sz
     else if n == 1%w then e2
     else Papp2 (Omul (Op_w sz)) (wconst n) e2
   | _, Some n =>
-    if n == 0%w then wconst (0 : word sz)
+    if n == 0%w then wconst0 sz
     else if n == 1%w then e1
     else Papp2 (Omul (Op_w sz)) e1 (wconst n)
   | _, _ => Papp2 (Omul (Op_w sz)) e1 e2

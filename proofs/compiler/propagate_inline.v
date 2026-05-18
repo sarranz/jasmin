@@ -12,6 +12,7 @@ Module Import E.
   Definition pass : string := "propagate inline".
 
   Section INFO.
+
   Context
     {var_info instr_info fun_info : Type}
     {CI : CompilerInfo var_info instr_info fun_info}
@@ -76,14 +77,15 @@ End INFO.
 Section WITH_PARAMS.
 
 Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
+
+Context
   {asm_op syscall_state : Type}
   {asmop:asmOp asm_op}
   {fcp : FlagCombinationParams}
   {LC : LoopCounter}.
-Context
-  {var_info instr_info fun_info : Type}
-  {CI : CompilerInfo var_info instr_info fun_info}
-.
 
 Definition scfc (cf : combine_flags) (es : seq pexpr) : pexpr :=
   if es is [:: eof; ecf; esf; ezf ]

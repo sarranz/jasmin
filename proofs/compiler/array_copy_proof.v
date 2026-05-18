@@ -14,6 +14,11 @@ Local Open Scope Z_scope.
 Section WITH_PARAMS.
 
 Context
+  {var_info instr_info fun_info : Type}
+  {CI : CompilerInfo var_info instr_info fun_info}
+.
+
+Context
   {wsw : WithSubWord}
   {dc:DirectCall}
   {asm_op syscall_state : Type}
@@ -23,10 +28,6 @@ Context
   {pT : progT}
   {sCP : semCallParams}.
 
-Context
-  {var_info instr_info fun_info : Type}
-  {CI : CompilerInfo var_info instr_info fun_info}
-.
 Context (fresh_var_ident: v_kind → instr_info → string → atype → Ident.ident).
 
 Let fresh_counter fi : Ident.ident := fresh_var_ident Inline (entry_info_of_fun_info fi) "i__copy" aint.
@@ -226,7 +227,7 @@ Transparent esem.
     { rewrite /= /sem_assgn /=.
       rewrite /= get_gvar_neq // -eq_globs.
       move: hv => /= => -> /=.
-      rewrite (@get_gvar_eq _ _ _ _ _ (mk_lvar i)) //= (WArray.uincl_get hty' hget) /=.
+      rewrite (get_gvar_eq _ (x := mk_lvar i)) //= (WArray.uincl_get hty' hget) /=.
       rewrite /truncate_val /= truncate_word_u /= write_var_eq_type //.
       rewrite /mk_lvar /= /get_gvar get_var_eq /= cmp_le_refl orbT //.
       rewrite /truncate_val /= truncate_word_u /=.

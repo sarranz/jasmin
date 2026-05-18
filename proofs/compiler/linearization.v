@@ -298,11 +298,12 @@ Section WITH_PARAMS.
 Context
   {var_info instr_info fun_info : Type}
   {CI : CompilerInfo var_info instr_info fun_info}
+.
+Context
   {asm_op : Type}
   {pd : PointerData}
   {asmop : asmOp asm_op}
-  (liparams : linearization_params)
-.
+  (liparams : linearization_params).
 
 (* Return a linear instruction that corresponds to copying a register.
    The linear instruction [lmove rd rs] corresponds to

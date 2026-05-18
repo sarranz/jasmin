@@ -48,6 +48,11 @@ Section WITH_PARAMS.
   #[local] Existing Instance indirect_c.
 
   Context
+    {var_info instr_info fun_info : Type}
+    {CI : CompilerInfo var_info instr_info fun_info}
+  .
+
+  Context
     {asm_op syscall_state: Type}
       {wsw: WithSubWord}
       {ep: EstateParams syscall_state}
@@ -55,10 +60,6 @@ Section WITH_PARAMS.
       {sip: SemInstrParams asm_op syscall_state}
       {pT: progT}
       {sCP: semCallParams}.
-  Context
-    {var_info instr_info fun_info : Type}
-    {CI : CompilerInfo var_info instr_info fun_info}
-  .
 
   Section PROOF.
 
