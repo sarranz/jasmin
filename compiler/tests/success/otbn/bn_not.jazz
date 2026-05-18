@@ -1,0 +1,6 @@
+export
+fn bn_not(reg u256 arg0) -> reg u256 {
+    reg u256 x;
+    x = !arg0;
+    return x;
+}

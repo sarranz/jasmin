@@ -1,0 +1,23 @@
+export
+fn bn_subb(reg u256 arg0 arg1) -> reg u256 {
+    reg bool cf0 cf1;
+    cf0, _, _, _ = #BN_CMP(arg0, arg1);
+
+    reg u256 x;
+    ?{ cf0 }, x = #BN_SUBB(arg0, arg1, cf0);
+    ?{ cf0 }, x = #BN_SUBB(x, arg1 << 0, cf0);
+    ?{ cf0 }, x = #BN_SUBB(x, arg1 << 8, cf0);
+    ?{ cf0 }, x = #BN_SUBB(x, arg1 << 16, cf0);
+    ?{ cf0 }, x = #BN_SUBB(x, arg1 << 248, cf0);
+
+    ?{}, x = #BN_SUBB_FG0(x, arg1, cf0);
+
+    ?{ cf1 } = #BN_CMP_FG1(x, arg1);
+    ?{ cf1 }, x = #BN_SUBB_FG1(x, arg1, cf1);
+    ?{ cf1 }, x = #BN_SUBB_FG1(x, arg1 << 0, cf1);
+    ?{ cf1 }, x = #BN_SUBB_FG1(x, arg1 << 8, cf1);
+    ?{ cf1 }, x = #BN_SUBB_FG1(x, arg1 << 16, cf1);
+    ?{}, x = #BN_SUBB_FG1(x, arg1 << 248, cf1);
+
+    return x;
+}

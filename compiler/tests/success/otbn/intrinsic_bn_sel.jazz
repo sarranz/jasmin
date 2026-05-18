@@ -1,0 +1,13 @@
+export
+fn bn_sel(reg u256 arg0 arg1) -> reg u256 {
+    reg bool b;
+    reg u256 x;
+
+    ?{ "CF0" = b } = #BN_CMP(arg0, arg1);
+    x = #BN_SEL(arg0, arg1, b);
+
+    ?{ "LF1" = b } = #BN_CMP_FG1(x, arg1);
+    x = #BN_SEL(arg0, x, b);
+
+    return x;
+}

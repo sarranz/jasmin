@@ -1,0 +1,30 @@
+fn leaf() -> reg u32 {
+    reg u32 f;
+    f = 0;
+
+    stack u32 r;
+    r = f;
+
+    inline int i;
+    for i = 0 to 4 {
+        f = r;
+        f += i;
+        r = f;
+    }
+
+    f = r;
+    return f;
+}
+
+export
+fn main(reg u32 x) -> reg u32 {
+    stack u32 s;
+    s = x;
+
+    reg u32 k;
+    k = leaf();
+
+    x = s;
+    x += k;
+    return x;
+}

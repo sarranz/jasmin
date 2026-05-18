@@ -358,8 +358,8 @@ Proof. by case: adout. Qed.
    instruction descriptions [desc_rv_unop] and [desc_rv_binop]. *)
 
 Definition acc_mod := [:: ACC; MOD ].
-Definition Ea n := ADExplicit (AK_mem Aligned) n (ACR_avoid_xreg acc_mod).
-Definition Ec n := ADExplicit AK_compute n (ACR_avoid_xreg acc_mod).
+Definition EXa n := ADExplicit (AK_mem Aligned) n (ACR_avoid_xreg acc_mod).
+Definition EXc n := ADExplicit AK_compute n (ACR_avoid_xreg acc_mod).
 
 Section RV_DESC.
 
@@ -612,9 +612,9 @@ Definition desc_bn_basic_unop
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := [:: lword256 ];
-    id_in := [:: Ea 1 ];
+    id_in := [:: EXa 1 ];
     id_tout := ty_mlz ++ [:: lword256 ];
-    id_out := ad_mlz fg ++ [:: Ea 0 ];
+    id_out := ad_mlz fg ++ [:: EXa 0 ];
     id_semi := semi_unop_mlz semi;
     id_args_kinds := ak_xreg_xreg;
     id_nargs := 2;
@@ -634,9 +634,9 @@ Definition desc_bn_basic_binop
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := [:: lword256; lword256 ];
-    id_in := [:: Ea 1; Ea 2 ];
+    id_in := [:: EXa 1; EXa 2 ];
     id_tout := ty_cmlz ++ [:: lword256 ];
-    id_out := ad_cmlz fg ++ [:: Ea 0 ];
+    id_out := ad_cmlz fg ++ [:: EXa 0 ];
     id_semi := semi_binop_cmlz semi semiZ;
     id_args_kinds := ak_xreg_xreg_xreg;
     id_nargs := 3;
@@ -658,9 +658,9 @@ Definition desc_bn_basic_carry_binop
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := [:: lword256; lword256; lbool ];
-    id_in := [:: Ea 1; Ea 2; F (current_CF fg) ];
+    id_in := [:: EXa 1; EXa 2; F (current_CF fg) ];
     id_tout := ty_cmlz ++ [:: lword256 ];
-    id_out := ad_cmlz fg ++ [:: Ea 0 ];
+    id_out := ad_cmlz fg ++ [:: EXa 0 ];
     id_semi := semi_carry_binop_cmlz semi semiZ;
     id_args_kinds := ak_xreg_xreg_xreg;
     id_nargs := 3;
@@ -679,7 +679,7 @@ Definition desc_BN_CMP : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := [:: lword256; lword256 ];
-    id_in := [:: Ea 0; Ea 1 ];
+    id_in := [:: EXa 0; EXa 1 ];
     id_tout := ty_cmlz;
     id_out := ad_cmlz fg;
     id_semi := fun x y => rtuple_drop5th (semi_binop_cmlz wsub Z.sub x y);
@@ -700,7 +700,7 @@ Definition desc_BN_CMPB : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := [:: lword256; lword256; lbool ];
-    id_in := [:: Ea 0; Ea 1; F (current_CF fg) ];
+    id_in := [:: EXa 0; EXa 1; F (current_CF fg) ];
     id_tout := ty_cmlz;
     id_out := ad_cmlz fg;
     id_semi :=
@@ -813,9 +813,9 @@ Definition _desc_otbn_op_modular_binop
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := [:: lword ws; lword ws; lword ws ];
-    id_in := [:: Ea 1; Ea 2; Xreg MOD ];
+    id_in := [:: EXa 1; EXa 2; Xreg MOD ];
     id_tout := [:: lword ws ];
-    id_out := [:: Ea 0 ];
+    id_out := [:: EXa 0 ];
     id_semi := semi_modular_binop semiZ;
     id_args_kinds := ak_xreg_xreg_xreg;
     id_nargs := 3;
@@ -858,9 +858,9 @@ Definition desc_bn_binopI
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := [:: lword256; lword256 ];
-    id_in := [:: Ea 1; Ea 2 ];
+    id_in := [:: EXa 1; EXa 2 ];
     id_tout := ty_cmlz ++ [:: lword256 ];
-    id_out := ad_cmlz fg ++ [:: Ea 0 ];
+    id_out := ad_cmlz fg ++ [:: EXa 0 ];
     id_semi := semi_binopI_cmlz semi semiZ;
     id_args_kinds := ak_xreg_xreg_imm10;
     id_nargs := 3;
@@ -879,9 +879,9 @@ Definition desc_BN_MOV : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := [:: lword256 ];
-    id_in := [:: Ea 1 ];
+    id_in := [:: EXa 1 ];
     id_tout := [:: lword256 ];
-    id_out := [:: Ea 0 ];
+    id_out := [:: EXa 0 ];
     id_semi := fun x => ok x;
     id_args_kinds := ak_xreg_xreg;
     id_nargs := 2;
@@ -900,9 +900,9 @@ Definition desc_BN_SEL (fg : bn_flag_group) : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := [:: lword256; lword256; lbool ];
-    id_in := [:: Ea 1; Ea 2; Ea 3 ];
+    id_in := [:: EXa 1; EXa 2; EXa 3 ];
     id_tout := [:: lword256 ];
-    id_out := [:: Ea 0 ];
+    id_out := [:: EXa 0 ];
     id_semi := fun wn wm b => ok (if b then wn else wm);
     id_args_kinds := ak_xreg_xreg_xreg_bool;
     id_nargs := 4;
@@ -929,9 +929,9 @@ Definition desc_BN_RSHI : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := [:: lword256; lword256; lword8 ];
-    id_in := [:: Ea 1; Ea 2; Ea 3 ];
+    id_in := [:: EXa 1; EXa 2; EXa 3 ];
     id_tout := [:: lword256 ];
-    id_out := [:: Ea 0 ];
+    id_out := [:: EXa 0 ];
     id_semi := semi_BN_RSHI;
     id_args_kinds := ak_xreg_xreg_xreg_shift;
     id_nargs := 4;
@@ -992,7 +992,7 @@ Definition desc_BN_MULQACC : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := base_mulqacc_tin;
-    id_in := [:: Ea 0; Ea 1; Ea 2; Ea 3; Xreg ACC; Ea 4 ];
+    id_in := [:: EXa 0; EXa 1; EXa 2; EXa 3; Xreg ACC; EXa 4 ];
     id_tout := [:: lword256 ];
     id_out := [:: Xreg ACC ];
     id_semi := semi_BN_MULQACC;
@@ -1013,7 +1013,7 @@ Definition desc_BN_MULQACC_Z : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := base_mulqacc_z_tin;
-    id_in := [:: Ea 0; Ea 1; Ea 2; Ea 3; Ea 4 ];
+    id_in := [:: EXa 0; EXa 1; EXa 2; EXa 3; EXa 4 ];
     id_tout := [:: lword256 ];
     id_out := [:: Xreg ACC ];
     id_semi := fun x ix y iy sham => semi_BN_MULQACC x ix y iy 0%R sham;
@@ -1046,9 +1046,9 @@ Definition desc_BN_MULQACC_WO : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := base_mulqacc_tin;
-    id_in := [:: Ea 1; Ea 2; Ea 3; Ea 4; Xreg ACC; Ea 5 ];
+    id_in := [:: EXa 1; EXa 2; EXa 3; EXa 4; Xreg ACC; EXa 5 ];
     id_tout := ty_mlz ++ [:: lword256; lword256 ];
-    id_out := ad_mlz fg ++ [:: Ea 0; Xreg ACC ];
+    id_out := ad_mlz fg ++ [:: EXa 0; Xreg ACC ];
     id_semi := semi_BN_MULQACC_WO;
     id_nargs := 6;
     id_args_kinds := ak_xreg_xreg_q_xreg_q_shift;
@@ -1067,9 +1067,9 @@ Definition desc_BN_MULQACC_WO_Z : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := base_mulqacc_z_tin;
-    id_in := [:: Ea 1; Ea 2; Ea 3; Ea 4; Ea 5 ];
+    id_in := [:: EXa 1; EXa 2; EXa 3; EXa 4; EXa 5 ];
     id_tout := ty_mlz ++ [:: lword256; lword256 ];
-    id_out := ad_mlz fg ++ [:: Ea 0; Xreg ACC ];
+    id_out := ad_mlz fg ++ [:: EXa 0; Xreg ACC ];
     id_semi := fun x ix y iy sham => semi_BN_MULQACC_WO x ix y iy 0%R sham;
     id_nargs := 6;
     id_args_kinds := ak_xreg_xreg_q_xreg_q_shift;
@@ -1123,9 +1123,10 @@ Definition desc_BN_MULQACC_SO : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := mulqacc_so_tin;
-    id_in := ad_mlz fg ++ [:: Ea 0; Ea 1; Ea 2; Ea 3; Ea 4; Xreg ACC; Ea 5 ];
+    id_in :=
+      ad_mlz fg ++ [:: EXa 0; EXa 1; EXa 2; EXa 3; EXa 4; Xreg ACC; EXa 5 ];
     id_tout := mulqacc_so_tout;
-    id_out := ad_mlz fg ++ [:: Ea 0; Xreg ACC ];
+    id_out := ad_mlz fg ++ [:: EXa 0; Xreg ACC ];
     id_semi := semi_BN_MULQACC_SO;
     id_args_kinds := ak_xreg_xreg_q_xreg_q_shift;
     id_nargs := 6;
@@ -1144,9 +1145,9 @@ Definition desc_BN_MULQACC_SO_Z : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := ty_mlz ++ [:: lword256 ] ++ base_mulqacc_z_tin;
-    id_in := ad_mlz fg ++ [:: Ea 0; Ea 1; Ea 2; Ea 3; Ea 4; Ea 5 ];
+    id_in := ad_mlz fg ++ [:: EXa 0; EXa 1; EXa 2; EXa 3; EXa 4; EXa 5 ];
     id_tout := mulqacc_so_tout;
-    id_out := ad_mlz fg ++ [:: Ea 0; Xreg ACC ];
+    id_out := ad_mlz fg ++ [:: EXa 0; Xreg ACC ];
     id_semi :=
       fun mf lf zf r x ix y ix sham =>
         semi_BN_MULQACC_SO mf lf zf r x ix y ix 0%R sham;
@@ -1170,7 +1171,7 @@ End MULQACC.
    input or an output, respectively). *)
 Definition desc_BN_WSR op xr is_read : instr_desc_t :=
   let: (ad_in, ad_out) :=
-    if is_read then (Xreg xr, Ea 0) else (Ea 0, Xreg xr)
+    if is_read then (Xreg xr, EXa 0) else (EXa 0, Xreg xr)
   in
   {|
     id_msb_flag := MSB_MERGE;
@@ -1196,7 +1197,7 @@ Definition desc_BN_LID : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := [:: lword32; lword256 ];
-    id_in := [:: Ea 0; Ea 1 ];
+    id_in := [:: EXa 0; EXa 1 ];
     id_tout := [::];
     id_out := [::];
     id_semi := fun _ _ => Error E.no_semantics;
@@ -1217,7 +1218,7 @@ Definition desc_BN_SID : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := [:: lword32; lword256 ];
-    id_in := [:: Ea 0; Ea 1 ];
+    id_in := [:: EXa 0; EXa 1 ];
     id_tout := [::];
     id_out := [::];
     id_semi := fun _ _ => Error E.no_semantics;

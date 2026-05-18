@@ -1,0 +1,35 @@
+inline
+fn add(reg u32 arg0, stack u32 arg1) -> reg u32 {
+    reg u32 x;
+    x = arg1;
+    x = arg0 + x;
+    return x;
+}
+
+export
+fn main(reg u32 arg0, reg u32 arg1) -> reg u32 {
+    reg u32 x;
+    stack u32 y;
+    reg bool z;
+
+    y = arg1;
+
+    if (arg0 == arg1) {
+        x = add(arg0, y);
+    } else {
+        x = add(arg0, y);
+    }
+
+    inline int n;
+    for n = 0 to 3 {
+        x = add(x, y);
+    }
+
+    while (x != arg0) {
+        x = add(x, y);
+    }
+
+    x = x;
+
+    return x;
+}

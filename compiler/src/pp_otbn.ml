@@ -67,8 +67,8 @@ let hash_to_string_core (to_string : 'a -> string) =
       s
 
 let hash_to_string to_string = hash_to_string_core (fun x -> to_string x)
-let x0 = "X00" (* TODO_OTBN check *)
-let ra = "X01" (* TODO_OTBN check *)
+let x0 = "x0" (* TODO_OTBN check *)
+let ra = "x1" (* TODO_OTBN check *)
 let pp_register = hash_to_string arch.toS_r.to_string
 let pp_oregister = function Some r -> pp_register r | None -> x0
 let sp = pp_register X02

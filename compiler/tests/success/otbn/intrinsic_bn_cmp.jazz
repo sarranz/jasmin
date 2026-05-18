@@ -1,0 +1,19 @@
+export
+fn bn_cmp(reg u256 arg0 arg1) -> reg u256 {
+    // TODO_OTBN: Do something with the flags so that this isn't dead code.
+    ?{} = #BN_CMP(arg0, arg1);
+    ?{} = #BN_CMP(arg0, arg1 << 0);
+    ?{} = #BN_CMP(arg0, arg1 << 8);
+    ?{} = #BN_CMP(arg0, arg1 << 16);
+    ?{} = #BN_CMP(arg0, arg1 << 248);
+
+    ?{} = #BN_CMP_FG0(arg0, arg1);
+
+    ?{} = #BN_CMP_FG1(arg0, arg1);
+    ?{} = #BN_CMP_FG1(arg0, arg1 << 0);
+    ?{} = #BN_CMP_FG1(arg0, arg1 << 8);
+    ?{} = #BN_CMP_FG1(arg0, arg1 << 16);
+    ?{} = #BN_CMP_FG1(arg0, arg1 << 248);
+
+    return arg0;
+}

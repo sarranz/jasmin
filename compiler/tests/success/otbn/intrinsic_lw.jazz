@@ -1,0 +1,10 @@
+export
+fn lw(reg u32 arg0) {
+    reg u32 x;
+
+    x = #LW([arg0]);
+    x = #LW([x + 1]);
+    x = #LW([x - 1]);
+    x = #LW([x + 2047]);
+    x = #LW([x - 2048]);
+}

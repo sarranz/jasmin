@@ -1,0 +1,8 @@
+export
+fn bn_subb(reg u256 arg0 arg1) -> reg u256 {
+    reg bool cf;
+    reg u256 x;
+    cf, x = arg0 -256u arg1;
+    _, x = x -256u arg1 - cf;
+    return x;
+}

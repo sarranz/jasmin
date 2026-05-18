@@ -1,0 +1,24 @@
+param int N = 43;
+
+fn body(reg u32 x) -> reg u32 {
+    x += 1;
+    return x;
+}
+
+export
+fn main() -> reg u32 {
+    reg u32 x;
+    x = 0;
+
+    repeat 4 { x = body(x); }
+    repeat N { x = body(x); }
+    repeat (int)x { x = body(x); }
+    repeat (4 + N) { x = body(x); }
+
+    inline int i;
+    for i = 0 to 2 {
+        repeat i { x = body(x); }
+    }
+
+    return x;
+}
