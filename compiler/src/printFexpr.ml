@@ -16,7 +16,7 @@ let rec pp_fexpr side prio fmt = function
       let p = priority_ternary in
       optparent fmt prio side p "%a ? %a : %a" (pp_fexpr Left p) c (pp_fexpr NoAssoc p) e1 (pp_fexpr Right p) e2
 
-let pp_fexpr fmt e = pp_fexpr NoAssoc priority_min fmt e
+let pp_fexpr = pp_fexpr NoAssoc priority_min
 
 let pp_rexpr fmt = function
   | Rexpr e -> pp_fexpr fmt e
