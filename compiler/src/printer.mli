@@ -4,7 +4,8 @@ val pp_warning_msg :  Format.formatter -> Compiler_util.warning_msg -> unit
 val pp_err :
   debug:bool ->
   Format.formatter ->
-  (VInfo.t, IInfo.t, FInfo.t) Compiler_util.pp_error -> unit
+  (VInfo.t, IInfo.t, FInfo.t) Compiler_util.pp_error ->
+  unit
 
 val pp_print_X : Format.formatter -> Z.t -> unit
 
