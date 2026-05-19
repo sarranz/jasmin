@@ -49,7 +49,7 @@ Fixpoint to_spill_i (s : Sv.t * bool) (i : instr) :=
     end
   | Csyscall _ _ _ | Cassert _ => s
   | Cif _ c1 c2 => foldl to_spill_i (foldl to_spill_i s c1) c2
-  | Cfor _ _ c => foldl to_spill_i s c
+  | Cfor _ c => foldl to_spill_i s c
   | Cwhile _ c1 _ _ c2 => foldl to_spill_i (foldl to_spill_i s c1) c2
   | Ccall _ _ _ => s
   end.
@@ -170,9 +170,10 @@ Fixpoint spill_i (env : spill_env) (i : instr) : cexec (spill_env * cmd) :=
     Let ec1 := spill_c spill_i env c1 in
     Let ec2 := spill_c spill_i env c2 in
     ok (merge_env ec1.1 ec2.1, [:: MkI ii (Cif e ec1.2 ec2.2)])
-  | Cfor x r c =>
-    Let ec := loop (spill_c spill_i) ii c loop_counter (Sv.remove x env) in
-    ok (ec.1, [:: MkI ii (Cfor x r ec.2)])
+  | Cfor fi c =>
+    let env' := Sv.diff env (sv_of_ovar_i (iterator_of_fi fi)) in
+    Let ec := loop (spill_c spill_i) ii c loop_counter env' in
+    ok (ec.1, [:: MkI ii (Cfor fi ec.2)])
   | Cwhile a c1 e info c2 =>
     Let ec := wloop (spill_c spill_i) ii c1 c2 loop_counter env in
     ok (ec.1, [:: MkI ii (Cwhile a ec.2.1 e info ec.2.2)])

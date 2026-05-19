@@ -138,11 +138,11 @@ Fixpoint dead_code_i (i:instr) (s:Sv.t) {struct i} : cexec (Sv.t * cmd) :=
     let: (s2,c2) := sc2 in
     ok (read_e_rec (Sv.union s1 s2) b, [:: MkI ii (Cif b c1 c2)])
 
-  | Cfor x (dir, e1, e2) c =>
-    Let sc := loop (dead_code_c dead_code_i c) ii loop_counter
-                   (read_rv (Lvar x)) (vrv (Lvar x)) s in
-    let: (s, c) := sc in
-    ok (read_e_rec (read_e_rec s e2) e1, [:: MkI ii (Cfor x (dir,e1,e2) c)])
+  | Cfor fi c =>
+    Let: (s, c) :=
+      loop (dead_code_c dead_code_i c) ii loop_counter Sv.empty (write_fi fi) s
+    in
+    ok (read_fi_rec s fi, [:: MkI ii (Cfor fi c)])
 
   | Cwhile a c e info c' =>
     let dobody s_o :=
