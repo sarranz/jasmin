@@ -244,7 +244,7 @@ Lemma write_c_recE s c : Sv.Equal (write_c_rec s c) (Sv.union s (write_c c)).
 Proof.
   apply: (cmd_rect (Pr := Pr) (Pi := Pi) (Pc := Pc)) => /= {c s}
     [ i ii Hi | | i c Hi Hc | x tg ty e | xs t o es | p x e | a | e c1 c2 Hc1 Hc2
-    | v dir lo hi c Hc | a c e ii c' Hc Hc' | ii xs f es ] s;
+    | [???? | ?] c Hc | a c e ii c' Hc Hc' | ii xs f es ] s;
     rewrite /write_I /write_I_rec /write_i /write_i_rec -/write_i_rec -/write_I_rec /write_c /=
     ?Hc1 ?Hc2 /write_c_rec ?Hc ?Hc' ?Hi -?vrv_recE -?vrvs_recE //;
     by clear; SvD.fsetdec.
@@ -285,12 +285,16 @@ Proof.
     clear; SvD.fsetdec.
 Qed.
 
-Lemma write_i_for x rn c :
-  Sv.Equal (write_i (Cfor x rn c)) (Sv.union (Sv.singleton x) (write_c c)).
+Lemma write_i_for fi c :
+  Sv.Equal (write_i (Cfor fi c)) (Sv.union (write_fi fi) (write_c c)).
 Proof.
   rewrite /write_i /write_i_rec -/write_I_rec -/(write_c_rec _ c) write_c_recE;
     clear; SvD.fsetdec.
 Qed.
+
+Lemma write_fi_iterator fi :
+  Sv.Equal (write_fi fi) (sv_of_ovar_i (iterator_of_fi fi)).
+Proof. by case: fi. Qed.
 
 Lemma write_i_while a c e ii c' :
   Sv.Equal (write_i (Cwhile a c e ii c')) (Sv.union (write_c c) (write_c c')).
@@ -420,7 +424,7 @@ Lemma read_cE s c : Sv.Equal (read_c_rec s c) (Sv.union s (read_c c)).
 Proof.
   apply (cmd_rect (Pr := Pr) (Pi := Pi) (Pc := Pc)) => /= {c s}
    [ i ii Hi | | i c Hi Hc | x tg ty e | xs t o es | p x e | a | e c1 c2 Hc1 Hc2
-    | v dir lo hi c Hc | a c e ii c' Hc Hc' | ii xs f es ] s;
+    | [???? | ?] c Hc | a c e ii c' Hc Hc' | ii xs f es ] s;
     rewrite /read_I /read_I_rec /read_i /read_i_rec -/read_i_rec -/read_I_rec /read_c /=
      ?read_rvE ?read_eE ?read_esE ?read_eassertE ?read_rvE ?read_rvsE ?Hc2 ?Hc1 /read_c_rec ?Hc' ?Hc ?Hi //;
     by clear; SvD.fsetdec.
@@ -462,11 +466,12 @@ Proof.
   rewrite /read_i /read_i_rec -/read_c_rec read_eE !read_cE; clear; SvD.fsetdec.
 Qed.
 
-Lemma read_i_for x dir lo hi c :
-   Sv.Equal (read_i (Cfor x (dir, lo, hi) c))
-            (Sv.union (read_e lo) (Sv.union (read_e hi) (read_c c))).
+Lemma read_i_for fi c :
+  Sv.Equal (read_i (Cfor fi c)) (Sv.union (read_fi fi) (read_c c)).
 Proof.
-  rewrite /read_i /read_i_rec -/read_c_rec !read_eE read_cE; clear; SvD.fsetdec.
+  case: fi => [???? | ?];
+    rewrite /= /read_i /read_i_rec /= -/read_c_rec !read_eE read_cE;
+    clear; SvD.fsetdec.
 Qed.
 
 Lemma read_i_while a c e ii c' :
@@ -545,10 +550,13 @@ Proof.
   clear; SvD.fsetdec.
 Qed.
 
-Lemma vars_I_for ii i d lo hi c:
-  Sv.Equal (vars_I (MkI ii (Cfor i (d, lo, hi) c)))
-           (Sv.union (Sv.union (vars_c c) (Sv.singleton i)) (Sv.union (read_e lo) (read_e hi))).
-Proof. rewrite /vars_I read_Ii write_Ii read_i_for write_i_for /vars_c; clear; SvD.fsetdec. Qed.
+Lemma vars_I_for ii fi c :
+  Sv.Equal (vars_I (MkI ii (Cfor fi c)))
+           (Sv.union (read_fi fi) (Sv.union (write_fi fi) (vars_c c))).
+Proof.
+  rewrite /vars_I read_Ii write_Ii read_i_for write_i_for /vars_c;
+    clear; SvD.fsetdec.
+Qed.
 
 Lemma vars_I_call ii xs fn args:
   Sv.Equal (vars_I (MkI ii (Ccall xs fn args))) (Sv.union (vars_lvals xs) (read_es args)).
@@ -929,8 +937,11 @@ Proof. by move=> ?; rewrite /Pr /= eqxx eq_eassert_refl. Qed.
 Lemma Hrefl_if : forall e c1 c2, Pc c1 -> Pc c2 -> Pr (Cif e c1 c2).
 Proof. by move=> ???; rewrite /Pc /Pr /= eq_expr_refl -!/(eq_cmd _ _) => -> ->. Qed.
 
-Lemma Hrefl_for : forall v dir lo hi c, Pc c -> Pr (Cfor v (dir,lo,hi) c).
-Proof. by move=> ?????; rewrite /Pc /Pr /= !eqxx !eq_expr_refl -/(eq_cmd _ _) => ->. Qed.
+Lemma Hrefl_for : forall fi c, Pc c -> Pr (Cfor fi c).
+Proof.
+  move=> fi c; case: fi => [???? | ?];
+  by rewrite /Pc /Pr /= ?eqxx !eq_expr_refl -/(eq_cmd _ _) => ->.
+Qed.
 
 Lemma Hrefl_while : forall a c e info c', Pc c -> Pc c' -> Pr (Cwhile a c e info c').
 Proof. by move=> ?????; rewrite /Pc /Pr /= eqxx eq_expr_refl -!/(eq_cmd _ _) => -> ->. Qed.
@@ -1004,11 +1015,13 @@ Proof.
   by rewrite -!/(eq_cmd _ _) hc1 hc2.
 Qed.
 
-Lemma Hsymm_for : forall v dir lo hi c, Pc c -> Pr (Cfor v (dir,lo,hi) c).
+Lemma Hsymm_for : forall fi c, Pc c -> Pr (Cfor fi c).
 Proof.
-  move=> ????? hc [] //= ? [[??]?] ? /andP[] /andP[] /andP[] /andP[]
-    /eqP -> /eqP -> /eq_expr_symm -> /eq_expr_symm -> /hc{}hc.
-  by rewrite !eqxx -/(eq_cmd _ _) hc.
+  move=> fi c hc [] //= fi2 c2 /andP[hfi /hc{}hc].
+  case: fi fi2 hfi => [x d lo hi | e] [x' d' lo' hi' | e'] //=.
+  - move=> /and4P[]/eqP -> /eqP -> /eq_expr_symm -> /eq_expr_symm ->.
+    by rewrite !eqxx -/(eq_cmd _ _) hc.
+  - by move=> /eq_expr_symm ->; rewrite -/(eq_cmd _ _) hc.
 Qed.
 
 Lemma Hsymm_while : forall a c e info c', Pc c -> Pc c' -> Pr (Cwhile a c e info c').
@@ -1099,12 +1112,18 @@ Proof.
   by rewrite (eq_expr_trans h12 h23) -!/(eq_cmd _ _) (hc1 _ _ h12' h23') (hc2 _ _ h12'' h23'').
 Qed.
 
-Lemma Htrans_for : forall v dir lo hi c, Pc c -> Pr (Cfor v (dir,lo,hi) c).
+Lemma Htrans_for : forall fi c, Pc c -> Pr (Cfor fi c).
 Proof.
-  move=> ????? hc [] //= ? [[??]?] ? [] //= ? [[??]?] ?
-    /andP[] /andP[] /andP[] /andP[] /eqP -> /eqP -> h12 h12' h12''
-    /andP[] /andP[] /andP[] /andP[] /eqP -> /eqP -> h23 h23' h23''.
-  by rewrite !eqxx (eq_expr_trans h12 h23) (eq_expr_trans h12' h23') -/(eq_cmd _ _) (hc _ _ h12'' h23'').
+  move=> fi c hc [] //= fi2 c2 [] //= fi3 c3.
+  case: fi fi2 fi3
+    => [x1 d1 lo1 hi1 | e1] [x2 d2 lo2 hi2 | e2] [x3 d3 lo3 hi3 | e3] //=
+    /andP[h12fi h12c] /andP[h23fi h23c].
+  - move: h12fi h23fi
+      => /and4P[]/eqP -> /eqP -> h12lo h12hi /and4P[]/eqP -> /eqP -> h23lo h23hi.
+    by rewrite !eqxx (eq_expr_trans h12lo h23lo) (eq_expr_trans h12hi h23hi)
+      -/(eq_cmd _ _) (hc _ _ h12c h23c).
+  - move: h12fi h23fi => h12e h23e.
+    by rewrite (eq_expr_trans h12e h23e) -/(eq_cmd _ _) (hc _ _ h12c h23c).
 Qed.
 
 Lemma Htrans_while : forall a c e info c', Pc c -> Pc c' -> Pr (Cwhile a c e info c').
@@ -1192,10 +1211,12 @@ Proof.
   by rewrite !write_i_if hc1 hc2.
 Qed.
 
-Lemma Hwrite_for : forall v dir lo hi c, Pc c -> Pr (Cfor v (dir,lo,hi) c).
+Lemma Hwrite_for : forall fi c, Pc c -> Pr (Cfor fi c).
 Proof.
-  move=> [??]???? hc [] //= [??] [[??]?] ? /andP[] /andP[] /andP[] /andP[] /eqP -> _ _ _ /hc{}hc.
-  by rewrite !write_i_for hc.
+  move=> fi c hc [] //= fi2 c2 /andP[hfi /hc{}hc].
+  rewrite !write_i_for hc.
+  case: fi fi2 hfi => [x d lo hi | e] [x' d' lo' hi' | e'] //=.
+  by move=> /and4P[]/eqP ->; clear; SvD.fsetdec.
 Qed.
 
 Lemma Hwrite_while : forall a c e info c', Pc c -> Pc c' -> Pr (Cwhile a c e info c').

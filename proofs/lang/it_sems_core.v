@@ -108,6 +108,10 @@ Definition sem_bound (gd : glob_decls) (lo hi : pexpr) (s : estate) :
 Definition isem_bound (lo hi : pexpr) (s : estate) : itree E (Z * Z) :=
   iresult s (sem_bound (p_globs p) lo hi s).
 
+Definition isem_fi (gd : glob_decls) (fi : for_iteration) (s : estate)
+  : itree E (seq Z) :=
+  iresult s (sem_fi true gd s fi).
+
 Definition isem_assert (a: assertion) (s: estate) : itree E unit :=
   iresult s (sem_assert (p_globs p) s a).
 
@@ -167,15 +171,18 @@ Definition isem_foldr (c: cmd) : estate -> itree E estate :=
 Local Notation continue_loop s := (ret (inl s)).
 Local Notation exit_loop s := (ret (inr s)).
 
-Definition isem_for_round (i : var_i) (c : cmd)
+Definition isem_for_round (oi : option var_i) (c : cmd)
   (w: Z) (k: estate -> itree E estate) (s: estate) :
     itree E estate :=
-  s <- iwrite_var true i (Vint w) s ;;
+  s <- (match oi with
+        | Some i => iwrite_var true i (Vint w) s
+        | None   => Ret s
+        end) ;;
   s <- isem_foldr c s ;; k s.
 
-Definition isem_for_loop (i : var_i) (c : cmd) (ls : list Z)
+Definition isem_for_loop (oi : option var_i) (c : cmd) (ls : list Z)
   : estate -> itree E estate :=
-  foldr (isem_for_round i c) (fun s: estate => Ret s) ls.
+  foldr (isem_for_round oi c) (fun s: estate => Ret s) ls.
 
 Definition isem_while_round (c1 : cmd) (e : pexpr) (c2 : cmd) (s : estate) :
     itree E (estate + estate) :=
@@ -222,9 +229,9 @@ Fixpoint isem_i_body (p : prog) (ev : extra_val_t) (i : instr) (s : estate) :
   | Cwhile a c1 e i c2 =>
     isem_while_loop isem_i_body p ev c1 e c2 s
 
-  | Cfor i (d, lo, hi) c =>
-    bounds <- isem_bound p lo hi s;;
-    isem_for_loop isem_i_body p ev i c (wrange d bounds.1 bounds.2) s
+  | Cfor fi c =>
+    rn <- isem_fi (p_globs p) fi s;;
+    isem_for_loop isem_i_body p ev (iterator_of_fi fi) c rn s
 
   | Ccall xs fn args =>
     vargs <- isem_pexprs  (~~direct_call) (p_globs p) args s;;
@@ -310,12 +317,12 @@ Fixpoint esem_i (p : prog) (ev : extra_val_t) (i : instr) (s : estate) :
 
   | Cwhile a c1 e i c2 => Error ErrSemUndef
 
-  | Cfor i (d, lo, hi) c =>
-    Let bounds := sem_bound (p_globs p) lo hi s in
+  | Cfor fi c =>
+    Let rn := sem_fi true (p_globs p) s fi in
     foldM (fun j s =>
-      Let s := write_var true i (Vint j) s in
+      Let s := init_iteration true s (iterator_of_fi fi) j in
       foldM (esem_i p ev) s c)
-     s (wrange d bounds.1 bounds.2)
+     s rn
 
   | Ccall xs fn args => Error ErrSemUndef
   end.
@@ -323,9 +330,9 @@ Fixpoint esem_i (p : prog) (ev : extra_val_t) (i : instr) (s : estate) :
 Definition esem (p : prog) (ev : extra_val_t) (c : cmd) (s : estate) :=
   foldM (esem_i p ev) s c.
 
-Definition esem_for p ev i c :=
+Definition esem_for p ev (oi : option var_i) c :=
   foldM (fun j s =>
-      Let s := write_var true i (Vint j) s in
+      Let s := init_iteration true s oi j in
       foldM (esem_i p ev) s c).
 
 Lemma esem_i_bodyP p ev c s s' :
@@ -342,14 +349,23 @@ Proof.
   + move=> > hc1 hc2 ii s s' /=.
     rewrite /isem_cond; t_xrbindP => b -> /=.
     by rewrite bind_ret_l; case: b; [apply hc1 | apply hc2].
-  move=> i d lo hi c hc ii s s' /=.
-  rewrite /isem_bound; t_xrbindP => bound -> /=.
-  rewrite bind_ret_l.
-  elim: wrange s => {bound} => /= [ | j js hrec] s.
+  move=> fi c hc ii s s' /=.
+  rewrite /isem_fi; t_xrbindP => rn hfi /=.
+  rewrite hfi bind_ret_l.
+  elim: rn s {hfi} => /= [ | j js hrec] s.
   + move=> [<-]; reflexivity.
-  t_xrbindP => s1 s2 hw /hc{}hc /hrec{}hrec.
-  rewrite /isem_for_round /= /iwrite_var hw /= bind_ret_l.
-  by move: hc; rewrite /isem_cmd_ => -> /=; rewrite bind_ret_l.
+  t_xrbindP => s1 s2 hinit /hc{}hc /hrec{}hrec.
+  rewrite /isem_for_round /=.
+  move: hrec; case: (iterator_of_fi fi) hinit => [i|] hinit /= hrec.
+  + rewrite /init_iteration /= in hinit.
+    rewrite /iwrite_var hinit /= bind_ret_l.
+    move: hc; rewrite /isem_cmd_ => hc.
+    by setoid_rewrite hc; rewrite bind_ret_l; exact: hrec.
+  + rewrite /init_iteration /= in hinit.
+    move/ok_inj: hinit => hinit; subst s2.
+    rewrite bind_ret_l.
+    move: hc; rewrite /isem_cmd_ => hc.
+    by setoid_rewrite hc; rewrite bind_ret_l; exact: hrec.
 Qed.
 
 Lemma esem_cat p ev c1 c2 s : esem p ev (c1 ++ c2) s = Let s1 := esem p ev c1 s in esem p ev c2 s1.
@@ -364,11 +380,11 @@ Proof. done. Qed.
 Lemma esem1 p ev s i : esem p ev [::i] s = esem_i p ev i s.
 Proof. by rewrite esem_cons; case: esem_i. Qed.
 
-Lemma eEForOne p ev s1 s1' s2 s3 i w ws c :
-  write_var true i (Vint w) s1 = ok s1' ->
+Lemma eEForOne p ev s1 s1' s2 s3 oi w ws c :
+  init_iteration true s1 oi w = ok s1' ->
   esem p ev c s1' = ok s2 ->
-  esem_for p ev i c s2 ws = ok s3 ->
-  esem_for p ev i c s1 (w :: ws) = ok s3.
+  esem_for p ev oi c s2 ws = ok s3 ->
+  esem_for p ev oi c s1 (w :: ws) = ok s3.
 Proof. by rewrite /esem => /= -> /= -> /=. Qed.
 
 End SEM_I.
@@ -400,11 +416,11 @@ Proof.
   + move=> e c1 c2 hc1 hc2 /= _ s.
     apply eqit_bind; first reflexivity.
     by move=> []; [apply hc1 | apply hc2].
-  + move=> x dir lo hi c hc ii s /=.
+  + move=> fi c hc ii s /=.
     apply eqit_bind; first reflexivity.
-    move=> bound; elim:wrange s => /=; first reflexivity.
-    move=> j js hrec s; rewrite /isem_for_round.
-    apply eqit_bind; first reflexivity.
+    move=> rn; elim: rn s => /= [s | j js hrec s]; first reflexivity.
+    rewrite /isem_for_round.
+    apply eqit_bind; first by case: (iterator_of_fi fi) => [?|] /=; reflexivity.
     move=> ?; apply eqit_bind; first apply hc.
     move=> ?; apply hrec.
   + move=> al c e ii' c' hc hc' ii s /=.
@@ -552,12 +568,15 @@ Proof.
     rewrite interp_bind; apply eqit_bind.
     + by apply interp_iresult.
     by move=> []; [apply hc1 | apply hc2].
-  + move=> v dir lo hi c hc ii s; rewrite /isem_i /isem_i_rec /=.
+  + move=> fi c hc ii s; rewrite /isem_i /isem_i_rec /=.
     rewrite interp_bind; apply eqit_bind; first by apply interp_iresult.
-    move=> bounds /=. elim: wrange s => {bounds ii} //=.
+    move=> rn /=. elim: rn s => //=.
     + move=> >; rewrite interp_ret; reflexivity.
     move=> j js hrec s.
-    rewrite interp_bind; apply eqit_bind; first by apply interp_iresult.
+    rewrite /isem_for_round interp_bind.
+    apply eqit_bind; first by
+      case: (iterator_of_fi fi) => [i|] /=;
+      [apply interp_iresult | rewrite interp_ret; reflexivity].
     move=> s'; rewrite interp_bind.
     rewrite hc; setoid_rewrite hrec; reflexivity.
   + move=> al c1 e inf c2 hc1 hc2 ii s; rewrite /isem_i /isem_i_rec /= /isem_while_loop.
@@ -684,14 +703,17 @@ Proof.
     + move=> e c1 c2 hc1 hc2 ii s; rewrite interp_bind.
       rewrite /isem_cond interp_cond_iresult.
       by apply/eutt_eq_bind; case; [apply hc1 | apply hc2].
-    + move=> x dir lo hi c hc ii s; rewrite interp_bind.
-      rewrite /isem_bound interp_cond_iresult.
-      apply eutt_eq_bind => ? /=.
-      elim: (wrange _ _) s => //= [ | j js hrec] s.
+    + move=> fi c hc ii s; rewrite interp_bind.
+      rewrite /isem_fi interp_cond_iresult.
+      apply eutt_eq_bind => rn /=.
+      elim: rn s => //= [ | j js hrec] s.
       + rewrite interp_ret; reflexivity.
-      rewrite /isem_for_round interp_bind /iwrite_var interp_cond_iresult.
-      apply eutt_eq_bind => ? /=.
-      by rewrite interp_bind hc; apply eutt_eq_bind => ? /=; apply hrec.
+      rewrite /isem_for_round interp_bind.
+      apply eqit_bind.
+      + by case: (iterator_of_fi fi) => [i|] /=;
+           [apply interp_cond_iresult | rewrite interp_ret; reflexivity].
+      move=> r /=; rewrite interp_bind.
+      by apply eqit_bind; [apply hc | move=> s1; apply hrec].
     + move=> al c e ii' c' hc hc' ii s.
       rewrite /isem_while_loop interp_iter.
       apply eutt_iter => s'.
