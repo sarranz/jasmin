@@ -947,30 +947,52 @@ Qed.
 
 Lemma wequiv_for P0 P Pi ii1 i1 d lo1 hi1 c1 ii2 i2 lo2 hi2 c2 :
   (forall s1 s2, P0 s1 s2 -> P s1 s2) ->
-  wrequiv P0 (sem_bound (p_globs p1) lo1 hi1) (sem_bound (p_globs p2) lo2 hi2) eq ->
+  wrequiv P0 (fun s => sem_fi true (p_globs p1) s (FIrange i1 d lo1 hi1))
+            (fun s => sem_fi true (p_globs p2) s (FIrange i2 d lo2 hi2)) eq ->
   (forall i : Z, wrequiv P (write_var true i1 (Vint i)) (write_var true i2 (Vint i)) Pi) ->
   wequiv Pi c1 c2 P ->
-  wequiv P0 [:: MkI ii1 (Cfor i1 (d, lo1, hi1) c1)] [:: MkI ii2 (Cfor i2 (d, lo2, hi2) c2)] P.
+  wequiv P0 [:: MkI ii1 (Cfor (FIrange i1 d lo1 hi1) c1)] [:: MkI ii2 (Cfor (FIrange i2 d lo2 hi2) c2)] P.
 Proof.
   move=> hP0P hbound hwi hc; rewrite /wequiv /isem_cmd_ /=.
   apply wkequiv_bind with P; last by apply wkequiv_ret.
   apply wkequiv_read with eq.
   + by apply wkequiv_iresult.
-  move=> bounds _ <-.
+  move=> rn _ <-.
   apply wkequiv_weaken with P P => //.
-  elim: wrange => /= [| j js hrec].
+  elim: rn => /= [| j js hrec].
   + by apply wkequiv_ret.
   apply wkequiv_bind with Pi.
   + by apply wkequiv_iresult.
   by apply: wkequiv_bind hrec.
 Qed.
 
-Lemma wrequiv_sem_bound (P : rel_c) lo1 hi1 lo2 hi2 :
+Lemma wequiv_for_repeat P0 P ii1 e1 c1 ii2 e2 c2 :
+  (forall s1 s2, P0 s1 s2 -> P s1 s2) ->
+  wrequiv P0 (fun s => sem_fi true (p_globs p1) s (FIrepeat e1))
+            (fun s => sem_fi true (p_globs p2) s (FIrepeat e2)) eq ->
+  wequiv P c1 c2 P ->
+  wequiv P0 [:: MkI ii1 (Cfor (FIrepeat e1) c1)] [:: MkI ii2 (Cfor (FIrepeat e2) c2)] P.
+Proof.
+  move=> hP0P hbound hc; rewrite /wequiv /isem_cmd_ /=.
+  apply wkequiv_bind with P; last by apply wkequiv_ret.
+  apply wkequiv_read with eq.
+  + by apply wkequiv_iresult.
+  move=> rn _ <-.
+  apply wkequiv_weaken with P P => //.
+  elim: rn => /= [| j js hrec].
+  + by apply wkequiv_ret.
+  apply wkequiv_bind with P.
+  + by apply wkequiv_ret.
+  by apply: wkequiv_bind hrec.
+Qed.
+
+Lemma wrequiv_sem_bound (P : rel_c) {i1 i2 : var_i} d lo1 hi1 lo2 hi2 :
   wrequiv P (fun s => sem_pexprs true (p_globs p1) s [::lo1; hi1])
             (fun s => sem_pexprs true (p_globs p2) s [::lo2; hi2]) (List.Forall2 value_uincl) ->
-  wrequiv P (sem_bound (p_globs p1) lo1 hi1) (sem_bound (p_globs p2) lo2 hi2) eq.
+  wrequiv P (fun s => sem_fi true (p_globs p1) s (FIrange i1 d lo1 hi1))
+            (fun s => sem_fi true (p_globs p2) s (FIrange i2 d lo2 hi2)) eq.
 Proof.
-  move=> hbound; rewrite /sem_bound.
+  move=> hbound; rewrite /sem_fi /sem_pexpr_int.
   move=> s1 s2 lh1 hP; t_xrbindP => ilo1 vlo1 hlo1 hvlo1 ihi1 vhi1 hhi1 hvhi1 <-.
   have [] /= := hbound s1 s2 [::vlo1; vhi1] hP.
   + by rewrite hlo1 /= hhi1.
@@ -981,14 +1003,42 @@ Proof.
   eexists; eauto.
 Qed.
 
+Lemma wrequiv_sem_bound_repeat (P : rel_c) e1 e2 :
+  wrequiv P (fun s => sem_pexprs true (p_globs p1) s [::e1])
+            (fun s => sem_pexprs true (p_globs p2) s [::e2]) (List.Forall2 value_uincl) ->
+  wrequiv P (fun s => sem_fi true (p_globs p1) s (FIrepeat e1))
+            (fun s => sem_fi true (p_globs p2) s (FIrepeat e2)) eq.
+Proof.
+  move=> hbound s1 s2 lh1 hP; rewrite /sem_fi /sem_pexpr_int.
+  t_xrbindP => iz v hv hvz <-.
+  have [] /= := hbound s1 s2 [::v] hP.
+  + by rewrite /= hv.
+  move=> vs2; t_xrbindP => v2 hv2 <-; move=> hforall.
+  have /List_Forall2_inv [hu _] := hforall.
+  rewrite hv2 /=.
+  have [_ -> <-] := wrequiv_to_int hu hvz.
+  by exists (ziota 0 iz).
+Qed.
+
 Lemma wequiv_for_uincl P0 P Pi ii1 i1 d lo1 hi1 c1 ii2 i2 lo2 hi2 c2 :
   (forall s1 s2, P0 s1 s2 -> P s1 s2) ->
   wrequiv P0 (fun s => sem_pexprs true (p_globs p1) s [::lo1; hi1])
             (fun s => sem_pexprs true (p_globs p2) s [::lo2; hi2]) (List.Forall2 value_uincl) ->
   (forall i : Z, wrequiv P (write_var true i1 (Vint i)) (write_var true i2 (Vint i)) Pi) ->
   wequiv Pi c1 c2 P ->
-  wequiv P0 [:: MkI ii1 (Cfor i1 (d, lo1, hi1) c1)] [:: MkI ii2 (Cfor i2 (d, lo2, hi2) c2)] P.
+  wequiv P0 [:: MkI ii1 (Cfor (FIrange i1 d lo1 hi1) c1)] [:: MkI ii2 (Cfor (FIrange i2 d lo2 hi2) c2)] P.
 Proof. by move=> hP0P hbound; apply/wequiv_for/wrequiv_sem_bound. Qed.
+
+Lemma wequiv_for_repeat_uincl P0 P ii1 e1 c1 ii2 e2 c2 :
+  (forall s1 s2, P0 s1 s2 -> P s1 s2) ->
+  wrequiv P0 (fun s => sem_pexprs true (p_globs p1) s [::e1])
+            (fun s => sem_pexprs true (p_globs p2) s [::e2]) (List.Forall2 value_uincl) ->
+  wequiv P c1 c2 P ->
+  wequiv P0 [:: MkI ii1 (Cfor (FIrepeat e1) c1)] [:: MkI ii2 (Cfor (FIrepeat e2) c2)] P.
+Proof.
+  move=> hP0P hbound hc; apply wequiv_for_repeat => //.
+  exact (wrequiv_sem_bound_repeat hbound).
+Qed.
 
 Lemma wequiv_for_eq P0 P Pi ii1 i1 d lo1 hi1 c1 ii2 i2 lo2 hi2 c2 :
   (forall s1 s2, P0 s1 s2 -> P s1 s2) ->
@@ -996,9 +1046,20 @@ Lemma wequiv_for_eq P0 P Pi ii1 i1 d lo1 hi1 c1 ii2 i2 lo2 hi2 c2 :
             (fun s => sem_pexprs true (p_globs p2) s [::lo2; hi2]) eq ->
   (forall i : Z, wrequiv P (write_var true i1 (Vint i)) (write_var true i2 (Vint i)) Pi) ->
   wequiv Pi c1 c2 P ->
-  wequiv P0 [:: MkI ii1 (Cfor i1 (d, lo1, hi1) c1)] [:: MkI ii2 (Cfor i2 (d, lo2, hi2) c2)] P.
+  wequiv P0 [:: MkI ii1 (Cfor (FIrange i1 d lo1 hi1) c1)] [:: MkI ii2 (Cfor (FIrange i2 d lo2 hi2) c2)] P.
 Proof.
   move=> hP0P hbound; apply wequiv_for_uincl => //.
+  by apply: wrequiv_weaken hbound => // > <-; apply List_Forall2_refl.
+Qed.
+
+Lemma wequiv_for_repeat_eq P0 P ii1 e1 c1 ii2 e2 c2 :
+  (forall s1 s2, P0 s1 s2 -> P s1 s2) ->
+  wrequiv P0 (fun s => sem_pexprs true (p_globs p1) s [::e1])
+            (fun s => sem_pexprs true (p_globs p2) s [::e2]) eq ->
+  wequiv P c1 c2 P ->
+  wequiv P0 [:: MkI ii1 (Cfor (FIrepeat e1) c1)] [:: MkI ii2 (Cfor (FIrepeat e2) c2)] P.
+Proof.
+  move=> hP0P hbound hc; apply wequiv_for_repeat_uincl => //.
   by apply: wrequiv_weaken hbound => // > <-; apply List_Forall2_refl.
 Qed.
 
@@ -1468,13 +1529,26 @@ Lemma wequiv_for_rel_uincl_R d0 d dhi di ii i dir lo hi c ii' i' lo' hi' c':
   (∀ s1 s2, R dhi s1 s2 → R d s1 s2) ->
   check_lvals d [::Lvar i] [::Lvar i'] di ->
   wequiv (R di) c c' (R d) ->
-  wequiv (R d0) [:: MkI ii (Cfor i (dir, lo, hi) c)] [:: MkI ii' (Cfor i' (dir, lo', hi') c')] (R d).
+  wequiv (R d0) [:: MkI ii (Cfor (FIrange i dir lo hi) c)] [:: MkI ii' (Cfor (FIrange i' dir lo' hi') c')] (R d).
 Proof.
   move=> hes hdhi hx hc.
   apply wequiv_for_uincl with (R di) => //.
   + by move=> s1 s2 /(check_esP_rel hes) /hdhi.
   + by apply: ucheck_esP hes.
   by move=> j; have /(_ j j (value_uincl_refl j)) := ucheck_lvalP hx.
+Qed.
+
+Lemma wequiv_for_repeat_rel_uincl_R d0 d de ii e c ii' e' c':
+  check_es d0 [::e] [::e'] de ->
+  (forall s1 s2, R de s1 s2 -> R d s1 s2) ->
+  wequiv (R d) c c' (R d) ->
+  wequiv (R d0) [:: MkI ii (Cfor (FIrepeat e) c)] [:: MkI ii' (Cfor (FIrepeat e') c')] (R d).
+Proof.
+  move=> hes hdhe hc.
+  apply wequiv_for_repeat_uincl.
+  + by move=> s1 s2 /(check_esP_rel hes) /hdhe.
+  + by apply: ucheck_esP hes.
+  exact hc.
 Qed.
 
 Lemma wequiv_while_rel_uincl d d' de ii1 al1 c1 e1 inf1 c1' ii2 al2 c2 e2 inf2 c2' :
@@ -1627,13 +1701,26 @@ Lemma wequiv_for_rel_eq_R d0 d dhi di ii i dir lo hi c ii' i' lo' hi' c':
   (∀ s1 s2, R dhi s1 s2 → R d s1 s2) ->
   check_lvals d [::Lvar i] [::Lvar i'] di ->
   wequiv (R di) c c' (R d) ->
-  wequiv (R d0) [:: MkI ii (Cfor i (dir, lo, hi) c)] [:: MkI ii' (Cfor i' (dir, lo', hi') c')] (R d).
+  wequiv (R d0) [:: MkI ii (Cfor (FIrange i dir lo hi) c)] [:: MkI ii' (Cfor (FIrange i' dir lo' hi') c')] (R d).
 Proof.
   move=> hes hdhi hx hc.
   apply wequiv_for_eq with (R di) => //.
   + by move=> s1 s2 /(check_esP_rel hes) /hdhi.
   + by apply: echeck_esP hes.
   by move=> j; have /(_ j) := echeck_lvalP hx.
+Qed.
+
+Lemma wequiv_for_repeat_rel_eq_R d0 d de ii e c ii' e' c':
+  check_es d0 [::e] [::e'] de ->
+  (forall s1 s2, R de s1 s2 -> R d s1 s2) ->
+  wequiv (R d) c c' (R d) ->
+  wequiv (R d0) [:: MkI ii (Cfor (FIrepeat e) c)] [:: MkI ii' (Cfor (FIrepeat e') c')] (R d).
+Proof.
+  move=> hes hdhe hc.
+  apply wequiv_for_repeat_eq.
+  + by move=> s1 s2 /(check_esP_rel hes) /hdhe.
+  + by apply: echeck_esP hes.
+  exact hc.
 Qed.
 
 Lemma wequiv_while_rel_eq d d' de ii1 al1 c1 e1 inf1 c1' ii2 al2 c2 e2 inf2 c2' :
@@ -1731,10 +1818,21 @@ Lemma wequiv_for_rel_uincl d0 d dhi di ii i dir lo hi c ii' i' lo' hi' c':
   (∀ s1 s2, R dhi s1 s2 → R d s1 s2) ->
   check_lvals d [::Lvar i] [::Lvar i'] di ->
   wequiv (st_rel R di) c c' (st_rel R d) ->
-  wequiv (st_rel R d0) [:: MkI ii (Cfor i (dir, lo, hi) c)] [:: MkI ii' (Cfor i' (dir, lo', hi') c')] (st_rel R d).
+  wequiv (st_rel R d0) [:: MkI ii (Cfor (FIrange i dir lo hi) c)] [:: MkI ii' (Cfor (FIrange i' dir lo' hi') c')] (st_rel R d).
 Proof.
   move=> hes hdhi hx hc.
   apply wequiv_for_rel_uincl_R with ce dhi di => //.
+  by apply st_rel_weaken.
+Qed.
+
+Lemma wequiv_for_repeat_rel_uincl d0 d de ii e c ii' e' c':
+  check_es d0 [::e] [::e'] de ->
+  (forall s1 s2, R de s1 s2 -> R d s1 s2) ->
+  wequiv (st_rel R d) c c' (st_rel R d) ->
+  wequiv (st_rel R d0) [:: MkI ii (Cfor (FIrepeat e) c)] [:: MkI ii' (Cfor (FIrepeat e') c')] (st_rel R d).
+Proof.
+  move=> hes hdhe hc.
+  apply wequiv_for_repeat_rel_uincl_R with ce de => //.
   by apply st_rel_weaken.
 Qed.
 
@@ -1789,10 +1887,21 @@ Lemma wequiv_for_rel_eq d0 d dhi di ii i dir lo hi c ii' i' lo' hi' c':
   (∀ s1 s2, R dhi s1 s2 → R d s1 s2) ->
   check_lvals d [::Lvar i] [::Lvar i'] di ->
   wequiv (st_rel R di) c c' (st_rel R d) ->
-  wequiv (st_rel R d0) [:: MkI ii (Cfor i (dir, lo, hi) c)] [:: MkI ii' (Cfor i' (dir, lo', hi') c')] (st_rel R d).
+  wequiv (st_rel R d0) [:: MkI ii (Cfor (FIrange i dir lo hi) c)] [:: MkI ii' (Cfor (FIrange i' dir lo' hi') c')] (st_rel R d).
 Proof.
   move=> hes hdhi hx hc.
   apply wequiv_for_rel_eq_R with ce dhi di => //.
+  by apply st_rel_weaken.
+Qed.
+
+Lemma wequiv_for_repeat_rel_eq d0 d de ii e c ii' e' c':
+  check_es d0 [::e] [::e'] de ->
+  (forall s1 s2, R de s1 s2 -> R d s1 s2) ->
+  wequiv (st_rel R d) c c' (st_rel R d) ->
+  wequiv (st_rel R d0) [:: MkI ii (Cfor (FIrepeat e) c)] [:: MkI ii' (Cfor (FIrepeat e') c')] (st_rel R d).
+Proof.
+  move=> hes hdhe hc.
+  apply wequiv_for_repeat_rel_eq_R with ce de => //.
   by apply st_rel_weaken.
 Qed.
 

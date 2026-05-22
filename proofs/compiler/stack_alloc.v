@@ -1810,7 +1810,7 @@ Fixpoint alloc_i sao (trmap:table*region_map) (i: instr) : cexec (table * region
     Let ri := add_iinfo ii (alloc_call sao rmap rs fn es) in
     ok (table, ri.1, [::MkI ii ri.2])
 
-  | Cfor _ _ _  => Error (pp_at_ii ii (stk_ierror_no_var "don't deal with for loop"))
+  | Cfor _ _  => Error (pp_at_ii ii (stk_ierror_no_var "don't deal with for loop"))
 
   end.
 

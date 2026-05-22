@@ -45,11 +45,11 @@ Section REMOVE_INIT.
         sem p' ev (with_vm s1 vm1) (remove_init_c is_reg_array c) (with_vm s2 vm2) &
         evm s2 <=1 vm2.
 
-  Let Pfor (i:var_i) vs s1 c s2 :=
+  Let Pfor (oi:option var_i) vs s1 c s2 :=
     forall vm1,
       evm s1 <=1 vm1 ->
       exists2 vm2,
-        sem_for p' ev i vs (with_vm s1 vm1) (remove_init_c is_reg_array c) (with_vm s2 vm2) &
+        sem_for p' ev oi vs (with_vm s1 vm1) (remove_init_c is_reg_array c) (with_vm s2 vm2) &
         evm s2 <=1 vm2.
 
   Let Pfun scs m fn vargs scs' m' vres :=
@@ -172,20 +172,20 @@ Section REMOVE_INIT.
 
   Local Lemma Rfor : sem_Ind_for p ev Pi_r Pfor.
   Proof.
-    move=> s1 s2 i d lo hi c vlo vhi H H' _ Hfor ii vm1 Hvm1.
-    have [? H1 /value_uinclE H2]:= sem_pexpr_uincl Hvm1 H; subst.
-    have [? H3 /value_uinclE H4]:= sem_pexpr_uincl Hvm1 H'; subst.
-    have [vm2 ??]:= Hfor _ Hvm1; exists vm2 => //=.
-    by apply sem_seq1;constructor; econstructor; eauto; rewrite ?H1 ?H3.
+    move=> s1 s2 fi c rn hfi _ Hfor ii vm1 Hvm1.
+    have [vm2 hfor hvm2] := Hfor _ Hvm1; exists vm2 => //.
+    apply sem_seq1; constructor; apply: Efor.
+    - exact: sem_fi_uincl Hvm1 hfi.
+    - exact: hfor.
   Qed.
 
   Local Lemma Rfor_nil : sem_Ind_for_nil Pfor.
-  Proof. by move=> s i c vm1 Hvm1; exists vm1 => //; constructor. Qed.
+  Proof. by move=> s oi c vm1 Hvm1; exists vm1 => //; constructor. Qed.
 
   Local Lemma Rfor_cons : sem_Ind_for_cons p ev Pc Pfor.
   Proof.
-    move=> s1 s1' s2 s3 i w ws c Hi _ Hc _ Hf vm1 Hvm1.
-    have [vm1' Hi' /Hc [vm2 Hsc /Hf [vm3 Hsf Hvm3]]] := write_var_uincl Hvm1 (value_uincl_refl _) Hi.
+    move=> s1 s1' s2 s3 oi w ws c Hi _ Hc _ Hf vm1 Hvm1.
+    have [vm1' Hi' /Hc [vm2 Hsc /Hf [vm3 Hsf Hvm3]]] := init_iteration_uincl Hvm1 Hi.
     exists vm3 => //; econstructor; eauto.
   Qed.
 
@@ -310,7 +310,9 @@ Proof.
   + by move=> xs sc es ii; apply wequiv_syscall_rel_uincl with checker_st_uincl tt.
   + by move=> a ii; apply wequiv_noassert.
   + by move=> e c1 c2 hc1 hc2 ii; apply wequiv_if_rel_uincl with checker_st_uincl tt tt tt.
-  + by move=> > hc ii; apply wequiv_for_rel_uincl with checker_st_uincl tt tt.
+  + move=> fi c hc ii; case: fi => [i d lo hi | e].
+    - by apply wequiv_for_rel_uincl with checker_st_uincl tt tt.
+    - by apply wequiv_for_repeat_rel_uincl with checker_st_uincl tt.
   + by move=> > ?? ii; apply wequiv_while_rel_uincl with checker_st_uincl tt.
   move=> xs fn es ii; apply wequiv_call_rel_uincl with checker_st_uincl tt => //.
  move=> ???; exact/wequiv_fun_rec.
@@ -390,8 +392,8 @@ Section ADD_INIT.
           let: cI := add_init_c add_init_i I c in
           undef_except cI.2 (evm s2) /\ lift_sem s1 cI.1 s2.
 
-  Let Pfor i vs s1 c s2 :=
-   lift_vm (fun s s' => sem_for p' ev i vs s c s') s1 s2.
+  Let Pfor (oi : option var_i) vs s1 c s2 :=
+   lift_vm (fun s s' => sem_for p' ev oi vs s c s') s1 s2.
 
   Let Pfun scs m fn vargs scs' m' vres :=
     sem_call p' ev scs m fn vargs scs' m' vres.
@@ -541,20 +543,23 @@ Section ADD_INIT.
 
   Local Lemma RAfor : sem_Ind_for p ev Pi_r Pfor.
   Proof.
-    move=> s1 s2 i d lo hi c vlo vhi H H' hsf hf ii.
+    move=> s1 s2 fi c rn hfi hsf hf ii.
     apply aux.
-    + by constructor; econstructor; eauto.
-    move=> vm1 /[dup] heq /hf [vm2] ? hs'; exists vm2 => //.
-    by constructor; econstructor; eauto; rewrite -(sem_pexpr_ext_eq _ _ _ heq).
+    + constructor; apply: Efor; [exact: hfi | exact: hsf].
+    move=> vm1 heq.
+    have [vm2 hvm2 hs'] := hf _ heq.
+    exists vm2 => //.
+    constructor; apply: Efor; last exact: hs'.
+    by rewrite (sem_fi_read_fi _ _ (vm_eq_eq_on heq)).
   Qed.
 
   Local Lemma RAfor_nil : sem_Ind_for_nil Pfor.
-  Proof. move=> s i c vm1 Hvm1;exists vm1 =>//;constructor. Qed.
+  Proof. move=> s oi c vm1 Hvm1;exists vm1 =>//;constructor. Qed.
 
   Local Lemma RAfor_cons : sem_Ind_for_cons p ev Pc Pfor.
   Proof.
-    move=> s1 s1' s2 s3 i w ws c Hi _ [] Hc _ _ Hf vm1 Hvm1.
-    have [vm2 /Hc [vm3] /Hf [vm4] *]:= write_lvar_ext_eq Hvm1 (Hi : write_lval true gd i w s1 = ok s1').
+    move=> s1 s1' s2 s3 oi w ws c Hi _ [] Hc _ _ Hf vm1 Hvm1.
+    have [vm2 /Hc [vm3] /Hf [vm4] *] := init_iteration_ext_eq Hvm1 Hi.
     exists vm4 => //; by econstructor; eauto.
   Qed.
 

@@ -158,7 +158,7 @@ Section CAT.
   Qed.
 
   #[ local ]
-  Lemma cat_for : forall v dir lo hi c, Pc c -> Pr (Cfor v (dir, lo, hi) c).
+  Lemma cat_for : forall fi c, Pc c -> Pr (Cfor fi c).
   Proof. by []. Qed.
 
   #[ local ]
@@ -870,7 +870,7 @@ Section VALIDITY.
   Qed.
 
   #[ local ]
-  Lemma valid_labels_for (v : var_i) (d: dir) (lo hi : pexpr) (c : cmd) : Pc c → Pr (Cfor v (d, lo, hi) c).
+  Lemma valid_labels_for (fi : for_iteration) (c : cmd) : Pc c → Pr (Cfor fi c).
   Proof. move => ? ?; exact: default. Qed.
 
   #[ local ]
@@ -1026,7 +1026,7 @@ Section NUMBER_OF_LABELS.
   Qed.
 
   #[ local ]
-  Lemma nb_labels_for (v : var_i) (d: dir) (lo hi : pexpr) (c : cmd) : Pc c → Pr (Cfor v (d, lo, hi) c).
+  Lemma nb_labels_for (fi : for_iteration) (c : cmd) : Pc c → Pr (Cfor fi c).
   Proof. by move=> hc ii fn lbl /=; apply Z.le_refl. Qed.
 
   Lemma label_in_lcmd_add_align ii al lc :

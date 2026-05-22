@@ -178,7 +178,7 @@ Qed.
 Let Pc s1 (_: cmd) s2 : Prop := emem s1 ≡ emem s2.
 Let Pi s1 (_: instr) s2 : Prop := emem s1 ≡ emem s2.
 Let Pi_r s1 (_: instr_r) s2 : Prop := emem s1 ≡ emem s2.
-Let Pfor (_: var_i) (_: seq Z) s1 (_: cmd) s2 : Prop := emem s1 ≡ emem s2.
+Let Pfor (_: option var_i) (_: seq Z) s1 (_: cmd) s2 : Prop := emem s1 ≡ emem s2.
 Let Pfun (scs1:syscall_state) m1 (_: funname) (_: seq value) (scs2:syscall_state) m2 (_: seq value) : Prop := m1 ≡ m2.
 
 Lemma mem_equiv_nil : sem_Ind_nil Pc.
@@ -229,8 +229,8 @@ Proof. by []. Qed.
 
 Lemma mem_equiv_for_cons : sem_Ind_for_cons P ev Pc Pfor.
 Proof.
-  move => ???????? /write_var_memP A _ B _ C; red.
-  rewrite A; etransitivity; [ exact: B | exact: C ].
+  move => s1 s1' s2 s3 oi w ws c /init_iteration_estateP [? -> ?] _ B _ C; red.
+  etransitivity; [ exact: B | exact: C ].
 Qed.
 
 Lemma mem_equiv_call : sem_Ind_call P ev Pi_r Pfun.
@@ -564,8 +564,8 @@ Let Pi s1 i s2 :=
 Let Pi_r s1 i s2 :=
   ∀ s2', sem_i p ev s1 i s2' → s2 = s2'.
 
-Let Pfor i r s1 c s2 :=
-  ∀ s2', sem_for p ev i r s1 c s2' → s2 = s2'.
+Let Pfor oi r s1 c s2 :=
+  ∀ s2', sem_for p ev oi r s1 c s2' → s2 = s2'.
 
 Let Pfun scs1 m1 fn args scs2 m2 res :=
   ∀ scs2' m2' res', sem_call p ev scs1 m1 fn args scs2' m2' res' → [/\ scs2 = scs2', m2 =  m2' & res = res'].
@@ -630,18 +630,16 @@ Qed.
 
 Local Lemma sem_deter_for : sem_Ind_for p ev Pi_r Pfor.
 Proof.
-  red => s1 s2 i d lo hi c vlo vhi ok_vlo ok_vhi _ ih s2' /sem_iE[] vlo' [] vhi' [].
-  rewrite ok_vlo => /ok_inj[] <-.
-  rewrite ok_vhi => /ok_inj[] <-.
-  exact: ih.
+  red => s1 s2 fi c rn hfi _ ih s2' /sem_iE[rn' h1 h2].
+  apply: ih; move: h1 h2; rewrite hfi => /ok_inj <- //.
 Qed.
 
 Local Lemma sem_deter_for_nil : sem_Ind_for_nil Pfor.
-Proof. by red => s i c s' /sem_forE. Qed.
+Proof. by red => s oi c s' /sem_forE. Qed.
 
 Local Lemma sem_deter_for_cons : sem_Ind_for_cons p ev Pc Pfor.
 Proof.
-  red => s s1 s2 s' i w ws c ok_s1' _ ih1 _ ih2 s3' /sem_forE[] ? [] ? [].
+  red => s s1 s2 s' oi w ws c ok_s1' _ ih1 _ ih2 s3' /sem_forE[] ? [] ? [].
   by rewrite ok_s1' => /ok_inj <- /ih1 <- /ih2.
 Qed.
 

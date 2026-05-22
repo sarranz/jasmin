@@ -96,10 +96,10 @@ Section WITH_PARAMS.
           exists2 vm', evm s' <=1 vm' &
           sem p' ev (with_vm s vm) c (with_vm s' vm').
 
-    Let Pfor (i: var_i) vs s c s' :=
+    Let Pfor (oi: option var_i) vs s c s' :=
           ∀ vm, evm s <=1 vm →
           exists2 vm', evm s' <=1 vm' &
-          sem_for p' ev i vs (with_vm s vm) c (with_vm s' vm').
+          sem_for p' ev oi vs (with_vm s vm) c (with_vm s' vm').
 
     Let Pfun scs1 m1 fn vargs scs2 m2 vres :=
           ∀ vargs', List.Forall2 value_uincl vargs vargs' →
@@ -267,15 +267,14 @@ Section WITH_PARAMS.
         case: (sem_pexpr_uincl s2_vm2 ok_e) => - [] // ? {}ok_e /= ?; subst.
         exists vm2; first exact: s2_vm2.
         by constructor; econstructor; eauto.
-      - move => s1 s2 i d lo hi c vlo vhi ok_vlo ok_vhi _ hfor ii vm hvm.
-        case: (sem_pexpr_uincl hvm ok_vlo) => - [] // vlo' {} ok_vlo /= ?; subst vlo'.
-        case: (sem_pexpr_uincl hvm ok_vhi) => - [] // vhi' {} ok_vhi /= ?; subst vhi'.
+      - move => s1 s2 fi c rn ok_fi _ hfor ii vm hvm.
+        have ok_fi' := sem_fi_uincl hvm ok_fi.
         case: (hfor vm hvm) => vm2 s2_vm2 {} hfor.
         exists vm2; first exact: s2_vm2.
         by constructor; econstructor; eauto.
-      - by move => s i c vm hvm; exists vm; last constructor.
-      - move => s1 s2 s3 s4 i w ws c ok_s2 _ hc _ ih vm hvm.
-        case: (write_var_uincl hvm (erefl : value_uincl w w) ok_s2) => vm2 {} ok_s2 s2_vm2.
+      - by move => s oi c vm hvm; exists vm; last constructor.
+      - move => s1 s2 s3 s4 oi w ws c ok_s2 _ hc _ ih vm hvm.
+        case: (init_iteration_uincl hvm ok_s2) => vm2 {} ok_s2 s2_vm2.
         case: (hc vm2 s2_vm2) => vm3 s3_vm3 {} hc.
         case: (ih vm3 s3_vm3) => vm4 s4_vm4 {} ih.
         exists vm4; first exact: s4_vm4.
@@ -383,7 +382,9 @@ Section WITH_PARAMS.
       - by move=> xs sc es ii; apply wequiv_syscall_rel_uincl with checker_st_uincl tt.
       - by move=> a ii; apply wequiv_noassert.
       - by move=> e c1 c2 hc1 hc2 ii; apply wequiv_if_rel_uincl with checker_st_uincl tt tt tt.
-      - by move=> > hc ii; apply wequiv_for_rel_uincl with checker_st_uincl tt tt.
+      - move=> fi c hc ii; case: fi => [i dir lo hi | e].
+        * by apply wequiv_for_rel_uincl with checker_st_uincl tt tt.
+        * by apply wequiv_for_repeat_rel_uincl with checker_st_uincl tt.
       - by move=> > ?? ii; apply wequiv_while_rel_uincl with checker_st_uincl tt.
       move=> xs fn es ii; apply wequiv_call_rel_uincl with checker_st_uincl tt => //.
       by move=> ???; apply hrec.

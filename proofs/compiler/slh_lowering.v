@@ -351,7 +351,7 @@ Section CHECK_FOR.
 
   Context
     (ii : instr_info)
-    (x : var)
+    (fi : for_iteration)
     (check_c : Env.t -> cexec Env.t).
 
   (* We use the argument [env] as an initial guess for [env*], and if it is not
@@ -363,7 +363,7 @@ Section CHECK_FOR.
   Fixpoint check_for (fuel : nat) (env : Env.t) : cexec Env.t :=
     if fuel is S n
     then
-      Let env' := check_c (Env.after_assign_var env x) in
+      Let env' := check_c (Env.after_assign_vars env (write_fi fi)) in
       if Env.le env env'
       then ok env
       else check_for n (Env.meet env env')
@@ -453,7 +453,7 @@ Fixpoint check_i (i : instr) (env : Env.t) : cexec Env.t :=
       Let env1 := check_cmd c1 (Env.update_cond env (enot cond)) in
       ok (Env.meet env0 env1)
 
-  | Cfor x _ c => check_for ii x (check_cmd c) loop_counter env
+  | Cfor fi c => check_for ii fi (check_cmd c) loop_counter env
 
   | Cwhile _ c0 cond _ c1 =>
       Let _ := chk_mem ii cond in
@@ -515,9 +515,9 @@ Fixpoint lower_i (i : instr) : cexec instr :=
       Let c1' := lower_cmd c1 in
       ok (Cif b c0' c1')
 
-    | Cfor x r c =>
+    | Cfor fi c =>
       Let c' := lower_cmd c in
-      ok (Cfor x r c')
+      ok (Cfor fi c')
 
     | Cwhile al c0 b info c1 =>
       Let c0' := lower_cmd c0 in

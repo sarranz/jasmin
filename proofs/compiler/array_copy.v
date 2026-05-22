@@ -69,7 +69,7 @@ Definition array_copy ii (x: var_i) (ws: wsize) (n: positive) (y: gvar) :=
     else Cassgn (Lvar x) AT_none (aarr ws n) (Parr_init ws n) in
   [:: MkI ii pre;
       MkI ii
-        (Cfor i (UpTo, Pconst 0, Pconst n)
+        (Cfor (FIrange i UpTo (Pconst 0) (Pconst n))
            [seq MkI ii i | i <- (if needs_temporary x y.(gv) then indirect_copy else direct_copy) ws x y ei ])
     ].
 
@@ -135,9 +135,9 @@ Fixpoint array_copy_i V (i:instr) : cexec cmd :=
       Let c1 := array_copy_c V array_copy_i c1 in
       Let c2 := array_copy_c V array_copy_i c2 in
       ok [:: MkI ii (Cif e c1 c2)]
-  | Cfor i r c =>
+  | Cfor fi c =>
       Let c := array_copy_c V array_copy_i c in
-      ok [:: MkI ii (Cfor i r c)]
+      ok [:: MkI ii (Cfor fi c)]
   | Cwhile a c1 e info c2 =>
       Let c1 := array_copy_c V array_copy_i c1 in
       Let c2 := array_copy_c V array_copy_i c2 in

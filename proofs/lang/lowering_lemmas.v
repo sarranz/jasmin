@@ -318,20 +318,12 @@ Proof.
   by move=> /disjoint_union [] h0 /disjoint_union [h1 h2].
 Qed.
 
-Lemma disj_fvars_vars_I_Cfor ii i d lo hi c :
-  disj_fvars (vars_I (MkI ii (Cfor i (d, lo, hi) c)))
-  -> [/\ disj_fvars (Sv.add i (vars_c c))
-       , disj_fvars (read_e lo)
-       & disj_fvars (read_e hi)
-     ].
+Lemma disj_fvars_vars_I_Cfor ii fi c :
+  disj_fvars (vars_I (MkI ii (Cfor fi c)))
+  -> disj_fvars (read_fi fi) /\ disj_fvars (Sv.union (write_fi fi) (vars_c c)).
 Proof.
-  move=> /(disjoint_equal_l (vars_I_for ii i d lo hi c)).
-  move=> /disjoint_union [] h /disjoint_union [h0 h1].
-  split=> // {h0 h1}.
-  apply: disjoint_equal_l _ h.
-  apply: SvP.MP.equal_sym.
-  rewrite SvP.MP.union_sym.
-  exact: SvP.MP.add_union_singleton.
+  move=> /(disjoint_equal_l (vars_I_for ii fi c)).
+  by move=> /disjoint_union.
 Qed.
 
 Lemma disj_fvars_vars_I_Ccall ii lvs fn args :

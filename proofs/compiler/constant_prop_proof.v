@@ -909,12 +909,13 @@ Section PROPER.
     by move=> [];rewrite /RelationPairs.RelCompFun /= => -> ->.
   Qed.
 
-  Local Lemma Wfor v dir lo hi c: Pc c -> Pr (Cfor v (dir,lo,hi) c).
+  Local Lemma Wfor fi c: Pc c -> Pr (Cfor fi c).
   Proof.
     move=> Hc ii m1 m2 Heq /=.
     rewrite /const_prop_ir -/(const_prop_i _).
-    have -> : const_prop_e None m1 lo = const_prop_e None m2 lo by rewrite Heq.
-    have -> : const_prop_e None m1 hi = const_prop_e None m2 hi by rewrite Heq.
+    have -> : map_pexpr_fi (const_prop_e None m1) fi =
+              map_pexpr_fi (const_prop_e None m2) fi.
+    + by case: fi => * /=; rewrite !Heq.
     set ww1 := remove_cpm _ _; set ww2 := remove_cpm _ _.
     have Hw: Mvar_eq ww1 ww2 by rewrite /ww1 /ww2 Heq.
     move: (Hw) => /Hc; case: const_prop => ??; case: const_prop => ?? [].
@@ -1018,14 +1019,14 @@ Section PROOF.
           sem p' ev (with_vm s1 vm1) (const_prop (const_prop_i gd) m c).2 (with_vm s2 vm2) /\
           vm_uincl (evm s2) vm2.
 
-  Let Pfor (i:var_i) zs s1 c s2 :=
+  Let Pfor (oi: option var_i) zs s1 c s2 :=
     forall m,
-      Mvar_eq m (remove_cpm m (Sv.union (Sv.singleton i) (write_c c))) ->
+      Mvar_eq m (remove_cpm m (Sv.union (sv_of_ovar_i oi) (write_c c))) ->
       valid_cpm s1.(evm) m ->
       forall vm1,
         vm_uincl (evm s1) vm1 ->
         exists vm2,
-         sem_for p' ev i zs (with_vm s1 vm1) (const_prop (const_prop_i gd) m c).2 (with_vm s2 vm2) /\
+         sem_for p' ev oi zs (with_vm s1 vm1) (const_prop (const_prop_i gd) m c).2 (with_vm s2 vm2) /\
          vm_uincl (evm s2) vm2.
 
   Let Pfun scs1 m1 fd vargs scs2 m2 vres :=
@@ -1220,47 +1221,81 @@ Section PROOF.
     by have [v2 -> /value_uinclE ->]:= sem_pexpr_uincl h He0.
   Qed.
 
+  Local Lemma iterator_of_fi_map_pexpr f (fi : for_iteration) :
+      iterator_of_fi (map_pexpr_fi f fi) = iterator_of_fi fi.
+  Proof. by case: fi. Qed.
+
   Local Lemma Hfor : sem_Ind_for p ev Pi_r Pfor.
   Proof.
-    move=> s1 s2 i d lo hi c vlo vhi Hlo Hhi Hc Hfor m ii Hm.
-    rewrite /const_prop_ir -/const_prop_i.
-    set ww := write_i _;set m' := remove_cpm _ _.
-    have Hm'1 : valid_cpm (evm s1) m' by apply: valid_cpm_rm Hm.
-    have Heqm: Mvar_eq m' (remove_cpm m' (Sv.union (Sv.singleton i) (write_c c))).
-    + by have := remove_cpm2 m ww; rewrite /m' /ww write_i_for => ->.
-    have := Hfor _ Heqm Hm'1.
-    case Heq1: const_prop => [m'' c'] /= Hsem;split.
-    + by apply: valid_cpm_rm Hm;apply (write_iP (P:=p) (ev:=ev));econstructor;eauto.
-    move=> vm1 /[dup] hvm1 /Hsem [vm2 [ hfor hvm2]];exists vm2;split => //.
-    apply sem_seq1;constructor;econstructor;eauto.
-    + have [v' [h /=]] := const_prop_eP Hm valid_without_globals Hlo; case: v' h => //= ? h ->.
-      by have [v2 -> /value_uinclE ->]:= sem_pexpr_uincl hvm1 h.
-    have [v' [h /=]] := const_prop_eP Hm valid_without_globals Hhi;case: v' h => //= ? h ->.
-    by have [v2 -> /value_uinclE ->]:= sem_pexpr_uincl hvm1 h.
+    move=> s1 s2 [i d lo hi | e] c rn hfi hfor_conc hind m ii Hm.
+    - rewrite /const_prop_ir -/const_prop_i.
+      set ww := write_i _; set m' := remove_cpm _ _.
+      have Hm'1 : valid_cpm (evm s1) m' by apply: valid_cpm_rm Hm.
+      have Heqm: Mvar_eq m'
+          (remove_cpm m' (Sv.union (sv_of_ovar_i (Some i)) (write_c c))).
+      + by have := remove_cpm2 m ww; rewrite /m' /ww write_i_for write_fi_iterator => ->.
+      have := hind _ Heqm Hm'1.
+      case Heq1: const_prop => [m'' c'] /= Hsem; split.
+      + by apply: valid_cpm_rm Hm; apply (write_iP (P:=p) (ev:=ev));
+             apply: Efor; [exact hfi | exact hfor_conc].
+      move=> vm1 /[dup] hvm1 /Hsem [vm2 [hfor hvm2]]; exists vm2; split => //.
+      apply sem_seq1; constructor; apply: Efor; last by exact hfor.
+      rewrite /sem_fi /sem_pexpr_int /= in hfi.
+      move: hfi; t_xrbindP => z1 v1 hv1 hz1 z2 v2 hv2 hz2 <-.
+      rewrite (to_intI hz1) in hv1; rewrite (to_intI hz2) in hv2.
+      have [v1' [h1 u1]] := const_prop_eP Hm valid_without_globals hv1.
+      have [v2' [h2 u2]] := const_prop_eP Hm valid_without_globals hv2.
+      rewrite (value_uinclE u1) in h1; rewrite (value_uinclE u2) in h2.
+      have [vv1 hh1 uu1] := sem_pexpr_uincl hvm1 h1.
+      have [vv2 hh2 uu2] := sem_pexpr_uincl hvm1 h2.
+      rewrite (value_uinclE uu1) in hh1; rewrite (value_uinclE uu2) in hh2.
+      by rewrite /sem_fi /= /sem_pexpr_int /= hh1 /= hh2.
+    - rewrite /const_prop_ir -/const_prop_i.
+      set ww := write_i _; set m' := remove_cpm _ _.
+      have Hm'1 : valid_cpm (evm s1) m' by apply: valid_cpm_rm Hm.
+      have Heqm: Mvar_eq m'
+          (remove_cpm m' (Sv.union (sv_of_ovar_i None) (write_c c))).
+      + by have := remove_cpm2 m ww; rewrite /m' /ww write_i_for write_fi_iterator => ->.
+      have := hind _ Heqm Hm'1.
+      case Heq1: const_prop => [m'' c'] /= Hsem; split.
+      + by apply: valid_cpm_rm Hm; apply (write_iP (P:=p) (ev:=ev));
+             apply: Efor; [exact hfi | exact hfor_conc].
+      move=> vm1 /[dup] hvm1 /Hsem [vm2 [hfor hvm2]]; exists vm2; split => //.
+      apply sem_seq1; constructor; apply: Efor; last by exact hfor.
+      rewrite /sem_fi /sem_pexpr_int /= in hfi.
+      move: hfi; t_xrbindP => z v hv hz <-.
+      rewrite (to_intI hz) in hv.
+      have [v' [h u]] := const_prop_eP Hm valid_without_globals hv.
+      rewrite (value_uinclE u) in h.
+      have [vv hh uu] := sem_pexpr_uincl hvm1 h.
+      rewrite (value_uinclE uu) in hh.
+      by rewrite /sem_fi /= /sem_pexpr_int /= hh.
   Qed.
 
   Local Lemma Hfor_nil : sem_Ind_for_nil Pfor.
   Proof.
-    move=> s i c m Hm hv vm1 hvm1;exists vm1;split => //; constructor.
+    move=> s oi c m Hm hv vm1 hvm1; exists vm1; split => //; constructor.
   Qed.
 
   Local Lemma Hfor_cons : sem_Ind_for_cons p ev Pc Pfor.
   Proof.
-    move => s1 s1' s2 s3 i w ws c Hw Hsemc Hc Hsemf Hf m Heqm Hm vm1 hvm1.
+    move => s1 s1' s2 s3 oi w ws c Hw Hsemc Hc Hsemf Hf m Heqm Hm vm1 hvm1.
     have Hm' : valid_cpm (evm s1') m.
-    + have Hmi : Mvar_eq m (Mvar.remove m i).
-      + move=> z;rewrite Mvar.removeP;case:ifPn => [/eqP <- | Hneq //].
-        rewrite Heqm;move: (remove_cpm_spec m (Sv.union (Sv.singleton i) (write_c c)) i).
-        by case: Mvar.get => // a [];SvD.fsetdec.
-      have -> := valid_cpm_m (refl_equal (evm s1')) Hmi.
-      by apply: remove_cpm1P Hw Hm.
-    have [_  Hc']:= Hc _ Hm'.
-    have /(Hf _ Heqm) Hc'': valid_cpm (evm s2) m.
+    + move: Hw Heqm Hsemf Hf; case: oi => [i | ] /= Hw Heqm Hsemf Hf.
+      - have Hmi : Mvar_eq m (Mvar.remove m i).
+        + move=> z; rewrite Mvar.removeP; case:ifPn => [/eqP <- | Hneq //].
+          rewrite Heqm; move: (remove_cpm_spec m (Sv.union (Sv.singleton i) (write_c c)) i).
+          by case: Mvar.get => // a []; SvD.fsetdec.
+        have -> := valid_cpm_m (refl_equal (evm s1')) Hmi.
+        by apply: remove_cpm1P Hw Hm.
+      - by move: Hw => [<-].
+    have [_ Hc'] := Hc _ Hm'.
+    have /(Hf _ Heqm) Hc'' : valid_cpm (evm s2) m.
     + have -> := valid_cpm_m (refl_equal (evm s2)) Heqm.
-      apply: valid_cpm_rm Hm'=> z Hz;apply: (writeP Hsemc);SvD.fsetdec.
-    have /(_ _ _ (value_uincl_refl _)) [vm1' hw hvm1'] := write_var_uincl hvm1 _ Hw.
-    have [vm2 [hc' /Hc'' [vm3 [hfor U]]]]:= Hc' _ hvm1';exists vm3;split => //.
-    by apply: EForOne hc' hfor.
+      apply: valid_cpm_rm Hm' => z Hz; apply: (writeP Hsemc); SvD.fsetdec.
+    have [vm1' hw hvm1'] := init_iteration_uincl hvm1 Hw.
+    have [vm2 [hc' /Hc'' [vm3 [hfor U]]]]:= Hc' _ hvm1'; exists vm3; split => //.
+    by apply: EForOne hw hc' hfor.
   Qed.
 
   Local Lemma Hcall : sem_Ind_call p ev Pi_r Pfun.
@@ -1546,25 +1581,35 @@ Local Opaque opp_word.
     1-2: by move=> ?? [hval hu];split =>//; apply merge_cpmP; auto.
     + by apply hc1.
     by apply hc2.
-  + move=> i dir lo hi c hc ii m /=.
-    set m' := remove_cpm _ _.
-    have /= := hc m'.
-    case: const_prop => mc c2 /= {}hc.
-    apply wequiv_for_uincl with (cmpl_inv m').
-    + by apply cmpl_inv_remove.
-    + by apply const_prop_esPe.
-    + move => j s1 s2 s1' /st_relP [-> /= [hval hvm1]] Hw.
-      have Hm' : valid_cpm (evm s1') m'.
-      + have Hmi : Mvar_eq m' (Mvar.remove m' i).
-        + move=> z;rewrite Mvar.removeP;case:ifPn => [/eqP <- | Hneq //].
-          rewrite /m'; move: (remove_cpm_spec m (write_i (Cfor i (dir, lo, hi) c)) i).
-          by case: Mvar.get => // a []; rewrite write_i_for;SvD.fsetdec.
-        have -> := valid_cpm_m (refl_equal (evm s1')) Hmi.
-        by apply: remove_cpm1P Hw hval.
-      have /(_ _ _ (value_uincl_refl _)) [vm1' -> hvm1'] := write_var_uincl hvm1 _ Hw.
-      by eexists.
-    apply: remove_cpm_write1 hc => //.
-    by rewrite write_i_for; SvD.fsetdec.
+  + move=> fi c hc ii m /=.
+    case: fi hc => [i d lo hi | e] hc.
+    - set m' := remove_cpm _ _.
+      have /= := hc m'.
+      case: const_prop => mc c2 /= {}hc.
+      apply wequiv_for_uincl with (cmpl_inv m').
+      + by apply cmpl_inv_remove.
+      + by apply const_prop_esPe.
+      + move => j s1 s2 s1' /st_relP [-> /= [hval hvm1]] Hw.
+        have Hm' : valid_cpm (evm s1') m'.
+        + have Hmi : Mvar_eq m' (Mvar.remove m' i).
+          + move=> z; rewrite Mvar.removeP; case:ifPn => [/eqP <- | Hneq //].
+            rewrite /m'; move: (remove_cpm_spec m (write_i (Cfor (FIrange i d lo hi) c)) i).
+            by case: Mvar.get => // a []; rewrite write_i_for write_fi_iterator /=; SvD.fsetdec.
+          have -> := valid_cpm_m (refl_equal (evm s1')) Hmi.
+          by apply: remove_cpm1P Hw hval.
+        have /(_ _ _ (value_uincl_refl _)) [vm1' -> hvm1'] := write_var_uincl hvm1 _ Hw.
+        by eexists.
+      apply: remove_cpm_write1 hc => //.
+      by rewrite write_i_for write_fi_iterator /=; SvD.fsetdec.
+    - set m' := remove_cpm _ _.
+      have /= := hc m'.
+      case: const_prop => mc c2 /= {}hc.
+      apply wequiv_for_repeat_uincl.
+      + by apply cmpl_inv_remove.
+      + by apply const_prop_esPe.
+      apply: remove_cpm_write1 hc.
+      + by SvD.fsetdec.
+      + by move=> ? ? h; split.
   + rewrite /Pc => a c e ii' c' hc hc' ii m /=.
     set m' := remove_cpm m (write_i (Cwhile a c e ii' c')).
     have := hc m'; case: const_prop => mc c2 /= {}hc.

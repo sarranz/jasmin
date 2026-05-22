@@ -485,10 +485,10 @@ Section PROOF.
     by rewrite loop_counterP /= hc1 /= hc2 /= hi1 /=.
   Qed.
 
-  Local Lemma loop_forP ii x c n pi1 pi c' :
-    loop_for pi_i ii x c n pi1 = ok (pi, c') ->
+  Local Lemma loop_forP ii ox c n pi1 pi c' :
+    loop_for pi_i ii ox c n pi1 = ok (pi, c') ->
     exists pi3,
-     [/\ pi_c pi_i (remove pi x) c = ok (pi3, c'),
+     [/\ pi_c pi_i (if ox is Some x then remove pi x else pi) c = ok (pi3, c'),
          incl pi pi3
        & incl pi pi1].
   Proof.
@@ -558,13 +558,13 @@ Section PROOF.
       [/\ evm s2 <=1 vm2, valid_pi gd s2 pc2.1
         & sem p2 ev (with_vm s1 vm1) pc2.2 (with_vm s2 vm2) ].
 
-  Let Pfor (i1:var_i) vs s1 c1 s2 :=
+  Let Pfor (oi:option var_i) vs s1 c1 s2 :=
     forall pi pc2 vm1,
-      pi_c pi_i (remove pi i1) c1 = ok pc2 -> incl pi pc2.1 ->
+      pi_c pi_i (if oi is Some i then remove pi i else pi) c1 = ok pc2 -> incl pi pc2.1 ->
       evm s1 <=1 vm1 -> valid_pi gd s1 pi ->
       exists vm2,
       [/\ evm s2 <=1 vm2, valid_pi gd s2 pi
-        & sem_for p2 ev i1 vs (with_vm s1 vm1) pc2.2 (with_vm s2 vm2) ].
+        & sem_for p2 ev oi vs (with_vm s1 vm1) pc2.2 (with_vm s2 vm2) ].
 
   Let Pfun scs m fn vargs scs' m' vres :=
     forall vargs', List.Forall2 value_uincl vargs vargs' ->
@@ -671,30 +671,46 @@ Section PROOF.
 
   Local Lemma Hfor : sem_Ind_for p1 ev Pi_r Pfor.
   Proof.
-    move => s1 s2 i d lo hi c vlo vhi he1 he2 _ hfor ii pi pi2 vm1 /=.
+    move=> s1 s2 fi c rn hfi _ hfor ii pi pi2 vm1 /=.
     t_xrbindP => -[pi' c'] /= /loop_forP [pi3] [hpic hi1 hi2] ?; subst pi2 => /= hu hv.
     have hv' := valid_pi_incl hi2 hv.
-    have [/= vm2 [hu2 hv2 hs]]:= hfor _ _ _ hpic hi1 hu hv'.
-    exists vm2; split => //.
-    constructor; econstructor; eauto; rewrite -eq_globs.
-    + by have [v' -> /value_uinclE ->] := pi_eP_uincl hv hu he1.
-    by have [v' -> /value_uinclE ->] := pi_eP_uincl hv hu he2.
+    case: fi hfi hfor hpic => [iv dv lov hiv | erep] /= hfi hfor hpic.
+    - have [/= vm2 [hu2 hv2 hs]] := hfor _ _ _ hpic hi1 hu hv'.
+      exists vm2; split => //.
+      constructor; econstructor; last exact hs.
+      rewrite -eq_globs; move: hfi; rewrite /sem_fi /sem_pexpr_int /=.
+      t_xrbindP => zlo vlo hvlo hzlo zhi vhi hvhi hzhi <-.
+      rewrite (to_intI hzlo) in hvlo; rewrite (to_intI hzhi) in hvhi.
+      have [v' -> /value_uinclE ->] := pi_eP_uincl hv hu hvlo.
+      by have [v'' -> /value_uinclE ->] := pi_eP_uincl hv hu hvhi.
+    - have [/= vm2 [hu2 hv2 hs]] := hfor _ _ _ hpic hi1 hu hv'.
+      exists vm2; split => //.
+      constructor; econstructor; last exact hs.
+      rewrite -eq_globs; move: hfi; rewrite /sem_fi /sem_pexpr_int /=.
+      t_xrbindP => z v hv'' hz <-.
+      rewrite (to_intI hz) in hv''.
+      by have [v' -> /value_uinclE ->] := pi_eP_uincl hv hu hv''.
   Qed.
 
   Local Lemma Hfor_nil : sem_Ind_for_nil Pfor.
   Proof.
-    move=> s i c pi pi2 vm1 _ hincl hu hv.
+    move=> s oi c pi pc2 vm1 _ hincl hu hv.
     by exists vm1; split => //; constructor.
   Qed.
 
   Local Lemma Hfor_cons : sem_Ind_for_cons p1 ev Pc Pfor.
   Proof.
-    move=> s1 s1' s2 s3 i w ws c hwi _ hc _ hfor pi pi2 vm1 hc_ hincl hu hv.
-    have [{}hv {}hwi]:= write_var_valid_pi hv hwi.
-    have [vm1' hwi' hu']:= write_var_uincl hu (value_uincl_refl _) hwi.
-    have [vm2 [hu2 hv2 hs2]] := hc _ _ _ hc_ hu' hv.
-    have [vm3 [hu3 hv3 hsf]] := hfor _ _ _ hc_ hincl hu2 (valid_pi_incl hincl hv2).
-    by exists vm3; split => //; econstructor; eauto.
+    move=> s1 s1' s2 s3 oi w ws c hwi _ hc _ hfor pi pc2 vm1 hc_ hincl hu hv.
+    case: oi hwi hc_ hfor => [i|] hwi hc_ hfor /=.
+    - have [{}hv {}hwi] := write_var_valid_pi hv hwi.
+      have [vm1' hwi' hu'] := write_var_uincl hu (value_uincl_refl _) hwi.
+      have [vm2 [hu2 hv2 hs2]] := hc _ _ _ hc_ hu' hv.
+      have [vm3 [hu3 hv3 hsf]] := hfor _ _ _ hc_ hincl hu2 (valid_pi_incl hincl hv2).
+      by exists vm3; split => //; econstructor; eauto.
+    - move: (ok_inj hwi) => ?; subst s1'.
+      have [vm2 [hu2 hv2 hs2]] := hc _ _ _ hc_ hu hv.
+      have [vm3 [hu3 hv3 hsf]] := hfor _ _ _ hc_ hincl hu2 (valid_pi_incl hincl hv2).
+      by exists vm3; split => //; econstructor; eauto.
   Qed.
 
   Local Lemma Hcall : sem_Ind_call p1 ev Pi_r Pfun.
@@ -877,11 +893,16 @@ Section PROOF.
       apply wequiv_if_rel_uincl_R with checker_pi d di1.1 di2.1 => //.
       + by apply/st_pi_incl/incl_merge_l.
       by apply/st_pi_incl/incl_merge_r.
-    + move=> v dir lo hi c hc ii d di /=; t_xrbindP.
-      move=> -[d' c'] /loop_forP [d1 [ /hc/={}hc hincl1 hincl2]] <- /=.
-      apply wequiv_for_rel_uincl_R with checker_pi d (remove d' v) => //.
-      + by apply st_pi_incl.
-      by apply wequiv_weaken with (st_pi (remove d' v)) (st_pi d1) => //; apply st_pi_incl.
+    + move=> fi c hc ii d di /=; t_xrbindP.
+      case: fi => [v dir lo hi | e] /=.
+      - move=> -[d' c'] /loop_forP [d1 [ /hc/={}hc hincl1 hincl2]] <- /=.
+        apply wequiv_for_rel_uincl_R with checker_pi d (remove d' v) => //.
+        + by apply st_pi_incl.
+        by apply wequiv_weaken with (st_pi (remove d' v)) (st_pi d1) => //; apply st_pi_incl.
+      - move=> -[d' c'] /loop_forP [d1 [ /hc/={}hc hincl1 hincl2]] <- /=.
+        apply wequiv_for_repeat_rel_uincl_R with checker_pi d => //.
+        + by apply st_pi_incl.
+        by apply wequiv_weaken with (st_pi d') (st_pi d1) => //; apply st_pi_incl.
     + move=> a c1 e ii' c2 hc1 hc2 ii d di /=; t_xrbindP.
       move=> [[[d' c1'] e'] c2' ] /loop_whileP [d1] [d2] [/hc1 /={}hc1 /hc2/={}hc2 -> [hincl1 hincl2]] [<-] /=.
       apply wequiv_weaken with (st_pi d1) (st_pi d') => //.

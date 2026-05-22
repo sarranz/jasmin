@@ -89,9 +89,9 @@ Fixpoint load_constants_i (i : instr) :=
     Let c1 := load_constants_c load_constants_i c1 in
     Let c2 := load_constants_c load_constants_i c2 in
     ok (map (MkI ii) (c ++ [:: Cif e c1 c2]))
-  | Cfor x (d,lo,hi) c =>
+  | Cfor fi c =>
     Let c := load_constants_c load_constants_i c in
-    ok [:: MkI ii (Cfor x (d, lo, hi) c)]
+    ok [:: MkI ii (Cfor fi c)]
   | Cwhile a c1 e info c2 =>
     Let: (c, e) := process_condition info e in
     Let c1 := load_constants_c load_constants_i c1 in

@@ -405,12 +405,12 @@ Section PROOF.
     exists2 vm2, eq_alloc r2 (evm s2) vm2 &
       sem p2 ev (with_vm s1 vm1) c2 (with_vm s2 vm2).
 
-  Let Pfor (i1:var_i) vs s1 c1 s2 :=
-    forall dead_vars i2 r1 r1' c2 r2 vm1, eq_alloc r1 (evm s1) vm1 ->
-    check_var i1 i2 r1 = ok r1' ->
+  Let Pfor (oi1:option var_i) vs s1 c1 s2 :=
+    forall dead_vars oi2 r1 r1' c2 r2 vm1, eq_alloc r1 (evm s1) vm1 ->
+    check_iteration_var oi1 oi2 r1 = ok r1' ->
     check_cmd dead_vars c1 c2 r1' = ok r2 -> M.incl r1 r2 ->
     exists2 vm2, eq_alloc r1 (evm s2) vm2 &
-      sem_for p2 ev i2 vs (with_vm s1 vm1) c2 (with_vm s2 vm2).
+      sem_for p2 ev oi2 vs (with_vm s1 vm1) c2 (with_vm s2 vm2).
 
   Let Pfun scs m fn vargs1 scs' m' vres :=
     forall vargs2, List.Forall2 value_uincl vargs1 vargs2 ->
@@ -587,30 +587,61 @@ Section PROOF.
 
   Local Lemma Hfor : sem_Ind_for p1 ev Pi_r Pfor.
   Proof.
-    move => s1 s2 i d lo hi c vlo vhi.
-    case: s1 => scs1 sm1 svm1 Hlo Hhi Hc Hfor dead_vars r1 [] //= i2 [[d2 lo2] hi2] c2 r2 vm1 Hvm1.
-    rewrite /check_i -/check_I.
-    case: eqP => //= ?;subst d2.
-    t_xrbindP => r1' r1'' /check_eP -/(_ true gd _ _ Hvm1) [Hr1'' Heqlo].
-    have [vlo'' [Hlo2 /value_uinclE Hvlo']] := Heqlo _ _ _ Hlo.
-    subst vlo'' => /check_eP -/(_ true gd _ _ Hr1'') [Hr1' Heqhi].
-    have [vhi'' [Hhi2 /value_uinclE Hhi']] := Heqhi _ _ _ Hhi.
-    subst vhi'' => /loopP [r2'] []; t_xrbindP=> r2'' Hcv Hcc Hr2r1 Hr2r2.
-    have := Hfor _ _ _ _ _ _ _ (eq_alloc_incl Hr2r1 Hr1') Hcv Hcc Hr2r2.
-    move=> [vm2 Hvm2 Hsem2];exists vm2 => //.
-    econstructor; rewrite -?eq_globs ?Hlo2 ?Hhi2 /= ;eauto.
+    move=> s1 s2 fi c rn hfi _ Hfor dead_vars r1 [] //= fi2 c2 r2 vm1 Hvm1.
+    case: s1 hfi Hfor Hvm1 => scs1 sm1 svm1 hfi Hfor Hvm1.
+    case: fi fi2 hfi Hfor => [i1 d lo1 hi1 | e1] [i2 d2 lo2 hi2 | e2] //= hfi Hfor;
+      rewrite /check_i /check_fi -/check_I /=.
+    - case: eqP => //= ?; subst d2.
+      apply: rbindP => -[[oi1' oi2'] rhi'] /=.
+      t_xrbindP => hclo rhi hchi hloop; move=> <- <- <- /loopP [r2'] [];
+      t_xrbindP => r2'' hcv hcc hr2r1 hr2r2.
+      have [hrlo helo] := check_eP true gd rhi Hvm1.
+      have [hrhi hehi] := check_eP true gd hloop hrlo.
+      have hfi2 : sem_fi true gd {| escs := scs1; emem := sm1; evm := vm1 |}
+          (FIrange i2 d lo2 hi2) = ok rn.
+      + move: hfi; rewrite /sem_fi /sem_pexpr_int /=.
+        t_xrbindP => zlo vlo hvlo hzlo zhi vhi hvhi hzhi <-.
+        have [vlo2 [hlo2 hulo]] := helo _ _ _ hvlo.
+        have [vhi2 [hhi2 huhi]] := hehi _ _ _ hvhi.
+        have [zlo2 hzlo2 /= ->] := wrequiv_to_int hulo hzlo.
+        have [zhi2 hzhi2 /= ->] := wrequiv_to_int huhi hzhi.
+        by rewrite hlo2 /= hzlo2 hhi2 /= hzhi2.
+      have [vm3 hvm3 hsem3] := Hfor dead_vars (Some i2) r2 r2'' c2 r2' vm1
+        (eq_alloc_incl hr2r1 hrhi) hcv hcc hr2r2.
+      by exists vm3 => //; rewrite eq_globs in hfi2; exact: Efor hfi2 hsem3.
+    - apply: rbindP => -[[oi1' oi2'] rhi'] /=.
+      t_xrbindP => hce hloop; move=> <- <- <- /loopP [r2'] [];
+      t_xrbindP => r2'' hcv hcc hr2r1 hr2r2.
+      have [hrhi hee] := check_eP true gd hloop Hvm1.
+      have hfi2 : sem_fi true gd {| escs := scs1; emem := sm1; evm := vm1 |}
+          (FIrepeat e2) = ok rn.
+      + move: hfi; rewrite /sem_fi /sem_pexpr_int /=.
+        t_xrbindP => z v hv hz <-.
+        have [v2 [hv2 hu]] := hee _ _ _ hv.
+        have [z2 htz2 ->] := wrequiv_to_int hu hz.
+        by rewrite hv2 /= htz2.
+      have [vm3 hvm3 hsem3] := Hfor dead_vars None r2 r2'' c2 r2' vm1
+        (eq_alloc_incl hr2r1 hrhi) hcv hcc hr2r2.
+      by exists vm3 => //; rewrite eq_globs in hfi2; exact: Efor hfi2 hsem3.
   Qed.
 
   Local Lemma Hfor_nil : sem_Ind_for_nil Pfor.
-  Proof. by move=> s i c dead_vars i2 r1 r1' c2 r2 vm1 Ha ???;exists vm1 => //;constructor. Qed.
+  Proof. by move=> s oi c dead_vars oi2 r1 r1' c2 r2 vm1 Ha ???;exists vm1 => //;constructor. Qed.
 
   Local Lemma Hfor_cons : sem_Ind_for_cons p1 ev Pc Pfor.
   Proof.
-    move=> s1 s1' s2 s3 i w ws c Hwi _ Hc _ Hfor dead_vars i2 r1 r1' c2 r2 vm2 Heq Hr1' Hcc Hincl.
-    have [//|vm3 Hwi2 Hvm3] := check_lvalP (gd := gd) Hr1' Heq (value_uincl_refl _) _ Hwi.
-    have [vm4 Hvm4 Hsc] := Hc _ _ _ _ _ Hvm3 Hcc.
-    have [vm5 Hvm5 Hsf] := Hfor _ _ _ _ _ _ _ (eq_alloc_incl Hincl Hvm4) Hr1' Hcc Hincl.
-    by exists vm5 => //; econstructor; eauto.
+    move=> s1 s1' s2 s3 oi w ws c Hwi _ Hc _ Hfor dead_vars oi2 r1 r1' c2 r2 vm1 Heq Hr1' Hcc Hincl.
+    case: oi oi2 Hwi Hr1' Hfor => [i|] [i2|] //= Hwi Hr1' Hfor.
+    - have hciv : check_iteration_var (Some i) (Some i2) r1 = ok r1' := Hr1'.
+      have [//|vm3 Hwi2 Hvm3] := check_lvalP (gd := gd) Hr1' Heq (value_uincl_refl _) _ Hwi.
+      have [vm4 Hvm4 Hsc] := Hc _ _ _ _ _ Hvm3 Hcc.
+      have [vm5 Hvm5 Hsf] := Hfor _ (Some i2) _ _ _ _ _ (eq_alloc_incl Hincl Hvm4) hciv Hcc Hincl.
+      by exists vm5 => //; econstructor; eauto.
+    - move/ok_inj: Hwi => ?; subst s1'.
+      move/ok_inj: Hr1' => ?; subst r1'.
+      have [vm4 Hvm4 Hsc] := Hc _ _ _ _ _ Heq Hcc.
+      have [vm5 Hvm5 Hsf] := Hfor _ None _ _ _ _ _ (eq_alloc_incl Hincl Hvm4) erefl Hcc Hincl.
+      by exists vm5 => //; econstructor; eauto.
   Qed.
 
   Local Lemma Hcall : sem_Ind_call p1 ev Pi_r Pfun.
@@ -775,16 +806,26 @@ Section PROOF.
       + by apply: hc1 hcc1.
       by apply: hc2 hcc2.
     (* For *)
-    + move=> i d lo hi c hc ii dead_vars r1 r2 ii2 [] // i2 [ [d2 lo2] hi2] c2 /=.
-      t_xrbindP => /eqP <- rhi rlo hlo hhi /loopP [r2' []].
-      t_xrbindP => r2i hci hcc ??.
-      apply wequiv_for_rel_uincl with checker_alloc rhi r2i => //.
-      + by rewrite /= /check_es_alloc /check_es /= hlo /= hhi.
-      + by move=> >; apply: eq_alloc_incl.
-      + by move: hci; rewrite /= /check_lvals_alloc /check_var /= => ->.
-      apply wequiv_weaken with (st_eq_alloc r2i) (st_eq_alloc r2') => //.
-      + by move=> >; apply st_eq_alloc_incl.
-      by apply: hc hcc.
+    + move=> fi c hc ii dead_vars r1 r2 ii2 [] // fi2 c2 /=.
+      case: fi fi2 => [i d lo hi | e] [i2 d2 lo2 hi2 | e2] //=.
+      - case: eqP => //= ?; subst d2.
+        move=> hcheck; move: hcheck; t_xrbindP => rlo hlo hrlo hhi hhhi.
+        move=> <- /loopP [r2' []]; t_xrbindP => r2i hci hcc ??.
+        apply wequiv_for_rel_uincl with checker_alloc hhi r2i => //.
+        + by rewrite /= /check_es_alloc /check_es /= hrlo /= hhhi.
+        + by move=> >; apply: eq_alloc_incl.
+        + by move: hci; rewrite /= /check_lvals_alloc /check_iteration_var /check_var /= => ->.
+        apply wequiv_weaken with (st_eq_alloc r2i) (st_eq_alloc r2') => //.
+        + by move=> >; apply st_eq_alloc_incl.
+        by apply: hc hcc.
+      - t_xrbindP => rhi hrhi.
+        move=> hrhi_proof <- /loopP [r2' []]; t_xrbindP => r2i hci hcc ??.
+        apply wequiv_for_repeat_rel_uincl with checker_alloc hrhi => //.
+        + by rewrite /= /check_es_alloc /check_es /= hrhi_proof.
+        + by move=> >; apply: eq_alloc_incl.
+        apply wequiv_weaken with (st_eq_alloc r2) (st_eq_alloc r2') => //.
+        + by move=> >; apply st_eq_alloc_incl.
+        by move: hci hcc => [<-] hcc; apply: hc hcc.
     (* While *)
     + move=> a c e ii' c' hc hc' ii dead_vars r1 r2_ ii2 [] // a2 c2 e2 ii2' c2' /=.
       t_xrbindP => r2 /loop2P [r2' [r3 []]].

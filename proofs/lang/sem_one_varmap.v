@@ -278,7 +278,7 @@ Lemma sem_iE ii k s i s' :
     exists2 k',
     k = Sv.union k' (fd_tmp_call p f) &
     sem_call ii k' (kill_tmp_call f s) f s2
-  | Cfor _ _ _ => false
+  | Cfor _ _ => false
   end.
 Proof.
   case => { ii k s i s' }; eauto.

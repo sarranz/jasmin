@@ -455,7 +455,7 @@ Definition pop_to_save
       Error (E.ii_error ii "assert found in linear")
     | Cif b c1 c2 =>
       check_fexpr ii b >> check_c check_i c1 >> check_c check_i c2
-    | Cfor _ _ _ =>
+    | Cfor _ _ =>
       Error (E.ii_error ii "for found in linear")
     | Cwhile _ c e _ c' =>
       match is_bool e with
@@ -740,7 +740,7 @@ Fixpoint linear_i (i:instr) (lbl:label) (lc:lcmd) :=
               ++ lc
           )
     else (lbl, lc )
-  | Cfor _ _ _ => (lbl, lc)
+  | Cfor _ _ => (lbl, lc)
   end.
 
 Definition linear_body (fi: fun_info) (e: stk_fun_extra) (body: cmd) : label * lcmd :=

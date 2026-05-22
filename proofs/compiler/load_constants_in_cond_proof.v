@@ -152,12 +152,12 @@ Let Pc s1 (c:cmd) s2:=
   forall vm1, evm s1 =[X] vm1 ->
   exists2 vm2, evm s2 =[X] vm2 & sem p' ev (with_vm s1 vm1) c' (with_vm s2 vm2).
 
-Let Pfor (i:var_i) vs s1 c s2 :=
+Let Pfor (oi:option var_i) vs s1 c s2 :=
   forall X c',
   load_constants_c (load_constants_i fresh_reg X) c = ok c' ->
-  Sv.Subset (Sv.add i (Sv.union (read_c c) (write_c c))) X ->
+  Sv.Subset (Sv.union (sv_of_ovar_i oi) (Sv.union (read_c c) (write_c c))) X ->
   forall vm1, evm s1 =[X] vm1 ->
-  exists2 vm2, evm s2 =[X] vm2 & sem_for p' ev i vs (with_vm s1 vm1) c' (with_vm s2 vm2).
+  exists2 vm2, evm s2 =[X] vm2 & sem_for p' ev oi vs (with_vm s1 vm1) c' (with_vm s2 vm2).
 
 Let Pfun scs m fn vargs scs' m' vres :=
   sem_call p' ev scs m fn vargs scs' m' vres.
@@ -301,40 +301,41 @@ Qed.
 
 Local Lemma Hfor_nil : sem_Ind_for_nil Pfor.
 Proof.
-  move => s1 x c X c' Hc le_X vm1 eq_s1_vm1.
+  move => s1 oi c X c' Hc le_X vm1 eq_s1_vm1.
   by exists vm1 => //; constructor.
 Qed.
 
 Local Lemma Hfor_cons : sem_Ind_for_cons p ev Pc Pfor.
 Proof.
-  move => s1 s2 s3 s4 x w ws c eq_s2 sem_s2_s3 H_s2_s3 H_s3_s4 Pfor_s3_s4 X c'.
+  move => s1 s1' s2 s3 oi w ws c hinit sem_s1'_s2 H_s1'_s2 H_s2_s3 Pfor_s2_s3 X c'.
   move => eq_c' le_X vm1 eq_s1_vm1.
-  case : (write_var_eq_on eq_s2 eq_s1_vm1) => vm2 eq_write eq_s2_vm2.
-  case : (H_s2_s3 X _ eq_c' _ vm2).
+  case : (init_iteration_eq_on eq_s1_vm1 hinit) => vm2 hinit' eq_s1'_vm2.
+  case : (H_s1'_s2 X _ eq_c' _ vm2).
   + by SvD.fsetdec.
-  + by apply: (eq_onI _ eq_s2_vm2) ; SvD.fsetdec.
-  move => vm3 eq_s3_vm3 sem_vm2_vm3.
-  case : (Pfor_s3_s4 X _ eq_c' _ vm3 eq_s3_vm3) => //.
-  move => vm4 eq_s4_vm4 sem_vm3_vm4.
+  + by apply: (eq_onI _ eq_s1'_vm2); SvD.fsetdec.
+  move => vm3 eq_s2_vm3 sem_vm2_vm3.
+  case : (Pfor_s2_s3 X _ eq_c' _ vm3 eq_s2_vm3) => //.
+  move => vm4 eq_s3_vm4 sem_vm3_vm4.
   exists vm4 => //.
-  by apply (EForOne eq_write sem_vm2_vm3 sem_vm3_vm4).
+  by apply (EForOne hinit' sem_vm2_vm3 sem_vm3_vm4).
 Qed.
 
 Local Lemma Hfor : sem_Ind_for p ev Pi_r Pfor.
 Proof.
-  move=> s1 s2 x d lo hi c vlo vhi cpl_lo cpl_hi cpl_for sem_s1_s2.
+  move=> s1 s2 fi c rn hfi _ sem_s1_s2.
   move=> ii X c' /=; t_xrbindP=> {} c' c'E <-.
   rewrite !(read_Ii, write_Ii) !(read_i_for, write_i_for).
   move=> le_X vm1 eq_s1_vm1.
-  case: (sem_s1_s2 X _ c'E _ _ eq_s1_vm1); first by SvD.fsetdec.
+  have hle : Sv.Subset (Sv.union (sv_of_ovar_i (iterator_of_fi fi))
+                                 (Sv.union (read_c c) (write_c c))) X.
+  + have := write_fi_iterator fi; SvD.fsetdec.
+  case: (sem_s1_s2 X _ c'E hle _ eq_s1_vm1).
   move=> vm2 eq_s2_vm2 sem_vm1_vm2; exists vm2 => //.
-  apply/sem_seq1/EmkI/(Efor (vlo := vlo) (vhi := vhi)) => //.
-  + rewrite eq_globs -cpl_lo.
-    rewrite -read_e_eq_on_empty // -/(read_e _).
-    by apply: (eq_onI _ eq_s1_vm1); SvD.fsetdec.
-  rewrite eq_globs -cpl_hi.
-  rewrite -read_e_eq_on_empty // -/(read_e _).
-  by apply: (eq_onI _ eq_s1_vm1); SvD.fsetdec.
+  apply/sem_seq1/EmkI/Efor.
+  + rewrite eq_globs (sem_fi_read_fi _).
+    * exact hfi.
+    * by apply: (eq_onI _ eq_s1_vm1); SvD.fsetdec.
+  + exact sem_vm1_vm2.
 Qed.
 
 Local Lemma Hcall : sem_Ind_call p ev Pi_r Pfun.
@@ -465,11 +466,20 @@ Proof.
       + by SvD.fsetdec.
       by eexists; split;eauto.
     by move=> []; [apply hc1 | apply hc2] => //; SvD.fsetdec.
-  + move=> x dir lo hi c hc ii c_; t_xrbindP => c' hc' <-; rewrite !read_writeE => hsub.
-    apply wequiv_for_rel_eq with checker_st_eq_on X X => //.
-    + by split => //; rewrite /read_es /= !read_eE; SvD.fsetdec.
-    + by split => //; rewrite /read_rvs /=; SvD.fsetdec.
-    by apply hc => //; SvD.fsetdec.
+  + move=> fi c hc ii c_; t_xrbindP => c' hc' <-.
+    case: fi => [i dir lo hi | e]; rewrite !read_writeE => hsub.
+    * apply wequiv_for_rel_eq with checker_st_eq_on X X => //.
+      + by split => //=; rewrite /read_es /= !read_eE; move: hsub;
+           rewrite /read_fi /write_fi /= !read_eE; clear; SvD.fsetdec.
+      + by split => //; move: hsub; rewrite /read_fi /write_fi /= /read_rvs /=;
+           clear; SvD.fsetdec.
+      by apply hc => //; move: hsub; rewrite /read_fi /write_fi /= !read_eE;
+         clear; SvD.fsetdec.
+    * apply wequiv_for_repeat_rel_eq with checker_st_eq_on X => //.
+      + by split => //=; rewrite /read_es /= !read_eE; move: hsub;
+           rewrite /read_fi /= !read_eE; clear; SvD.fsetdec.
+      by apply hc => //; move: hsub; rewrite /read_fi /= !read_eE;
+         clear; SvD.fsetdec.
   + move=> a c1 e ii' c2 hc1 hc2 ii c_; t_xrbindP => -[c e'] hcond; t_xrbindP.
     move=> c1' hc1' c2' hc2' <-; rewrite !read_writeE => hsub.
     apply wequiv_while_esem with (st_eq_on X).

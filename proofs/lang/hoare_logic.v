@@ -596,19 +596,19 @@ Qed.
 
 Lemma hoare_for_full P Pb Pi Qerr ii i d lo hi c :
   (forall s e, P s -> Qerr e -> rInvErr s e) ->
-  rhoare P (sem_bound (p_globs p) lo hi) Pb Qerr ->
-  (forall bounds (j:Z),
-    Pb bounds ->
-    j \in wrange d bounds.1 bounds.2 ->
+  rhoare P (fun s => sem_fi true (p_globs p) s (FIrange i d lo hi)) Pb Qerr ->
+  (forall rn (j:Z),
+    Pb rn ->
+    j \in rn ->
     rhoare P (write_var true i (Vint j)) Pi Qerr) ->
   hoare Pi c P ->
-  hoare P [:: MkI ii (Cfor i (d, lo, hi) c)] P.
+  hoare P [:: MkI ii (Cfor (FIrange i d lo hi) c)] P.
 Proof.
   move=> herr hbound hwi hc; rewrite /hoare /isem_cmd_ /=.
   apply khoare_bind with P; last by apply khoare_ret.
   apply khoare_read with Pb.
   + by apply (khoare_iresult herr).
-  move=> bounds {}/hwi; elim (wrange _ _) => /= [ | j js hrec] hwi.
+  move=> rn {}/hwi; elim rn => /= [ | j js hrec] hwi.
   + by apply khoare_ret.
   eapply khoare_bind.
   + by apply (khoare_iresult herr); apply/hwi/mem_head.
@@ -617,13 +617,30 @@ Qed.
 
 Lemma hoare_for P Pi Qerr ii i d lo hi c :
   (forall s e, P s -> Qerr e -> rInvErr s e) ->
-  rhoare P (sem_bound (p_globs p) lo hi) PredT Qerr ->
+  rhoare P (fun s => sem_fi true (p_globs p) s (FIrange i d lo hi)) PredT Qerr ->
   (forall (j:Z), rhoare P (write_var true i (Vint j)) Pi Qerr) ->
   hoare Pi c P ->
-  hoare P [:: MkI ii (Cfor i (d, lo, hi) c)] P.
+  hoare P [:: MkI ii (Cfor (FIrange i d lo hi) c)] P.
 Proof.
   move=> herr hbound hwi.
   apply: (hoare_for_full ii herr hbound) => _ j _ _; apply hwi.
+Qed.
+
+Lemma hoare_for_repeat P Qerr ii e c :
+  (forall s err, P s -> Qerr err -> rInvErr s err) ->
+  rhoare P (fun s => sem_fi true (p_globs p) s (FIrepeat e)) PredT Qerr ->
+  hoare P c P ->
+  hoare P [:: MkI ii (Cfor (FIrepeat e) c)] P.
+Proof.
+  move=> herr hbound hc; rewrite /hoare /isem_cmd_ /=.
+  apply khoare_bind with P; last by apply khoare_ret.
+  apply khoare_read with PredT.
+  + by apply (khoare_iresult herr).
+  move=> rn _; elim rn => /= [ | j js hrec].
+  + by apply khoare_ret.
+  apply khoare_read with P; first by apply: khoare_ret.
+  move=> s' hPs' s _.
+  by apply lutt_bind with P; [apply hc | move=> s'' hPs''; apply hrec].
 Qed.
 
 Lemma hoare_while_full I I' Qerr ii al e inf c c' :
@@ -915,21 +932,27 @@ Lemma whoare_if P Q ii e c c' :
 Proof. by apply hoare_if. Qed.
 
 Lemma whoare_for_full P Pb Pi ii i d lo hi c :
-  rhoare P (sem_bound (p_globs p) lo hi) Pb PredT ->
-  (forall bounds (j:Z),
-    Pb bounds ->
-    j \in (wrange d bounds.1 bounds.2) ->
+  rhoare P (fun s => sem_fi true (p_globs p) s (FIrange i d lo hi)) Pb PredT ->
+  (forall rn (j:Z),
+    Pb rn ->
+    j \in rn ->
     rhoare P (write_var true i (Vint j)) Pi PredT) ->
   whoare p ev Pi c P ->
-  whoare p ev P [:: MkI ii (Cfor i (d, lo, hi) c)] P.
+  whoare p ev P [:: MkI ii (Cfor (FIrange i d lo hi) c)] P.
 Proof. by apply hoare_for_full. Qed.
 
 Lemma whoare_for P Pi ii i d lo hi c :
-  rhoare P (sem_bound (p_globs p) lo hi) (fun _ => True) PredT ->
+  rhoare P (fun s => sem_fi true (p_globs p) s (FIrange i d lo hi)) (fun _ => True) PredT ->
   (forall (j:Z), rhoare P (write_var true i (Vint j)) Pi PredT) ->
   whoare p ev Pi c P ->
-  whoare p ev P [:: MkI ii (Cfor i (d, lo, hi) c)] P.
+  whoare p ev P [:: MkI ii (Cfor (FIrange i d lo hi) c)] P.
 Proof. by apply hoare_for. Qed.
+
+Lemma whoare_for_repeat P ii e c :
+  rhoare P (fun s => sem_fi true (p_globs p) s (FIrepeat e)) (fun _ => True) PredT ->
+  whoare p ev P c P ->
+  whoare p ev P [:: MkI ii (Cfor (FIrepeat e) c)] P.
+Proof. by apply hoare_for_repeat. Qed.
 
 Lemma whoare_while_full I I' ii al e inf c c' :
   whoare p ev I c I' ->
@@ -1085,17 +1108,26 @@ Proof.
       (fun s : estate => evm s0 =[\ write_c (if b then c1 else c2)] evm s) => //.
     + by move=> s; rewrite write_i_if; apply eq_exI; case: b; SvD.fsetdec.
     by case: b.
-  + move=> i d lo hi c hc ii s0.
-    set P := (fun s => evm s0 =[\ Sv.add i (write_c c)] evm s).
-    apply hoare_weaken1 with P P.
-    + by move=> _ ->.
-    + by move=> s; apply eq_exI; rewrite write_Ii write_i_for; SvD.fsetdec.
-    apply whoare_for with P; first by auto using rhoare_true.
-    + move=> j;apply wrhoareP => s s' hP /vrvP_var h.
-      by apply (eq_exT hP); apply : eq_exI h; SvD.fsetdec.
-    apply hoareP => s1 hs1.
-    apply: hoare_weaken1 (hc s1) => //.
-    by move=> s2 hs2; apply (eq_exT hs1); apply: eq_exI hs2; SvD.fsetdec.
+  + move=> fi c hc ii s0.
+    case: fi => [i d lo hi | e].
+    - set P := (fun s => evm s0 =[\ Sv.add i (write_c c)] evm s).
+      apply hoare_weaken1 with P P.
+      + by move=> _ ->.
+      + by move=> s; apply eq_exI; rewrite write_Ii write_i_for /write_fi /=; SvD.fsetdec.
+      apply whoare_for with P; first by auto using rhoare_true.
+      + move=> j;apply wrhoareP => s s' hP /vrvP_var h.
+        by apply (eq_exT hP); apply : eq_exI h; SvD.fsetdec.
+      apply hoareP => s1 hs1.
+      apply: hoare_weaken1 (hc s1) => //.
+      by move=> s2 hs2; apply (eq_exT hs1); apply: eq_exI hs2; SvD.fsetdec.
+    - set P := (fun s => evm s0 =[\ write_c c] evm s).
+      apply hoare_weaken1 with P P.
+      + by move=> _ ->.
+      + by move=> s; apply eq_exI; rewrite ?write_Ii ?write_i_for /write_fi /=; SvD.fsetdec.
+      apply whoare_for_repeat; first by auto using rhoare_true.
+      apply hoareP => s1 hs1.
+      apply: hoare_weaken1 (hc s1) => //.
+      by move=> s2 hs2; apply (eq_exT hs1); apply: eq_exI hs2; SvD.fsetdec.
   + move=> a c e inf c' hc hc' ii s0.
     set P := (fun s => evm s0 =[\ Sv.union (write_c c) (write_c c') ] evm s).
     apply hoare_weaken1 with P P.

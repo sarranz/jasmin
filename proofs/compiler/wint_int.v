@@ -376,13 +376,20 @@ Fixpoint wi2i_ir (ir:instr_r) : cexec (safety_cond * instr_r) :=
     Let c2 := wi2i_c wi2i_i c2 in
     ok (b.1, Cif b.2 c1 c2)
 
-  | Cfor x (dir, e1, e2) c =>
-    Let _ := assert [&& in_FV_var x, vtype x == aint, etype_of_expr m e1 == ETint _ & etype_of_expr m e2 == ETint _]
-                (E.ierror_s "invalid loop counter") in
-    Let e1 := wi2i_e e1 in
-    Let e2 := wi2i_e e2 in
-    Let c := wi2i_c wi2i_i c in
-    ok (e1.1 ++ e2.1, Cfor x (dir, e1.2, e2.2) c)
+  | Cfor fi c =>
+    match fi with
+    | FIrange x dir e1 e2 =>
+      Let _ := assert [&& in_FV_var x, vtype x == aint, etype_of_expr m e1 == ETint _ & etype_of_expr m e2 == ETint _]
+                  (E.ierror_s "invalid loop counter") in
+      Let e1 := wi2i_e e1 in
+      Let e2 := wi2i_e e2 in
+      Let c := wi2i_c wi2i_i c in
+      ok (e1.1 ++ e2.1, Cfor (FIrange x dir e1.2 e2.2) c)
+    | FIrepeat e =>
+      Let e := wi2i_e e in
+      Let c := wi2i_c wi2i_i c in
+      ok (e.1, Cfor (FIrepeat e.2) c)
+    end
 
   | Cwhile a c e ii' c' =>
     Let e := wi2i_e e in

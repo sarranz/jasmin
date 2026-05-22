@@ -545,9 +545,9 @@ Fixpoint lower_i_aux (i : instr) : cexec cmd :=
       Let c2' := conc_mapM lower_i c2 in
       ok [:: MkI ii (Cif e c1' c2') ]
 
-  | Cfor i r c =>
+  | Cfor fi c =>
       Let c' := conc_mapM lower_i c in
-      ok [:: MkI ii (Cfor i r c') ]
+      ok [:: MkI ii (Cfor fi c') ]
 
   | Cwhile a c0 e ii c1 =>
       Let c0' := conc_mapM lower_i c0 in

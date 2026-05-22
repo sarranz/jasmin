@@ -25,9 +25,9 @@ Fixpoint remove_assert_i (i: instr) : cmd :=
     let c1 := remove_assert_c remove_assert_i c1 in
     let c2 := remove_assert_c remove_assert_i c2 in
     [:: MkI ii (Cwhile al c1 e ii' c2)]
-  | Cfor x (d, e1, e2) c =>
+  | Cfor fi c =>
     let c := remove_assert_c remove_assert_i c in
-    [:: MkI ii (Cfor x (d, e1, e2) c)]
+    [:: MkI ii (Cfor fi c)]
   end.
 
 Context {pT:progT}.

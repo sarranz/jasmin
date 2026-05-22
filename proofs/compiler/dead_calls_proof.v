@@ -33,7 +33,7 @@ with i_Calls_r (i : instr_r) {struct i} : Sf.t :=
   | Cassert _
     => Sf.empty
   | Cif    _  c1 c2   => Sf.union (c_Calls c1) (c_Calls c2)
-  | Cfor   _  _  c1   => c_Calls c1
+  | Cfor   _  c1   => c_Calls c1
   | Cwhile _ c1 _ _ c2 => Sf.union (c_Calls c1) (c_Calls c2)
   | Ccall _ f _ => Sf.singleton f
   end.
@@ -62,8 +62,8 @@ Lemma i_Calls_if e c1 c2 :
   i_Calls_r (Cif e c1 c2) = Sf.union (c_Calls c1) (c_Calls c2).
 Proof. by []. Qed.
 
-Lemma i_Calls_for v rg c1 :
-  i_Calls_r (Cfor v rg c1) = c_Calls c1.
+Lemma i_Calls_for fi c1 :
+  i_Calls_r (Cfor fi c1) = c_Calls c1.
 Proof. by []. Qed.
 
 Lemma i_Calls_while a c1 e ei c2 :
@@ -100,7 +100,7 @@ Proof.
 move: c.
 apply: (cmd_rect (Pr := Pr) (Pi := Pi) (Pc := Pc)) => /=
   [ i0 ii Hi | | i0 c0 Hi Hc | x t ty e | xs t o es | xs o es | a | e c1 c2 Hc1 Hc2
-    | v dir lo hi c0 Hc | a c0 e ei c' Hc Hc' | ii xs f es ] c /=.
+    | fi c0 Hc | a c0 e ei c' Hc Hc' | ii xs f es ] c /=.
 + by apply Hi.
 + rewrite CallsE; SfD.fsetdec.
 + rewrite CallsE Hc Hi; SfD.fsetdec.
@@ -208,8 +208,8 @@ Section PROOF.
   Let Pc s (c:cmd) s' :=
     def_incl (c_Calls c) -> sem p' ev s c s'.
 
-  Let Pfor (i:var_i) vs s c s' :=
-    def_incl (c_Calls c) -> sem_for p' ev i vs s c s'.
+  Let Pfor (oi:option var_i) vs s c s' :=
+    def_incl (c_Calls c) -> sem_for p' ev oi vs s c s'.
 
   Let Pfun scs1 m1 fn vargs scs2 m2 vres :=
     def_incl (Sf.singleton fn) -> sem_call p' ev scs1 m1 fn vargs scs2 m2 vres.
@@ -285,20 +285,19 @@ Section PROOF.
 
   Local Lemma Hfor : sem_Ind_for p ev Pi_r Pfor.
   Proof.
-    move=> s1 s2 i d lo hi c vlo vhi Hlo Hhi Hsf Hf Hincl.
+    move=> s1 s2 fi c rn hfi Hsf Hf Hincl.
     rewrite CallsE in Hincl.
-    apply: (Efor (P:= p') Hlo Hhi).
-    exact: (Hf Hincl).
+    exact: (Efor (P:=p') hfi (Hf Hincl)).
   Qed.
 
   Local Lemma Hfor_nil : sem_Ind_for_nil Pfor.
   Proof.
-    move=> s i c Hincl; exact: EForDone.
+    move=> s oi c Hincl; exact: EForDone.
   Qed.
 
   Local Lemma Hfor_cons : sem_Ind_for_cons p ev Pc Pfor.
   Proof.
-    move=> s1 s1' s2 s3 i w ws c H Hsc Hc Hsf Hf Hincl.
+    move=> s1 s1' s2 s3 oi w ws c H Hsc Hc Hsf Hf Hincl.
     exact: (EForOne H (Hc Hincl) (Hf Hincl)).
   Qed.
 
@@ -392,8 +391,10 @@ Section PROOF.
       apply wequiv_if_rel_eq with checker_st_eq tt tt tt => //.
       + by apply hc1.
       by apply hc2.
-    + move=> > hc ii; rewrite !CallsE => ?.
-      by apply wequiv_for_rel_eq with checker_st_eq tt tt => //; apply hc.
+    + move=> fi c hc ii; rewrite !CallsE => ?.
+      case: fi => [v dir lo hi | e].
+      * by apply wequiv_for_rel_eq with checker_st_eq tt tt => //; apply hc.
+      * by apply wequiv_for_repeat_rel_eq with checker_st_eq tt => //; apply hc.
     + move=> > hc hc' ii; rewrite !CallsE => /def_incl_union [??].
       apply wequiv_while_rel_eq with checker_st_eq tt => //.
       + by apply hc.

@@ -83,9 +83,9 @@ Fixpoint lower_addressing_i (i: instr) :=
     let c1 := conc_map lower_addressing_i c1 in
     let c2 := conc_map lower_addressing_i c2 in
     [:: MkI ii (Cif b c1 c2)]
-  | Cfor x (dir, e1, e2) c =>
+  | Cfor fi c =>
     let c := conc_map lower_addressing_i c in
-    [:: MkI ii (Cfor x (dir, e1, e2) c) ]
+    [:: MkI ii (Cfor fi c) ]
   | Cwhile a c e info c' =>
     let c := conc_map lower_addressing_i c in
     let c' := conc_map lower_addressing_i c' in

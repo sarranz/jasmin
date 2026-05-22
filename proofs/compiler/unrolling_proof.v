@@ -4,6 +4,12 @@ From Coq Require Import ZArith.
 Require Import psem compiler_util.
 Require Export unrolling.
 
+Set Uniform Inductive Parameters.
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
+Set Warnings "-notation-overridden,-extraction-reserved-identifier,-extraction-opaque-accessed,-ambiguous-paths,-redundant-canonical-projection,-projection-no-head-constant,-postfix-notation-not-level-1,-deprecated-since-mathcomp-2.4.0,-deprecated-since-mathcomp-2.5.0,-deprecated-from-Coq,-deprecated-dirpath-Coq,-deprecated-reference-since-9.1,-rewrite-rw".
+
 Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then remove the line when requiring MathComp >= 2.6 *)
 
 Local Open Scope seq_scope.
@@ -54,10 +60,11 @@ Section PROOF.
   Let Pc s (c:cmd) s':=
     sem p' ev s (unroll_cmd unroll_i c).1 s'.
 
-  Let Pfor (i:var_i) vs s c s' :=
-    sem_for p' ev i vs s (unroll_cmd unroll_i c).1 s'
-    /\ forall ii, sem p' ev s
-      (flatten (map (fun n => assgn ii i (Pconst n) :: (unroll_cmd unroll_i c).1) vs)) s'.
+  Let Pfor (oi : option var_i) vs s c s' :=
+    sem_for p' ev oi vs s (unroll_cmd unroll_i c).1 s'
+    /\ forall ii i, oi = Some i ->
+      sem p' ev s
+        (flatten (map (fun n => assgn ii i (Pconst n) :: (unroll_cmd unroll_i c).1) vs)) s'.
 
   Let Pfun scs1 m1 fn vargs scs2 m2 vres :=
     sem_call p' ev scs1 m1 fn vargs scs2 m2 vres.
@@ -134,40 +141,56 @@ Section PROOF.
 
   Local Lemma Hfor : sem_Ind_for p ev Pi_r Pfor.
   Proof.
-    move => s1 s2 i d lo hi c vlo vhi Hlo Hhi _ [].
-    rewrite /Pi_r /=.
-    case: unroll_cmd => c' b /= Hfor Hfor' ii.
-    case Hlo': (is_const lo)=> [nlo|].
-    + case Hhi': (is_const hi)=> [nhi|].
-      + have ->: nlo = vlo.
-          rewrite /is_const /= in Hlo'.
-          by case: lo Hlo Hlo'=> //= z [] -> [] ->.
-        have ->: nhi = vhi.
-          rewrite /is_const /= in Hhi'.
-          by case: hi Hhi Hhi'=> //= z [] -> [] ->.
-        exact: Hfor'.
-    all: apply: sem_seq1; apply: EmkI; apply: Efor; rewrite ?p'_globs; eassumption.
+    move => s1 s2 fi c rn.
+    case: fi => [i d lo hi | e].
+    - (* FIrange *)
+      move => hfi _.
+      rewrite /Pi_r /Pfor /=.
+      case: (unroll_cmd _ c) => c' b /= [Hfor Hfor'] ii.
+      case Hlo': (is_const lo) => [nlo|].
+      + case Hhi': (is_const hi) => [nhi|].
+        * have hlo : lo = Pconst nlo.
+            by move: hfi Hlo'; rewrite /is_const; case: lo => //= z _ [= ->].
+          have hhi : hi = Pconst nhi.
+            by move: hfi Hhi'; rewrite /is_const; case: hi => //= z _ [= ->].
+          subst lo hi.
+          have hrn : rn = wrange d nlo nhi by apply: esym; apply: ok_inj; exact: hfi.
+          rewrite hrn in Hfor'.
+          exact: Hfor' ii i erefl.
+        * rewrite /=; apply: sem_seq1; apply: EmkI; apply: Efor; rewrite ?p'_globs; eassumption.
+      + rewrite /=; apply: sem_seq1; apply: EmkI; apply: Efor; rewrite ?p'_globs; eassumption.
+    - (* FIrepeat *)
+      move => hfi _.
+      rewrite /Pi_r /Pfor /=.
+      case: (unroll_cmd _ c) => c' b /= [Hfor _] ii.
+      apply: sem_seq1; apply: EmkI; apply: Efor.
+      + by rewrite p'_globs; exact: hfi.
+      + exact: Hfor.
   Qed.
 
   Local Lemma Hfor_nil : sem_Ind_for_nil Pfor.
   Proof.
-    move => s i c; split => /=; first by exact: EForDone.
-    move=> ii; apply: Eskip.
+    move => s oi c; split => /=; first by exact: EForDone.
+    by move=> ii i _; exact: Eskip.
   Qed.
 
   Lemma write_var_Z i (z: Z) s s' :
-    write_var true i z s = ok s' ->
+    write_var true i (Vint z) s = ok s' ->
     eval_atype (vtype i) = cint.
   Proof. by case: i => - [[] x]. Qed.
 
   Local Lemma Hfor_cons : sem_Ind_for_cons p ev Pc Pfor.
   Proof.
-    move=> s1 s1' s2 s3 i w ws c Hw Hsc Hc Hsfor [Hfor Hfor']; split=> [|ii].
-    apply: EForOne; [exact: Hw|exact: Hc|exact: Hfor].
-    move: Hfor'=> /(_ ii) Hfor'.
-    apply: Eseq.
-    + apply: EmkI; apply: Eassgn;[ reflexivity | by rewrite (write_var_Z Hw) | exact Hw].
-    apply: sem_app; [ exact: Hc | exact: Hfor'].
+    move=> s1 s1' s2 s3 oi w ws c Hw _ Hc _ [Hfor Hfor']; split=> [|ii i hoi].
+    - apply: EForOne; [exact: Hw|exact: Hc|exact: Hfor].
+    - subst oi.
+      move: (Hfor' ii i erefl) => Hfor''.
+      have Hw' : write_var true i (Vint w) s1 = ok s1'
+        by move: Hw; rewrite /init_iteration /=.
+      apply: Eseq.
+      + apply: EmkI; apply: Eassgn;
+          [reflexivity | by rewrite (write_var_Z Hw') | exact: Hw'].
+      apply: sem_app; [exact: Hc | exact: Hfor''].
   Qed.
 
   Local Lemma Hcall : sem_Ind_call p ev Pi_r Pfun.
@@ -252,28 +275,30 @@ Section PROOF.
     + by move=> ???? /=; apply wequiv_syscall_rel_eq with checker_st_eq tt.
     + by move=> ?? /=; apply wequiv_noassert.
     + by move=> > ??? /=; surjpairing; apply wequiv_if_rel_eq with checker_st_eq tt tt tt.
-    + move=> i d lo hi c hc ii /=; surjpairing.
-      case: is_constP => [{}lo | {}lo]; last by apply wequiv_for_rel_eq with checker_st_eq tt tt.
-      case: is_constP => [{}hi | {}hi]; last by apply wequiv_for_rel_eq with checker_st_eq tt tt.
-      rewrite /wequiv_rec /wequiv.
-      apply (wkequiv_eutt_l (F1 := fun s => isem_for_loop isem_i_body p ev i c (wrange d lo hi) s)).
-      + move=> s1 _ _ /=; rewrite /isem_bound /sem_bound /=.
-        rewrite ITree.Eq.Eqit.bind_ret_l ITree.Eq.Eqit.bind_ret_r; reflexivity.
-      elim: wrange => [ | j js hjs] /=.
-      + by apply wkequiv_ret.
-      rewrite /isem_for_round.
-      set c' := (unroll_cmd _ _).1.
-      apply wkequiv_bind with (st_eq tt).
-      + apply wkequiv_iresult.
-        move=> s t s' /st_relP [-> /= heq] hw.
-        rewrite /sem_assgn /= (write_var_Z hw) /=.
-        have [vm2 /= ??] := [elaborate write_lvar_ext_eq (gd := [::]) (x:= Lvar i) heq hw].
-        by exists (with_vm s' vm2).
-      apply (wkequiv_eutt_r
-              (F2 := fun s => Monad.bind (isem_cmd_ p' ev c' s)
-                      [eta isem_cmd_ p' ev (flatten [seq assgn ii i (Pconst n) :: c' | n <- js])])).
-      + move=> _ s2 _; rewrite isem_cmd_cat; reflexivity.
-      by apply wkequiv_bind with (st_eq tt).
+    + move=> fi c hc ii /=; surjpairing.
+      case: fi hc => [i d lo hi | e] hc.
+      * case: is_constP => [{}lo | {}lo]; last by apply wequiv_for_rel_eq with checker_st_eq tt tt.
+        case: is_constP => [{}hi | {}hi]; last by apply wequiv_for_rel_eq with checker_st_eq tt tt.
+        rewrite /wequiv_rec /wequiv.
+        apply (wkequiv_eutt_l (F1 := fun s => isem_for_loop isem_i_body p ev (Some i) c (wrange d lo hi) s)).
+        + move=> s1 _ _ /=; rewrite /isem_fi /sem_fi /sem_pexpr_int /=.
+          rewrite ITree.Eq.Eqit.bind_ret_l ITree.Eq.Eqit.bind_ret_r; reflexivity.
+        elim: wrange => [ | j js hjs] /=.
+        + by apply wkequiv_ret.
+        rewrite /isem_for_round /=.
+        set c' := (unroll_cmd _ _).1.
+        apply wkequiv_bind with (st_eq tt).
+        + apply wkequiv_iresult.
+          move=> s t s' /st_relP [-> /= heq] hw.
+          rewrite /sem_assgn /= (write_var_Z hw) /=.
+          have [vm2 /= ??] := [elaborate write_lvar_ext_eq (gd := [::]) (x:= Lvar i) heq hw].
+          by exists (with_vm s' vm2).
+        apply (wkequiv_eutt_r
+                (F2 := fun s => Monad.bind (isem_cmd_ p' ev c' s)
+                        [eta isem_cmd_ p' ev (flatten [seq assgn ii i (Pconst n) :: c' | n <- js])])).
+        + move=> _ s2 _; rewrite isem_cmd_cat; reflexivity.
+        by apply wkequiv_bind with (st_eq tt).
+      * by apply wequiv_for_repeat_rel_eq with checker_st_eq tt.
     + by move=> > hc hc' ii /=; surjpairing; apply wequiv_while_rel_eq with checker_st_eq tt.
     move=> ???? /=; surjpairing; apply wequiv_call_rel_eq with checker_st_eq tt => //.
     by move=> ???; apply: wequiv_fun_rec.

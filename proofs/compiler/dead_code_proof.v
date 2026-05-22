@@ -83,7 +83,7 @@ Section PROOF.
     by rewrite /= /sem_assgn -?eq_globs Hv'' /= Ht /= Hw2.
   Qed.
 
-  Local Lemma Hwrite_disj wdb s1 s2 s x v:
+  Local Lemma Hwrite_disj {wdb} s1 s2 s x v:
     write_lval wdb gd x v s1 = ok s2 ->
     disjoint s (vrv x) ->
     ~~ lv_write_mem x ->
@@ -93,7 +93,7 @@ Section PROOF.
     by apply: disjoint_eq_on Hdisj Hw.
   Qed.
 
-  Local Lemma Hwrites_disj wdb s1 s2 s x v:
+  Local Lemma Hwrites_disj {wdb} s1 s2 s x v:
     write_lvals wdb gd s1 x v = ok s2 ->
     disjoint s (vrvs x) ->
     ~~ has lv_write_mem x ->
@@ -267,13 +267,13 @@ Section PROOF.
       exists vm2', s'.(evm) <=[s2] vm2' /\
         sem p' ev (with_vm s vm1') c' (with_vm s' vm2').
 
-  Let Pfor (i:var_i) vs s c s' :=
+  Let Pfor (oi:option var_i) vs s c s' :=
     forall s1 c' s2,
       dead_code_c (dead_code_i is_move_op do_nop onfun) c s2 = ok (s1, c') ->
-      Sv.Subset (Sv.union (read_rv (Lvar i)) (Sv.diff s1 (vrv (Lvar i)))) s2 ->
+      Sv.Subset (Sv.diff s1 (sv_of_ovar_i oi)) s2 ->
       forall vm1', s.(evm) <=[s2] vm1' ->
       exists vm2', s'.(evm) <=[s2] vm2' /\
-       sem_for p' ev i vs (with_vm s vm1') c' (with_vm s' vm2').
+       sem_for p' ev oi vs (with_vm s vm1') c' (with_vm s' vm2').
 
   Let Pfun scs1 m1 fn vargs scs2 m2 vres :=
     forall vargs', List.Forall2 value_uincl vargs vargs' ->
@@ -409,43 +409,85 @@ Section PROOF.
     by move=> b -> H'.
   Qed.
 
+  Local Lemma read_fi_rec_le_sv (sv : Sv.t) (fi : for_iteration) : Sv.Subset sv (read_fi_rec sv fi).
+  Proof.
+    case: fi => [i d elo ehi | e] /=.
+    - have h1 := read_eE elo (read_e_rec sv ehi).
+      have h2 := read_eE ehi sv.
+      SvD.fsetdec.
+    - have h := read_eE e sv.
+      SvD.fsetdec.
+  Qed.
+
+  Local Lemma sem_fi_on sv1 fi s vm rn :
+    evm s <=[read_fi_rec sv1 fi] vm ->
+    sem_fi true gd s fi = ok rn ->
+    sem_fi true gd (with_vm s vm) fi = ok rn.
+  Proof.
+    case: fi => [i d elo ehi | e] /= hvm hfi.
+    - move: hfi; rewrite /sem_fi /sem_pexpr_int /= (surj_estate s).
+      t_xrbindP => zlo vlo hvlo hzlo zhi vhi hvhi hzhi <-.
+      have [vlo' hvlo' hulo] := sem_pexpr_uincl_on' hvm hvlo.
+      have hvm_hi : evm s <=[read_e_rec sv1 ehi] vm.
+      + apply: (uincl_onI _ hvm).
+        have h := read_eE elo (read_e_rec sv1 ehi).
+        SvD.fsetdec.
+      have [vhi' hvhi' huhi] := sem_pexpr_uincl_on' hvm_hi hvhi.
+      rewrite (to_intI hzlo) in hulo; rewrite (to_intI hzhi) in huhi.
+      rewrite /sem_fi /sem_pexpr_int /= hvlo' /= (value_uinclE hulo) /=
+              hvhi' /= (value_uinclE huhi).
+      by [].
+    - move: hfi; rewrite /sem_fi /sem_pexpr_int /= (surj_estate s).
+      t_xrbindP => z v hv hz <-.
+      have [v' hv' huv] := sem_pexpr_uincl_on' hvm hv.
+      rewrite (to_intI hz) in huv.
+      by rewrite /sem_fi /sem_pexpr_int /= hv' /= (value_uinclE huv).
+  Qed.
+
   Local Lemma Hfor : sem_Ind_for p ev Pi_r Pfor.
   Proof.
-    move=> s1 s2 i d lo hi c vlo vhi Hlo Hhi Hc Hfor ii I c_ O /=.
-    case Hloop: (loop (dead_code_c (dead_code_i is_move_op do_nop onfun) c) ii loop_counter Sv.empty (Sv.add i Sv.empty) O)=> [[sv1 sc1] /=|//] [??]; subst I c_.
+    move=> s1 s2 fi c rn hfi _ Hfor ii I c_ O /=.
+    case Hloop: (loop (dead_code_c (dead_code_i is_move_op do_nop onfun) c) ii loop_counter Sv.empty (write_fi fi) O)=> [[sv1 sc1] /=|//] [??]; subst I c_.
     move: (loopP Hloop)=> [H1 [sv2 [H2 H2']]] vm1' Hvm.
-    have [|vm2' [Hvm2'1 Hvm2'2]] := Hfor _ _ _ H2 H2' vm1'.
-    + move: Hvm; rewrite !read_eE=> Hvm.
-      by apply: uincl_onI Hvm; SvD.fsetdec.
-    rewrite (surj_estate s1) in Hlo.
-    have := sem_pexpr_uincl_on' Hvm Hlo.
-    move=> [v] Hlo' Hv.
+    have Hvm_sv1 : evm s1 <=[sv1] vm1'.
+    + apply: uincl_onI Hvm.
+      apply: read_fi_rec_le_sv.
+    have Hsub : Sv.Subset (Sv.diff sv2 (sv_of_ovar_i (iterator_of_fi fi))) sv1.
+    + move: H2' hfi Hfor Hloop Hvm Hvm_sv1; case: fi => /= *; SvD.fsetdec.
+    have [vm2' [Hvm2'1 Hvm2'2]] := Hfor sv2 sc1 sv1 H2 Hsub vm1' Hvm_sv1.
     exists vm2'; split.
-    + apply: uincl_onI Hvm2'1; SvD.fsetdec.
-    apply sem_seq1; constructor;case: v Hv Hlo'=> //= z <- Hlo'; econstructor;
-    rewrite -?eq_globs. apply Hlo'.
-    rewrite (surj_estate s1) in Hhi.
-    + have Hvm': evm s1 <=[read_e_rec Sv.empty hi] vm1'.
-      + move: Hvm; rewrite !read_eE=> Hvm.
-        by apply: uincl_onI Hvm; SvD.fsetdec.
-    rewrite (surj_estate s1) in Hhi.
-    have := sem_pexpr_uincl_on' Hvm' Hhi.
-    move=> [v] Hhi' Hv. case: v Hv Hhi'=> //= z' <- Hhi'. by apply Hhi'.
+    + by apply: uincl_onI Hvm2'1; SvD.fsetdec.
+    apply sem_seq1; constructor; econstructor.
+    + rewrite -eq_globs; exact: sem_fi_on Hvm hfi.
     exact: Hvm2'2.
   Qed.
 
   Local Lemma Hfor_nil : sem_Ind_for_nil Pfor.
   Proof.
-   move=> s i c sv1 sc1 sv0 Heq Hsub vm1' Hvm.
+   move=> s oi c sv1 sc1 sv0 Heq Hsub vm1' Hvm.
    exists vm1'; split=> //.
    apply: EForDone.
   Qed.
 
+  Local Lemma init_iteration_uincl_on X oi z s1 s1' vm1 :
+    init_iteration true s1 oi z = ok s1' ->
+    evm s1 <=[X] vm1 ->
+    exists2 vm2,
+      init_iteration true (with_vm s1 vm1) oi z = ok (with_vm s1' vm2)
+      & evm s1' <=[Sv.union (sv_of_ovar_i oi) X] vm2.
+  Proof.
+    case: oi => [i|] /= hw hvm.
+    - have [vm2 hw' hvm2] := write_var_uincl_on (value_uincl_refl _) hw hvm.
+      exists vm2 => //.
+      apply: uincl_onI hvm2.
+      rewrite /sv_of_ovar_i -SvP.MP.add_union_singleton; SvD.fsetdec.
+    - by case: hw => <-; exists vm1.
+  Qed.
+
   Local Lemma Hfor_cons : sem_Ind_for_cons p ev Pc Pfor.
   Proof.
-    move=> s1 s1' s2 s3 i w ws c Hw Hsc Hc Hsfor Hfor sv1 sc1 sv0 Heq /= Hsub vm1' Hvm.
-    have Hv : value_uincl w w. done.
-    have [vm1''] := write_var_uincl_on Hv Hw Hvm. move=> Hvm1''1 Hvm1''2 .
+    move=> s1 s1' s2 s3 oi w ws c Hw Hsc Hc Hsfor Hfor sv1 sc1 sv0 Heq /= Hsub vm1' Hvm.
+    have [vm1'' Hvm1''1 Hvm1''2] := init_iteration_uincl_on Hw Hvm.
     have [|vm2' [Hvm2'1 Hvm2'2]] := Hc _ _ _ Heq vm1''.
     + by apply: uincl_onI Hvm1''2; SvD.fsetdec.
     have [||vm3' [Hvm3'1 Hvm3'2]] // := Hfor _ _ _ Heq _ vm2'.
@@ -667,17 +709,30 @@ Section PROOF.
         by apply st_rel_weaken => ??; apply uincl_onI; rewrite read_eE; SvD.fsetdec.
       apply wequiv_weaken with (st_uincl_on I2) (st_uincl_on O) => //.
       by apply st_rel_weaken => ??; apply uincl_onI; rewrite read_eE; SvD.fsetdec.
-    + move=> x dir lo hi c hc ii I c_ O /=.
+    + move=> fi c hc ii I c_ O /=.
       case Hloop: loop => [[sv1 sc1] /=|//] [??]; subst I c_.
       move: (loopP Hloop) => [H1 [sv2 [/hc{}hc H2']]].
-      apply wequiv_weaken with (st_uincl_on (read_e_rec (read_e_rec sv1 hi) lo))
-             (st_uincl_on sv1) => //.
-      + by apply st_rel_weaken => ??; apply uincl_onI.
-      apply wequiv_for_rel_uincl with checker_st_uincl_on
-         (read_e_rec (read_e_rec sv1 hi) lo) sv2 => //.
-      + by split => //; rewrite /read_es /= !read_eE; SvD.fsetdec.
-      + by move=> ??; apply uincl_onI; rewrite !read_eE; SvD.fsetdec.
-      by split => //; rewrite /vrvs /read_rvs //=; SvD.fsetdec.
+      case: fi Hloop H2' => [i dir lo hi | e] Hloop H2' /=.
+      - apply wequiv_weaken with (st_uincl_on (read_e_rec (read_e_rec sv1 hi) lo))
+               (st_uincl_on sv1) => //.
+        + by apply st_rel_weaken => ??; apply uincl_onI.
+        apply wequiv_for_rel_uincl with checker_st_uincl_on
+           (read_e_rec (read_e_rec sv1 hi) lo) sv2 => //.
+        + by split => //; rewrite /read_es /= !read_eE; SvD.fsetdec.
+        + by move=> ??; apply uincl_onI; rewrite !read_eE; SvD.fsetdec.
+        by split => //; move: H2'; rewrite /vrvs /read_rvs /write_fi /write_fi_rec /=;
+           SvD.fsetdec.
+      - apply wequiv_weaken with (st_uincl_on (read_e_rec sv1 e))
+               (st_uincl_on sv1) => //.
+        + by apply st_rel_weaken => ??; apply uincl_onI.
+        apply wequiv_for_repeat_rel_uincl with checker_st_uincl_on (read_e_rec sv1 e) => //.
+        + by split => //; rewrite /read_es /= !read_eE; SvD.fsetdec.
+        + by move=> ??; apply uincl_onI; rewrite read_eE; SvD.fsetdec.
+        apply wequiv_weaken with (P2 := st_uincl_on sv2) (Q2 := st_uincl_on sv1).
+        + apply st_rel_weaken => ?? h; apply: uincl_onI h.
+          by move: H2'; rewrite /write_fi /write_fi_rec /=; SvD.fsetdec.
+        + done.
+        exact: hc.
     + move=> a c1 e ii' c2 hc1 hc2 ii I c_ O /=.
       set dobody := (X in wloop X).
       case Hloop: wloop => [[sv1 [c1' c2']] /=|//] [??]; subst sv1 c_.

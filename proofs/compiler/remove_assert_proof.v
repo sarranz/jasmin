@@ -36,9 +36,9 @@ Section REMOVE_ASSERT.
     forall c', remove_assert_c remove_assert_i c = c' ->
     sem p' ev s1 c' s2.
 
-  Let Pfor (i: var_i) vs s1 c s2 :=
+  Let Pfor (oi: option var_i) vs s1 c s2 :=
     forall c', remove_assert_c remove_assert_i c = c' ->
-    sem_for p' ev i vs s1 c' s2.
+    sem_for p' ev oi vs s1 c' s2.
 
   Let Pfun scs m fn vargs scs' m' vres :=
     sem_call p' ev scs m fn vargs scs' m' vres.
@@ -108,16 +108,16 @@ Section REMOVE_ASSERT.
 
   Local Lemma Rfor : sem_Ind_for p ev Pi_r Pfor.
   Proof.
-    move=> s1 s2 i d lo hi c vlo vhi hlo hhi _ hfor ii _ <-.
+    move=> s1 s2 fi c rn hfi _ hfor ii _ <-.
     by apply sem_seq1; constructor; econstructor; eauto; rewrite eq_globs.
   Qed.
 
   Local Lemma Rfor_nil : sem_Ind_for_nil Pfor.
-  Proof. move=> s i c c' hc'. constructor. Qed.
+  Proof. move=> s oi c c' hc'. constructor. Qed.
 
   Local Lemma Rfor_cons : sem_Ind_for_cons p ev Pc Pfor.
   Proof.
-    move=> s1 s1' s2 s3 i w ws c hw _ hc _ hfor c' hcc'; econstructor; eauto.
+    move=> s1 s1' s2 s3 oi w ws c hw _ hc _ hfor c' hcc'; econstructor; eauto.
   Qed.
 
   Local Lemma Rcall : sem_Ind_call p ev Pi_r Pfun.
@@ -212,8 +212,10 @@ Section REMOVE_ASSERT.
     + by move => >; apply wequiv_assert_left.
     + move=> > hc1 hc2 ii.
       by apply wequiv_if_rel_eq with checker_ra_eq tt tt tt.
-    + move=> > hc >.
-      by apply wequiv_for_rel_eq with checker_ra_eq tt tt.
+    + move=> fi c hc ii.
+      case: fi => [i d lo hi | e].
+      - by apply wequiv_for_rel_eq with checker_ra_eq tt tt.
+      - by apply wequiv_for_repeat_rel_eq with checker_ra_eq tt.
     + move=> > hc hc' >.
       by apply wequiv_while_rel_eq with checker_ra_eq tt.
     move=> >.

@@ -490,7 +490,7 @@ Proof.
     by case: b hv => [ hv /hc1 | hc /hc2]; [apply Eif_true | apply Eif_false].
   move=> fi c hc /= _ s s'; t_xrbindP => rn hfi hfor.
   eapply Efor; eauto.
-  elim: rn s hfor => /= [ | j js hrec] s.
+  elim: rn s {hfi} hfor => /= [ | j js hrec] s.
   + by move=> [<-]; constructor.
   t_xrbindP.
   by move=> s1 hinit s2 /hc + /hrec; apply EForOne.
@@ -573,17 +573,19 @@ Lemma sem_fi_uincl wdb gd s vm rn fi :
   sem_fi wdb gd s fi = ok rn ->
   sem_fi wdb gd (with_vm s vm) fi = ok rn.
 Proof.
-  move=> hvm.
-  case: fi => [i d elo ehi | e] /=.
-  - rewrite /sem_fi /sem_pexpr_int.
-    t_xrbindP => vlo hvlo /to_intI -> vhi hvhi /to_intI -> <-.
-    have [? hvlo' /value_uinclE ->] := sem_pexpr_uincl hvm hvlo.
-    have [? hvhi' /value_uinclE ->] := sem_pexpr_uincl hvm hvhi.
-    by rewrite hvlo' /= hvhi'.
-  - rewrite /sem_fi /sem_pexpr_int.
-    t_xrbindP => v hv /to_intI -> <-.
-    have [? hv' /value_uinclE ->] := sem_pexpr_uincl hvm hv.
-    by rewrite hv'.
+  move=> hvm; case: fi => [i d elo ehi | e] /=; rewrite /sem_fi /sem_pexpr_int /=.
+  - t_xrbindP => zlo vlo hvlo hzlo zhi vhi hvhi hzhi <-.
+    rewrite (to_intI hzlo) in hvlo; rewrite (to_intI hzhi) in hvhi.
+    have [v2 hvlo' hulo] := sem_pexpr_uincl hvm hvlo.
+    have [v3 hvhi' huhi] := sem_pexpr_uincl hvm hvhi.
+    rewrite (value_uinclE hulo) in hvlo'.
+    rewrite (value_uinclE huhi) in hvhi'.
+    by rewrite hvlo' /= hvhi' /=.
+  - t_xrbindP => z v hv hz <-.
+    rewrite (to_intI hz) in hv.
+    have [v2 hv' hu] := sem_pexpr_uincl hvm hv.
+    rewrite (value_uinclE hu) in hv'.
+    by rewrite hv' /=.
 Qed.
 
 Lemma init_iteration_uincl wdb s1 s2 vm1 oi z :
@@ -773,7 +775,9 @@ Proof.
   + by move=> >; apply wequiv_syscall_rel_eq with checker_st_eq tt.
   + by move=> a ii; apply wequiv_assert_rel_eq with checker_a_st_eq.
   + by move=> > hc1 hc2 ii; apply wequiv_if_rel_eq with checker_st_eq tt tt tt.
-  + by move=> > hc ii; apply wequiv_for_rel_eq with checker_st_eq tt tt.
+  + move=> fi c hc ii; case: fi => [i dir lo hi | e].
+    * by apply wequiv_for_rel_eq with checker_st_eq tt tt.
+    * by apply wequiv_for_repeat_rel_eq with checker_st_eq tt.
   + by move=> > hc hc' ii; apply wequiv_while_rel_eq with checker_st_eq tt.
   by move=> ????; apply wequiv_call_rel_eq with checker_st_eq tt.
 Qed.
@@ -826,12 +830,13 @@ Proof.
   have hvm : evm s1 <=1 vm1 by move=> x; rewrite heq.
   have hfi' : sem_fi true (p_globs p') (with_vm s1 vm1) fi = ok rn.
   + by rewrite -eq_globs; exact: sem_fi_uincl hvm hfi.
-  rewrite /= hfi' /=.
+  rewrite /= hfi' /= {hvm hfi hfi'}.
   elim: rn s1 vm1 hf heq => [ | j js hrec] s1 vm1 /=.
   + by move=> [<-] ?; eexists; eauto.
   t_xrbindP => s11 s12 hinit hsc hf heq.
   have [vm2 heq2 hinit'] := init_iteration_ext_eq heq hinit.
   have [vm3 hsc' heq3] := hc _ _ _ hsc heq2.
+  rewrite /esem in hsc'.
   by rewrite hinit' /= hsc' /=; apply: hrec hf heq3.
 Qed.
 
@@ -927,18 +932,15 @@ Proof.
   case: fi => [i d elo ehi | e] /= hvm.
   - rewrite /sem_fi /sem_pexpr_int.
     have helo : sem_pexpr wdb gd (with_vm s vm) elo = sem_pexpr wdb gd s elo.
-    + symmetry; apply: (eq_on_sem_pexpr wdb (with_vm s vm) gd s elo).
-      * done.
+    + symmetry; apply: eq_on_sem_pexpr; first done.
       apply: eq_onI hvm; rewrite /read_fi /= !read_eE; SvD.fsetdec.
     have hehi : sem_pexpr wdb gd (with_vm s vm) ehi = sem_pexpr wdb gd s ehi.
-    + symmetry; apply: (eq_on_sem_pexpr wdb (with_vm s vm) gd s ehi).
-      * done.
+    + symmetry; apply: eq_on_sem_pexpr; first done.
       apply: eq_onI hvm; rewrite /read_fi /= !read_eE; SvD.fsetdec.
     by rewrite helo hehi.
   - rewrite /sem_fi /sem_pexpr_int.
     have he : sem_pexpr wdb gd (with_vm s vm) e = sem_pexpr wdb gd s e.
-    + symmetry; apply: (eq_on_sem_pexpr wdb (with_vm s vm) gd s e).
-      * done.
+    + symmetry; apply: eq_on_sem_pexpr; first done.
       apply: eq_onI hvm; rewrite /read_fi /=; done.
     by rewrite he.
 Qed.
@@ -1245,14 +1247,13 @@ Proof.
     + by apply hc1; SvD.fsetdec.
     by apply hc2; SvD.fsetdec.
   + move=> fi c hc ii X; rewrite read_i_for => hsub.
-    case: fi => [i d lo hi | e] /=.
+    case: fi hsub => [i d lo hi | e] /= hsub; rewrite !read_eE in hsub.
     * apply wequiv_for_rel_eq with checker_st_eq_on X X => //.
       + by split => //; rewrite /read_es /= !read_eE; SvD.fsetdec.
       + by split => //; rewrite /read_rvs /=; SvD.fsetdec.
       apply hc; SvD.fsetdec.
-    * apply wequiv_for_rel_eq with checker_st_eq_on X X => //.
+    * apply wequiv_for_repeat_rel_eq with checker_st_eq_on X => //.
       + by split => //; rewrite /read_es /= read_eE; SvD.fsetdec.
-      + by split => //; rewrite /read_rvs /=; SvD.fsetdec.
       apply hc; SvD.fsetdec.
   + move=> a c e ii' c' hc hc' ii X. rewrite read_i_while => hsub.
     apply wequiv_while_rel_eq with checker_st_eq_on X => //.
@@ -1691,7 +1692,9 @@ Proof.
   + by move=> xs sc es ii; apply wequiv_syscall_rel_uincl with checker_st_uincl tt.
   + by move=> a ii; apply wequiv_noassert.
   + by move=> e c1 c2 hc1 hc2 ii; apply wequiv_if_rel_uincl with checker_st_uincl tt tt tt.
-  + by move=> > hc ii; apply wequiv_for_rel_uincl with checker_st_uincl tt tt.
+  + move=> fi c hc ii; case: fi => [i dir lo hi | e].
+    * by apply wequiv_for_rel_uincl with checker_st_uincl tt tt.
+    * by apply wequiv_for_repeat_rel_uincl with checker_st_uincl tt.
   + by move=> > ?? ii; apply wequiv_while_rel_uincl with checker_st_uincl tt.
   by move=> xs fn es ii; apply wequiv_call_rel_uincl with checker_st_uincl tt.
 Qed.
@@ -1894,11 +1897,10 @@ Qed.
 Local Lemma Hcmd_eq_for_cons : sem_Ind_for_cons p ev Pc Pfor.
 Proof.
   move=> s1 s1' s2 s3 oi w ws c hinit _ Hc _ Hf oi' c' heq heqc.
-  eapply EForOne.
-  - case: oi oi' heq hinit => [i|] [i'|] //= [/eqP heqv] hinit.
-    by rewrite -heqv.
-  - exact: (Hc c' heqc).
-  exact: (Hf oi' c' heq heqc).
+  apply: EForOne; last first.
+  - exact: Hf oi' c' heq heqc.
+  - exact: Hc c' heqc.
+  by case: oi oi' Hf heq hinit => [[x xi]|] [[_ yi]|] //= _ [<-].
 Qed.
 
 Local Lemma Hcmd_eq_for : sem_Ind_for p ev Pi_r Pfor.
@@ -1906,15 +1908,15 @@ Proof.
   move=> s1 s2 fi c rn hfi _ Hfor.
   move=> [] //= fi' c' /andP[] hfi_eq heqc.
   have hrn : sem_fi true (p_globs p) s1 fi' = ok rn.
-  + move: hfi; case: fi fi' hfi_eq => [i d elo ehi|e] [i' d' elo' ehi'|e'] //=.
-    * move=> /andP[]/andP[]/andP[] _ /eqP <- heqlo heqhi.
-      by rewrite /sem_fi /sem_pexpr_int -(eq_exprP _ _ _ heqlo) -(eq_exprP _ _ _ heqhi).
-    * move=> /eqP heqe. by rewrite /sem_fi /sem_pexpr_int -(eq_exprP _ _ _ heqe).
+  + clear Hfor; move: hfi; case: fi fi' hfi_eq => [i d elo ehi|e] [i' d' elo' ehi'|e'] //=.
+    * move=> /andP[_ /andP[/eqP <- /andP[heqlo heqhi]]] hfi.
+      by rewrite /sem_fi /sem_pexpr_int -(eq_exprP _ _ _ heqlo) -(eq_exprP _ _ _ heqhi); exact hfi.
+    * move=> heqe hfi.
+      by rewrite /sem_fi /sem_pexpr_int -(eq_exprP _ _ _ heqe); exact hfi.
   have hoi : omap v_var (iterator_of_fi fi) = omap v_var (iterator_of_fi fi').
-  + case: fi fi' hfi_eq => [i d elo ehi|e] [i' d' elo' ehi'|e'] //=.
-    by move=> /andP[]/andP[]/andP[] /eqP ->.
-  apply: Efor hrn.
-  exact: Hfor hoi heqc.
+  + move: hfi hrn; clear Hfor; case: fi fi' hfi_eq => [i d elo ehi|e] [i' d' elo' ehi'|e'] //=.
+    by move=> /andP[/eqP -> _] _ _.
+  exact: (Efor hrn (Hfor (iterator_of_fi fi') c' hoi heqc)).
 Qed.
 
 Local Lemma Hcmd_eq_call : sem_Ind_call p ev Pi_r Pfun.
@@ -2089,14 +2091,13 @@ Proof.
     by rewrite /= /check_es_eq_cmd /= andbT.
   + move=> fi c hc [] //= fi' c' /andP[] hfi_eq /hc{}hc ??.
     case: fi fi' hfi_eq => [i dir lo hi|e] [i' dir' lo' hi'|e'] //=.
-    * move=> /andP[]/andP[]/andP[] /eqP hi /eqP hd heq1 heq2.
+    * move=> /andP[/eqP heqi /andP[/eqP -> /andP[heq1 heq2]]].
       apply wequiv_for_rel_uincl with checker_eq_cmd tt tt => //.
       + by rewrite /= /check_es_eq_cmd /= heq1 heq2.
-      by rewrite /= /check_lvals_eq_cmd /= hi.
-    * move=> /eqP heqe.
-      apply wequiv_for_rel_uincl with checker_eq_cmd tt tt => //.
-      + by rewrite /= /check_es_eq_cmd /= heqe andbT.
-      by rewrite /= /check_lvals_eq_cmd /= eqxx.
+      by rewrite /= /check_lvals_eq_cmd /= heqi eqxx.
+    * move=> heqe.
+      apply wequiv_for_repeat_rel_uincl with checker_eq_cmd tt => //.
+      by rewrite /= /check_es_eq_cmd /= heqe.
   + move=> a c1 e info c2 hc1 hc2 [] //= a' c1' e' info' c2'
       /andP[] /andP[] /andP[] /eqP -> /hc1{}hc1 heq /hc2{}hc2 ??.
     apply wequiv_while_rel_uincl with checker_eq_cmd tt => //.

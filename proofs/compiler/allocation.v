@@ -567,6 +567,27 @@ Context (dead_vars : instr_info -> Sv.t).
      (except in conditions and loops?). This can probably be used to reduce
      the amount of information we need to remember. *)
 
+Definition check_fi (fi1 fi2 : for_iteration) (r : M.t) :
+    cexec (option var_i * option var_i * M.t) :=
+  match fi1, fi2 with
+  | FIrange x1 d1 lo1 hi1, FIrange x2 d2 lo2 hi2 =>
+      Let _ := assert (d1 == d2) (alloc_error "loop directions not equals") in
+      Let r := check_e lo1 lo2 r in
+      Let r := check_e hi1 hi2 r in
+      ok (Some x1, Some x2, r)
+  | FIrepeat e1, FIrepeat e2 =>
+      Let r := check_e e1 e2 r in
+      ok (None, None, r)
+  | _, _ => Error (alloc_error "different loop iteration modes")
+  end.
+
+Definition check_iteration_var (oi1 oi2 : option var_i) (r : M.t) : cexec M.t :=
+  match oi1, oi2 with
+  | Some i1, Some i2 => check_var i1 i2 r
+  | None, None => ok r
+  | _, _ => Error (alloc_error "different loop iteration variables")
+  end.
+
 Fixpoint check_i (i1 i2:instr_r) r :=
     match i1, i2 with
     | Cassgn x1 _ ty1 e1, Cassgn x2 _ ty2 e2 =>
@@ -591,12 +612,12 @@ Fixpoint check_i (i1 i2:instr_r) r :=
       Let r2 := fold2 E.fold2 check_I c12 c22 re in
       ok (M.merge r1 r2)
 
-    | Cfor x1 (d1,lo1,hi1) c1, Cfor x2 (d2,lo2,hi2) c2 =>
-      Let _ := assert (d1 == d2) (alloc_error "loop directions not equals") in
-      Let rhi := check_e lo1 lo2 r >>=check_e hi1 hi2 in
+    | Cfor fi1 c1, Cfor fi2 c2 =>
+      Let: (oi1, oi2, rhi) := check_fi fi1 fi2 r in
       let check_c r :=
-        check_var x1 x2 r >>=
-        fold2 E.fold2 check_I c1 c2 in
+        Let r := check_iteration_var oi1 oi2 r in
+        fold2 E.fold2 check_I c1 c2 r
+      in
       loop check_c loop_counter rhi
 
     | Cwhile a1 c1 e1 _ c1', Cwhile a2 c2 e2 _ c2' =>

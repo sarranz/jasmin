@@ -1,3 +1,8 @@
+Set Uniform Inductive Parameters.
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
+Set Warnings "-notation-overridden,-extraction-reserved-identifier,-extraction-opaque-accessed,-ambiguous-paths,-redundant-canonical-projection,-projection-no-head-constant,-postfix-notation-not-level-1,-deprecated-since-mathcomp-2.4.0,-deprecated-since-mathcomp-2.5.0,-deprecated-from-Coq,-deprecated-dirpath-Coq,-deprecated-reference-since-9.1,-rewrite-rw".
 (* ** Imports and settings *)
 From mathcomp Require Import ssreflect ssrfun ssrbool.
 Require Import varmap psem.
@@ -117,9 +122,9 @@ Let Pc s1 (c:cmd) s2:=
   forall (vm1:Vm.t), evm s1 <=1 vm1 ->
   exists2 vm2, evm s2 <=1 vm2 & sem (dc:= direct_c) p ev (with_vm s1 vm1) c (with_vm s2 vm2).
 
-Let Pfor (i:var_i) vs s1 c s2 :=
+Let Pfor (oi:option var_i) vs s1 c s2 :=
   forall (vm1:Vm.t), evm s1 <=1 vm1 ->
-  exists2 vm2, evm s2 <=1 vm2 & sem_for (dc:= direct_c) p ev i vs (with_vm s1 vm1) c (with_vm s2 vm2).
+  exists2 vm2, evm s2 <=1 vm2 & sem_for (dc:= direct_c) p ev oi vs (with_vm s1 vm1) c (with_vm s2 vm2).
 
 Let Pfun scs m fn vargs scs' m' vres :=
   forall vargs', List.Forall2 value_uincl vargs vargs' ->
@@ -199,20 +204,19 @@ Qed.
 
 Local Lemma Hfor : sem_Ind_for (dc:=indirect_c) p ev Pi_r Pfor.
 Proof.
-  move=> s1 s2 i d lo hi c vlo vhi hlo hhi _ hfor vm1 hle.
-  have [? ? /value_uinclE ?]:= sem_pexpr_uincl hle hlo;subst.
-  have [? ? /value_uinclE ?]:= sem_pexpr_uincl hle hhi;subst.
-  by have [vm2 ??]:= hfor _ hle; exists vm2 => //; econstructor; eauto.
+  move=> s1 s2 fi c rn hfi _ hfor vm1 hle.
+  have hfi' := sem_fi_uincl hle hfi.
+  by have [vm2 ??] := hfor _ hle; exists vm2 => //; econstructor; eauto.
 Qed.
 
 Local Lemma Hfor_nil : sem_Ind_for_nil Pfor.
-Proof. by move=> s i c vm1 ?;exists vm1 => //;constructor. Qed.
+Proof. by move=> s oi c vm1 ?;exists vm1 => //;constructor. Qed.
 
 Local Lemma Hfor_cons : sem_Ind_for_cons (dc:=indirect_c) p ev Pc Pfor.
 Proof.
-  move=> s1 s1' s2 s3 i w ws c hw _ hc _ hf vm1 hle.
-  have [vm1' Hi' /hc] := write_var_uincl hle (value_uincl_refl _) hw.
-  move=> [vm2 /hf [vm3 hle3 ?] ?]; exists vm3 => //; econstructor; eauto.
+  move=> s1 s1' s2 s3 oi w ws c hw _ hc _ hf vm1 hle.
+  have [vm1' Hi' /hc [vm2 /hf [vm3 hle3 ?] ?]] := init_iteration_uincl hle hw.
+  exists vm3 => //; econstructor; eauto.
 Qed.
 
 Local Lemma Hcall : sem_Ind_call (dc:=indirect_c) p ev Pi_r Pfun.
@@ -339,7 +343,9 @@ Proof.
     by apply fs_uincl_syscall.
   + by move=> >; apply wequiv_noassert.
   + by move=> e c1 c2 hc1 hc2 ii; apply wequiv_if_rel_uincl with checker_st_uincl tt tt tt.
-  + by move=> > hc ii; apply wequiv_for_rel_uincl with checker_st_uincl tt tt.
+  + move=> fi c hc ii; case: fi => [v dir lo hi | e].
+    * by apply wequiv_for_rel_uincl with checker_st_uincl tt tt.
+    * by apply wequiv_for_repeat_rel_uincl with checker_st_uincl tt.
   + by move=> > ?? ii; apply wequiv_while_rel_uincl with checker_st_uincl tt.
   move=> xs fn es ii; apply wequiv_call_rel_uincl with checker_st_uincl tt => //.
   by move=> ???; apply: wequiv_fun_rec.

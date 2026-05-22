@@ -688,11 +688,11 @@ Let Pc s1 (c1:cmd) s2 :=
     mapM (expand_i fsigs m) c1 = ok c2 ->
   exists2 s2', eq_alloc m s2 s2' & sem p2 ev s1' c2 s2'.
 
-Let Pfor (i1:var_i) vs s1 c1 s2 :=
+Let Pfor (oi : option var_i) vs s1 c1 s2 :=
   forall m c2 s1',
-    wf_t m -> eq_alloc m s1 s1' -> Sv.mem i1 m.(svars) ->
+    wf_t m -> eq_alloc m s1 s1' -> Sv.subset (sv_of_ovar_i oi) m.(svars) ->
     mapM (expand_i fsigs m) c1 = ok c2 ->
-  exists2 s2', eq_alloc m s2 s2' & sem_for p2 ev i1 vs s1' c2 s2'.
+  exists2 s2', eq_alloc m s2 s2' & sem_for p2 ev oi vs s1' c2 s2'.
 
 Let Pfun scs m fn vargs scs' m' vres :=
   forall expdin expdout, Mf.get fsigs fn = Some (expdin, expdout) ->
@@ -790,25 +790,50 @@ Qed.
 
 Local Lemma Hfor : sem_Ind_for p1 ev Pi_r Pfor.
 Proof.
-  move => s1 s2 i d lo hi c vlo vhi hslo hshi _ hfor ii m ii' ? s1' hwf heqa /=.
-  t_xrbindP => hin lo' hlo hi' hhi c' hc ? <-.
-  have := expand_eP hwf heqa hlo hslo.
-  have := expand_eP hwf heqa hhi hshi; rewrite -eq_globs => hshi' hslo'.
-  have [s2' ??]:= hfor _ _ _ hwf heqa hin hc.
-  exists s2' => //; econstructor; eauto.
+  move => s1 s2 nfi c rn hfi _ hpfor ii m ii' ? s1' hwf heqa /=.
+  case: nfi hfi hpfor => [x d lo hi | e] hfi hpfor /=.
+  - t_xrbindP => hsubset elo' helo ehi' hehi c0 hc.
+    move => c2 hc2 _ <-. subst elo'.
+    have hfi' : sem_fi true (p_globs p2) s1' (FIrange x d helo hehi) = ok rn.
+    { rewrite eq_globs /sem_fi /sem_pexpr_int.
+      move: hfi; rewrite /sem_fi /sem_pexpr_int.
+      t_xrbindP => vr hvr zr hzr vr2 hvr2 zr2 hzr2 <-.
+      rewrite (expand_eP hwf heqa ehi' zr) /= hzr.
+      by rewrite (expand_eP hwf heqa c0 zr2) /= hzr2. }
+    have [s2' heqa2 hsem] := hpfor m c2 s1' hwf heqa hsubset hc2.
+    exists s2' => //. exact (Efor hfi' hsem).
+  - t_xrbindP => e' he c2 hc2.
+    move => z1 hz1 _ <-. subst e'.
+    have hfi' : sem_fi true (p_globs p2) s1' (FIrepeat he) = ok rn.
+    { rewrite eq_globs /sem_fi /sem_pexpr_int.
+      move: hfi; rewrite /sem_fi /sem_pexpr_int.
+      t_xrbindP => vr hvr zr hzr <-.
+      by rewrite (expand_eP hwf heqa c2 zr) /= hzr. }
+    have hsubset : Sv.subset Sv.empty (svars m) by SvD.fsetdec.
+    have [s2' heqa2 hsem] := hpfor m z1 s1' hwf heqa hsubset hz1.
+    exists s2' => //. exact (Efor hfi' hsem).
 Qed.
 
 Local Lemma Hfor_nil : sem_Ind_for_nil Pfor.
 Proof.
-  move=> s i c i2 c' s1' hwf heqa _; exists s1' => //; constructor.
+  move=> s oi c m c2 s1' hwf heqa _ _; exists s1' => //; constructor.
 Qed.
 
 Local Lemma Hfor_cons : sem_Ind_for_cons p1 ev Pc Pfor.
 Proof.
-  move=> s1 s1w s2 s3 i w ws c Hwi _ Hc _ Hfor m c' s1' hwf heqa hin hc.
-  have [s1w' [? heqa1']]:= eq_alloc_write_var hwf heqa hin Hwi.
+  move=> s1 s1w s2 s3 oi w ws c Hwi _ Hc _ Hfor m c' s1' hwf heqa hsubset hc.
+  have [s1w' hinit' heqa1'] : exists2 s1w',
+      init_iteration true s1' oi w = ok s1w' & eq_alloc m s1w s1w'.
+  { case: oi Hwi hsubset Hfor => [i | ] Hwi hsubset _ /=.
+    - have hmem : Sv.mem i m.(svars).
+      { apply/Sv_memP; move: hsubset; rewrite /sv_of_ovar_i => /Sv.subset_spec h;
+        by SvD.fsetdec. }
+      have [s1w' [hw' heqa1']]:= eq_alloc_write_var hwf heqa hmem Hwi.
+      exists s1w' => //.
+    - case: Hwi => <-.
+      exists s1' => //. }
   have [s2' heqa2 ?]:= Hc _ _ _ hwf heqa1' hc.
-  have [s3' ??]:= Hfor _ _ _ hwf heqa2 hin hc.
+  have [s3' ??]:= Hfor _ _ _ hwf heqa2 hsubset hc.
   exists s3' => //; econstructor; eauto.
 Qed.
 
@@ -972,10 +997,27 @@ Proof.
   + move=> e1 c1 c1' hc1 hc1' ii i2_ /=; t_xrbindP => e2 he c2 /hc1{}hc1 c2' /hc1'{}hc1' <-.
     apply wequiv_if_rel_eq with checker_exp m m m => //.
     by split => //=; rewrite he.
-  + move=> x1 dir lo1 hi1 c1 hc ii i2_ /=; t_xrbindP => hx1 lo2 hlo hi2 hhi c2 /hc{}hc <-.
-    apply wequiv_for_rel_eq with checker_exp m m => //.
-    + by split => //=; rewrite hlo hhi.
-    by split => //=; rewrite hx1.
+  + move=> nfi c1 hc ii i2_ /=.
+    case: nfi => [x1 dir lo1 hi1 | e1].
+    - t_xrbindP => hsubset lo2 hlo hi2 hhi.
+      move: hlo; rewrite /mapM_pexpr_fi /=; t_xrbindP => elo' helo ehi' hehi ?; subst lo2.
+      move => <-.
+      have hmem : Sv.mem x1 m.(svars)
+        by apply/Sv_memP; move: hsubset; rewrite /sv_of_ovar_i /iterator_of_fi => /Sv.subset_spec h; SvD.fsetdec.
+      apply wequiv_for_rel_eq with checker_exp m m.
+      + exact checker_exp_eqP.
+      + by split => //=; rewrite helo hehi.
+      + by move=> ?? h.
+      + by split => //=; rewrite /expand_lv hmem.
+      + apply hc => //.
+    - t_xrbindP => _ fi0 hfi0 c2 hc2.
+      move: hfi0; rewrite /mapM_pexpr_fi /=; t_xrbindP => e2 he2 ?; subst fi0.
+      move => <-.
+      apply wequiv_for_repeat_rel_eq with checker_exp m.
+      + exact checker_exp_eqP.
+      + by split => //=; rewrite he2.
+      + by move=> ?? h.
+      + apply hc => //.
   + move=> al c1 e1 ii' c1' hc1 hc1' ii i2_ /=; t_xrbindP => e2 he c2 /hc1{}hc1 c2' /hc1'{}hc1' <-.
     apply wequiv_while_rel_eq with checker_exp m => //.
     by split => //=; rewrite he.

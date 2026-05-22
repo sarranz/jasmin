@@ -82,8 +82,8 @@ Fixpoint extend_iinfo_i ii i : instr :=
     | Ccall _ _ _ => ir
     | Cif e c1 c2 =>
       Cif e (map (extend_iinfo_i ii) c1) (map (extend_iinfo_i ii) c2)
-    | Cfor x (d,lo,hi) c =>
-      Cfor x (d,lo,hi) (map (extend_iinfo_i ii) c)
+    | Cfor fi c =>
+      Cfor fi (map (extend_iinfo_i ii) c)
     | Cwhile a c e info c' =>
       Cwhile a (map (extend_iinfo_i ii) c) e info (map (extend_iinfo_i ii) c')
     end
@@ -105,10 +105,10 @@ Fixpoint inline_i (p:ufun_decls) (i:instr) (X:Sv.t) : cexec (Sv.t * cmd) :=
     Let c1 := inline_c (inline_i p) c1 X in
     Let c2 := inline_c (inline_i p) c2 X in
     ok (read_e_rec (Sv.union c1.1 c2.1) e, [::MkI iinfo (Cif e c1.2 c2.2)])
-  | Cfor x (d,lo,hi) c =>
+  | Cfor fi c =>
     let X := Sv.union (read_i ir) X in
     Let c := inline_c (inline_i p) c X in
-    ok (X, [::MkI iinfo (Cfor x (d, lo, hi) c.2)])
+    ok (X, [::MkI iinfo (Cfor fi c.2)])
   | Cwhile a c e info c' =>
     let X := Sv.union (read_i ir) X in
     Let c := inline_c (inline_i p) c X in

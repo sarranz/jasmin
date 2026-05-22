@@ -241,9 +241,9 @@ Fixpoint lower_i (i : instr) : cmd :=
       let c2' := conc_map lower_i c2 in
         [:: MkI ii (Cif e c1' c2')]
 
-  | Cfor v r c =>
+  | Cfor fi c =>
       let c' := conc_map lower_i c in
-      [:: MkI ii (Cfor v r c') ]
+      [:: MkI ii (Cfor fi c') ]
 
   | Cwhile a c0 e info c1 =>
       let c0' := conc_map lower_i c0 in
