@@ -1,3 +1,4 @@
+From Coq Require Import Morphisms.
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssralg.
 
 Require Import
@@ -43,7 +44,7 @@ Section CONST_PROP.
     case: sem_sop1_typed => [v'|//] /=.
     case h1: to_expr => //.
     move: h0 => /use_mem_of_expr ->.
-    exact: (use_mem_to_expr h1).
+    exact: use_mem_to_expr h1.
   Qed.
 
   #[local]
@@ -778,10 +779,10 @@ Definition hp_body := let 'And3 x _ _ := lower_pP in x.
 Definition hp_globs := let 'And3 _ x _ := lower_pP in x.
 Definition hp_extra := let 'And3 _ _ x := lower_pP in x.
 
-Lemma check_forP ii x check_c n env env_fix :
-  check_for ii x check_c n env = ok env_fix
+Lemma check_forP ii fi check_c n env env_fix :
+  check_for ii fi check_c n env = ok env_fix
   -> exists env0,
-       [/\ check_c (Env.after_assign_var env_fix x) = ok env0
+       [/\ check_c (Env.after_assign_vars env_fix (write_fi fi)) = ok env0
          , Env.le env_fix env
          & Env.le env_fix env0
        ].
@@ -793,7 +794,7 @@ Proof.
   clear - hind.
   move=> /hind [env1 [hcheck hle0 hle1]].
   exists env1; split => //.
-  by apply: (EnvP.le_trans hle0); case: (EnvP.meet_le env env0).
+  exact: EnvP.le_trans hle0 (EnvP.meet_le env env0).1.
 Qed.
 
 Lemma check_whileP ii cond check_c0 check_c1 n env env' :
@@ -861,13 +862,14 @@ Let Pi (s : estate) (i : instr) (s' : estate) : Prop :=
     -> lower_i i = ok i'
     -> sem_I p' ev s i' s' /\ wf_env env' (p_globs p') s'.
 
-Let Pfor (x : var_i) (rg : seq Z) (s : estate) (c : cmd) (s' : estate) : Prop :=
+Let Pfor (oi : option var_i) (rg : seq Z) (s : estate) (c : cmd) (s' : estate) : Prop :=
   forall env env' c',
+    let: s_init := if oi is Some i then Sv.add i Sv.empty else Sv.empty in
     wf_env env (p_globs p) s
-    -> check_cmd fun_info (Env.after_assign_var env x) c = ok env'
+    -> check_cmd fun_info (Env.after_assign_vars env s_init) c = ok env'
     -> lower_cmd c = ok c'
     -> Env.le env env'
-    -> sem_for p' ev x rg s c' s' /\ wf_env env (p_globs p') s'.
+    -> sem_for p' ev oi rg s c' s' /\ wf_env env (p_globs p') s'.
 
 Let Pfun
   (scs : syscall_state)
@@ -1116,33 +1118,54 @@ Qed.
    hypothesis [hind]. *)
 Lemma Hfor : sem_Ind_for p ev Pi_r Pfor.
 Proof.
-  move=> s s' x d xstart xend c vstart vend hsemstart hsemend _ hind.
+  move=> s s' fi c rn hfi _ hind.
   move=> ii env env_fix c' hwf /= /check_forP [env0 [hcheck hle hle0]].
   rewrite /= -/(lower_cmd _).
   t_xrbindP=> irs c0 hlower ? ?; subst irs c'.
 
   have hwffix := wf_env_le hle hwf.
+  have {}hcheck :
+    let: s_init :=
+      if iterator_of_fi fi is Some i then Sv.add i Sv.empty else Sv.empty
+    in check_cmd fun_info (Env.after_assign_vars env_fix s_init) c = ok env0.
+  - by case: fi hcheck {hfi hind}.
   have [hsem' hwffix'] := hind _ _ _ hwffix hcheck hlower hle0.
 
-  clear - hp hsemstart hsemend hsem' hwffix'.
+  clear - hp hfi hsem' hwffix'.
   split; last exact: hwffix'.
-  by constructor; apply: (Efor _ _ hsem'); rewrite (hp_globs hp).
+  constructor; apply: (Efor _ hsem').
+  by rewrite (hp_globs hp).
 Qed.
 
 Lemma Hfor_nil : sem_Ind_for_nil Pfor.
 Proof.
-  move=> s x c.
+  move=> s oi c.
   move=> env env_fix c' hwf _ _ hle.
   split; last by rewrite (hp_globs hp).
   exact: EForDone.
 Qed.
 
+Lemma wf_env_init_iteration wdb env gd s s' (oi : option var_i) z :
+  let: s_init := if oi is Some i then Sv.add i Sv.empty else Sv.empty in
+  wf_env env gd s ->
+  init_iteration wdb s oi z = ok s' ->
+  wf_env (Env.after_assign_vars env s_init) gd s'.
+Proof.
+  case: oi => [i|] /= hwf.
+  - move=> hinit.
+    apply: wf_env_le (wf_env_after_assign_var hwf hinit).
+    exact: (snd (EnvP.after_assign_var_after_assign_vars env (v_var i))).
+  move=> [<-]; move: hwf => [hwfvars hwfcond]; split.
+  - apply: wf_varsI hwfvars; rewrite /Env.after_assign_vars /=; SvD.fsetdec.
+  exact: wf_cond_restrict (fun x _ => erefl) hwfcond.
+Qed.
+
 Lemma Hfor_cons : sem_Ind_for_cons p ev Pc Pfor.
 Proof.
-  move=> s0 s1 s2 s3 x n rg c hwrite _ hc hsem hind.
+  move=> s0 s1 s2 s3 oi w rg c hinit _ hc hsem hind.
   move=> env env_fix c' hwf hcheck hlower hle.
 
-  have hwf' := wf_env_after_assign_var hwf hwrite.
+  have hwf' := wf_env_init_iteration hwf hinit.
   have [hsem0 hwf0] := hc _ _ _ hwf' hcheck hlower.
   clear hc hwf hwf'.
 
@@ -1152,7 +1175,7 @@ Proof.
   clear hcheck hlower hle hwf.
 
   split; last exact: hwf'.
-  exact: (EForOne hwrite hsem0 hsem1).
+  exact: (EForOne hinit hsem0 hsem1).
 Qed.
 
 Lemma Hcall : sem_Ind_call p ev Pi_r Pfun.
@@ -1385,19 +1408,42 @@ move=> b; apply (
 case: b; [exact: hc1 hchk1 hc1' | exact: hc2 hchk2 hc2'].
 Qed.
 
-Lemma lower_it_for i dir lo hi c : Pc c -> Pi_r (Cfor i (dir, lo, hi) c).
+Lemma lower_it_for fi c : Pc c -> Pi_r (Cfor fi c).
 move=> hc ii env env' /=; t_xrbindP=> _ _ /check_forP [env0 [hchk hle hle0]] _
   c' hc' <- <- <-.
-apply
-  (wequiv_for_rel_eq_R (dhi := env) (di := Env.after_assign_var env' i)) => //.
-- split=> //; exact: EnvP.le_refl.
-- move=> ??; exact: env_le_st_eq.
-- split=> //. by have [] := EnvP.after_assign_var_after_assign_vars env' i.
+case: fi hchk => [i dir lo hi | e] hchk /=.
+- apply
+    (wequiv_for_rel_eq_R (dhi := env) (di := Env.after_assign_var env' i)) => //.
+  - split=> //; exact: EnvP.le_refl.
+  - move=> ??; exact: env_le_st_eq.
+  - split=> //. by have [] := EnvP.after_assign_var_after_assign_vars env' (v_var i).
   apply (
-    wequiv_weaken (P2 := st_eq (Env.after_assign_var env' i)) (Q2 := st_eq env0)
+    wequiv_weaken
+      (P2 := st_eq (Env.after_assign_vars env' (write_fi (FIrange i dir lo hi))))
+      (Q2 := st_eq env0)
   ) => //.
-- move=> ??; exact: env_le_st_eq hle0.
-exact: hc hchk hc'.
+  - move=> s t; apply: env_le_st_eq.
+    exact: (snd (EnvP.after_assign_var_after_assign_vars env' (v_var i))).
+  - move=> ??; exact: env_le_st_eq hle0.
+  exact: hc hchk hc'.
+- apply (wequiv_for_repeat_rel_eq_R (de := env)) => //.
+  - split=> //; exact: EnvP.le_refl.
+  - move=> ??; exact: env_le_st_eq.
+  apply (
+    wequiv_weaken
+      (P2 := st_eq (Env.after_assign_vars env' Sv.empty))
+      (Q2 := st_eq env0)
+  ) => //.
+  - move=> s t [-> hwf]; split=> //.
+    apply: wf_env_le hwf.
+    rewrite /Env.le /Env.after_assign_vars /=; apply/andP; split.
+    + case: Env.cond => [c_|] //=.
+      have -> : ~~ disjoint (read_e c_) Sv.empty = false.
+      * by apply/negbF; rewrite /disjoint /is_true Sv.is_empty_spec; SvD.fsetdec.
+      by rewrite eq_expr_refl.
+    + apply/Sv.subset_spec; SvD.fsetdec.
+  - move=> ??; exact: env_le_st_eq hle0.
+  exact: hc hchk hc'.
 Qed.
 
 Lemma lower_it_while al c1 e ii0 c2 :
