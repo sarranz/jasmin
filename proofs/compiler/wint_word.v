@@ -96,10 +96,7 @@ Fixpoint wi2w_ir (ir:instr_r) : instr_r :=
   | Cif b c1 c2 =>
     Cif (wi2w_e b) (map wi2w_i c1) (map wi2w_i c2)
 
-  | Cfor (FIrange x dir e1 e2) c =>
-    Cfor (FIrange x dir (wi2w_e e1) (wi2w_e e2)) (map wi2w_i c)
-  | Cfor (FIrepeat e) c =>
-    Cfor (FIrepeat (wi2w_e e)) (map wi2w_i c)
+  | Cfor fi c => Cfor (map_pexpr_fi wi2w_e fi) (map wi2w_i c)
 
   | Cwhile a c e info c' =>
     Cwhile a (map wi2w_i c) (wi2w_e e) info (map wi2w_i c')

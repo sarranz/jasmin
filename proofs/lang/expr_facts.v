@@ -200,6 +200,10 @@ Qed.
 Lemma is_RAnoneP ra : reflect (ra = RAnone) (is_RAnone ra).
 Proof. by case: ra => [ | ? | ?? ] /=; constructor. Qed.
 
+Lemma iterator_of_fi_map_pexpr_fi f fi :
+  iterator_of_fi (map_pexpr_fi f fi) = iterator_of_fi fi.
+Proof. by case: fi. Qed.
+
 (* ** Compute written variables
  * -------------------------------------------------------------------- *)
 

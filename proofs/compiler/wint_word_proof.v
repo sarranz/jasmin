@@ -221,9 +221,9 @@ Let Pc s (c:cmd) s' :=
     exists2 vm', sem p' ev (with_vm s vm) (map wi2w_i c) (with_vm s' vm') &
                  evm s' <=1 vm'.
 
-Let Pfor (i:var_i) vs s c s' :=
+Let Pfor (oi:option var_i) vs s c s' :=
  forall vm, evm s <=1 vm ->
-    exists2 vm', sem_for p' ev i vs (with_vm s vm) (map wi2w_i c) (with_vm s' vm') &
+    exists2 vm', sem_for p' ev oi vs (with_vm s vm) (map wi2w_i c) (with_vm s' vm') &
                  evm s' <=1 vm'.
 
 Let Pfun scs1 m1 fn vargs scs2 m2 vres :=
@@ -310,20 +310,30 @@ Qed.
 
 Local Lemma Hfor : sem_Ind_for p ev Pi_r Pfor.
 Proof.
-  move=> s1 s2 i d lo hi c vlo vhi hlo hhi _ hfor vm hu.
-  have [? hlo' /value_uinclE ?] := wi2w_eP hu hlo.
-  have [? hhi' /value_uinclE ?] := wi2w_eP hu hhi; subst.
+  move=> s1 s2 fi c rn hfi _ hfor vm hu.
   have [vm' h hu'] := hfor _ hu.
-  exists vm' => //; econstructor; eauto.
+  exists vm' => //; apply: (Efor (rn := rn));
+    last by rewrite iterator_of_fi_map_pexpr_fi; apply: h.
+  move: hfi; rewrite -eq_globs /sem_fi /sem_pexpr_int /=.
+  case: fi {hfor h} => [i d lo hi | e].
+  + t_xrbindP => zlo vlo + hzlo zhi vhi + hzhi <-.
+    rewrite (to_intI hzlo) (to_intI hzhi) => hvlo hvhi.
+    have [v2 + hulo] := wi2w_eP hu hvlo.
+    have [v3 + huhi] := wi2w_eP hu hvhi.
+    by rewrite (value_uinclE hulo) (value_uinclE huhi) => /= -> ->.
+  t_xrbindP => z v + hz <-.
+  rewrite (to_intI hz) => hv.
+  have [v2 + hu2] := wi2w_eP hu hv.
+  by rewrite (value_uinclE hu2) => /= ->.
 Qed.
 
 Local Lemma Hfor_nil : sem_Ind_for_nil Pfor.
-Proof. move=> s i c vm hu; exists vm => //; apply EForDone. Qed.
+Proof. move=> s oi c vm hu; exists vm => //; apply EForDone. Qed.
 
 Local Lemma Hfor_cons : sem_Ind_for_cons p ev Pc Pfor.
 Proof.
-  move=> s1 s1' s2 s3 i w ws c hw _ hc _ hfor vm hu.
-  have [vm1 hw' hu1] := [elaborate write_var_uincl hu (value_uincl_refl w) hw].
+  move=> s1 s1' s2 s3 oi w ws c hw _ hc _ hfor vm hu.
+  have [vm1 hw' hu1] := init_iteration_uincl hu hw.
   have [vm2 hs1 hu2] := hc _ hu1.
   have [vm' hs2 hu'] := hfor _ hu2.
   exists vm' => //; econstructor; eauto.
@@ -448,7 +458,9 @@ Proof.
   + by move=> xs o es ii; apply wequiv_syscall_rel_uincl with checker_wi2w tt.
   + by move=> >; apply wequiv_noassert.
   + by move=> e c1 c2 hc1 hc2 ii; apply wequiv_if_rel_uincl with checker_wi2w tt tt tt.
-  + by move=> v dir lo hi c hc ii; apply wequiv_for_rel_uincl with checker_wi2w tt tt.
+  + move=> fi c hc ii; case: fi => [v dir lo hi | e].
+    * by apply wequiv_for_rel_uincl with checker_wi2w tt tt.
+    * by apply wequiv_for_repeat_rel_uincl with checker_wi2w tt.
   + by move=> a c e ii' c' hc hc' ii; apply wequiv_while_rel_uincl with checker_wi2w tt.
   move=> xs f es ii; apply wequiv_call_rel_uincl with checker_wi2w tt => //.
   by move=> ???; apply: wequiv_fun_rec.
