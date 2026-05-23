@@ -206,6 +206,22 @@ Fixpoint wi2i_e (e0:pexpr) : cexec (safety_cond * pexpr) :=
 
   end.
 
+Definition wi2i_fi (fi : for_iteration) : cexec (safety_cond * for_iteration) :=
+  match fi with
+  | FIrange x dir e1 e2 =>
+      Let _ :=
+        assert
+          [&& in_FV_var x, vtype x == aint, etype_of_expr m e1 == ETint _ & etype_of_expr m e2 == ETint _]
+          (E.ierror_s "invalid loop counter")
+      in
+      Let: (sc1, e1) := wi2i_e e1 in
+      Let: (sc2, e2) := wi2i_e e2 in
+      ok (sc1 ++ sc2, FIrange x dir e1 e2)
+  | FIrepeat e =>
+      Let: (sc, e) := wi2i_e e in
+      ok (sc, FIrepeat e)
+  end.
+
 Definition wi2i_lvar (ety : extended_type positive) (x : var_i) : cexec var_i :=
   Let _ := assert (esubtype (etype_of_var m x) ety)
                   (E.ierror_lv (Lvar x)) in
@@ -377,19 +393,9 @@ Fixpoint wi2i_ir (ir:instr_r) : cexec (safety_cond * instr_r) :=
     ok (b.1, Cif b.2 c1 c2)
 
   | Cfor fi c =>
-    match fi with
-    | FIrange x dir e1 e2 =>
-      Let _ := assert [&& in_FV_var x, vtype x == aint, etype_of_expr m e1 == ETint _ & etype_of_expr m e2 == ETint _]
-                  (E.ierror_s "invalid loop counter") in
-      Let e1 := wi2i_e e1 in
-      Let e2 := wi2i_e e2 in
+      Let: (sc, fi') := wi2i_fi fi in
       Let c := wi2i_c wi2i_i c in
-      ok (e1.1 ++ e2.1, Cfor (FIrange x dir e1.2 e2.2) c)
-    | FIrepeat e =>
-      Let e := wi2i_e e in
-      Let c := wi2i_c wi2i_i c in
-      ok (e.1, Cfor (FIrepeat e.2) c)
-    end
+      ok (sc, Cfor fi' c)
 
   | Cwhile a c e ii' c' =>
     Let e := wi2i_e e in

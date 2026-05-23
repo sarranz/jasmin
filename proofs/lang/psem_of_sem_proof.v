@@ -185,6 +185,32 @@ move => x xs ih [] // v vs s1 s1' h /=; apply: rbindP => s' /(write_lval_sim h) 
 exact: (ih _ _ _ h').
 Qed.
 
+Lemma sem_fi_sim s s' fi rn :
+  estate_sim s s' →
+  sem_fi true gd s fi = ok rn →
+  sem_fi true gd s' fi = ok rn.
+Proof.
+  move=> hss'; case: fi => /=.
+  - move=> i d elo ehi; rewrite /sem_fi /sem_pexpr_int /=.
+    t_xrbindP => zlo vlo helo hzlo zhi vhi hehi hzhi <-.
+    have helo' := sem_pexpr_sim hss' helo.
+    have hehi' := sem_pexpr_sim hss' hehi.
+    by rewrite helo' /= hzlo hehi' /= hzhi.
+  - move=> e; rewrite /sem_pexpr_int.
+    t_xrbindP => z v he hz <-.
+    by rewrite (sem_pexpr_sim hss' he) /= hz.
+Qed.
+
+Lemma init_iteration_sim s1 s2 (s1' : estate_s) oi w :
+  estate_sim s1 s1' →
+  init_iteration true s1 oi w = ok s2 →
+  ∃ s2', estate_sim s2 s2' ∧ init_iteration true s1' oi w = ok s2'.
+Proof.
+  case: oi => [i | ] hss' /=.
+  - exact: write_var_sim hss'.
+  - by move=> [<-]; exists s1'.
+Qed.
+
 Let Pc s1 c s2 : Prop :=
   ∀ s1',
     estate_sim s1 s1' →
@@ -279,13 +305,14 @@ apply:
   case: (ih _ hss'1) => s2' [hss'2 hc].
   exists s2'; split; first exact: hss'2.
   once (econstructor; eauto; fail).
-- move => s1 s2 x d lo hi c vlo vhi /sem_pexpr_sim hlo /sem_pexpr_sim hhi _ ih s1' hss'1.
+- move => s1 s2 fi c rn hfi _ ih s1' hss'1.
+  have hfi' := sem_fi_sim hss'1 hfi.
   case: (ih _ hss'1) => s2' [hss'2 hc].
   exists s2'; split; first exact: hss'2.
-  once (econstructor; eauto; fail).
+  exact: Efor hfi' hc.
 - by move => s1 x c s1' hss'1; exists s1'; split => //; constructor.
-- move => s1 s2 s3 s4 x w ws c /write_var_sim hw _ ih _ ih' s1' hss'1.
-  case: (hw _ hss'1) => s2' [hss'2 hw'].
+- move => s1 s2 s3 s4 oi w ws c /init_iteration_sim hinit _ ih _ ih' s1' hss'1.
+  case: (hinit _ hss'1) => s2' [hss'2 hinit'].
   case: (ih _ hss'2) => s3' [hss'3 hc].
   case: (ih' _ hss'3) => s4' [hss'4 hf].
   exists s4'; split; first exact: hss'4.
@@ -366,7 +393,9 @@ Proof.
     by t_xrbindP => -[[??]?] /= /hsyscall -> [<-] /=; eauto.
   + by move=> a ii; apply wequiv_noassert.
   + by move=> > hc1 hc2 ii; apply wequiv_if_rel_eq with checker_st_eq tt tt tt.
-  + by move=> > hc ii; apply wequiv_for_rel_eq with checker_st_eq tt tt.
+  + move=> fi c hc ii; case: fi => [i dir lo hi | e].
+    - by apply wequiv_for_rel_eq with checker_st_eq tt tt.
+    - by apply wequiv_for_repeat_rel_eq with checker_st_eq tt.
   + by move=> > hc hc' ii; apply wequiv_while_rel_eq with checker_st_eq tt.
   move=> ????; apply wequiv_call_rel_eq with checker_st_eq tt => //.
   by move=> ?? <-; apply: wequiv_fun_rec.
