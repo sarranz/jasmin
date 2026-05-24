@@ -171,6 +171,11 @@ with sem_i : instr_info → Sv.t → estate → instr_r → estate → Prop :=
     sem_pexpr true gd s2 e = ok (Vbool false) →
     sem_i ii k s1 (Cwhile a c e ei c') s2
 
+| Efor ii k s1 s2 fi c rn :
+    sem_fi true gd s1 fi = ok rn →
+    sem_for_sov k s1 (iterator_of_fi fi) rn c s2 →
+    sem_i ii (Sv.union k (sv_of_ovar_i (iterator_of_fi fi))) s1 (Cfor fi c) s2
+
 | Ecall ii k s1 s2 s2' res f args :
     sem_call ii k (kill_tmp_call f s1) f s2 →
     s2' = kill_tmp_call f s2 ->
@@ -197,7 +202,18 @@ with sem_call : instr_info → Sv.t → estate → funname → estate → Prop :
     let vm2 := kill_vars (ra_vm_return f.(f_extra)) s2'.(evm) in
     s2 = {| escs := s2'.(escs); emem := m2 ; evm := set_RSP m2 vm2 |} →
     let k' := Sv.union (ra_undef f var_tmp) (ra_vm_return f.(f_extra)) in
-    sem_call ii (Sv.union k k') s1 fn s2.
+    sem_call ii (Sv.union k k') s1 fn s2
+
+with sem_for_sov :
+    Sv.t → estate → option var_i → seq Z → cmd → estate → Prop :=
+| Efor_sov_nil k s oi c :
+    sem_for_sov k s oi [::] c s
+
+| Efor_sov_cons k1 k2 s1 s1' s2 s3 oi w ws c :
+    init_iteration true s1 oi w = ok s1' →
+    sem k1 s1' c s2 →
+    sem_for_sov k2 s2 oi ws c s3 →
+    sem_for_sov (Sv.union k1 k2) s1 oi (w :: ws) c s3.
 
 Variant sem_export_call_conclusion (scs: syscall_state_t) (m: mem) (fd: sfundef) (args: values) (vm: Vm.t) (scs': syscall_state_t) (m': mem) (res: values) : Prop :=
   | SemExportCallConclusion (m1: mem) (k: Sv.t) (m2: mem) (vm2: Vm.t) (res':values) of
@@ -278,14 +294,19 @@ Lemma sem_iE ii k s i s' :
     exists2 k',
     k = Sv.union k' (fd_tmp_call p f) &
     sem_call ii k' (kill_tmp_call f s) f s2
-  | Cfor _ _ => false
+  | Cfor fi c =>
+    ∃ rn k',
+    [/\ k = Sv.union k' (sv_of_ovar_i (iterator_of_fi fi)),
+        sem_fi true gd s fi = ok rn &
+        sem_for_sov k' s (iterator_of_fi fi) rn c s']
   end.
 Proof.
   case => { ii k s i s' }; eauto.
   - by move => _ s s' x _ ty e v v' -> /= ->; eauto.
   - by move=> _ s1 scs m s2 o xs es ves vs h1 h2 h3; split => //; exists scs, m, ves, vs.
   - by move => ii k k' krec s1 s2 s3 s4 a c e c' exec_c eval_e exec_c' rec; exists k, s2, true; split; try eexists; eauto.
-  by move => ii k s1 s2 a c e c' exec_c eval_e; exists k, s2, false.
+  - by move => ii k s1 s2 a c e c' exec_c eval_e; exists k, s2, false.
+  by move => ii k s1 s2 fi c rn hfi hsov; exists rn, k; split.
 Qed.
 
 Lemma sem_callE ii k s fn s' :
@@ -319,7 +340,9 @@ Section SEM_IND.
     (Pc   : Sv.t → estate → cmd → estate → Prop)
     (Pi : Sv.t → estate → instr → estate → Prop)
     (Pi_r : instr_info → Sv.t → estate → instr_r → estate → Prop)
-    (Pfun : instr_info → Sv.t → estate → funname → estate → Prop).
+    (Pfun : instr_info → Sv.t → estate → funname → estate → Prop)
+    (Pfor_sov : Sv.t → estate → option var_i → seq Z → cmd →
+                estate → Prop).
 
   Definition sem_Ind_nil : Prop :=
     ∀ (s : estate), Pc Sv.empty s [::] s.
@@ -390,6 +413,26 @@ Section SEM_IND.
     sem_pexpr true gd s2 e = ok (Vbool false) →
     Pi_r ii k s1 (Cwhile a c e ei c') s2.
 
+  Definition sem_Ind_for_sov_nil : Prop :=
+    ∀ k s oi c, Pfor_sov k s oi [::] c s.
+
+  Definition sem_Ind_for_sov_cons : Prop :=
+    ∀ k1 k2 (s1 s1' s2 s3: estate) oi w ws c,
+      init_iteration true s1 oi w = ok s1' →
+      sem k1 s1' c s2 →
+      Pc k1 s1' c s2 →
+      sem_for_sov k2 s2 oi ws c s3 →
+      Pfor_sov k2 s2 oi ws c s3 →
+      Pfor_sov (Sv.union k1 k2) s1 oi (w :: ws) c s3.
+
+  Definition sem_Ind_for : Prop :=
+    ∀ ii k (s1 s2: estate) fi c rn,
+      sem_fi true gd s1 fi = ok rn →
+      sem_for_sov k s1 (iterator_of_fi fi) rn c s2 →
+      Pfor_sov k s1 (iterator_of_fi fi) rn c s2 →
+      Pi_r ii (Sv.union k (sv_of_ovar_i (iterator_of_fi fi)))
+              s1 (Cfor fi c) s2.
+
   Hypotheses
     (Hasgn: sem_Ind_assgn)
     (Hopn: sem_Ind_opn)
@@ -398,6 +441,9 @@ Section SEM_IND.
     (Hif_false: sem_Ind_if_false)
     (Hwhile_true: sem_Ind_while_true)
     (Hwhile_false: sem_Ind_while_false)
+    (Hfor_sov_nil: sem_Ind_for_sov_nil)
+    (Hfor_sov_cons: sem_Ind_for_sov_cons)
+    (Hfor: sem_Ind_for)
   .
 
   Definition sem_Ind_call : Prop :=
@@ -458,6 +504,9 @@ Section SEM_IND.
           (@sem_I_Ind krec s3 (MkI ii (Cwhile a c e1 ei c')) s4 s6)
     | @Ewhile_false ii k s1 s2 a c e1 ei c' s0 e2 =>
       @Hwhile_false ii k s1 s2 a c e1 ei c' s0 (@sem_Ind k s1 c s2 s0) e2
+    | @Efor ii k s1 s2 fi c rn hfi hsov =>
+      @Hfor ii k s1 s2 fi c rn hfi hsov
+            (@sem_for_sov_Ind k s1 (iterator_of_fi fi) rn c s2 hsov)
     | @Ecall ii k s1 s2 s2' res fn args exec heq =>
       @sem_Ind_call' ii k s1 s2 s2' res fn args exec heq
          (@sem_call_Ind ii k (kill_tmp_call fn s1) fn s2 exec)
@@ -473,6 +522,19 @@ Section SEM_IND.
     | @EcallRun ii k s1 s2 fn fd m1 s2' ok_fd ok_ra ok_ss ok_sp ok_rsp ok_m1 exec ok_rsp' ok_s2 =>
 
       @Hproc ii k s1 s2 fn fd m1 s2' ok_fd ok_ra ok_ss ok_sp ok_rsp ok_m1 exec (@sem_Ind k _ _ _ exec) ok_rsp' ok_s2
+    end
+
+  with sem_for_sov_Ind (k: Sv.t) (s1: estate) (oi: option var_i)
+       (rn: seq Z) (c: cmd) (s2: estate)
+       (s: sem_for_sov k s1 oi rn c s2) {struct s} :
+    Pfor_sov k s1 oi rn c s2 :=
+    match s with
+    | @Efor_sov_nil k s oi c =>
+      @Hfor_sov_nil k s oi c
+    | @Efor_sov_cons k1 k2 s1 s1' s2 s3 oi w ws c hinit hexec hfor =>
+      @Hfor_sov_cons k1 k2 s1 s1' s2 s3 oi w ws c hinit hexec
+        (@sem_Ind k1 s1' c s2 hexec) hfor
+        (@sem_for_sov_Ind k2 s2 oi ws c s3 hfor)
     end.
 
 End SEM_IND.

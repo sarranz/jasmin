@@ -29,6 +29,8 @@ Let Pc (_: Sv.t) s1 (_: cmd) s2 : Prop := emem s1 ≡ emem s2.
 Let Pi (_: Sv.t) s1 (_: instr) s2 : Prop := emem s1 ≡ emem s2.
 Let Pi_r (_: instr_info) (_: Sv.t) s1 (_: instr_r) s2 : Prop := emem s1 ≡ emem s2.
 Let Pfun (_: instr_info) (_: Sv.t) s1 (_: funname) s2 : Prop := emem s1 ≡ emem s2.
+Let Pfor_sov (_: Sv.t) s1 (_: option var_i) (_: seq Z) (_: cmd) s2 : Prop :=
+  emem s1 ≡ emem s2.
 
 Lemma Hnil : sem_Ind_nil Pc.
 Proof. by []. Qed.
@@ -68,6 +70,19 @@ Qed.
 Lemma Hwhile_false : sem_Ind_while_false p var_tmp Pc Pi_r.
 Proof. by []. Qed.
 
+Lemma Hfor_sov_nil_ss : sem_Ind_for_sov_nil Pfor_sov.
+Proof. by []. Qed.
+
+Lemma Hfor_sov_cons_ss : sem_Ind_for_sov_cons p var_tmp Pc Pfor_sov.
+Proof.
+  move=> k1 k2 s1 s1' s2 s3 oi w ws c hinit _ ih _ ih_for.
+  have [vm' hvm' _] := init_iteration_estateP hinit; subst s1'.
+  red; etransitivity; [exact: ih | exact: ih_for].
+Qed.
+
+Lemma Hfor_ss : sem_Ind_for p var_tmp Pi_r Pfor_sov.
+Proof. by move=> ii k s1 s2 fi c rn _ _ ih. Qed.
+
 Lemma Hcall : sem_Ind_call p var_tmp Pi_r Pfun.
 Proof. by []. Qed.
 
@@ -98,6 +113,9 @@ Proof.
        Hif_false
        Hwhile_true
        Hwhile_false
+       Hfor_sov_nil_ss
+       Hfor_sov_cons_ss
+       Hfor_ss
        Hcall
        Hproc).
 Qed.
@@ -117,6 +135,9 @@ Proof.
        Hif_false
        Hwhile_true
        Hwhile_false
+       Hfor_sov_nil_ss
+       Hfor_sov_cons_ss
+       Hfor_ss
        Hcall
        Hproc).
 Qed.
@@ -136,6 +157,9 @@ Proof.
        Hif_false
        Hwhile_true
        Hwhile_false
+       Hfor_sov_nil_ss
+       Hfor_sov_cons_ss
+       Hfor_ss
        Hcall
        Hproc).
 Qed.
@@ -155,6 +179,9 @@ Proof.
        Hif_false
        Hwhile_true
        Hwhile_false
+       Hfor_sov_nil_ss
+       Hfor_sov_cons_ss
+       Hfor_ss
        Hcall
        Hproc).
 Qed.
@@ -185,6 +212,9 @@ Let Pc (k: Sv.t) (s1: estate) (_: cmd) (s2: estate) : Prop := s1 =[\ k] s2 .
 Let Pi (k: Sv.t) (s1: estate) (_: instr) (s2: estate) : Prop := s1 =[\ k] s2.
 Let Pi_r (_: instr_info) (k: Sv.t) (s1: estate) (_: instr_r) (s2: estate) : Prop := s1 =[\ k] s2.
 Let Pfun (_: instr_info) (k: Sv.t) (s1: estate) (_: funname) (s2: estate) : Prop := s1 =[\ k] s2.
+Let Pfor_sov (k: Sv.t) (s1: estate) (oi: option var_i) (_: seq Z)
+    (_: cmd) (s2: estate) : Prop :=
+  s1 =[\Sv.union k (sv_of_ovar_i oi)] s2.
 
 Local Lemma Hnil_nw : sem_Ind_nil Pc.
 Proof. by []. Qed.
@@ -232,6 +262,22 @@ Qed.
 Lemma Hwhile_false_nw : sem_Ind_while_false p var_tmp Pc Pi_r.
 Proof. by []. Qed.
 
+Lemma Hfor_sov_nil_nw : sem_Ind_for_sov_nil Pfor_sov.
+Proof. by []. Qed.
+
+Lemma Hfor_sov_cons_nw : sem_Ind_for_sov_cons p var_tmp Pc Pfor_sov.
+Proof.
+  move=> k1 k2 s1 s1' s2 s3 oi w ws c hinit _ ih _ ih_for x hx.
+  have [vm' hvm' heq'] := init_iteration_estateP hinit; subst s1'.
+  have hx1 : ¬ Sv.In x (sv_of_ovar_i oi) by SvD.fsetdec.
+  have hx2 : ¬ Sv.In x k1 by SvD.fsetdec.
+  have hx3 : ¬ Sv.In x k2 by SvD.fsetdec.
+  by rewrite (heq' x hx1) (ih x hx2); apply: ih_for; SvD.fsetdec.
+Qed.
+
+Lemma Hfor_nw : sem_Ind_for p var_tmp Pi_r Pfor_sov.
+Proof. by move=> ii k s1 s2 fi c rn _ _ ih. Qed.
+
 Lemma Hcall_nw : sem_Ind_call p var_tmp Pi_r Pfun.
 Proof.
   move=> ii k s1 s2 res fn args ?.
@@ -276,6 +322,9 @@ Proof.
        Hif_false_nw
        Hwhile_true_nw
        Hwhile_false_nw
+       Hfor_sov_nil_nw
+       Hfor_sov_cons_nw
+       Hfor_nw
        Hcall_nw
        Hproc_nw).
 Qed.
@@ -296,6 +345,9 @@ Proof.
        Hif_false_nw
        Hwhile_true_nw
        Hwhile_false_nw
+       Hfor_sov_nil_nw
+       Hfor_sov_cons_nw
+       Hfor_nw
        Hcall_nw
        Hproc_nw).
 Qed.
@@ -316,6 +368,9 @@ Proof.
        Hif_false_nw
        Hwhile_true_nw
        Hwhile_false_nw
+       Hfor_sov_nil_nw
+       Hfor_sov_cons_nw
+       Hfor_nw
        Hcall_nw
        Hproc_nw).
 Qed.
@@ -342,6 +397,8 @@ Let Pc (k: Sv.t) (_: estate) (_: cmd) (_: estate) : Prop := disjoint k (magic_va
 Let Pi (k: Sv.t) (_: estate) (_: instr) (_: estate) : Prop := disjoint k (magic_variables p).
 Let Pi_r (_: instr_info) (_: Sv.t) (_: estate) (_: instr_r) (_: estate) : Prop := True.
 Let Pfun (_: instr_info) (k: Sv.t) (_: estate) (_: funname) (_: estate) : Prop := disjoint k (magic_variables p).
+Let Pfor_sov (_: Sv.t) (_: estate) (_: option var_i) (_: seq Z) (_: cmd) (_: estate) : Prop :=
+  True.
 
 Local Lemma Hnil_pm : sem_Ind_nil Pc.
 Proof.
@@ -376,6 +433,15 @@ Lemma Hwhile_true_pm : sem_Ind_while_true p var_tmp Pc Pi Pi_r.
 Proof. by []. Qed.
 
 Lemma Hwhile_false_pm : sem_Ind_while_false p var_tmp Pc Pi_r.
+Proof. by []. Qed.
+
+Lemma Hfor_sov_nil_pm : sem_Ind_for_sov_nil Pfor_sov.
+Proof. by []. Qed.
+
+Lemma Hfor_sov_cons_pm : sem_Ind_for_sov_cons p var_tmp Pc Pfor_sov.
+Proof. by []. Qed.
+
+Lemma Hfor_pm : sem_Ind_for p var_tmp Pi_r Pfor_sov.
 Proof. by []. Qed.
 
 Lemma Hcall_pm : sem_Ind_call p var_tmp Pi_r Pfun.
@@ -438,6 +504,9 @@ Proof.
        Hif_false_pm
        Hwhile_true_pm
        Hwhile_false_pm
+       Hfor_sov_nil_pm
+       Hfor_sov_cons_pm
+       Hfor_pm
        Hcall_pm
        Hproc_pm).
 Qed.
@@ -458,6 +527,9 @@ Proof.
        Hif_false_pm
        Hwhile_true_pm
        Hwhile_false_pm
+       Hfor_sov_nil_pm
+       Hfor_sov_cons_pm
+       Hfor_pm
        Hcall_pm
        Hproc_pm).
 Qed.
@@ -493,6 +565,8 @@ Let Pc (_: Sv.t) s1 (_: cmd) s2 : Prop := emem s1 ≡ emem s2.
 Let Pi (_: Sv.t) s1 (_: instr) s2 : Prop := emem s1 ≡ emem s2.
 Let Pi_r (_: instr_info) (_: Sv.t) s1 (_: instr_r) s2 : Prop := emem s1 ≡ emem s2.
 Let Pfun (_: instr_info) (_: Sv.t) s1 (_: funname) s2 : Prop := emem s1 ≡ emem s2.
+Let Pfor_sov (_: Sv.t) s1 (_: option var_i) (_: seq Z) (_: cmd) s2 : Prop :=
+  emem s1 ≡ emem s2.
 
 Lemma validw_stable_nil : sem_Ind_nil Pc.
 Proof. by []. Qed.
@@ -529,6 +603,19 @@ Qed.
 Lemma validw_stable_while_false : sem_Ind_while_false p var_tmp Pc Pi_r.
 Proof. by []. Qed.
 
+Lemma validw_stable_for_nil : sem_Ind_for_sov_nil Pfor_sov.
+Proof. by []. Qed.
+
+Lemma validw_stable_for_cons : sem_Ind_for_sov_cons p var_tmp Pc Pfor_sov.
+Proof.
+  move=> k1 k2 s1 s1' s2 s3 oi w ws c hinit _ ih _ ih_for.
+  have [vm' hvm' _] := init_iteration_estateP hinit; subst s1'.
+  red; etransitivity; [exact: ih | exact: ih_for].
+Qed.
+
+Lemma validw_stable_for : sem_Ind_for p var_tmp Pi_r Pfor_sov.
+Proof. by move=> ii k s1 s2 fi c rn _ _ ih. Qed.
+
 Lemma validw_stable_call : sem_Ind_call p var_tmp Pi_r Pfun.
 Proof. by []. Qed.
 
@@ -556,6 +643,9 @@ Proof.
        validw_stable_if_false
        validw_stable_while_true
        validw_stable_while_false
+       validw_stable_for_nil
+       validw_stable_for_cons
+       validw_stable_for
        validw_stable_call
        validw_stable_proc).
 Qed.
@@ -575,6 +665,9 @@ Proof.
        validw_stable_if_false
        validw_stable_while_true
        validw_stable_while_false
+       validw_stable_for_nil
+       validw_stable_for_cons
+       validw_stable_for
        validw_stable_call
        validw_stable_proc).
 Qed.
@@ -594,6 +687,9 @@ Proof.
        validw_stable_if_false
        validw_stable_while_true
        validw_stable_while_false
+       validw_stable_for_nil
+       validw_stable_for_cons
+       validw_stable_for
        validw_stable_call
        validw_stable_proc).
 Qed.
@@ -613,6 +709,9 @@ Proof.
        validw_stable_if_false
        validw_stable_while_true
        validw_stable_while_false
+       validw_stable_for_nil
+       validw_stable_for_cons
+       validw_stable_for
        validw_stable_call
        validw_stable_proc).
 Qed.

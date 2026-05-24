@@ -179,7 +179,8 @@ Section LEMMA.
     - by move => xs op es s; rewrite /write_i /write_i_rec !vrvs_recE; SvD.fsetdec.
     - by move=> a s; rewrite /write_i /write_i_rec; SvD.fsetdec.
     - by move => e c1 c2 h1 h2 s; rewrite /write_i /write_i_rec -!/write_c_rec -/write_c !h1 h2; SvD.fsetdec.
-    - by move => v d lo hi body h s; rewrite /write_i /write_i_rec -!/write_c_rec !h; SvD.fsetdec.
+    - move => fi body h s; case: fi => *;
+        by rewrite /write_i /write_i_rec /write_fi_rec -!/write_c_rec !h; SvD.fsetdec.
     - by move => a c1 e ei c2  h1 h2 s; rewrite /write_i /write_i_rec -!/write_c_rec -/write_c !h1 h2; SvD.fsetdec.
     by move=> xs fn es s; rewrite /write_i /write_i_rec; SvD.fsetdec.
   Qed.
@@ -204,6 +205,13 @@ Section LEMMA.
   Lemma write_i_while aa c1 e ei c2 :
     Sv.Equal (write_i (Cwhile aa c1 e ei c2)) (Sv.union (write_c c1) (write_c c2)).
   Proof. etransitivity; last exact: (write_i_if e c1 c2). reflexivity. Qed.
+
+  Lemma write_i_for e c :
+    Sv.Equal (write_i (Cfor (FIrepeat e) c)) (write_c c).
+  Proof.
+    rewrite /write_i /write_i_rec /write_fi_rec -/write_c_rec write_c_recE.
+    SvD.fsetdec.
+  Qed.
 
   End WRITE.
 
@@ -231,6 +239,24 @@ Section LEMMA.
     move => /ih{ih} [D4] [D3]; rewrite /check_e => -[ h he' h' heq [le le'] ].
     exists D4, D3; split => //; last by split; SvD.fsetdec.
     by rewrite h /= he' /= h' /=; move /Sv.subset_spec: le' => ->.
+  Qed.
+
+  Lemma check_instr_r_CforP sz ii e c D D' :
+    check_instr_r sz ii D (Cfor (FIrepeat e) c) = ok D' →
+    [/\ check_e ii D' e = ok tt,
+        ∃ D'', check_cmd sz D' c = ok D'' ∧ Sv.Subset D'' D' &
+        Sv.Subset D D'].
+  Proof.
+    rewrite /check_instr_r -/check_instr /=.
+    elim: loop_counter D => // n ih D /=; t_xrbindP => hfe D'' hc.
+    case: (equivP idP (Sv.subset_spec _ _)) => sub.
+    - move=> [<-]; split.
+      + exact: hfe.
+      + by exists D''.
+      by SvD.fsetdec.
+    move=> /ih{ih} [hfe' [D3 [hc' sub']] hle]; split => //.
+    + by exists D3.
+    by SvD.fsetdec.
   Qed.
 
   Lemma check_instrP sz ii i D D' :
@@ -302,12 +328,8 @@ Section LEMMA.
   Proof.
     move => s1 s2 s3 i c exec_i hi exec_c hc sz I O t1 /=; t_xrbindP => D ok_i ok_c ok_W sim1.
     have ok_W1 : merged_vmap_precondition (write_I i) sz (emem s1) (evm t1).
-    - split.
-      2: exact: (mvp_top_stack ok_W).
-      2: exact: (mvp_global_data ok_W).
-      2: exact: (mvp_stack_aligned ok_W).
-      by move: (mvp_not_written ok_W); rewrite write_c_cons; apply: disjoint_w;
-        move: (write_I i) (write_c c) (* SvD.fsetdec faster *); SvD.fsetdec.
+    - apply: merged_vmap_preconditionI ok_W.
+      rewrite write_c_cons; move: (write_I i) (write_c c); SvD.fsetdec.
     have [t2 [ki texec_i hki] sim2] := hi _ _ _ _ ok_i ok_W1 sim1. 
     have ok_W2 : merged_vmap_precondition (write_c c) sz (emem s2) (evm t2).
     - have [ not_written_gd not_written_rsp ] := not_written_magic (mvp_not_written ok_W1).
@@ -562,17 +584,92 @@ Section LEMMA.
     by SvD.fsetdec.
   Qed.
 
-  Let Pfor (_: var_i) (_: seq Z) (_: estate) (_: cmd) (_: estate) : Prop :=
-    True.
+  Let Pfor (oi : option var_i) (rn : seq Z) (s1 : estate) (c : cmd)
+      (s2 : estate) : Prop :=
+    if oi is None then
+      ∀ sz (D : Sv.t) (t1 : estate),
+        (∃ D', check_cmd sz D c = ok D' ∧ Sv.Subset D' D) →
+        merged_vmap_precondition (write_c c) sz s1.(emem) t1.(evm) →
+        match_estate D s1 t1 →
+        exists2 t2,
+          exists2 k,
+            sem_one_varmap.sem_for_sov p var_tmps k t1 None rn c t2 &
+            Sv.Subset k (write_c c) &
+          match_estate D s2 t2
+    else True.
 
   Lemma Hfor: sem_Ind_for p global_data Pi_r Pfor.
-  Proof. by []. Qed.
+  Proof.
+    move=> s1 s2 fi c rn hfi hsov ih.
+    case: fi hfi hsov ih => [v d lo hi | e] hfi hsov ih.
+    { by move=> sz ii I O t1 /=. }
+    move=> sz ii I O t1 hcheck pre sim.
+    have [check_e_O [D'' [check_c_O hD''] hIO]] :=
+      check_instr_r_CforP hcheck.
+    have pre_c :
+        merged_vmap_precondition (write_c c) sz s1.(emem) t1.(evm).
+    { apply: merged_vmap_preconditionI pre; rewrite write_i_for; SvD.fsetdec. }
+    have sim' : match_estate O s1 t1 by apply: match_estateI hIO sim.
+    have hcheck' : ∃ D', check_cmd sz O c = ok D' ∧ Sv.Subset D' O
+      by exists D''.
+    have [t2 [k tsov hk] sim2] := ih sz O t1 hcheck' pre_c sim'.
+    have hfi_t1 : sem_fi true (p_globs p) t1 (FIrepeat e) = ok rn.
+    { move: hfi; rewrite /sem_fi /sem_pexpr_int /=.
+      t_xrbindP => v hv z hz <-.
+      have [v' hv' hincl] := check_eP check_e_O sim' z.
+      rewrite /sem_fi /sem_pexpr_int /= hv' /=.
+      by move: hincl; rewrite (to_intI hz) => /value_uinclE ->. }
+    exists t2; last exact: sim2.
+    eexists.
+    - apply: sem_one_varmap.Efor.
+      + exact: hfi_t1.
+      exact: tsov.
+    rewrite write_i_for.
+    move: hk; clear; SvD.fsetdec.
+  Qed.
 
   Lemma Hfor_nil: sem_Ind_for_nil Pfor.
-  Proof. by []. Qed.
+  Proof.
+    move=> s oi c; case: oi => // sz D t1 _ pre sim.
+    exists t1; last exact: sim.
+    exists Sv.empty.
+    - exact: sem_one_varmap.Efor_sov_nil.
+    by SvD.fsetdec.
+  Qed.
 
   Lemma Hfor_cons: sem_Ind_for_cons p global_data Pc Pfor.
-  Proof. by []. Qed.
+  Proof.
+    move=> s1 s1' s2 s3 oi w ws c hinit sexec_c ih_c _ ih_rest.
+    case: oi hinit ih_rest => [v|] hinit ih_rest; first by [].
+    have hs1' : s1' = s1 := esym (ok_inj hinit).
+    rewrite hs1' in ih_c sexec_c.
+    move=> sz D t1 [D'' [hcheck_D hD''D]] pre sim.
+    have [hgd hrsp] := not_written_magic (mvp_not_written pre).
+    have [t2 [k1 texec_c hk1] sim2] := ih_c sz D D'' t1 hcheck_D pre sim.
+    have sim2' : match_estate D s2 t2 := match_estateI hD''D sim2.
+    have pre2 : merged_vmap_precondition (write_c c) sz s2.(emem) t2.(evm).
+    { split.
+      + exact: mvp_not_written pre.
+      + rewrite -(ss_top_stack (sem_stack_stable_sprog sexec_c))
+                -(mvp_top_stack pre)
+                (sem_not_written texec_c) //.
+        move: vrsp (write_c c) hk1 hrsp; clear; SvD.fsetdec.
+      + rewrite -(sem_not_written texec_c); first exact: mvp_global_data pre.
+        move: vgd (write_c c) hk1 hgd; clear; SvD.fsetdec.
+      rewrite -(ss_top_stack (sem_stack_stable_sprog sexec_c)).
+      exact: mvp_stack_aligned pre. }
+    have hcheck' : ∃ D', check_cmd sz D c = ok D' ∧ Sv.Subset D' D
+      by exists D''.
+    have [t4 [k2 tsov2 hk2] sim4] := ih_rest sz D t2 hcheck' pre2 sim2'.
+    exists t4; last exact: sim4.
+    eexists.
+    - apply: sem_one_varmap.Efor_sov_cons.
+      + by [].
+      + exact: texec_c.
+      exact: tsov2.
+    move: hk1 hk2; clear.
+    move: (write_c c); SvD.fsetdec.
+  Qed.
 
   Let Pfun scs (m: mem) (fn: funname) (args: seq value) scs' (m': mem) (res: seq value) : Prop :=
     ∀ ii fd tvm1 args',
