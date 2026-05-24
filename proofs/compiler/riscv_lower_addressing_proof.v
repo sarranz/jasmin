@@ -223,13 +223,13 @@ Let Pc s1 c s2 :=
       sem p' ev (with_vm s1 vm1) (lower_addressing_c tmp c) (with_vm s2 vm2)
       & evm s2 =[X] vm2.
 
-Let Pfor (i:var_i) zs s1 c s2 :=
+Let Pfor (oi:option var_i) zs s1 c s2 :=
   forall X (tmp : var_i) vm1,
     vtype tmp = aword Uptr ->
     ~ Sv.In tmp X -> Sv.Subset (read_c c) X ->
     evm s1 =[X] vm1 ->
     exists2 vm2,
-      sem_for p' ev i zs (with_vm s1 vm1) (lower_addressing_c tmp c) (with_vm s2 vm2)
+      sem_for p' ev oi zs (with_vm s1 vm1) (lower_addressing_c tmp c) (with_vm s2 vm2)
       & evm s2 =[X] vm2.
 
 Let Pfun scs1 m1 fn vargs scs2 m2 vres :=
@@ -336,27 +336,25 @@ Qed.
 
 Local Lemma Hfor : sem_Ind_for p ev Pi_r Pfor.
 Proof.
-  move=> s1 s2 i d lo hi c vlo vhi Hlo Hhi _ Hfor ii X tmp vm1 tmp_ty tmp_nin; rewrite !read_writeE => hsub eq_vm1.
+  move=> s1 s2 fi c rn hfi _ Hfor ii X tmp vm1 tmp_ty tmp_nin; rewrite !read_writeE => hsub eq_vm1.
   have [|vm2 hsem2 eq_vm2] := Hfor X tmp vm1 tmp_ty tmp_nin _ eq_vm1; first SvD.fsetdec.
   exists vm2 => //=.
-  apply: sem_seq_ir; apply: Efor hsem2.
-  + rewrite -eq_globs.
-    rewrite -(eq_on_sem_pexpr _ _ (s:=s1)) //=.
-    by apply: eq_onI eq_vm1; SvD.fsetdec.
-  rewrite -eq_globs.
-  rewrite -(eq_on_sem_pexpr _ _ (s:=s1)) //=.
-  by apply: eq_onI eq_vm1; SvD.fsetdec.
+  apply: sem_seq_ir; apply: Efor.
+  - rewrite -eq_globs (sem_fi_read_fi _).
+    + exact hfi.
+    + by apply: eq_onI eq_vm1; SvD.fsetdec.
+  - exact hsem2.
 Qed.
 
 Local Lemma Hfor_nil : sem_Ind_for_nil Pfor.
 Proof.
-  by move=> s i c X tmp vm1 tmp_ty tmp_nin hsub eq_vm1; exists vm1 => //; constructor.
+  by move=> s oi c X tmp vm1 tmp_ty tmp_nin hsub eq_vm1; exists vm1 => //; constructor.
 Qed.
 
 Local Lemma Hfor_cons : sem_Ind_for_cons p ev Pc Pfor.
 Proof.
-  move => s1 s1' s2 s3 i w ws c Hw _ Hc _ Hf X tmp vm1 tmp_ty tmp_nin hsub eq_vm1.
-  have [vm2 Hw2 eq_vm2] := write_var_eq_on Hw eq_vm1.
+  move => s1 s1' s2 s3 oi w ws c hinit _ Hc _ Hf X tmp vm1 tmp_ty tmp_nin hsub eq_vm1.
+  have [vm2 Hw2 eq_vm2] := init_iteration_eq_on eq_vm1 hinit.
   have {}eq_vm2: evm s1' =[X] vm2 by apply: eq_onI eq_vm2; SvD.fsetdec.
   have [vm3 hsem3 eq_vm3] := Hc X tmp vm2 tmp_ty tmp_nin hsub eq_vm2.
   have [vm4 hsem4 eq_vm4] := Hf X tmp vm3 tmp_ty tmp_nin hsub eq_vm3.
@@ -491,11 +489,17 @@ Proof.
     + by split => //; rewrite /read_es /= read_eE; SvD.fsetdec.
     + by apply hc1; SvD.fsetdec.
     by apply hc2; SvD.fsetdec.
-  + move=> x dir lo hi c hc ii; rewrite !read_writeE => hsub.
-    apply (wequiv_for_rel_eq (sip:=sip)) with checker_st_eq_on X X => //.
-    + by split => //; rewrite /read_es /= !read_eE; SvD.fsetdec.
-    + by split => //; rewrite /read_rvs /=; SvD.fsetdec.
-    by apply hc => //; SvD.fsetdec.
+  + move=> fi c hc ii; rewrite !read_writeE => hsub.
+    case: fi => [x dir lo hi | e] in hsub *.
+    - apply (wequiv_for_rel_eq (sip:=sip)) with checker_st_eq_on X X => //.
+      + by split => //; rewrite /read_es /= !read_eE; move: hsub;
+             rewrite /read_fi /= !read_eE; clear; SvD.fsetdec.
+      + by split => //; rewrite /read_rvs /=; SvD.fsetdec.
+      by apply hc => //; move: hsub; rewrite /read_fi /= !read_eE; clear; SvD.fsetdec.
+    - apply (wequiv_for_repeat_rel_eq (sip:=sip)) with checker_st_eq_on X => //.
+      + by split => //; rewrite /read_es /= !read_eE; move: hsub;
+             rewrite /read_fi /= !read_eE; clear; SvD.fsetdec.
+      by apply hc => //; move: hsub; rewrite /read_fi /= !read_eE; clear; SvD.fsetdec.
   + move=> a c1 e ii' c2 hc1 hc2 ii; rewrite !read_writeE => hsub.
     apply (wequiv_while_rel_eq (sip:=sip)) with checker_st_eq_on X => //.
     + by split => //; rewrite /read_es /= !read_eE; SvD.fsetdec.
