@@ -598,8 +598,8 @@ Definition Pc (s0 : estate) (c : cmd) (s1 : estate) :=
 
 #[ local ]
 Definition Pfor
-  (i : var_i) (rng : seq Z) (s0 : estate) (c : cmd) (s1 : estate) :=
-    sem_for p' ev i rng s0 (lower_cmd c) s1.
+  (oi : option var_i) (rng : seq Z) (s0 : estate) (c : cmd) (s1 : estate) :=
+    sem_for p' ev oi rng s0 (lower_cmd c) s1.
 
 #[ local ]
 Definition Pfun
@@ -688,7 +688,7 @@ Qed.
 #[ local ]
 Lemma Hfor : sem_Ind_for p ev Pi_r Pfor.
 Proof.
-  move=> s0 s1 i d lo hi c vlo vhi hlo hhi _ hfor ii.
+  move=> s0 s1 fi c rn hfi _ hfor ii.
   rewrite /Pi /=.
   apply: sem_seq_ir.
   by apply: Efor; eassumption.
@@ -697,7 +697,7 @@ Qed.
 #[ local ]
 Lemma Hfor_nil : sem_Ind_for_nil Pfor.
 Proof.
-  move=> s0 i c.
+  move=> s0 oi c.
   rewrite /Pfor.
   by apply: EForDone; eassumption.
 Qed.
@@ -705,7 +705,7 @@ Qed.
 #[ local ]
 Lemma Hfor_cons : sem_Ind_for_cons p ev Pc Pfor.
 Proof.
-  move=> s0 s1 s2 s3 i v vs c hwrite hsem hc hsemf hfor.
+  move=> s0 s1 s2 s3 oi v vs c hwrite hsem hc hsemf hfor.
   rewrite /Pfor.
   by apply: EForOne; eassumption.
 Qed.
@@ -817,8 +817,10 @@ Proof.
   + move=> e c1 c2 hc1 hc2 ii /=.
     by apply (wequiv_if_rel_eq (sip:=sip)) with checker_st_eq tt tt tt.
   (* For *)
-  + move=> x dir lo hi c hc ii /=.
-    by apply (wequiv_for_rel_eq (sip:=sip)) with checker_st_eq tt tt.
+  + move=> fi c hc ii /=.
+    case: fi => [x dir lo hi | e].
+    - by apply (wequiv_for_rel_eq (sip:=sip)) with checker_st_eq tt tt.
+    - by apply (wequiv_for_repeat_rel_eq (sip:=sip)) with checker_st_eq tt.
   (* While *)
   + move=> al c e ii' c' hc hc' ii /=.
     by apply (wequiv_while_rel_eq (sip:=sip)) with checker_st_eq tt.
