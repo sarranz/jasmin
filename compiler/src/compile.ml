@@ -47,9 +47,10 @@ let rec warn_extra_i pd msfsize asmOp i =
   | Cif (_, c1, c2) | Cwhile (_, c1, _, _, c2) ->
       List.iter (warn_extra_i pd msfsize asmOp) c1;
       List.iter (warn_extra_i pd msfsize asmOp) c2
-  | Cfor _ ->
+  | Cfor(FIrange _, _) ->
       hierror ~loc:(Lmore i.i_loc) ~kind:"compilation error" ~internal:true
         "for loop remains"
+  | Cfor(FIrepeat _, c) -> List.iter (warn_extra_i pd msfsize asmOp) c
   | Ccall _ | Csyscall _ | Cassert _ -> ()
 
 let warn_extra_fd pd msfsize asmOp (_, fd) = List.iter (warn_extra_i pd msfsize asmOp) fd.f_body
@@ -347,7 +348,7 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
     let rec analyze (i : _ ginstr) =
       begin match i.i_desc with
       | Cif (_, c1, c2) -> List.iter analyze c1; List.iter analyze c2
-      | Cfor (_, _, c) -> List.iter analyze c
+      | Cfor (_, c) -> List.iter analyze c
       | Cwhile (_, c, _, _, c') -> List.iter analyze c; List.iter analyze c'
       | _ -> ()
       end;

@@ -561,8 +561,7 @@ Definition assemble_declassify rip ii d es :=
 Definition is_not_app1 e : bool :=
   if e is Rexpr (Fapp1 _ _) then false else true.
 
-Definition assemble_i (rip : var) (i : linstr) : cexec (seq asm_i) :=
-  let '{| li_ii := ii; li_i := ir; |} := i in
+Fixpoint assemble_i_r (rip : var) (ii : instr_info) (ir : linstr_r) : cexec (seq asm_i) :=
   let mk i := {| asmi_i := i ; asmi_ii := ii |} in
   match ir with
   | Lopn ds op es =>
@@ -608,10 +607,25 @@ Definition assemble_i (rip : var) (i : linstr) : cexec (seq asm_i) :=
       else Error (E.verror true "Not a register" ii r) in
       ok [:: mk (JAL r l) ]
 
+  | Lrepeat_call cnt c =>
+      Let cnt' :=
+        match cnt with
+        | inl x =>
+            if to_reg x is Some r then ok (inl r)
+            else Error (E.verror true "Not a register" ii x)
+        | inr z => ok (inr z)
+        end : cexec (reg_t + Z)
+      in
+      Let c' := conc_mapM (fun i => assemble_i_r rip (li_ii i) (li_i i)) c in
+      ok [:: mk (REPEATCALL cnt' (map asmi_i c')) ]
+
   | Lret =>
       ok [:: mk POPPC ]
 
   end.
+
+Definition assemble_i (rip : var) (i : linstr) : cexec (seq asm_i) :=
+  assemble_i_r rip (li_ii i) (li_i i).
 
 (* -------------------------------------------------------------------- *)
 (*TODO: use in whatever characterization using an lprog there is.*)

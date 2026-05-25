@@ -41,7 +41,7 @@ type 'asm stack =
   | Sempty of instr_info * 'asm fundef * value list
   | Scall of
       instr_info * 'asm fundef * value list * lval list * Vm.t * 'asm instr list * 'asm stack
-  | Sfor of instr_info * var_i * coq_Z list * 'asm instr list * 'asm instr list * 'asm stack
+  | Sfor of instr_info * var_i option * coq_Z list * 'asm instr list * 'asm instr list * 'asm stack
 
 type ('syscall_state, 'asm) state =
   { s_prog : 'asm prog;
@@ -95,14 +95,17 @@ let return ep spp s =
       s_estate = s1;
       s_stk = stk }
 
-  | Sfor(ii,i,ws,body,c,stk) ->
+  | Sfor(ii,oi,ws,body,c,stk) ->
     match ws with
     | [] -> { s with s_cmd = c; s_stk = stk }
     | w::ws ->
-      let s1 = exn_exec ii (write_var nosubword ep true i (Vint w) s.s_estate) in
+      let s1 = match oi with
+        | Some i -> exn_exec ii (write_var nosubword ep true i (Vint w) s.s_estate)
+        | None -> s.s_estate
+      in
       { s with s_cmd = body;
                s_estate = s1;
-               s_stk = Sfor(ii, i, ws, body, c, stk) }
+               s_stk = Sfor(ii, oi, ws, body, c, stk) }
 
 let small_step1 ep spp sip s =
   match s.s_cmd with
@@ -139,12 +142,18 @@ let small_step1 ep spp sip s =
       let c = (if b then c1 else c2) @ c in
       { s with s_cmd = c }
 
-    | Cfor (i,((d,lo),hi), body) ->
-      let vlo = of_val_z ii (exn_exec ii (sem_pexpr nosubword ep spp true gd s1 lo)) in
-      let vhi = of_val_z ii (exn_exec ii (sem_pexpr nosubword ep spp true gd s1 hi)) in
-      let rng = wrange d vlo vhi in
+    | Cfor (fi, body) ->
+      let oi, rng = match fi with
+        | FIrange(i, d, lo, hi) ->
+            let vlo = of_val_z ii (exn_exec ii (sem_pexpr nosubword ep spp true gd s1 lo)) in
+            let vhi = of_val_z ii (exn_exec ii (sem_pexpr nosubword ep spp true gd s1 hi)) in
+            Some i, wrange d vlo vhi
+        | FIrepeat e ->
+            let vn = of_val_z ii (exn_exec ii (sem_pexpr nosubword ep spp true gd s1 e)) in
+            None, ziota Z0 vn
+      in
       let s =
-        {s with s_cmd = []; s_stk = Sfor(ii, i, rng, body, c, s.s_stk) } in
+        {s with s_cmd = []; s_stk = Sfor(ii, oi, rng, body, c, s.s_stk) } in
       return ep spp s
 
     | Cwhile (_, c1, e, _, c2) ->

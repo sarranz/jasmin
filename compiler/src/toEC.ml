@@ -1334,8 +1334,9 @@ let rec is_write_i x i =
   | Cassert _ -> false
   | Cif(_, c1, c2) | Cwhile(_, c1, _, _, c2) ->
     is_write_c x c1 || is_write_c x c2
-  | Cfor(x',_,c) ->
+  | Cfor(FIrange(x', _, _, _), c) ->
     V.equal x x'.L.pl_desc || is_write_c x c
+  | Cfor(FIrepeat _, c) -> is_write_c x c
 
 and is_write_c x c = List.exists (is_write_i x) c
 
@@ -1345,15 +1346,16 @@ let rec remove_for_i i =
     | Cassgn _ | Copn _ | Ccall _ | Csyscall _ | Cassert _ -> i.i_desc
     | Cif(e, c1, c2) -> Cif(e, remove_for c1, remove_for c2)
     | Cwhile(a, c1, e, loc, c2) -> Cwhile(a, remove_for c1, e, loc, remove_for c2)
-    | Cfor(j,r,c) ->
+    | Cfor(FIrange(j, elo, ehi, d), c) ->
       let jd = j.pl_desc in
-      if not (is_write_c jd c) then Cfor(j, r, remove_for c)
+      if not (is_write_c jd c) then Cfor(FIrange(j, elo, ehi, d), remove_for c)
       else
         let jd' = V.clone jd in
         let j' = { j with pl_desc = jd' } in
         let ii' = Cassgn (Lvar j, E.AT_inline, jd.v_ty, Pvar (gkvar j')) in
         let ii' = { i with i_desc = ii' } in
-        Cfor (j', r, ii' :: remove_for c)
+        Cfor (FIrange(j', elo, ehi, d), ii' :: remove_for c)
+    | Cfor(FIrepeat e, c) -> Cfor(FIrepeat e, remove_for c)
   in
   { i with i_desc }
 and remove_for c = List.map remove_for_i c
@@ -1862,8 +1864,13 @@ struct
           let c1 env = toec_cmd asmOp env c1 in
           let c2 env = toec_cmd asmOp env c2 in
           ec_leaking_while env c1 e c2
-      | Cfor (i, (d,e1,e2), c) ->
+      | Cfor (fi, c) ->
           let env = Env.new_aux_range env in
+          let ec_i_name, d, e1, e2 = match fi with
+            | FIrange(i, d, e1, e2) -> ec_vars env (L.unloc i), d, e1, e2
+            | FIrepeat e ->
+                Env.create_aux env "rep" "int", UpTo, Pconst Z.zero, e
+          in
           (* decreasing for loops have bounds swaped *)
           let e1, e2 = if d = UpTo then e1, e2 else e2, e1 in
           let init, ec_e2 =
@@ -1875,7 +1882,7 @@ struct
                   let init = ESasgn ([LvIdent [aux]], toec_expr env e2) in
                   let ec_e2 = ec_ident aux in
                   [init], ec_e2 in
-          let ec_i = [ec_vars env (L.unloc i)] in
+          let ec_i = [ec_i_name] in
           let lv_i = [LvIdent ec_i] in
           let init  = init @ [ESasgn (lv_i, toec_expr env e1)] in
           let ec_i1, ec_i2 =
@@ -2056,7 +2063,7 @@ and used_func_i used i =
   match i.i_desc with
   | Cassgn _ | Copn _ | Csyscall _ | Cassert _ -> used
   | Cif (_,c1,c2)     -> used_func_c (used_func_c used c1) c2
-  | Cfor(_,_,c)       -> used_func_c used c
+  | Cfor(_, c)        -> used_func_c used c
   | Cwhile(_, c1, _, _, c2) -> used_func_c (used_func_c used c1) c2
   | Ccall (_,f,_)   -> Ss.add f.fn_name used
 

@@ -167,7 +167,7 @@ let rec modmsf_i fenv i =
     | Update_msf -> modified_here (* not sure it is needed *)
     | Mov_msf | Protect | Other -> NotModified
     end
-  | Cfor(_, _, c) -> modmsf_c fenv c
+  | Cfor(_, c) -> modmsf_c fenv c
   | Ccall (_, f, _) ->
     match (FEnv.get_fty fenv f).modmsf with
     | Modified (l, tr) -> Modified(i.i_loc, (l, f) :: tr)
@@ -275,8 +275,8 @@ let rec infer_msf_i ~withcheck fenv (tbl:(L.i_loc, Sv.t) Hashtbl.t) i ms =
     let ms2 = infer_msf_c ~withcheck fenv tbl c2 ms in
     Sv.union ms1 ms2
 
-  | Cfor(x, _, c) ->
-    check_x ms x;
+  | Cfor(fi, c) ->
+    (match fi with FIrange(x, _, _, _) -> check_x ms x | FIrepeat _ -> ());
     let rec loop ms =
       let ms' = infer_msf_c ~withcheck fenv tbl c ms in
       if Sv.subset ms' ms then (Hashtbl.add tbl i.i_loc ms; ms)
@@ -1036,9 +1036,12 @@ and ty_instr_r is_ct_asm fenv env ((msf,venv) as msf_e :msf_e) i =
     let venv2 = Env.venv_forget (snd i.i_info) venv2 in
     MSF.max msf1 msf2, Env.max env venv1 venv2
 
-  | Cfor(x, (_, e1, e2), c) ->
-      ensure_public env venv loc e1;
-      ensure_public env venv loc e2;
+  | Cfor(fi, c) ->
+      (match fi with
+       | FIrange(_, _, e1, e2) ->
+           ensure_public env venv loc e1;
+           ensure_public env venv loc e2
+       | FIrepeat(e) -> ensure_public env venv loc e);
 
       (* Live set after the loop guard *)
       let live_at_c =
@@ -1046,9 +1049,12 @@ and ty_instr_r is_ct_asm fenv env ((msf,venv) as msf_e :msf_e) i =
         match c with i :: _ -> Sv.union live_after_i (fst i.i_info) | [] -> live_after_i in
 
       let msf = MSF.loop env i.i_loc msf in
-      (* let w, _ = written_vars [i] in *)
       let venv1 = Env.freshen env venv in (* venv <= venv1 *)
-      let msf_e = ty_lval env (msf, venv1) (Lvar x) (Env.dpublic env) in
+      let lv = match fi with
+        | FIrange(x, _, _, _) -> Lvar x
+        | FIrepeat _ -> Lnone(L._dummy, tbool)
+      in
+      let msf_e = ty_lval env (msf, venv1) lv (Env.dpublic env) in
       let (msf', venv') = ty_cmd is_ct_asm fenv env msf_e c in
       let msf' = MSF.end_loop loc msf msf' in
       let venv1 = Env.venv_forget live_at_c venv1 in

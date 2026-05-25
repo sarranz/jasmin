@@ -64,7 +64,10 @@ let check_func fd =
         check_es i_info es
     | Cassert (_, e) -> check_a i_info e
     | Cif (e, _, _) -> check_e i_info e
-    | Cfor (_, (_, e1, e2), _) -> check_es i_info [ e1; e2 ]
+    | Cfor (fi, _) ->
+        (match fi with
+         | FIrange (_, _, e1, e2) -> check_es i_info [e1; e2]
+         | FIrepeat e -> check_e i_info e)
     | Cwhile (_, _, e, (_, i), _) -> check_e i e
   in
   let check_body stmt = iter_instr check_instr stmt in

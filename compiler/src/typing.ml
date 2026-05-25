@@ -233,10 +233,14 @@ let rec check_instr pd msfsz asmOp env i =
     check_cmd pd msfsz asmOp env c1;
     check_cmd pd msfsz asmOp env c2
 
-  | Cfor(i,(_,e1,e2),c) ->
-    check_expr pd loc (Pvar (gkvar i)) tint;
-    check_expr pd loc e1 tint;
-    check_expr pd loc e2 tint;
+  | Cfor(fi, c) ->
+    (match fi with
+     | FIrange(i, _, e1, e2) ->
+         check_expr pd loc (Pvar (gkvar i)) tint;
+         check_expr pd loc e1 tint;
+         check_expr pd loc e2 tint
+     | FIrepeat(e) ->
+         check_expr pd loc e tint);
     check_cmd pd msfsz asmOp env c
 
   | Cwhile(_, c1, e, _, c2) ->

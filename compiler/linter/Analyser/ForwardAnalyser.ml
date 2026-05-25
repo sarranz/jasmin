@@ -142,7 +142,8 @@ module Make (Logic : Logic) : S with type domain = Logic.domain = struct
                 loop_annotation
           in
           if Annotation.included loop_annotation in_annotation Logic.included then
-            (Cfor (variable, range, body), out_annotation)
+            let (dir, lo, hi) = range in
+            (Cfor (FIrange(variable, dir, lo, hi), body), out_annotation)
           else
             loop (Annotation.merge loop_annotation in_annotation Logic.merge)
       in
@@ -196,13 +197,20 @@ module Make (Logic : Logic) : S with type domain = Logic.domain = struct
           let th, annotation_th = analyse_stmt th annotation_th in
           let el, annotation_el = analyse_stmt el annotation_el in
           (Cif (expr, th, el), Annotation.merge annotation_th annotation_el Logic.merge)
-      | Cfor (var, range, bloc) -> analyse_for loc var range bloc annotation
+      | Cfor (fi, bloc) ->
+          (match fi with
+           | FIrange (var, dir, e1, e2) -> analyse_for loc var (dir, e1, e2) bloc annotation
+           | FIrepeat _ ->
+               let body, annotation = analyse_stmt bloc annotation in
+               (Cfor (fi, body), annotation))
       | Cwhile (align, b1, cond, info, b2) -> analyse_while align cond info b1 b2 annotation
 
   and analyse_instr (in_annotation : annot) (instr : ('info, 'asm) instr) :
       annot * (annot, 'asm) instr =
       let instr_r, out_annotation = analyse_instr_r instr.i_loc instr.i_desc in_annotation in
-      (out_annotation, {instr with i_desc= instr_r; i_info= in_annotation})
+      (out_annotation,
+       { i_desc = instr_r; i_loc = instr.i_loc;
+         i_info = in_annotation; i_annot = instr.i_annot })
 
   and analyse_stmt (stmt : ('info, 'asm) stmt) in_annotation =
       let out_annotation, stmt = List.fold_left_map analyse_instr in_annotation stmt in
@@ -211,5 +219,8 @@ module Make (Logic : Logic) : S with type domain = Logic.domain = struct
   let analyse_function (func : ('info, 'asm) Prog.func) : (annot, 'asm) Prog.func =
       let in_domain = Logic.initialize func in
       let body, out_domain = analyse_stmt func.f_body in_domain in
-      {func with f_info= out_domain; f_body= body}
+      { f_loc = func.f_loc; f_annot = func.f_annot; f_info = out_domain;
+        f_contract = func.f_contract; f_cc = func.f_cc; f_name = func.f_name;
+        f_tyin = func.f_tyin; f_args = func.f_args; f_body = body;
+        f_tyout = func.f_tyout; f_ret_info = func.f_ret_info; f_ret = func.f_ret }
 end

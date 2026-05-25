@@ -689,7 +689,7 @@ module PIDynMake (Arch : SafetyArch.SafetyArch) (PW : ProgWrap with type extende
       let lmap = build_lmap lmap is1 ssa_is1 in
       build_lmap lmap is2 ssa_is2
 
-    | Cfor (_, _, is), Cif (_, _, ssa_is) ->
+    | Cfor (_, is), Cif (_, _, ssa_is) ->
       build_lmap lmap is ssa_is
 
     | Ccall _, _ | _, Ccall _ -> assert false

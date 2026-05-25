@@ -61,6 +61,10 @@ type 'len glvals = 'len glval list
 
 type 'len grange = E.dir * 'len gexpr * 'len gexpr
 
+type 'len gfor_iteration =
+  | FIrange of 'len gvar_i * E.dir * 'len gexpr * 'len gexpr
+  | FIrepeat of 'len gexpr
+
 (* Warning sopn (Ocopy) contain a 'len without being polymorphic.
    Before instr this information is dummy ...
    This is durty ...
@@ -75,7 +79,7 @@ type ('len, 'info, 'asm) ginstr_r =
   | Csyscall of 'len glvals * (Wsize.wsize * BinNums.positive) Syscall_t.syscall_t * 'len gexprs
   | Cassert of 'len assertion
   | Cif    of 'len gexpr * ('len, 'info, 'asm) gstmt * ('len, 'info, 'asm) gstmt
-  | Cfor   of 'len gvar_i * 'len grange * ('len, 'info, 'asm) gstmt
+  | Cfor   of 'len gfor_iteration * ('len, 'info, 'asm) gstmt
   | Cwhile of E.align * ('len, 'info, 'asm) gstmt * 'len gexpr * (IInfo.t * 'info) * ('len, 'info, 'asm) gstmt
   | Ccall  of 'len glvals * funname * 'len gexprs
 
@@ -244,6 +248,7 @@ val vars_fc_contract : ('info, 'asm) func  -> Sv.t
 
 val rvars_e : ('a gvar -> 'b -> 'b) -> 'b -> 'a gexpr -> 'b
 val rvars_es : ('a gvar -> 'b -> 'b) -> 'b -> 'a gexprs -> 'b
+val rvars_fi : ('a gvar -> 'b -> 'b) -> 'b -> 'a gfor_iteration -> 'b
 val rvars_lv : ('a gvar -> 'b -> 'b) -> 'b -> 'a glval -> 'b
 val rvars_lvs : ('a gvar -> 'b -> 'b) -> 'b -> 'a glvals -> 'b
 
@@ -260,6 +265,8 @@ val written_lv : Sv.t -> lval -> Sv.t
 
 (* -------------------------------------------------------------------- *)
 (* Written variables & called functions *)
+val iterator_of_fi : 'len gfor_iteration -> 'len gvar_i option
+
 val written_vars_fc : ('info, 'asm) func -> Sv.t * L.i_loc list Mf.t
 
 (* -------------------------------------------------------------------- *)

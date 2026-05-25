@@ -72,8 +72,13 @@ let rec gsubst_i (flen: ?loc:L.t -> 'len1 -> 'len2) f i =
     | Csyscall(x,o,e)   -> Csyscall(gsubst_lvals flen f x, o, gsubst_es flen f e)
     | Cassert (msg, e)  -> Cassert (msg, gsubst_a flen f e)
     | Cif(e,c1,c2)  -> Cif(gsubst_e flen f e, gsubst_c flen f c1, gsubst_c flen f c2)
-    | Cfor(x,(d,e1,e2),c) ->
-        Cfor(gsubst_vdest f x, (d, gsubst_e flen f e1, gsubst_e flen f e2), gsubst_c flen f c)
+    | Cfor(fi, c) ->
+        let fi = match fi with
+          | FIrange(x, d, e1, e2) ->
+              FIrange(gsubst_vdest f x, d, gsubst_e flen f e1, gsubst_e flen f e2)
+          | FIrepeat e -> FIrepeat(gsubst_e flen f e)
+        in
+        Cfor(fi, gsubst_c flen f c)
     | Cwhile(a, c, e, loc, c') ->
       Cwhile(a, gsubst_c flen f c, gsubst_e flen f e, loc, gsubst_c flen f c')
     | Ccall(x,fn,e) -> Ccall(gsubst_lvals flen f x, fn, gsubst_es flen f e) in
@@ -424,8 +429,8 @@ let rec extend_iinfo_i pre i =
     | Cassgn _ | Copn _ | Csyscall _ | Ccall _ | Cassert _ -> i.i_desc
     | Cif(e,c1,c2) ->
       Cif(e, extend_iinfo_c pre c1, extend_iinfo_c pre c2)
-    | Cfor(x,r,c) ->
-      Cfor(x,r, extend_iinfo_c pre c)
+    | Cfor(fi, c) ->
+      Cfor(fi, extend_iinfo_c pre c)
     | Cwhile (a, c1, e, loc, c2) ->
       Cwhile(a, extend_iinfo_c pre c1, e, loc, extend_iinfo_c pre c2) in
   let {L.base_loc = ii; L.stack_loc = l} = i.i_loc in

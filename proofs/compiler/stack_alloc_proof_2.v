@@ -2387,6 +2387,32 @@ Proof.
   by apply wfr_VARS_STATUS_merge.
 Qed.
 
+Lemma loop_for_invariant table ii check_c n ramp rmap' e' c' :
+  (forall rm rm' e'' cs,
+    check_c rm = ok (rm', e'', cs) ->
+    exists Y, wfr_VARS_ZONE Y rm') ->
+  loop_for ii check_c (vars table) n ramp = ok (rmap', e', c') ->
+  wf_table_vars table ramp ->
+  wf_table_vars table rmap'.
+Proof.
+  move=> hcheck.
+  elim: n ramp => //= n hrec ramp.
+  t_xrbindP=> -[[m' e''] cs'] hc.
+  have [Y hm'z] := hcheck _ _ _ _ hc.
+  move=> hif [hvars_t hvarsz hvars_s].
+  move: hif; case: ifP => _.
+  - by move=> [<- _ _]; split.
+  - move=> hloop'.
+    apply: (hrec _ hloop').
+    split.
+    + exact: hvars_t.
+    + move=> x sr hxsr.
+      have hmz := (@wfr_VARS_ZONE_merge (vars table) Y ramp m' (vars table) hvarsz hm'z) x sr hxsr.
+      apply: subset_vars_wf_vars_zone hmz.
+      clear; SvD.fsetdec.
+    + exact: wfr_VARS_STATUS_merge.
+Qed.
+
 Local Lemma Wassert a: Pi_r (Cassert a).
 Proof. done. Qed.
 
@@ -2398,8 +2424,22 @@ Proof.
   apply wf_table_vars_merge; auto.
 Qed.
 
-Local Lemma Wfor v dir lo hi c: Pc c -> Pi_r (Cfor v (dir,lo,hi) c).
-Proof. done. Qed.
+Local Lemma Wfor fi c: Pc c -> Pi_r (Cfor fi c).
+Proof.
+  move=> Hc table1 rmap1 table2 rmap2 ii c2 /=.
+  case: fi => [_ _ _ _|e]; first by [].
+  t_xrbindP=> -[[rm e'] c'] hloop [<- <- _] hvars1.
+  split; last by clear; SvD.fsetdec.
+  apply: loop_for_invariant.
+  2: exact hloop.
+  2: exact hvars1.
+  move=> rm0 rm0' e'' cs_out /=.
+  apply: rbindP => -[[table_out rm_body] cs_body] hfmap h2.
+  move: h2 => /=.
+  apply: rbindP => e_body _ /= [<- _ _].
+  case: (Hc table1 rmap1 table_out rm_body cs_body hfmap hvars1) => [[_ hz _] _].
+  by exists (vars table_out).
+Qed.
 
 Lemma loop2_invariant ii check_c2 n table rmap table' rmap' e' c1' c2':
   (forall table rmap table1 rmap1 table2 rmap2 e' c1' c2',
@@ -3390,7 +3430,7 @@ Let Pc s1 (c1:cmd) s2 :=
     valid_state pmap glob_size rsp rip Slots Addr Writable Align P table2 rmap2 vme' m0 s2 s2' &
     vme =[table1.(vars)] vme'].
 
-Let Pfor (i1: var_i) (vs: seq Z) (s1: estate) (c: cmd) (s2: estate) := True.
+Let Pfor (oi: option var_i) (vs: seq Z) (s1: estate) (c: cmd) (s2: estate) := True.
 
 Let Pfun (scs1: syscall_state) (m1: mem) (fn: funname) (vargs: seq value)
          (scs2: syscall_state) (m2: mem) (vres: seq value) :=
@@ -3769,7 +3809,22 @@ Proof.
 Qed.
 
 Local Lemma Hfor : sem_Ind_for P ev Pi_r Pfor.
-Proof. by []. Qed.
+Proof.
+  (* TODO: semantic correctness for FIrepeat.
+     FIrange: alloc_i returns Error, goal is vacuous (by []).
+     FIrepeat e: alloc_i now succeeds (produces Cfor (FIrepeat e') c').
+     Proof requires threading valid_state through sem_for iterations.
+     Strategy: either (a) make Pfor non-trivial so Hfor_cons accumulates
+     the body IH at each step, or (b) show Incl rmap1 rm_body from the
+     loop_for convergence condition and use valid_state_Incl_gen to
+     restore the invariant after each iteration. *)
+  move=> s1 s2 fi c rn _ _ _
+    pmap rsp Slots Addr Writable Align table1 rmap1 table2 rmap2 ii1 c2
+    hpmap hwf sao /=.
+  case: fi => [_ _ _ _|e]; first by [].
+  t_xrbindP=> -[[rm e'] c'] _ [<- <- <-].
+  move=> vme m0 s1' hvs hext hsao.
+  Admitted.
 
 Local Lemma Hfor_nil : sem_Ind_for_nil Pfor.
 Proof. by []. Qed.
@@ -4344,6 +4399,13 @@ Proof.
       + by apply incl_table_merge_table_r.
       by apply/incl_Incl/incl_merge_r.
     by apply: ihc2.
+
+  (* For: FIrange -> alloc returns Error (vacuous); FIrepeat -> TODO *)
+  + move=> fi c _ihc ii table1 rmap1 table2 rmap2 vme c2 /=.
+    case: fi => [_ _ _ _|e]; first by [].
+    (* TODO: wequiv_rec correctness for FIrepeat (analogous to Hfor above).
+       Requires threading st_sa_pre/post through sem_for iterations. *)
+    admit.
 
   (* While *)
   + move=> al c1 e ii' c2 ihc1 ihc2 ii table1 rmap1 table3 rmap3 vme c_.

@@ -26,7 +26,7 @@ let pp_label_kind fmt = function
   | InternalLabel -> ()
   | ExternalLabel -> F.fprintf fmt "#returnaddress "
 
-let pp_instr pd msfsize asmOp fmt i =
+let rec pp_instr pd msfsize asmOp fmt i =
   match i.li_i with
   | Lopn (lvs, op, es) ->
     let pp_cast fmt = function
@@ -39,7 +39,7 @@ let pp_instr pd msfsize asmOp fmt i =
       (pp_opn pd msfsize asmOp) op
       (pp_list ",@ " pp_rexpr) es
   | Lsyscall o -> F.fprintf fmt "SysCall %s" (pp_syscall o)
-  | Lcall(lr, lbl) -> 
+  | Lcall(lr, lbl) ->
       let pp_o fmt o = match o with None -> () | Some v -> Format.fprintf fmt "%a " pp_var_i v in
       F.fprintf fmt "Call %a%a" pp_o lr pp_remote_label lbl
   | Lret       -> F.fprintf fmt "Return"
@@ -49,6 +49,14 @@ let pp_instr pd msfsize asmOp fmt i =
   | Ligoto e -> F.fprintf fmt "IGoto %a" pp_rexpr e
   | LstoreLabel (x, lbl) -> F.fprintf fmt "%a = Label %a" pp_var x pp_label lbl
   | Lcond (e, lbl) -> F.fprintf fmt "If %a goto %a" pp_fexpr e pp_label lbl
+  | Lrepeat_call (cnt, c) ->
+    let pp_cnt fmt = function
+      | Datatypes.Coq_inl v -> pp_var_i fmt v
+      | Datatypes.Coq_inr z -> Z.pp_print fmt (Conv.z_of_cz z)
+    in
+    F.fprintf fmt "@[<v>repeat %a {@   @[<v>%a@]@ }@]" pp_cnt cnt (pp_code pd msfsize asmOp) c
+
+and pp_code pd msfsize asmOp = pp_list ";@ " (pp_instr pd msfsize asmOp)
 
 let pp_param fmt x =
   let y = Conv.var_of_cvar x.E.v_var in

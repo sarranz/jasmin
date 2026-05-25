@@ -73,8 +73,10 @@ let variables_in_instr_r : _ pinstr_r -> Spv.t = function
   | Cassgn (x, _, _, e) -> variables_in_pexpr (variables_in_plval Spv.empty x) e
   | Copn (xs, _, _, es) | Csyscall (xs, _, es) | Ccall (xs, _, es) ->
       variables_in_pexprs (variables_in_plvals Spv.empty xs) es
-  | Cfor (x, (_, e1, e2), _) ->
-      variables_in_pexprs (Spv.singleton (L.unloc x)) [ e1; e2 ]
+  | Cfor (fi, _) ->
+      (match fi with
+       | FIrange(x, _, e1, e2) -> variables_in_pexprs (Spv.singleton (L.unloc x)) [e1; e2]
+       | FIrepeat(e) -> variables_in_pexpr Spv.empty e)
   | Cif (e, _, _) | Cwhile (_, _, e, _, _) -> variables_in_pexpr Spv.empty e
   | Cassert (_, e) -> rvars_a variables_in_gvar Spv.empty e
 
@@ -100,7 +102,7 @@ let rec tree_of_instr ((acc : tree), (t : Tree.t option)) (i : _ ginstr) :
 
 and tree_of_instr_r (acc : tree) (t : Tree.t) : _ ginstr_r -> tree = function
   | Cassgn _ | Copn _ | Csyscall _ | Ccall _ | Cassert _ -> acc
-  | Cfor (_, _, c) -> tree_of_stmt acc (Some t) c |> fst
+  | Cfor (_, c) -> tree_of_stmt acc (Some t) c |> fst
   | Cif (_, c1, c2) | Cwhile (_, c1, _, _, c2) ->
       let acc, _ = tree_of_stmt acc (Some t) c1 in
       let acc, _ = tree_of_stmt acc (Some t) c2 in

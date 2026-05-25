@@ -373,6 +373,19 @@ Definition tmp_of_ra (ra : return_address_location) : option var :=
 Definition tmpi_of_ra (ra : return_address_location) : option var_i :=
   omap mk_var_i (tmp_of_ra ra).
 
+Definition repeat_call_count
+  (ii : instr_info) (e : pexpr) : cexec (var_i + Z) :=
+  match e with
+  | Pconst z => ok (inr z)
+  | Pvar x => ok (inl (gv x))
+  | Papp1 (Oint_of_word _ Uptr) (Pvar x) => ok (inl (gv x))
+  | _ => Error (E.ii_error ii "invalid repeat loop count")
+  end.
+
+Definition linearize_for ii (fi : for_iteration) : cexec (var_i + Z) :=
+  if fi is FIrepeat e then repeat_call_count ii e
+  else Error (E.ii_error ii "for loop found in linear").
+
 Section PROG.
 
 Context
@@ -455,8 +468,9 @@ Definition pop_to_save
       Error (E.ii_error ii "assert found in linear")
     | Cif b c1 c2 =>
       check_fexpr ii b >> check_c check_i c1 >> check_c check_i c2
-    | Cfor _ _ =>
-      Error (E.ii_error ii "for found in linear")
+    | Cfor fi c =>
+        Let _ := linearize_for ii fi in
+        check_c check_i c
     | Cwhile _ c e _ c' =>
       match is_bool e with
       | Some false => check_c check_i c
@@ -740,7 +754,12 @@ Fixpoint linear_i (i:instr) (lbl:label) (lc:lcmd) :=
               ++ lc
           )
     else (lbl, lc )
-  | Cfor _ _ => (lbl, lc)
+  | Cfor fi c =>
+      if linearize_for ii fi is Ok count then
+        let: (lbl', c') := linear_c linear_i c lbl [::] in
+        (lbl', MkLI ii (Lrepeat_call count c') :: lc)
+      else
+        (xH, [::]) (* absurd *)
   end.
 
 Definition linear_body (fi: fun_info) (e: stk_fun_extra) (body: cmd) : label * lcmd :=

@@ -267,6 +267,8 @@ and type asm_op = arm_op
     | POPPC ->
         [ Instr ("pop", [ "{pc}" ]) ]
 
+    | REPEATCALL _ -> assert false
+
     | SysCall op ->
         [Instr ("bl", [ pp_syscall op ])]
 

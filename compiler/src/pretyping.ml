@@ -2247,7 +2247,14 @@ let rec tt_instr arch_info (env : 'asm Env.env) ((pannot,pi) : S.pinstr) : 'asm 
       check_ty_eq ~loc:lx ~from:xty ~to_:P.etint;
       let s    = tt_block arch_info env s in
       let d    = match d with `Down -> E.DownTo | `Up -> E.UpTo in
-      env, [mk_i (P.Cfor (L.mk_loc lx vx, (d, i1, i2), s))]
+      let fi   = P.FIrange (L.mk_loc lx vx, d, i1, i2) in
+      env, [mk_i (P.Cfor (fi, s))]
+
+  | PIRepeat (e, s) ->
+      let e = tt_expr_int arch_info.pd env e in
+      let s = tt_block arch_info env s in
+      let fi = P.FIrepeat e in
+      env, [mk_i (P.Cfor (fi, s))]
 
   | PIWhile (s1, e, s2) ->
       let c  = tt_expr_bool arch_info.pd env e in
@@ -2336,6 +2343,7 @@ let rec add_reserved_i env (_,i) =
   | PIArrayInit _ | PIAssign _ | PIAssert _ -> env
   | PIIf(_, c, oc) -> add_reserved_oc (add_reserved_c' env c) oc
   | PIFor(_, _, c) -> add_reserved_c' env c
+  | PIRepeat(_, c) -> add_reserved_c' env c
   | PIWhile(oc1, _, oc2) -> add_reserved_oc (add_reserved_oc env oc1) oc2
 
 and add_reserved_c env c =

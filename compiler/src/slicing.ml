@@ -45,7 +45,12 @@ and inspect_instr_r k = function
   | Cassert (_, e) -> inspect_a k e
   | Cif (g, a, b) | Cwhile (_, a, g, _, b) ->
       inspect_stmt (inspect_stmt (inspect_e k g) a) b
-  | Cfor (_, (_, e1, e2), s) -> inspect_stmt (inspect_es k [ e1; e2 ]) s
+  | Cfor (fi, s) ->
+      let k = match fi with
+        | FIrange(_, _, elo, ehi) -> inspect_es k [elo; ehi]
+        | FIrepeat(e) -> inspect_e k e
+      in
+      inspect_stmt k s
   | Ccall (xs, fn, es) -> with_fun (inspect_lvs (inspect_es k es) xs) fn
 
 let inspect_fun k fd =

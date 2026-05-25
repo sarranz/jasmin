@@ -40,7 +40,7 @@ let fill_in_missing_names (f: ('info, 'asm) func) : ('info, 'asm) func =
     | Csyscall (lvs, op, es) -> Csyscall(fill_lvs lvs, op, es)
     | Cassert (msg, e) -> Cassert (msg, e)
     | Cif (e, s1, s2) -> Cif (e, fill_stmt s1, fill_stmt s2)
-    | Cfor (i, r, s) -> Cfor (i, r, fill_stmt s)
+    | Cfor (fi, s) -> Cfor (fi, fill_stmt s)
     | Cwhile (a, s, e, loc, s') -> Cwhile (a, fill_stmt s, e, loc, fill_stmt s')
     | Ccall (lvs, f, es) -> Ccall (fill_lvs lvs, f, es)
   and fill_instr i = { i with i_desc = fill_instr_r i.i_desc }
@@ -446,7 +446,7 @@ let collect_opn_conflicts pd reg_size asmOp
         | Some x1, Some x2 ->
             add_one (Lmore i.i_loc) (L.unloc x1) (L.unloc x2) c
         | _, _ -> c) c conflicts
-    | Cfor (_, _, s) -> collect_opn_conflicts_stmt c s
+    | Cfor (_, s) -> collect_opn_conflicts_stmt c s
     | Cif (_, s1, s2)
     | Cwhile (_, s1, _, _, s2) ->
         let c = collect_opn_conflicts_stmt c s1 in
@@ -468,7 +468,7 @@ let collect_conflicts pd reg_size asmOp
   in
   let rec collect_instr_r c =
     function
-    | Cfor (_, _, s)
+    | Cfor (_, s)
       -> collect_stmt c s
     | Cassgn _
     | Copn _
@@ -500,7 +500,8 @@ let iter_variables (cb: var -> unit) (f: ('info, 'asm) func) : unit =
     | Cassgn (lv, _, _, e) -> iter_lv lv; iter_expr e
     | (Ccall (lvs, _, es) | Copn (lvs, _, _, es)) | Csyscall(lvs, _ , es) -> iter_lvs lvs; iter_exprs es
     | (Cwhile (_, s1, e, _, s2) | Cif (e, s1, s2)) -> iter_expr e; iter_stmt s1; iter_stmt s2
-    | Cfor _ -> assert false
+    | Cfor (FIrange _, _) -> assert false
+    | Cfor (FIrepeat e, c) -> iter_expr e; iter_stmt c
   and iter_instr { i_desc } = iter_instr_r i_desc
   and iter_stmt s = List.iter iter_instr s in
   iter_stmt f.f_body;
@@ -839,7 +840,7 @@ let allocate_forced_registers return_addresses nv (vars: int Hv.t) tr (cnf: conf
   let alloc_ret get  = alloc_ret_gen get Arch.ret_vars [] Arch.xmm_ret_vars [] in
   let rec alloc_instr_r loc c =
     function
-    | Cfor (_, _, s)
+    | Cfor (_, s)
       -> alloc_stmt s c
     | Copn (lvs, _, op, es) -> forced_registers loc nv vars tr c lvs op es a
     | Csyscall(lvs, _, es) ->

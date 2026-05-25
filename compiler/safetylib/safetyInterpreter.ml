@@ -472,7 +472,10 @@ let safe_instr pd asmOp ginstr = match ginstr.i_desc with
   | Cif(e, _, _) -> safe_e e
   | Cwhile(_, _, _, _, _) -> []       (* We check the while condition later. *)
   | Ccall(lvs, _, es) | Csyscall(lvs, _, es) -> safe_lvals lvs @ safe_es es
-  | Cfor (_, (_, e1, e2), _) -> safe_es [e1;e2]
+  | Cfor (fi, _) ->
+      (match fi with
+       | FIrange (_, _, e1, e2) -> safe_es [e1; e2]
+       | FIrepeat e -> safe_e e)
 
 let safe_return main_decl =
   List.fold_left (fun acc v -> safe_var v @ acc) [] main_decl.f_ret
@@ -1279,7 +1282,12 @@ end = struct
       | Cassert(_, e)           -> nm_a vs_for e
       | Cif (e, st, st')        ->
         nm_e vs_for e && nm_stmt vs_for st && nm_stmt vs_for st'
-      | Cfor (i, _, st)         -> nm_stmt (i :: vs_for) st
+      | Cfor (fi, st)           ->
+        let vs_for = match fi with
+          | FIrange (i, _, _, _) -> i :: vs_for
+          | FIrepeat _ -> vs_for
+        in
+        nm_stmt vs_for st
       | Cwhile (_, st1, e, _, st2) ->
         nm_e vs_for e && nm_stmt vs_for st1 && nm_stmt vs_for st2
       | Ccall (lvs, fn, es)  ->
@@ -1746,52 +1754,55 @@ end = struct
 
         return_call state callsite fstate lvs
 
-      | Cfor(i, (d,e1,e2), c) ->
+      | Cfor(fi, c) ->
         let prog_pt = ginstr.i_loc in
-        (match AbsExpr.aeval_cst_int state.abs e1,
-              AbsExpr.aeval_cst_int state.abs e2 with
-        | Some z1, Some z2 ->
-          if z1 = z2 then state else
-            let init_i, final_i, op = match d with
-              | UpTo -> assert (z1 < z2); (z1, z2 - 1, fun x -> x + 1)
-              | DownTo -> assert (z1 < z2); (z2, z1 + 1, fun x -> x - 1) in
+        (match fi with
+        | FIrange(i, d, e1, e2) ->
+          (match AbsExpr.aeval_cst_int state.abs e1,
+                AbsExpr.aeval_cst_int state.abs e2 with
+          | Some z1, Some z2 ->
+            if z1 = z2 then state else
+              let init_i, final_i, op = match d with
+                | UpTo -> assert (z1 < z2); (z1, z2 - 1, fun x -> x + 1)
+                | DownTo -> assert (z1 < z2); (z2, z1 + 1, fun x -> x - 1) in
 
-            let rec mk_range i f op =
-              if i = f then [i] else i :: mk_range (op i) f op in
+              let rec mk_range i f op =
+                if i = f then [i] else i :: mk_range (op i) f op in
 
-            let range = mk_range init_i final_i op
-            and mvari = Mlocal (Avar (L.unloc i)) in
+              let range = mk_range init_i final_i op
+              and mvari = Mlocal (Avar (L.unloc i)) in
 
-            List.fold_left ( fun state ci ->
-                (* We add a disjunctive constraint block. *)
-                let std = AbsDom.new_cnstr_blck state.abs prog_pt in
-                let state = { state with abs = std; } in
+              List.fold_left ( fun state ci ->
+                  (* We add a disjunctive constraint block. *)
+                  let std = AbsDom.new_cnstr_blck state.abs prog_pt in
+                  let state = { state with abs = std; } in
 
-                (* We set the integer variable i to ci. *)
-                let expr_ci = Mtexpr.cst (Coeff.s_of_int ci)
-                                  |> sexpr_from_simple_expr in
-                let abs =
-                  AbsDom.assign_sexpr
-                    state.abs (Some ginstr.i_info) [mvari, expr_ci] in
+                  (* We set the integer variable i to ci. *)
+                  let expr_ci = Mtexpr.cst (Coeff.s_of_int ci)
+                                    |> sexpr_from_simple_expr in
+                  let abs =
+                    AbsDom.assign_sexpr
+                      state.abs (Some ginstr.i_info) [mvari, expr_ci] in
 
-                let state =
-                  { state with
-                    abs = AbsDom.is_init abs (Avar (L.unloc i)); }
-                  |> aeval_gstmt c in
+                  let state =
+                    { state with
+                      abs = AbsDom.is_init abs (Avar (L.unloc i)); }
+                    |> aeval_gstmt c in
 
-                (* We pop the disjunctive constraint block. *)
-                let abs = AbsDom.pop_cnstr_blck state.abs prog_pt in
-                { state with abs = abs; }
-              ) state range
+                  (* We pop the disjunctive constraint block. *)
+                  let abs = AbsDom.pop_cnstr_blck state.abs prog_pt in
+                  { state with abs = abs; }
+                ) state range
 
-        | _ ->
-          Format.eprintf "@[<v>For loop: \
-                          I was expecting a constant integer expression.@;\
-                          Expr1:@[%a@]@;Expr2:@[%a@]@;@."
-            (Printer.pp_expr ~debug:true) e1
-            (Printer.pp_expr ~debug:true) e2;
-          assert false
-        )
+          | _ ->
+            Format.eprintf "@[<v>For loop: \
+                            I was expecting a constant integer expression.@;\
+                            Expr1:@[%a@]@;Expr2:@[%a@]@;@."
+              (Printer.pp_expr ~debug:true) e1
+              (Printer.pp_expr ~debug:true) e2;
+            assert false
+          )
+        | FIrepeat _ -> aeval_gstmt c state)
 
   and aeval_call : funname -> (minfo, 'asm) func -> L.i_loc -> astate -> astate =
     fun f f_decl callsite st_in ->

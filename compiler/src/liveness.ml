@@ -54,14 +54,21 @@ and live_d weak d (s_o: Sv.t) =
     let s2, c2 = live_c weak c2 s_o in
     Sv.union (vars_e e) (Sv.union s1 s2), s_o, Cif(e, c1, c2)
 
-  | Cfor (x, (_dir, e1, e2 as r), c) ->
+  | Cfor (fi, c) ->
     let rec loop s_o =
       let s_i, c = live_c weak c s_o in
-      let s_i = Sv.remove (L.unloc x) s_i in
+      let s_i = match fi with
+        | FIrange(x, _, _, _) -> Sv.remove (L.unloc x) s_i
+        | FIrepeat _ -> s_i
+      in
       if Sv.subset s_i s_o then s_o, c
       else loop (Sv.union s_i s_o) in
     let s_i, c = loop s_o in
-    Sv.union (vars_es [ e1; e2 ]) s_i, s_o, Cfor (x, r, c)
+    let ve = match fi with
+      | FIrange(_, _, e1, e2) -> vars_es [e1; e2]
+      | FIrepeat e -> vars_e e
+    in
+    Sv.union ve s_i, s_o, Cfor (fi, c)
 
   | Cwhile(a, c, e, (info, _), c') ->
     let ve = (vars_e e) in
@@ -128,7 +135,7 @@ let rec conflicts_i cf i =
   match i.i_desc with
   | Cassgn _ | Copn _ | Csyscall _ | Ccall _ | Cassert _ ->
     merge_class cf s2
-  | Cfor( _, _, c) ->
+  | Cfor(_, c) ->
     conflicts_c (merge_class cf s2) c
   | Cif(_, c1, c2) | Cwhile(_, c1, _, _, c2) ->
     conflicts_c (conflicts_c (merge_class cf s2) c1) c2

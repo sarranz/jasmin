@@ -393,6 +393,7 @@ and type asm_op = X86_instr_decl.x86_op
       [Instr ("call", [pp_remote_label lbl])]
     | POPPC ->
       [Instr ("ret", [])]
+    | REPEATCALL _ -> assert false
     | SysCall(op) ->
       let name = "call" in
       [Instr(name, [pp_syscall op])]

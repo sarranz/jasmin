@@ -154,6 +154,8 @@ module RiscVTarget: AsmTarget
     | POPPC ->
         assert false
 
+    | REPEATCALL _ -> assert false
+
     | SysCall op ->
         [Instr ("call", [ Asm_utils.pp_syscall op ])]
 

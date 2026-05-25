@@ -142,9 +142,12 @@ let eq_pgexpr x y =
   | GEarray a, GEarray b -> eq_pexprs a b
   | (GEword _ | GEarray _), _ -> false
 
-let eq_prange (x : pexpr_ grange) (y : pexpr_ grange) =
-  let a, b, c = x and d, e, f = y in
-  a = d && eq_pexpr b e && eq_pexpr c f
+let eq_pfor_iteration (x : pexpr_ gfor_iteration) (y : pexpr_ gfor_iteration) =
+  match x, y with
+  | FIrange (a, b, c, d), FIrange (e, f, g, h) ->
+      eq_pvar_i a e && b = f && eq_pexpr c g && eq_pexpr d h
+  | FIrepeat a, FIrepeat b -> eq_pexpr a b
+  | (FIrange _ | FIrepeat _), _ -> false
 
 let rec eq_pstmt x y = List.for_all2 eq_pinstr x y
 
@@ -161,8 +164,8 @@ and eq_pinstr_r (x : _ pinstr_r) y =
   | Csyscall (a, b, c), Csyscall (d, e, f) ->
       eq_plvals a d && b = e && eq_pexprs c f
   | Cif (a, b, c), Cif (d, e, f) -> eq_pexpr a d && eq_pstmt b e && eq_pstmt c f
-  | Cfor (a, b, c), Cfor (d, e, f) ->
-      eq_pvar_i a d && eq_prange b e && eq_pstmt c f
+  | Cfor (a, b), Cfor (d, e) ->
+      eq_pfor_iteration a d && eq_pstmt b e
   | Cwhile (a, b, c, _d, e), Cwhile (f, g, h, _i, j) ->
       a = f && eq_pstmt b g && eq_pexpr c h && eq_pstmt e j
   | Ccall (a, b, c), Ccall (d, e, f) ->

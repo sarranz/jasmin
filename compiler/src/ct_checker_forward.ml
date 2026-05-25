@@ -570,13 +570,20 @@ let rec ty_instr is_ct_asm fenv env i =
     let env2 = ty_cmd is_ct_asm fenv env c2 in
     Env.max env1 env2
 
-  | Cfor(x, (_, e1, e2), c) ->
-    let env, _ = ty_exprs ~public:true env [e1; e2] in
+  | Cfor(fi, c) ->
+    let env, _ = match fi with
+      | FIrange(_, _, e1, e2) -> ty_exprs ~public:true env [e1; e2]
+      | FIrepeat(e) -> let env, lvl = ty_expr ~public:true env e in env, [lvl]
+    in
+    let env1_of_fi env = match iterator_of_fi fi with
+      | Some x -> Env.set env x Public
+      | None -> env
+    in
     let rec loop env =
-      let env1 = Env.set env x Public in
-      let env1 = ty_cmd is_ct_asm fenv env1 c in (*  env |- x = p; c : env1 <= env  *)
-      if Env.le env1 env then env      (* G <= G'  G' |- c : G''   G |- c : G'' *)
-      else loop (Env.max env1 env) in  (* le env/env1 (max env1 env) Check *)
+      let env1 = env1_of_fi env in
+      let env1 = ty_cmd is_ct_asm fenv env1 c in
+      if Env.le env1 env then env
+      else loop (Env.max env1 env) in
     loop env
 
   | Cwhile(_, c1, e, _, c2) ->

@@ -132,44 +132,50 @@ struct
   The proxy variable is then removed from the annotation after fixpoint is reached.
 
   For simpler implementation, we do not call the analyse_while function here and prefer to mimic it's behavior.
+  [FIrepeat] bodies are analysed without a proxy variable.
   *)
   let rec analyse_for
       (loc : Location.i_loc)
-      variable
-      (range : range)
+      fi
       (body : ('info, 'asm) stmt)
       (out_annotation : annot) : (annot, 'asm) instr_r * annot =
-      let proxy_var = build_for_proxy_variable loc.base_loc variable in
-      let condition = build_for_condition_expr proxy_var range in
-      let rec loop out_annotation =
-          let _, annotation =
-              (* Incrementing loop counter (proxy_var (+|-)= 1) *)
+      match fi with
+      | FIrange (variable, dir, lo, hi) ->
+          let range = (dir, lo, hi) in
+          let proxy_var = build_for_proxy_variable loc.base_loc variable in
+          let condition = build_for_condition_expr proxy_var range in
+          let rec loop out_annotation =
+              let _, annotation =
+                  (* Incrementing loop counter (proxy_var (+|-)= 1) *)
+                  analyse_assign loc (Lvar proxy_var) AT_none (Location.unloc variable).v_ty
+                    (build_for_assign_expr proxy_var range)
+                    out_annotation
+              in
+              let body, annotation = analyse_stmt body annotation in
+              let _, domain =
+                  (* Assigning proxy_var to for variable*)
+                  analyse_assign loc (Lvar variable) AT_none (Location.unloc variable).v_ty
+                    (Pvar {gv= proxy_var; gs= Slocal})
+                    annotation
+              in
+              let domain = L.account condition domain out_annotation in
+              (* Check if the loop is finished *)
+              if Annotation.included domain out_annotation L.included then
+                (Cfor (fi, body), domain)
+              else
+                loop domain
+          in
+          let body, in_annotation = loop out_annotation in
+          let _, in_annotation =
+              (* Assigning proxy_var to range beginning*)
               analyse_assign loc (Lvar proxy_var) AT_none (Location.unloc variable).v_ty
-                (build_for_assign_expr proxy_var range)
-                out_annotation
+                (Grange.first range) in_annotation
           in
-          let body, annotation = analyse_stmt body annotation in
-          let _, domain =
-              (* Assigning proxy_var to for variable*)
-              analyse_assign loc (Lvar variable) AT_none (Location.unloc variable).v_ty
-                (Pvar {gv= proxy_var; gs= Slocal})
-                annotation
-          in
-          let domain = L.account condition domain out_annotation in
-          (* Check if the loop is finished *)
-          if Annotation.included domain out_annotation L.included then
-            (Cfor (variable, range, body), domain)
-          else
-            loop domain
-      in
-      let body, in_annotation = loop out_annotation in
-      let _, in_annotation =
-          (* Assigning proxy_var to range beginning*)
-          analyse_assign loc (Lvar proxy_var) AT_none (Location.unloc variable).v_ty
-            (Grange.first range) in_annotation
-      in
-      let in_annotation = Annotation.bind in_annotation (L.forget proxy_var) in
-      (body, in_annotation)
+          let in_annotation = Annotation.bind in_annotation (L.forget proxy_var) in
+          (body, in_annotation)
+      | FIrepeat _ ->
+          let body, annotation = analyse_stmt body out_annotation in
+          (Cfor (fi, body), annotation)
 
   (**
     Analysis of while loop
@@ -218,7 +224,7 @@ struct
           let th, annotation_th = analyse_stmt th annotation in
           let el, annotation_el = analyse_stmt el annotation in
           (Cif (cond, th, el), L.account cond annotation_th annotation_el)
-      | Cfor (var, range, bloc) -> analyse_for loc var range bloc annotation
+      | Cfor (fi, bloc) -> analyse_for loc fi bloc annotation
       | Cwhile (align, b1, cond, info, b2) -> analyse_while align cond info b1 b2 annotation
 
   and analyse_instr (out_annotation : annot) (instr : ('info, 'asm) instr) :

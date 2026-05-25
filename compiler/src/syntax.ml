@@ -387,6 +387,8 @@ type pinstr_r =
       (** if e { … } else { … } *)
   | PIFor       of pident * (fordir * pexpr * pexpr) * pblock
       (** for i = 0 to N { … } *)
+  | PIRepeat    of pexpr * pblock
+      (** repeat N { … } *)
   | PIWhile     of pblock option * pexpr * pblock option
       (** while { … } (x > 0) { … } *)
   | PIdecl      of vardecls

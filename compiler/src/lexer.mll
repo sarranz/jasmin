@@ -71,6 +71,7 @@
     "ptr"   , POINTER;
     "reg"   , REG    ;
     "require", REQUIRE;
+    "repeat", REPEAT ;
     "return", RETURN ;
     "stack" , STACK  ;
     "to"    , TO     ;

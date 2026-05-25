@@ -59,10 +59,14 @@ let rec spill_all_i strategy i =
           i_desc = Cif (e, spill_all_c strategy c1, spill_all_c strategy c2);
         };
       ]
-  | Cfor (x, (d, e1, e2), c) ->
+  | Cfor (fi, c) ->
+      let ve = match fi with
+        | FIrange(_, _, e1, e2) -> vars_es [e1; e2]
+        | FIrepeat e -> vars_e e
+      in
       [
-        op Unspill (vars_es [ e1; e2 ]);
-        { i with i_desc = Cfor (x, (d, e1, e2), spill_all_c strategy c) };
+        op Unspill ve;
+        { i with i_desc = Cfor (fi, spill_all_c strategy c) };
       ]
   | Cwhile (al, c1, e, ei, c2) ->
       [

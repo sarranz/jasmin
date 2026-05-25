@@ -166,6 +166,18 @@ let assertion_of_cassertions  = List.map assertion_of_cassertion
 
 (* ------------------------------------------------------------------------ *)
 
+let cfi_of_fi = function
+  | FIrange(x, d, elo, ehi) ->
+      C.FIrange(cvari_of_vari x, d, cexpr_of_expr elo, cexpr_of_expr ehi)
+  | FIrepeat(e) -> C.FIrepeat(cexpr_of_expr e)
+
+let fi_of_cfi = function
+  | C.FIrange(cx, d, celo, cehi) ->
+      FIrange(vari_of_cvari cx, d, expr_of_cexpr celo, expr_of_cexpr cehi)
+  | C.FIrepeat(e) -> FIrepeat(expr_of_cexpr e)
+
+(* ------------------------------------------------------------------------ *)
+
 let rec cinstr_of_instr i =
   let n = i.i_loc, i.i_annot in
   cinstr_r_of_instr_r n i.i_desc
@@ -197,11 +209,10 @@ and cinstr_r_of_instr_r p i =
     let ir = C.Cif(cexpr_of_expr e, c1, c2) in
     C.MkI(p, ir)
 
-  | Cfor(x, (d,e1,e2), c) ->
-    let d = ((d, cexpr_of_expr e1), cexpr_of_expr e2) in
-    let x = cvari_of_vari x in
+  | Cfor(fi, c) ->
+    let fi = cfi_of_fi fi in
     let c = cstmt_of_stmt c in
-    let ir = C.Cfor(x,d,c) in
+    let ir = C.Cfor(fi, c) in
     C.MkI(p, ir)
   | Cwhile(a, c, e, (info, _), c') ->
     let ir = C.Cwhile(a, cstmt_of_stmt c, cexpr_of_expr e, info,
@@ -239,11 +250,10 @@ and instr_r_of_cinstr_r = function
     let c2 = stmt_of_cstmt c2 in
     Cif(expr_of_cexpr e, c1, c2)
 
-  | Cfor(x, ((d,e1),e2), c) ->
-    let d = (d, expr_of_cexpr e1, expr_of_cexpr e2) in
-    let x = vari_of_cvari x in
+  | Cfor(fi, c) ->
+    let fi = fi_of_cfi fi in
     let c = stmt_of_cstmt c in
-    Cfor(x,d,c)
+    Cfor(fi, c)
 
   | Cwhile(a, c, e, info, c') ->
     Cwhile(a, stmt_of_cstmt c, expr_of_cexpr e, (info, ()), stmt_of_cstmt c')

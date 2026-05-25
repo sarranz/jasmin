@@ -99,6 +99,10 @@ type 'len glvals = 'len glval list
 
 type 'len grange = E.dir * 'len gexpr * 'len gexpr
 
+type 'len gfor_iteration =
+  | FIrange of 'len gvar_i * E.dir * 'len gexpr * 'len gexpr
+  | FIrepeat of 'len gexpr
+
 type 'len assertion = string * 'len gassert
 
 type ('len, 'info, 'asm) ginstr_r =
@@ -108,7 +112,7 @@ type ('len, 'info, 'asm) ginstr_r =
   | Csyscall of 'len glvals * (Wsize.wsize * BinNums.positive) Syscall_t.syscall_t * 'len gexprs
   | Cassert of 'len assertion
   | Cif    of 'len gexpr * ('len, 'info, 'asm) gstmt * ('len, 'info, 'asm) gstmt
-  | Cfor   of 'len gvar_i * 'len grange * ('len, 'info, 'asm) gstmt
+  | Cfor   of 'len gfor_iteration * ('len, 'info, 'asm) gstmt
   | Cwhile of E.align * ('len, 'info, 'asm) gstmt * 'len gexpr * (IInfo.t * 'info) * ('len, 'info, 'asm) gstmt
   | Ccall  of 'len glvals * funname * 'len gexprs
 
@@ -282,6 +286,10 @@ let rec rvars_e f s = function
 
 and rvars_es f s es = List.fold_left (rvars_e f) s es
 
+let rvars_fi f s = function
+  | FIrange(x, _, elo, ehi) -> rvars_e f (rvars_e f (f (L.unloc x) s) ehi) elo
+  | FIrepeat(e) -> rvars_e f s e
+
 let rvars_lv f s = function
  | Lnone _       -> s
  | Lvar x        -> f (L.unloc x) s
@@ -306,8 +314,7 @@ let rec rvars_i f s i =
   | Copn(x,_,_,e)  | Csyscall (x, _, e) -> rvars_es f (rvars_lvs f s x) e
   | Cassert(_, e) -> rvars_a f s e
   | Cif(e,c1,c2)   -> rvars_c f (rvars_c f (rvars_e f s e) c1) c2
-  | Cfor(x,(_,e1,e2), c) ->
-    rvars_c f (rvars_e f (rvars_e f (f (L.unloc x) s) e1) e2) c
+  | Cfor(fi, c) -> rvars_c f (rvars_fi f s fi) c
   | Cwhile(_, c, e, _, c') -> rvars_c f (rvars_e f (rvars_c f s c') e) c
   | Ccall(x,_,e) -> rvars_es f (rvars_lvs f s x) e
 
@@ -363,6 +370,10 @@ let written_lv s =
     -> Sv.add (L.unloc x) s
   | _ -> s
 
+let written_vars_fi v = function
+  | FIrange(x, _, _, _) -> Sv.add (L.unloc x) v
+  | FIrepeat(_) -> v
+
 let rec written_vars_i ((v, f) as acc) i =
   match i.i_desc with
   | Cassgn(x, _, _, _) -> written_lv v x, f
@@ -374,7 +385,7 @@ let rec written_vars_i ((v, f) as acc) i =
   | Cif(_, s1, s2)
   | Cwhile(_, s1, _, _, s2)
     -> written_vars_stmt (written_vars_stmt acc s1) s2
-  | Cfor(_, _, s) -> written_vars_stmt acc s
+  | Cfor(fi, s) -> written_vars_stmt (written_vars_fi v fi, f) s
 and written_vars_stmt acc s =
   List.fold_left written_vars_i acc s
 
@@ -390,8 +401,8 @@ let rec refresh_i_loc_i (i:('info, 'asm) instr) : ('info, 'asm) instr =
     | Cassgn _ | Copn _ | Csyscall _ | Ccall _ | Cassert _ -> i.i_desc
     | Cif(e, c1, c2) ->
         Cif(e, refresh_i_loc_c c1, refresh_i_loc_c c2)
-    | Cfor(x, r, c) ->
-        Cfor(x, r, refresh_i_loc_c c)
+    | Cfor(fi, c) ->
+        Cfor(fi, refresh_i_loc_c c)
     | Cwhile(a, c1, e, ((loc, annot), info), c2) ->
         Cwhile(a, refresh_i_loc_c c1, e, ((L.refresh_i_loc loc, annot), info), refresh_i_loc_c c2)
   in
@@ -520,7 +531,7 @@ let rec has_syscall_i i =
   | Csyscall _ -> true
   | Cassgn _ | Copn _ | Ccall _ | Cassert _ -> false
   | Cif (_, c1, c2) | Cwhile(_, c1, _, _, c2) -> has_syscall c1 || has_syscall c2
-  | Cfor (_, _, c) -> has_syscall c
+  | Cfor (_, c) -> has_syscall c
 
 and has_syscall c = List.exists has_syscall_i c
 
@@ -529,7 +540,7 @@ let rec has_call_or_syscall_i i =
   | Csyscall _ | Ccall _ -> true
   | Cassgn _ | Copn _ | Cassert _ -> false
   | Cif (_, c1, c2) | Cwhile(_, c1, _, _, c2) -> has_call_or_syscall c1 || has_call_or_syscall c2
-  | Cfor (_, _, c) -> has_call_or_syscall c
+  | Cfor (_, c) -> has_call_or_syscall c
 
 and has_call_or_syscall c = List.exists has_call_or_syscall_i c
 
@@ -543,7 +554,7 @@ let rec spilled_i s i =
   | Copn(_, _, Sopn.Opseudo_op (Pseudo_operator.Ospill _), es) -> rvars_es Sv.add s es
   | Cassgn _ | Csyscall _ | Ccall _ | Copn _ | Cassert _ -> s
   | Cif(_e, c1, c2)  -> spilled_c (spilled_c s c1) c2
-  | Cfor(_, _, c)    -> spilled_c s c
+  | Cfor(_, c)    -> spilled_c s c
   | Cwhile(_, c, _, _, c') -> spilled_c (spilled_c s c) c'
 
 and spilled_c s c =  List.fold_left spilled_i s c
@@ -575,10 +586,14 @@ and iter_instr_i f gi =
 
 and iter_instr_ir f = function
   | Cassgn _ | Copn _ | Csyscall _ | Ccall _ | Cassert _ -> ()
-  | Cfor (_, _, c) -> iter_instr f c
+  | Cfor (_, c) -> iter_instr f c
   | Cif (_, c1, c2) | Cwhile (_, c1, _, _, c2) ->
      iter_instr f c1;
      iter_instr f c2
+
+let iterator_of_fi = function
+  | FIrange (i, _, _, _) -> Some i
+  | FIrepeat _ -> None
 
 (* -------------------------------------------------------------------- *)
 let clamp (sz : wsize) (z : Z.t) =

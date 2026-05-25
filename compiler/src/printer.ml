@@ -213,11 +213,21 @@ let rec pp_gi ~debug pp_info pp_len pp_opn pp_var fmt i =
       (pp_ge ~debug pp_len pp_var) e (pp_cblock ~debug pp_info pp_len pp_opn pp_var) c1
       (pp_cblock ~debug pp_info pp_len pp_opn pp_var) c2
 
-  | Cfor(i, (dir, lo, hi), c) ->
-    let dir, e1, e2 =
-      if dir = UpTo then "to", lo, hi else "downto", hi, lo in
-    F.fprintf fmt "@[<v>for %a = @[%a %s@ %a@] %a@]"
-      (pp_gvar_i pp_var) i (pp_ge ~debug pp_len pp_var) e1 dir (pp_ge ~debug pp_len pp_var) e2
+  | Cfor(fi, c) ->
+    let pp_fi fmt fi =
+      match fi with
+      | FIrange(i, dir, lo, hi) ->
+        let dir, e1, e2 =
+          if dir = UpTo then "to", lo, hi else "downto", hi, lo in
+        F.fprintf fmt "%a = @[%a %s@ %a@]"
+          (pp_gvar_i pp_var) i
+          (pp_ge ~debug pp_len pp_var) e1 dir
+          (pp_ge ~debug pp_len pp_var) e2
+      | FIrepeat(e) ->
+        F.fprintf fmt "repeat %a" (pp_ge ~debug pp_len pp_var) e
+    in
+    F.fprintf fmt "@[<v>for %a %a@]"
+      pp_fi fi
       (pp_cblock ~debug pp_info pp_len pp_opn pp_var) c
 
   | Cwhile(a, [], e, ((iloc, _), info), c) ->

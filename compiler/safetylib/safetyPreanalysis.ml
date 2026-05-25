@@ -92,8 +92,12 @@ end = struct
         Csyscall(mk_lvals fn lvls, o, mk_exprs fn exprs)
     | Cif (e, st, st') ->
       Cif (mk_expr fn e, mk_stmt fn st, mk_stmt fn st')
-    | Cfor (v, r, st) ->
-      Cfor (mk_v_loc fn v, mk_range fn r, mk_stmt fn st)
+    | Cfor (fi, st) ->
+      let fi = match fi with
+        | FIrange (v, d, e1, e2) -> FIrange (mk_v_loc fn v, d, mk_expr fn e1, mk_expr fn e2)
+        | FIrepeat e -> FIrepeat (mk_expr fn e)
+      in
+      Cfor (fi, mk_stmt fn st)
     | Ccall (lvs, c_fn, es) ->
       Ccall (mk_lvals fn lvs, c_fn, mk_exprs fn es)
     | Cwhile (a, st1, e, (info, _), st2) ->
@@ -376,7 +380,7 @@ end = struct
           if r1 = r2 then Some r1 else raise Flag_set_from_failure
         | None, Some _ | Some _, None -> raise Flag_set_from_failure end
 
-    | Cfor (_, _, c) ->
+    | Cfor (_, c) ->
       pa_flag_setfrom v (List.rev c)
 
     | Cwhile (_, c1, _, _, c2) ->
@@ -406,7 +410,7 @@ end = struct
       (* Note that we reset the context after the merge *)
       st_merge (pa_stmt fn prog st' c1) (pa_stmt fn prog st' c2) st.ct
 
-    | Cfor (_, _, c) ->
+    | Cfor (_, c) ->
       (* We ignore the loop index, since we do not use widening for loops. *)
       pa_stmt fn prog st c
 
@@ -556,9 +560,14 @@ end = struct
       let sv = collect_vars_is sv st1 in
       let sv = collect_vars_is sv st2 in
       collect_vars_e sv e
-    | Cfor (v,(_,e1,e2),st) ->
-      let sv = collect_vars_is (Sv.add (L.unloc v) sv) st in
-      collect_vars_es sv [e1;e2]
+    | Cfor (fi, st) ->
+      (match fi with
+       | FIrange (v, _, e1, e2) ->
+           let sv = collect_vars_is (Sv.add (L.unloc v) sv) st in
+           collect_vars_es sv [e1; e2]
+       | FIrepeat e ->
+           let sv = collect_vars_is sv st in
+           collect_vars_e sv e)
     | Copn (lvs, _, _, es) | Csyscall(lvs, _, es) ->
       let sv = collect_vars_lvs sv lvs in
       collect_vars_es sv es
