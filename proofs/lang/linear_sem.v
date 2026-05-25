@@ -178,6 +178,7 @@ Definition eval_instr (i : linstr) (s1: lstate) : exec lstate :=
     if b then
       eval_jump (s1.(lfn),lbl) s1
     else ok (lnext_pc s1)
+  | Lrepeat_call _ _ => type_error
   end.
 
 Definition step (s: lstate) : exec lstate :=
