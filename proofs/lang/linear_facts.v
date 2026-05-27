@@ -224,10 +224,11 @@ Opaque eval_jump.
   + by move=> _ /eval_jump_mem_eq /= <-.
   + by t_xrbindP=> _ _ _ _ _ r _ /eval_jump_mem_eq <-.
   + by t_xrbindP=> _ _ _ _ _ _ <- /=.
-  t_xrbindP=> ?? b ? _ _.
-  case: b.
-  + by move=> /eval_jump_mem_eq <-.
-  by move=> [<-] /=.
+  + t_xrbindP=> ?? b ? _ _.
+    case: b.
+    + by move=> /eval_jump_mem_eq <-.
+    by move=> [<-] /=.
+  by [].
 Transparent eval_jump.
 Qed.
 
