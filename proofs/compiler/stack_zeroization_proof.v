@@ -407,25 +407,28 @@ Lemma step_in_bound lp lfd s s':
   step lp s = ok s' ->
   lpc s' <= size (lfd_body lfd).
 Proof.
+  Opaque eval_jump.
   move=> hget; rewrite /step /find_instr.
   case hget1 : get_fundef => [lfd1 | //].
   case honth: oseq.onth => [pc | //].
   have {honth}hsz:= onth_size honth.
   rewrite /eval_instr.
-  case: li_i; t_xrbindP.
+  case: pc => [ii []] /=; t_xrbindP.
   + by move=> *; subst s' => /=; move: hget; rewrite /= hget1 => -[<-].
   + move=> > _ [[??]?] _; t_xrbindP => *; subst s' => /=.
     by move: hget; rewrite /= hget1 => -[<-].
-  + by move=> [x|] r; t_xrbindP => *; apply: (eval_jump_in_bound hget); eauto.
-  + by move=> *; apply: (eval_jump_in_bound hget); eauto.
+  + by move=> [x|] r; t_xrbindP => *; apply: eval_jump_in_bound; eauto.
+  + by move=> *; apply: eval_jump_in_bound; eauto.
   + by move=> *; subst s' => /=; move: hget; rewrite /= hget1 => -[<-].
   + by move=> *; subst s' => /=; move: hget; rewrite /= hget1 => -[<-].
-  + by move=> *; apply: (eval_jump_in_bound hget); eauto.
-  + by move=> *; apply: (eval_jump_in_bound hget); eauto.
+  + by move=> *; apply: eval_jump_in_bound; eauto.
+  + by move=> *; apply: eval_jump_in_bound; eauto.
   + by move=> *; subst s' => /=; move: hget; rewrite /= hget1 => -[<-].
   move=> ?? [].
-  + by move=> *; apply: (eval_jump_in_bound hget); eauto.
+  + by move=> *; apply: eval_jump_in_bound; eauto.
   by move=> > _ _ [?]; subst s' => /=; move: hget; rewrite /= hget1 => -[<-].
+  by [].
+  Transparent eval_jump.
 Qed.
 
 Section ITREE.
