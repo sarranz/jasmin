@@ -113,7 +113,7 @@ Lemma labels_of_body_cons l c i :
    | Llabel _ lbl => l == lbl
    | _ => false
    end || (l \in labels_of_body c).
-Proof. by rewrite /labels_of_body /=; case: li_i. Qed.
+Proof. by rewrite /labels_of_body /=; case: (li_i i) => > //=. Qed.
 
 Lemma labels_of_body_rcons l c i :
   l \in labels_of_body (rcons c i) =
@@ -358,7 +358,7 @@ Lemma eval_instr_eq i s : eval_instr p' i s = eval_instr p i s.
 Proof.
   rewrite /eval_instr.
   rewrite get_label_after_pcE label_in_lprogE lp_rspE.
-  case: li_i => //.
+  case: (li_i i) => //.
   1: move=> [?|].
   all: by move=> >; repeat (apply bind_eq => // ?); rewrite eval_jumpE.
 Qed.
