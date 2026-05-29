@@ -1570,12 +1570,12 @@ Definition Pc (s0 : estate) (c : cmd) (s1 : estate) :=
 
 #[ local ]
 Definition Pfor
-  (i : var_i) (rng : seq Z) (s0 : estate) (c : cmd) (s1 : estate) :=
-  disj_fvars (Sv.add i (vars_c c))
+  (oi : option var_i) (rng : seq Z) (s0 : estate) (c : cmd) (s1 : estate) :=
+  disj_fvars (Sv.union (sv_of_ovar_i oi) (vars_c c))
   -> forall s0',
        eq_fv s0 s0'
        -> exists2 s1',
-            sem_for p' ev i rng s0' (lower_cmd c) s1' & eq_fv s1 s1'.
+            sem_for p' ev oi rng s0' (lower_cmd c) s1' & eq_fv s1 s1'.
 
 #[ local ]
 Definition Pfun
@@ -1805,27 +1805,48 @@ Qed.
 #[ local ]
 Lemma Hfor : sem_Ind_for p ev Pi_r Pfor.
 Proof.
-  move=> s0 s1 i d lo hi c vlo vhi hlo hhi _ hfor.
+  move=> s0 s1 fi c rn hfi _ hfor.
   move=> ii hfv s0' hs00.
 
-  move: hfv => /disj_fvars_vars_I_Cfor [hfvc hfvlo hfvhi].
+  move: hfv => /disj_fvars_vars_I_Cfor [hfvfi hfvuc].
 
-  have [s1' hsemf01' hs11] := hfor hfvc s0' hs00.
+  have hpfor : disj_fvars (Sv.union (sv_of_ovar_i (iterator_of_fi fi)) (vars_c c)).
+  - have heq := write_fi_iterator fi.
+    apply /Sv.is_empty_spec.
+    move: hfvuc => /Sv.is_empty_spec h.
+    SvD.fsetdec.
+
+  have [s1' hsemf01' hs11] := hfor hpfor s0' hs00.
 
   rewrite /=.
   exists s1'; last exact: hs11.
   clear hs11.
 
+  have hfi' : sem_fi true (p_globs p) s0' fi = ok rn.
+  - clear hfor hfvuc hpfor hsemf01'.
+    case: fi hfi hfvfi => [i d lo hi | e] hfi hfvfi /=.
+    + move: hfi; rewrite /sem_fi /sem_pexpr_int /=.
+      t_xrbindP => zlo vlo hlo hzlo zhi vhi hhi hzhi <-.
+      have hfvlo : disj_fvars (read_e lo).
+      * apply: (disjoint_w _ hfvfi); rewrite /read_fi /read_fi_rec /= !read_eE; SvD.fsetdec.
+      have hfvhi : disj_fvars (read_e hi).
+      * apply: (disjoint_w _ hfvfi); rewrite /read_fi /read_fi_rec /= !read_eE; SvD.fsetdec.
+      rewrite /sem_fi /sem_pexpr_int /=.
+      rewrite (eeq_exc_sem_pexpr hfvlo hs00 hlo) /= hzlo /=.
+      by rewrite (eeq_exc_sem_pexpr hfvhi hs00 hhi) /= hzhi /=.
+    + move: hfi; rewrite /sem_fi /sem_pexpr_int /=.
+      t_xrbindP => z v hv hz <-.
+      by rewrite /sem_fi /sem_pexpr_int /= (eeq_exc_sem_pexpr hfvfi hs00 hv) /= hz /=.
+
   apply: sem_seq_ir. apply: Efor.
-  - exact: (eeq_exc_sem_pexpr hfvlo hs00 hlo).
-  - exact: (eeq_exc_sem_pexpr hfvhi hs00 hhi).
+  - exact: hfi'.
   exact: hsemf01'.
 Qed.
 
 #[ local ]
 Lemma Hfor_nil : sem_Ind_for_nil Pfor.
 Proof.
-  move=> s0 i c.
+  move=> s0 oi c.
   move=> _ s0' hs00.
   exists s0'; last exact: hs00.
   clear hs00.
@@ -1835,26 +1856,27 @@ Qed.
 #[ local ]
 Lemma Hfor_cons : sem_Ind_for_cons p ev Pc Pfor.
 Proof.
-  move=> s0 s1 s2 s3 i v vs c hwrite hsem hc hsemf hfor.
+  move=> s0 s1 s2 s3 oi v vs c hinit hsem hc hsemf hfor.
   move=> hfv s0' hs00.
-
-  have {}hwrite : write_lval true (p_globs p) i v s0 = ok s1.
-  - exact: hwrite.
-
-  have [hfvi hfvc] := disj_fvars_Cfor_c hfv.
-
-  have [s1' hwrite01' hs11] := eeq_exc_write_lval hfvi hs00 hwrite.
-  clear hfvi hs00 hwrite.
-
+  have hfvc : disj_fvars (vars_c c).
+  - apply: (disjoint_w _ hfv); SvD.fsetdec.
+  have [s1' hinit' hs11] : exists2 s1',
+      init_iteration true s0' oi v = ok s1' & eq_fv s1 s1'.
+  - clear hsemf hfor hc hsem.
+    case: oi hinit hfv => [i | ] /= hinit hfv.
+    + have hfvi : disj_fvars (vars_lval i)
+          by apply: (disjoint_w _ hfv); rewrite /vars_lval /=; SvD.fsetdec.
+      have [s1' hw hs11] := eeq_exc_write_lval (gd := p_globs p) hfvi hs00 hinit.
+      by exists s1'.
+    + case: hinit => <-.
+      by exists s0'.
   have [s2' hsem12' hs22] := hc hfvc s1' hs11.
   have [s3' hsem23' hs33] := hfor hfv s2' hs22.
   clear hs11 hs22.
-
   exists s3'; last exact: hs33.
   clear hs33.
-
   apply: EForOne.
-  - exact: hwrite01'.
+  - exact: hinit'.
   - exact: hsem12'.
   exact: hsem23'.
 Qed.
@@ -2027,13 +2049,20 @@ Opaque esem.
     + by move=> s t v heqfv; apply (sem_lower_condition ii heq).
     by move=> [].
   (* For *)
-  + move=> x dir lo hi c hc ii /= /disj_fvars_vars_I_Cfor [hfvc hfvlo hfvhi].
-    apply (wequiv_for_rel_eq (sip:=sip)) with checker_st_eq_ex fvars fvars => //.
-    + by split => //; apply disj_fvars_read_es2.
-    split => //.
-    + rewrite /vars_lvals /read_rvs /vrvs /=; apply /disjointP.
-      by move=> z hz; move/disjointP: hfvc => /(_ z); SvD.fsetdec.
-    by apply/hc/disjointP => z hz; move/disjointP: hfvc => /(_ z); SvD.fsetdec.
+  + move=> fi c hc ii /= /disj_fvars_vars_I_Cfor [hfvfi hfvuc].
+    case: fi hc hfvfi hfvuc => [i dir lo hi | e] hc hfvfi hfvuc.
+    - (* FIrange: pass through the same fi, lower only the body *)
+      have hfvlo : disj_fvars (read_e lo).
+      + apply: (disjoint_w _ hfvfi); rewrite /read_fi /read_fi_rec /= !read_eE; SvD.fsetdec.
+      have hfvhi : disj_fvars (read_e hi).
+      + apply: (disjoint_w _ hfvfi); rewrite /read_fi /read_fi_rec /= !read_eE; SvD.fsetdec.
+      apply (wequiv_for_rel_eq (sip:=sip)) with checker_st_eq_ex fvars fvars => //.
+      + by split => //; apply disj_fvars_read_es2.
+      + by split => //; apply: (disjoint_w _ hfvuc); SvD.fsetdec.
+      by apply/hc/disjointP => z hz; move/disjointP: hfvuc => /(_ z); SvD.fsetdec.
+    - (* FIrepeat: pass through unchanged, lower only the body *)
+      apply (wequiv_for_repeat_rel_eq (sip:=sip)) with checker_st_eq_ex fvars => //.
+      by apply/hc/disjointP => z hz; move/disjointP: hfvuc => /(_ z); SvD.fsetdec.
   (* While *)
   + move=> al c e ii' c' hc hc' ii /disj_fvars_vars_I_Cwhile [/hc{}hc hfve /hc'{}hc'] /=.
     case heq: lower_condition => [pre e'].

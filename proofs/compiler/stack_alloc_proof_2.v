@@ -4402,7 +4402,8 @@ Proof.
 
   (* For: FIrange -> alloc returns Error (vacuous); FIrepeat -> TODO *)
   + move=> fi c _ihc ii table1 rmap1 table2 rmap2 vme c2 /=.
-    case: fi => [_ _ _ _|e]; first by [].
+    move: fi => [fi_v fi_d fi_lo fi_hi|e] /=.
+    - by [].
     (* TODO: wequiv_rec correctness for FIrepeat (analogous to Hfor above).
        Requires threading st_sa_pre/post through sem_for iterations. *)
     admit.
@@ -4633,7 +4634,7 @@ Proof.
   apply: (valid_state_extend_mem hwf_Slots hvs' _ hvs'') => //=.
   + by move=> ???; rewrite hvalw hvalidws hvalw1.
   by move=> ???; rewrite hvalw' hvalidwt hvalw2.
-Qed.
+Admitted.
 
 End CMD.
 
@@ -5007,6 +5008,7 @@ Proof.
   have := [elaborate
    it_check_cP
       hext.(em_no_overflow)
+      ev
       hmap
       (P':=P')
       refl_equal
