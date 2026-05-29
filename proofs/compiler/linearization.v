@@ -382,6 +382,12 @@ Definition repeat_call_count
   | _ => Error (E.ii_error ii "invalid repeat loop count")
   end.
 
+Definition is_repeat_call
+  (ii : instr_info) (c : cmd) : cexec (lvals * funname * pexprs) :=
+  if c is [:: MkI _ (Ccall xs fn es) ]
+  then ok (xs, fn, es)
+  else Error (E.ii_error ii "invalid repeat loop body").
+
 Definition linearize_for ii (fi : for_iteration) : cexec (var_i + Z) :=
   if fi is FIrepeat e then repeat_call_count ii e
   else Error (E.ii_error ii "for loop found in linear").
@@ -759,7 +765,7 @@ Fixpoint linear_i (i:instr) (lbl:label) (lc:lcmd) :=
         let: (lbl', c') := linear_c linear_i c lbl [::] in
         (lbl', MkLI ii (Lrepeat_call count c') :: lc)
       else
-        (xH, [::]) (* absurd *)
+        (lbl, lc) (* absurd *)
   end.
 
 Definition linear_body (fi: fun_info) (e: stk_fun_extra) (body: cmd) : label * lcmd :=

@@ -159,7 +159,11 @@ Section CAT.
 
   #[ local ]
   Lemma cat_for : forall fi c, Pc c -> Pr (Cfor fi c).
-  Proof. by []. Qed.
+  Proof.
+    move=> fi c _ ii fn lbl tail /=.
+    case: (linearize_for ii fi) => [count | err] //.
+    by case: linear_c.
+  Qed.
 
   #[ local ]
   Lemma cat_while : forall a c e ei c', Pc c -> Pc c' -> Pr (Cwhile a c e ei c').
@@ -215,6 +219,7 @@ Definition valid_labels (fn: funname) (lo hi: label) (i: linstr) : bool :=
   | Lalign
   | Ligoto _
   | Lret
+  | Lrepeat_call _ _
     => true
   | Llabel _ lbl
   | LstoreLabel _ lbl
@@ -871,7 +876,11 @@ Section VALIDITY.
 
   #[ local ]
   Lemma valid_labels_for (fi : for_iteration) (c : cmd) : Pc c → Pr (Cfor fi c).
-  Proof. move => ? ?; exact: default. Qed.
+  Proof.
+    move=> hc ii fn lbl /=.
+    case: (linearize_for ii fi) => [count | err]; last exact: default.
+    by case: linear_c (hc fn lbl) => lbl' c' [Lc' _].
+  Qed.
 
   #[ local ]
   Lemma valid_labels_while (a : expr.align) (c : cmd) (e : pexpr) (ei : instr_info) (c' : cmd) : Pc c → Pc c' → Pr (Cwhile a c e ei c').
@@ -1027,7 +1036,12 @@ Section NUMBER_OF_LABELS.
 
   #[ local ]
   Lemma nb_labels_for (fi : for_iteration) (c : cmd) : Pc c → Pr (Cfor fi c).
-  Proof. by move=> hc ii fn lbl /=; apply Z.le_refl. Qed.
+  Proof.
+    move=> hc ii fn lbl /=.
+    case: (linearize_for ii fi) => [count | err]; last by apply Z.le_refl.
+    case: linear_c (hc fn lbl) => lbl' c' /= Hc'.
+    lia.
+  Qed.
 
   Lemma label_in_lcmd_add_align ii al lc :
     label_in_lcmd (add_align ii al lc) = label_in_lcmd lc.
@@ -2052,6 +2066,9 @@ Section PROOF.
         & match_mem_gen (top_stack m0) s2 m2
         & target_mem_unchanged m1 m2.
 
+  Let Pfor (_: Sv.t) (_: estate) (_: option var_i) (_: seq Z) (_: cmd) (_: estate) : Prop :=
+    True.
+
   Local Lemma Hnil : sem_Ind_nil Pc.
   Proof.
     move=> s1 fn lbl _ ls m1 vm1 ?????? hpc _.
@@ -2675,7 +2692,7 @@ Section PROOF.
         rewrite find_labelE /= /is_label /= eqxx /=.
         rewrite addn0 setpc_lset_estate !setcpc_setpc.
         reflexivity.
-      rewrite add_align_nil catA size_cat in E3.
+      rewrite add_align_nil !catA size_cat in E3.
       rewrite -!catA -hfn in C.
       have /(_ _ hpc erefl erefl) {}E3 := lsem_skip_align _ _ C _ E3.
       rewrite !catA -cat1s -!catA catA in C.
@@ -2745,7 +2762,7 @@ Section PROOF.
         rewrite find_label_cat_hd; last by case: (a).
         rewrite find_labelE /= /is_label /= eqxx /= addn0 /setcpc /=.
         reflexivity.
-      rewrite add_align_nil catA size_cat in E3.
+      rewrite add_align_nil !catA size_cat in E3.
       rewrite -!catA -hfn in C.
       have /(_ _ hpc erefl erefl) {}E3 := lsem_skip_align _ _ C _ E3.
       rewrite !catA -cat1s -!catA catA in C.
@@ -3064,6 +3081,15 @@ Section PROOF.
     case: ra hneq hnin heq => [ | ? | [?|] ?] /=;
       SvD.fsetdec.
   Qed.
+
+  Local Lemma Hfor_sov_nil : sem_Ind_for_sov_nil Pfor.
+  Proof. by []. Qed.
+
+  Local Lemma Hfor_sov_cons : sem_Ind_for_sov_cons p var_tmps Pc Pfor.
+  Proof. by []. Qed.
+
+  Local Lemma Hfor : sem_Ind_for p var_tmps Pi_r Pfor.
+  Proof. Admitted.
 
   Lemma has_label_allocate_stack_frame p1 b ii z tmp rastack lbl :
     ~~has (is_label lbl) (allocate_stack_frame liparams p1 b ii z tmp rastack).
@@ -4712,6 +4738,9 @@ Section PROOF.
          Hif_false
          Hwhile_true
          Hwhile_false
+         Hfor_sov_nil
+         Hfor_sov_cons
+         Hfor
          Hcall
          Hproc).
   Qed.
