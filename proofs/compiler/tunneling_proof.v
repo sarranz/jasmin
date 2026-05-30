@@ -1,6 +1,3 @@
-Set Uniform Inductive Parameters.
-Set Implicit Arguments.
-Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat eqtype.
 From Coq Require Import ZArith.

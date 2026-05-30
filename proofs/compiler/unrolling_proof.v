@@ -4,12 +4,6 @@ From Coq Require Import ZArith.
 Require Import psem compiler_util.
 Require Export unrolling.
 
-Set Uniform Inductive Parameters.
-Set Implicit Arguments.
-Unset Strict Implicit.
-Unset Printing Implicit Defensive.
-Set Warnings "-notation-overridden,-extraction-reserved-identifier,-extraction-opaque-accessed,-ambiguous-paths,-redundant-canonical-projection,-projection-no-head-constant,-postfix-notation-not-level-1,-deprecated-since-mathcomp-2.4.0,-deprecated-since-mathcomp-2.5.0,-deprecated-from-Coq,-deprecated-dirpath-Coq,-deprecated-reference-since-9.1,-rewrite-rw".
-
 Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then remove the line when requiring MathComp >= 2.6 *)
 
 Local Open Scope seq_scope.

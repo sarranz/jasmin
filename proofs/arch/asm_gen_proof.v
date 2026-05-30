@@ -1,7 +1,3 @@
-Set Implicit Arguments.
-Unset Strict Implicit.
-Unset Printing Implicit Defensive.
-
 From ITree Require Import
   ITree
   ITreeFacts

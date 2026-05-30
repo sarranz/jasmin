@@ -1,4 +1,3 @@
-From Coq Require Import Morphisms.
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssralg.
 
 Require Import

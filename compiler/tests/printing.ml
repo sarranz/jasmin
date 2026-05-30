@@ -147,7 +147,7 @@ let eq_pfor_iteration (x : pexpr_ gfor_iteration) (y : pexpr_ gfor_iteration) =
   | FIrange (a, b, c, d), FIrange (e, f, g, h) ->
       eq_pvar_i a e && b = f && eq_pexpr c g && eq_pexpr d h
   | FIrepeat a, FIrepeat b -> eq_pexpr a b
-  | (FIrange _ | FIrepeat _), _ -> false
+  | _, _ -> false
 
 let rec eq_pstmt x y = List.for_all2 eq_pinstr x y
 

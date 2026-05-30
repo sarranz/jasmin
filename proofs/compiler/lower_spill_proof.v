@@ -448,7 +448,7 @@ Let Pfor (oi : option var_i) vs s c s' :=
   sem_for p' ev oi vs s c s' /\
   forall S env env' c' vm,
   spill_c (spill_i S.(get_spill)) env c = ok (env', c') ->
-  Sv.Empty (Sv.inter (sv_of_ovar_i oi) env) ->
+  disjoint (sv_of_ovar_i oi) env ->
   Sv.Subset env env' ->
   Sv.Subset (Sv.union (sv_of_ovar_i oi) (vars_c c)) S.(X) ->
   valid_env S env (evm s) vm ->
@@ -586,7 +586,7 @@ Proof.
   subst env' c1 => hX hval.
   have hsub2 : Sv.Subset env0 env by SvD.fsetdec.
   case: (hfor _ _ _ _ _ hc _ hsub1 _ (valid_env_sub hsub2 hval)).
-  + by SvD.fsetdec.
+  + by apply/disjointP; SvD.fsetdec.
   + by have := write_fi_iterator fi; SvD.fsetdec.
   move=> vm2 hsem hval2; exists vm2 => //.
   have heqon : evm s1 =[read_fi fi] vm1.
@@ -610,7 +610,8 @@ Proof.
   case: oi hinit hdisjoint hX hf => [i|] /= hinit hdisjoint hX hf.
   + change (write_lval true gd (Lvar i) (Vint w) s1 = ok s1') in hinit.
     case: (update_lvP hval hinit); first by rewrite /vars_lval /=; SvD.fsetdec.
-    have hsub1 : Sv.Subset env (Sv.remove i env) by SvD.fsetdec.
+    have hsub1 : Sv.Subset env (Sv.remove i env).
+    + by move/Sv.is_empty_spec: hdisjoint hX; clear; SvD.fsetdec.
     move=> vm1 /= hw1 /(valid_env_sub hsub1) hval1.
     case: (hc _ _ _ _ _ hsp _ hval1); first by SvD.fsetdec.
     move=> vm2 hsc hval2.
