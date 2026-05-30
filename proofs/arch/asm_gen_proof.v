@@ -1,3 +1,7 @@
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
+
 From ITree Require Import
   ITree
   ITreeFacts
@@ -1239,7 +1243,9 @@ Proof.
   elim: hall => // { lc ac }.
   move=> li ai lc ac ok_ai _.
   rewrite /label_in_lcmd -cat1s pmap_cat -(cat1s ai) flatten_cat /label_in_asm pmap_cat => ->; f_equal.
-  case: li ok_ai => ii [ l o es| | [] | | | | | | | ] /=; try (by t_xrbindP => *; subst).
+  case: li ok_ai => ii [ l o es| | [] | | | | | | | | ] /=;
+    try (by rewrite /assemble_i /=; t_xrbindP => *; subst => //=).
+  rewrite /assemble_i /=.
   case: is_declassify.
   + case => [aty | len] /=.
     + case: es => //= e [] //=.
@@ -1265,7 +1271,7 @@ Lemma assemble_i_is_label (li : linstr) ai lbl :
   -> linear.is_label lbl li = has (arch_sem.is_label lbl) ai.
 Proof.
   rewrite /assemble_i /linear.is_label ; case li =>  ii
-   [es o xs | s [<-]| xi r | [<-]| [<-] | lk l [<-]| r [<-]| x | x l | e l] //=; t_xrbindP.
+   [es o xs | s [<-]| xi r | [<-]| [<-] | lk l [<-]| r [<-]| x | x l | e l | cnt c] //=; t_xrbindP.
   + case: is_declassify; t_xrbindP.
     + case => [aty | len] ?.
       + by case: xs => // ? [] //=; t_xrbindP => ? _ ? _ <- <-.
@@ -1275,7 +1281,8 @@ Proof.
   + by rewrite orbC.
   + by move=> _ ? _ <-.
   + by move=> z _ <-.
-  by move=> z _ <-.
+  + by move=> z _ <-.
+  by move=> ? _ ? _ <-.
 Qed.
 
 Definition asm_pos p (lc:lcmd) :=
@@ -1569,7 +1576,7 @@ Proof.
   case: (ltnP (lpc ls) (size (lfd_body fd))) honth => [hn ok_i |];
       last by move=> /onth_default ->.
   rewrite ltnn ltnNge leqnSn /= subnn subSnn /= take0.
-  rewrite /assemble_c !mapM_cat hac0 /= hc /= hdecl /=.
+  rewrite /assemble_c !mapM_cat hac0 /assemble_i /= hdecl hc /=.
   by rewrite cats0 flatten_cat /= cats0 size_cat size_map.
 Qed.
 
@@ -1851,7 +1858,7 @@ Proof.
     case: (ltnP (lpc ls) (size (lfd_body fd))) ok_i => [hn ok_i| /onth_default -> //].
     by rewrite ltnn subnn take0 cats0 hac /= -heq onth_cat ltnn subnn.
   case: i ok_i haci hsem => /= li_ii [].
-  - move=> lvs op pes; rewrite /linear_sem.eval_instr /=.
+  - move=> lvs op pes; rewrite /linear_sem.eval_instr /assemble_i /=.
     case hdecl : is_declassify => [ d | ]; last first.
     + t_xrbindP.
       move=> honth c hopc ? args ok_args res ok_res m hw ?; subst aci ls'.
@@ -1886,7 +1893,7 @@ Proof.
       rewrite /asm_pos /= (onth_split honth).
       rewrite take_cat size_take.
       rewrite (onth_size honth) -(addn1 (lpc _)) lt_nm_n sub_nmn /= take0 assemble_c_cat.
-      by move: hip; rewrite /asm_pos /assemble_c hac /= hlty /= h0 /= size_cat /= addn1 => ->.
+      by move: hip; rewrite /asm_pos /assemble_c hac /= /assemble_i /= hlty /= h0 /= size_cat /= addn1 => ->.
     case: pes => //= -[] //= e [] //; t_xrbindP => a h0 ? honth ???? [] ???; subst.
     rewrite /exec_sopn /=; t_xrbindP => ??????; subst.
     case: lvs honth => // honth [?] ?; subst.
@@ -1897,18 +1904,18 @@ Proof.
     rewrite /asm_pos /= (onth_split honth).
     rewrite take_cat size_take.
     rewrite (onth_size honth) -(addn1 (lpc _)) lt_nm_n sub_nmn /= take0 assemble_c_cat.
-    by move: hip; rewrite /asm_pos /assemble_c hac /= h0 /= size_cat /= addn1 => ->.
+    by move: hip; rewrite /asm_pos /assemble_c hac /assemble_i /= h0 /= size_cat /= addn1 => ->.
 
   - move=> sc ok_i [?]; subst aci. by eauto using match_state_SysCall.
 
-  - move=> [xlr | ] r ok_i.
+  - move=> [xlr | ] r ok_i; rewrite /assemble_i /=.
     + case heqlr: to_reg => [lr /= | //] [?]; subst aci.
       rewrite /linear_sem.eval_instr => /=; t_xrbindP => l hgetpc.
       t_xrbindP=> ptr /o2rP ptr_eq vm hset hjump.
       apply (match_state_step1 (ls' := ls') hnth) => /=.
       rewrite /return_address_from.
       have /= := assemble_get_label_after_pc hass ok_i _ heqf hip _ hgetpc.
-      rewrite heqlr ok_fd /= => /(_ _ erefl erefl) [] _ ->.
+      rewrite /assemble_i /= heqlr ok_fd /= => /(_ _ erefl erefl) [] _ ->.
       rewrite -assemble_prog_labels -heqf ptr_eq.
       apply: eval_jumpP; last by apply hjump.
       rewrite /st_update_next /=.
@@ -1970,7 +1977,7 @@ Proof.
     by apply: asm_pos_incr hok_i hac heq hip.
   - move=> r hok_i [?] hi; subst aci.
     by apply (match_state_step1 (ls' := ls') hnth) => /=; apply: eval_jumpP; last by apply hi.
-  - rewrite /linear_sem.eval_instr /=; t_xrbindP=> e hok_i ok_e.
+  - rewrite /linear_sem.eval_instr /assemble_i /=; t_xrbindP=> e hok_i ok_e.
     move => d ok_d ? ptr v ok_v /to_wordI[? [? [? /word_uincl_truncate hptr]]]; subst.
     move=> r /o2rP ptr_eq.
     change reg_size with Uptr in ptr => hdec.
@@ -1978,7 +1985,7 @@ Proof.
     have [v' -> /value_uinclE /= [? [? [-> /hptr /= ->]]]] := eval_assemble_word hloeq ok_e ok_d ok_v.
     rewrite -assemble_prog_labels /= ptr_eq.
     by apply eval_jumpP.
-  - move => x lbl hok_i.
+  - move => x lbl hok_i; rewrite /assemble_i /=.
     case ok_r_x': (of_var x) => [r|//]; have ok_r_x := of_varI ok_r_x'.
     move=> /= [?] hev; subst aci.
     apply (match_state_step1 (ls' := ls') hnth) => /=.
@@ -1991,8 +1998,8 @@ Proof.
     + move: ok_r_x; change x with (v_var (VarI x dummy_var_info)).
       apply: lom_eqv_write_var; first exact: hloeq.
       by rewrite /write_var ok_vm.
-    by apply: asm_pos_incr hok_i hac heq hip => /=; rewrite ok_r_x'.
-  - rewrite /linear_sem.eval_instr => /=.
+    by apply: asm_pos_incr hok_i hac heq hip => /=; rewrite /assemble_i /= ok_r_x'.
+  - rewrite /linear_sem.eval_instr /assemble_i /=.
     t_xrbindP => cnd lbl hok_i cndt ok_c ? b v ok_v ok_b; subst aci.
     case: hloeq => eqscs eqm hrip hd eqr eqrx eqx eqf.
     have [v' ok_v' hvv'] := hagp_eval_assemble_cond hagparams eqr eqf ok_c ok_v.
@@ -2009,7 +2016,9 @@ Proof.
     move => [?]; subst ls'; rewrite ok_fd /=.
     do 2!(eexists; first reflexivity).
     constructor => //; rewrite /setpc /=.
-    by apply: asm_pos_incr hok_i hac heq hip; rewrite /= ok_c.
+    by apply: asm_pos_incr hok_i hac heq hip; rewrite /assemble_i /= ok_c.
+  - move=> cnt c _ _.
+    by rewrite /linear_sem.eval_instr /=.
 Qed.
 
 Lemma match_state_sem ls ls' lc xs :
@@ -2270,8 +2279,8 @@ Proof.
   + move=> [xs' -> hinv'] /=.
     by apply xrutt.xrutt_Ret; constructor.
   rewrite /inv.
-  case: i ok_i haci hsem => /= li_ii [].
-  - move=> lvs op pes; rewrite /linear_sem.eval_instr /=.
+  case: i ok_i haci hsem => /= li_ii [] //.
+  - move=> lvs op pes; rewrite /linear_sem.eval_instr /assemble_i /=.
     case hdecl : is_declassify => [ d | ]; last first.
     + t_xrbindP.
       move=> honth c hopc ? args ok_args res ok_res m hw ?; subst aci ls'.
@@ -2309,7 +2318,7 @@ Proof.
       rewrite /asm_pos /= (onth_split honth).
       rewrite take_cat size_take.
       rewrite (onth_size honth) -(addn1 (lpc _)) lt_nm_n sub_nmn /= take0 assemble_c_cat.
-      by move: hip; rewrite /asm_pos /assemble_c hac /= hlty /= h0 /= size_cat /= addn1 => ->.
+      by move: hip; rewrite /asm_pos /assemble_c hac /assemble_i /= hlty /= h0 /= size_cat /= addn1 => ->.
     case: pes => //= -[] //= e [] //; t_xrbindP => a h0 ? honth ???? [] ???; subst.
     rewrite /exec_sopn /=; t_xrbindP => ??????; subst.
     case: lvs honth => // honth [?] ?; subst.
@@ -2321,14 +2330,14 @@ Proof.
     rewrite /asm_pos /= (onth_split honth).
     rewrite take_cat size_take.
     rewrite (onth_size honth) -(addn1 (lpc _)) lt_nm_n sub_nmn /= take0 assemble_c_cat.
-    by move: hip; rewrite /asm_pos /assemble_c hac /= h0 /= size_cat /= addn1 => ->.
+    by move: hip; rewrite /asm_pos /assemble_c hac /assemble_i /= h0 /= size_cat /= addn1 => ->.
 
   - move=> sc ok_i [?] hev; subst aci.
     apply (imatch_state_step1 (ls' := ls') hnth) => /=.
     + by apply hpc; rewrite /= leqnn addn1 ltnSn.
     by have [_ ] := match_state_SysCall_eval hloeq ok_fd heqf hass hac heq hip hnth ok_i hev.
 
-  - move=> [xlr | ] r ok_i.
+  - move=> [xlr | ] r ok_i; rewrite /assemble_i /=.
     + case heqlr: to_reg => [lr /= | //] [?]; subst aci.
       rewrite /linear_sem.eval_instr => /=; t_xrbindP => l hgetpc.
       t_xrbindP=> ptr /o2rP ptr_eq vm hset hjump.
@@ -2336,7 +2345,7 @@ Proof.
       + by apply hpc; rewrite /= leqnn addn1 ltnSn.
       rewrite /return_address_from.
       have /= := assemble_get_label_after_pc hass ok_i _ heqf hip _ hgetpc.
-      rewrite heqlr ok_fd /= => /(_ _ erefl erefl) [] _ ->.
+      rewrite /assemble_i /= heqlr ok_fd /= => /(_ _ erefl erefl) [] _ ->.
       rewrite -assemble_prog_labels -heqf ptr_eq.
       apply: eval_jumpP; last by apply hjump.
       rewrite /st_update_next /=.
@@ -2404,7 +2413,7 @@ Proof.
     apply (imatch_state_step1 (ls' := ls') hnth) => /=.
     + by apply hpc; rewrite /= leqnn addn1 ltnSn.
     by apply: eval_jumpP; last by apply hi.
-  - rewrite /linear_sem.eval_instr /=; t_xrbindP=> e hok_i ok_e.
+  - rewrite /linear_sem.eval_instr /assemble_i /=; t_xrbindP=> e hok_i ok_e.
     move => d ok_d ? ptr v ok_v /to_wordI[? [? [? /word_uincl_truncate hptr]]]; subst.
     move=> r /o2rP ptr_eq.
     change reg_size with Uptr in ptr => hdec.
@@ -2414,7 +2423,7 @@ Proof.
     have [v' -> /value_uinclE /= [? [? [-> /hptr /= ->]]]] := eval_assemble_word hloeq ok_e ok_d ok_v.
     rewrite -assemble_prog_labels /= ptr_eq.
     by apply eval_jumpP.
-  - move => x lbl hok_i.
+  - move => x lbl hok_i; rewrite /assemble_i /=.
     case ok_r_x': (of_var x) => [r|//]; have ok_r_x := of_varI ok_r_x'.
     move=> /= [?] hev; subst aci.
     apply (imatch_state_step1 (ls' := ls') hnth) => /=.
@@ -2428,8 +2437,8 @@ Proof.
     + move: ok_r_x; change x with (v_var (VarI x dummy_var_info)).
       apply: lom_eqv_write_var; first exact: hloeq.
       by rewrite /write_var ok_vm.
-    by apply: asm_pos_incr hok_i hac heq hip => /=; rewrite ok_r_x'.
-  rewrite /linear_sem.eval_instr => /=.
+    by apply: asm_pos_incr hok_i hac heq hip => /=; rewrite /assemble_i /= ok_r_x'.
+  rewrite /linear_sem.eval_instr /assemble_i /=.
   t_xrbindP => cnd lbl hok_i cndt ok_c ? b v ok_v ok_b; subst aci.
   case: hloeq => eqscs eqm hrip hd eqr eqrx eqx eqf.
   have [v' ok_v' hvv'] := hagp_eval_assemble_cond hagparams eqr eqf ok_c ok_v.
@@ -2448,7 +2457,7 @@ Proof.
   move => [?]; subst ls'; rewrite ok_fd /=.
   do 2!(eexists; first reflexivity).
   constructor => //; rewrite /setpc /=.
-  by apply: asm_pos_incr hok_i hac heq hip; rewrite /= ok_c.
+  by apply: asm_pos_incr hok_i hac heq hip; rewrite /assemble_i /= ok_c.
 Qed.
 
 Lemma imatch_state_sem endpc endpc' ls xs :
