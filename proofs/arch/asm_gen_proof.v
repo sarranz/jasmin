@@ -196,7 +196,6 @@ move => eqm ok_f ok_v /to_boolI ?; subst v.
 by have /value_uinclE := xgetflag_ex eqm ok_f ok_v; case: (rf _) => //= ? [] <-.
 Qed.
 
-
 (* -------------------------------------------------------------------- *)
 Lemma lom_rip wdb rip s xs :
   lom_eqv rip s xs →

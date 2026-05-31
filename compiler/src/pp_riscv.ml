@@ -119,7 +119,7 @@ module RiscVTarget: AsmTarget
     ]
 
 
-  let pp_instr_r fn instr =
+  let pp_instr_r fn _ instr =
     match instr with
     | ALIGN ->
         failwith "TODO_RISCV: pp_instr align"
@@ -154,7 +154,7 @@ module RiscVTarget: AsmTarget
     | POPPC ->
         assert false
 
-    | REPEATCALL _ -> assert false
+    | REPEATLOOP _ -> assert false
 
     | SysCall op ->
         [Instr ("call", [ Asm_utils.pp_syscall op ])]

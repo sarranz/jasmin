@@ -222,8 +222,8 @@ let pp_args op args =
   pp_args_shift op args |> pp_args_flag_group op |> pp_args_mulqacc_selectors op
 
 let need_nop c =
-  match List.last c with
-  | LABEL _ | REPEATCALL _ -> true
+  match (List.last c).asmi_i with
+  | LABEL _ | REPEATLOOP _ -> true
   | _ -> false
   | exception Invalid_argument _ -> true
 
@@ -271,7 +271,7 @@ module OTBNTarget :
     if r == ra then Instr ("ret", [])
     else Instr ("jalr", [ x0; r; pp_imm Z.zero ])
 
-  let rec pp_instr_r fn i =
+  let pp_instr_r fn pp_cmd i =
     match i with
     | ALIGN -> E.not_implemented "pp_instr ALIGN"
     | LABEL (_, lbl) -> [ Label (pp_label fn lbl) ]
@@ -291,13 +291,13 @@ module OTBNTarget :
       end
     | JAL _ -> E.invalid_jal ()
     | CALL lbl -> [ Instr ("jal", [ ra; pp_remote_label lbl ]) ]
-    | REPEATCALL (count, c) ->
+    | REPEATLOOP (count, c) ->
         let count, name =
           match count with
           | Datatypes.Coq_inl v -> (pp_register v, "loop")
           | Datatypes.Coq_inr cz -> (Z.to_string (Conv.z_of_cz cz), "loopi")
         in
-        let c' = List.concat_map (pp_instr_r fn) c in
+        let c' = pp_cmd fn c in
         let c' = if need_nop c then c' @ [ Instr ("nop", []) ] else c' in
         let num_c' = Format.sprintf "%i" (List.count_matching notlbl c') in
         Instr (name, [ count; num_c' ]) :: c'

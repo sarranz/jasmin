@@ -582,6 +582,10 @@ Definition instr_desc (o:asm_op_msb_t) : instr_desc_t :=
 
 (* -------------------------------------------------------------------- *)
 (* Assembly language. *)
+
+Record gen_asm_i (A : Type) : Type :=
+  MkAI { asmi_ii : instr_info; asmi_i : A; }.
+
 Inductive asm_i_r : Type :=
   | ALIGN
   | LABEL of label_kind & label
@@ -594,14 +598,14 @@ Inductive asm_i_r : Type :=
   | JAL of reg_t & remote_label (* Direct jump; return address is saved in a register *)
   | CALL of remote_label (* Direct jump; return address is saved at the top of the stack *)
   | POPPC (* Pop a destination from the stack and jump there, arm : POP PC, x86 : RET *)
-  | REPEATCALL of (reg_t + Z) & seq asm_i_r
+  | REPEATLOOP of (reg_t + Z) & seq (gen_asm_i asm_i_r)
   (* Instructions exposed at source-level *)
   | AsmOp  of asm_op_t' & asm_args
   | SysCall of syscall_t
   | Declassify_val of ltype & asm_arg
   | Declassify_mem of positive & address.
 
-Record asm_i : Type := MkAI { asmi_ii : instr_info; asmi_i : asm_i_r }.
+Definition asm_i := gen_asm_i asm_i_r.
 
 Definition asm_code := seq asm_i.
 

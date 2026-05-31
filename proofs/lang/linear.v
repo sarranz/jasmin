@@ -10,7 +10,7 @@ Context `{asmop:asmOp}.
 (* --------------------------------------------------------------------------- *)
 (* Syntax                                                                      *)
 
-Record gen_linstr A : Type := MkLI { li_ii : instr_info; li_i : A }.
+Record gen_linstr (A : Type) : Type := MkLI { li_ii : instr_info; li_i : A; }.
 
 Inductive linstr_r :=
   | Lopn   : lexprs -> sopn -> rexprs -> linstr_r
@@ -25,7 +25,7 @@ Inductive linstr_r :=
   | Ligoto : rexpr -> linstr_r (* Absolute indirect jump *)
   | LstoreLabel : var -> label -> linstr_r
   | Lcond  : fexpr -> label -> linstr_r
-  | Lrepeat_call : (var_i + Z) -> seq (gen_linstr linstr_r) -> linstr_r
+  | Lrepeat_loop : (var_i + Z) -> seq (gen_linstr linstr_r) -> linstr_r
 .
 
 Definition linstr := gen_linstr linstr_r.

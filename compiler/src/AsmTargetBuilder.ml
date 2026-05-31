@@ -19,7 +19,13 @@ module type AsmTarget = sig
     val function_directives : asm_element list
     val function_header     : asm_element list
     val function_tail       : asm_element list
-    val pp_instr_r          : Name.t -> (reg, regx, xreg, rflag, cond, asm_op) Arch_decl.asm_i_r -> asm_element list
+    val pp_instr_r :
+      Name.t ->
+      (Name.t ->
+        (reg, regx, xreg, rflag, cond, asm_op) Arch_decl.asm_i list ->
+        asm_element list) ->
+      (reg, regx, xreg, rflag, cond, asm_op) Arch_decl.asm_i_r ->
+      asm_element list
 
 end
 
@@ -53,11 +59,10 @@ module Make(Target : AsmTarget) : S
     let asm_debug_info ({Location.base_loc = ii; _}, _) =
         List.map (fun x -> Dwarf x) (DebugInfo.source_positions ii)
 
-    let pp_instr name instr =
+    let rec pp_instr name instr =
         let Arch_decl.({ asmi_i = i; asmi_ii = ii}) = instr in
-        asm_debug_info ii @ Target.pp_instr_r name i
-
-    let pp_instrs name instrs = List.concat_map (pp_instr name) instrs
+        asm_debug_info ii @ Target.pp_instr_r name pp_instrs i
+    and pp_instrs name instrs = List.concat_map (pp_instr name) instrs
 
     let pp_body name decl =pp_instrs name decl.asm_fd_body
 

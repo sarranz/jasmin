@@ -373,7 +373,7 @@ and type asm_op = X86_instr_decl.x86_op
       end
     | Type.Coq_lword ws -> pp_asm_arg (ws, arg)
 
-  let pp_instr_r name (instr_r : (_, _, _, _, _, _) Arch_decl.asm_i_r) =
+  let pp_instr_r name _ (instr_r : (_, _, _, _, _, _) Arch_decl.asm_i_r) =
     match instr_r with
     | ALIGN ->
       [Instr (".p2align", ["5"])]
@@ -393,7 +393,7 @@ and type asm_op = X86_instr_decl.x86_op
       [Instr ("call", [pp_remote_label lbl])]
     | POPPC ->
       [Instr ("ret", [])]
-    | REPEATCALL _ -> assert false
+    | REPEATLOOP _ -> assert false
     | SysCall(op) ->
       let name = "call" in
       [Instr(name, [pp_syscall op])]

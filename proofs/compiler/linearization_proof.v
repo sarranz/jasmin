@@ -219,7 +219,7 @@ Definition valid_labels (fn: funname) (lo hi: label) (i: linstr) : bool :=
   | Lalign
   | Ligoto _
   | Lret
-  | Lrepeat_call _ _
+  | Lrepeat_loop _ _
     => true
   | Llabel _ lbl
   | LstoreLabel _ lbl

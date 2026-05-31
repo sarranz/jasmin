@@ -757,7 +757,7 @@ Fixpoint linear_i (i:instr) (lbl:label) (lc:lcmd) :=
   | Cfor fi c =>
       if linearize_for ii fi is Ok count then
         let: (lbl', c') := linear_c linear_i c lbl [::] in
-        (lbl', MkLI ii (Lrepeat_call count c') :: lc)
+        (lbl', MkLI ii (Lrepeat_loop count c') :: lc)
       else
         (lbl, lc) (* absurd *)
   end.

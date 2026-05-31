@@ -231,7 +231,7 @@ and type asm_op = arm_op
         Instr ("push", [pp_brace (pp_register LR)])
     ]
 
-  let pp_instr_r fn i =
+  let pp_instr_r fn _ i =
     match i with
     | ALIGN ->
         failwith "TODO_ARM: pp_instr align"
@@ -267,7 +267,7 @@ and type asm_op = arm_op
     | POPPC ->
         [ Instr ("pop", [ "{pc}" ]) ]
 
-    | REPEATCALL _ -> assert false
+    | REPEATLOOP _ -> assert false
 
     | SysCall op ->
         [Instr ("bl", [ pp_syscall op ])]

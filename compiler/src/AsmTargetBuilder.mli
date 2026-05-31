@@ -33,8 +33,15 @@ module type AsmTarget = sig
     *)
     val function_tail       : PrintASM.asm_element list
 
-    (* Pretty print of instruction*)
-    val pp_instr_r : CoreIdent.Name.t -> (reg, regx, xreg, rflag, cond, asm_op) Arch_decl.asm_i_r -> PrintASM.asm_element list
+    (* Pretty print of instruction. Receives the function printing of code
+       for mutual recursion. *)
+    val pp_instr_r :
+      CoreIdent.Name.t ->
+      (CoreIdent.Name.t ->
+        (reg, regx, xreg, rflag, cond, asm_op) Arch_decl.asm_i list ->
+        asm_element list) ->
+      (reg, regx, xreg, rflag, cond, asm_op) Arch_decl.asm_i_r ->
+      asm_element list
 
 end
 

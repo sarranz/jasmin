@@ -475,7 +475,7 @@ Definition eval_instr (i : asm_i_r) (s: asm_state) : exec asm_state :=
     if decode_label labels dst is Some lbl then
       eval_JMP p lbl s'
     else type_error
-  | REPEATCALL _ _ => type_error
+  | REPEATLOOP _ _ => type_error
   | AsmOp o args =>
     Let m := eval_op o args s.(asm_m) in
     ok (st_update_next m s)

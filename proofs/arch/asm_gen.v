@@ -607,7 +607,7 @@ Fixpoint assemble_i_r (rip : var) (ii : instr_info) (ir : linstr_r) : cexec (seq
       else Error (E.verror true "Not a register" ii r) in
       ok [:: mk (JAL r l) ]
 
-  | Lrepeat_call cnt c =>
+  | Lrepeat_loop cnt c =>
       Let cnt' :=
         match cnt with
         | inl x =>
@@ -617,7 +617,7 @@ Fixpoint assemble_i_r (rip : var) (ii : instr_info) (ir : linstr_r) : cexec (seq
         end : cexec (reg_t + Z)
       in
       Let c' := conc_mapM (fun i => assemble_i_r rip (li_ii i) (li_i i)) c in
-      ok [:: mk (REPEATCALL cnt' (map asmi_i c')) ]
+      ok [:: mk (REPEATLOOP cnt' c') ]
 
   | Lret =>
       ok [:: mk POPPC ]

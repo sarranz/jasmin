@@ -49,7 +49,7 @@ let rec pp_instr pd msfsize asmOp fmt i =
   | Ligoto e -> F.fprintf fmt "IGoto %a" pp_rexpr e
   | LstoreLabel (x, lbl) -> F.fprintf fmt "%a = Label %a" pp_var x pp_label lbl
   | Lcond (e, lbl) -> F.fprintf fmt "If %a goto %a" pp_fexpr e pp_label lbl
-  | Lrepeat_call (cnt, c) ->
+  | Lrepeat_loop (cnt, c) ->
     let pp_cnt fmt = function
       | Datatypes.Coq_inl v -> pp_var_i fmt v
       | Datatypes.Coq_inr z -> Z.pp_print fmt (Conv.z_of_cz z)
