@@ -1,5 +1,10 @@
 (* OTBN instruction set *)
 
+Set Uniform Inductive Parameters.
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
+
 From elpi.apps Require Import derive.std.
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype fintype.
 From mathcomp Require Import ssralg word_ssrZ.
@@ -494,9 +499,8 @@ Definition desc_nop :=
   |}.
 
 
-(* TODO_OTBN the reference states the reference defines the semantics in terms
-   of integer arithmetic and masks rather than modular arithmetic, perhaps it we
-   should use that? *)
+(* TODO_OTBN the reference defines the semantics in terms of integer arithmetic
+   and masks rather than modular arithmetic, perhaps it we should use that? *)
 Definition _desc_rv_mnemonic : instr_desc_t :=
   match mn with
   | ADD | ADDI => desc_rv_binop wadd
@@ -504,9 +508,9 @@ Definition _desc_rv_mnemonic : instr_desc_t :=
   | AND | ANDI => desc_rv_binop wand
   | OR | ORI => desc_rv_binop wor
   | XOR | XORI => desc_rv_binop wxor
-  | SLL | SLLI => desc_rv_binop (fun x y => wshl x (wunsigned y))
-  | SRL | SRLI => desc_rv_binop (fun x y => wshr x (wunsigned y))
-  | SRA | SRAI => desc_rv_binop (fun x y => wsar x (wunsigned y))
+  | SLL | SLLI => desc_rv_binop (fun x y => wshl x (Z.land (wunsigned y) 31))
+  | SRL | SRLI => desc_rv_binop (fun x y => wshr x (Z.land (wunsigned y) 31))
+  | SRA | SRAI => desc_rv_binop (fun x y => wsar x (Z.land (wunsigned y) 31))
   | LUI => desc_rv_unop (fun x => wshl x 12)
   | LW => desc_rv_unop id (* TODO_OTBN double check that it fails on unaligned *)
   | SW => _desc_rv_unop (Ea 0) (Ea 1) id (* TODO_OTBN double check that it fails on unaligned *)
@@ -826,30 +830,31 @@ End BN_BASIC_SHIFT_DESC.
 
 Section MODULAR_OP.
 
-Definition semi_modular_binop (ws : wsize) (semiZ : Z -> Z -> Z) :
+Definition semi_modular_binop (ws : wsize) (body : Z -> Z -> Z -> Z) :
   semi_type [:: lword ws; lword ws; lword ws ] [:: lword ws ] :=
   fun wx wy wm =>
-    let m := wunsigned wm in
-    let res := semiZ (wunsigned wx) (wunsigned wy) in
-    let res_m :=
-      if res <=? 0 then res + m
-      else if res >=? m then res - m
-      else res
-    in
-    ok (wrepr ws (res_m / wbase ws)).
+    ok (wrepr ws (body (wunsigned wx) (wunsigned wy) (wunsigned wm))).
+
+Definition addm_result (x y m : Z) : Z :=
+  let res := x + y in
+  if res >=? m then res - m else res.
+
+Definition subm_result (x y m : Z) : Z :=
+  let res := x - y in
+  if res <? 0 then res + m else res.
 
 (* TODO_OTBN: Right now we only use ws = U256, but we define it
    generically. *)
 
 Definition _desc_otbn_op_modular_binop
-  (mn : otbn_op) (ws : wsize) (semiZ : Z -> Z -> Z) : instr_desc_t :=
+  (mn : otbn_op) (ws : wsize) (body : Z -> Z -> Z -> Z) : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := [:: lword ws; lword ws; lword ws ];
     id_in := [:: EXa 1; EXa 2; Xreg MOD ];
     id_tout := [:: lword ws ];
     id_out := [:: EXa 0 ];
-    id_semi := semi_modular_binop semiZ;
+    id_semi := semi_modular_binop body;
     id_args_kinds := ak_xreg_xreg_xreg;
     id_nargs := 3;
     id_str_jas := pp_s (otbn_op_to_string mn);
@@ -866,10 +871,10 @@ Definition _desc_otbn_op_modular_binop
 Let desc_otbn_op_modular_binop mn := _desc_otbn_op_modular_binop mn U256.
 
 Definition desc_BN_ADDM : instr_desc_t :=
-  desc_otbn_op_modular_binop BN_ADDM Z.add.
+  desc_otbn_op_modular_binop BN_ADDM addm_result.
 
 Definition desc_BN_SUBM : instr_desc_t :=
-  desc_otbn_op_modular_binop BN_SUBM Z.sub.
+  desc_otbn_op_modular_binop BN_SUBM subm_result.
 
 End MODULAR_OP.
 
@@ -1142,7 +1147,7 @@ Definition semi_BN_MULQACC_SO : semi_type mulqacc_so_tin mulqacc_so_tout :=
   fun mf lf zf r x ix y iy acc sham =>
     let base_res := mulqacc x ix y iy acc sham in
     let lo_part := extract_subword base_res 0 128 in
-    let hi_part := extract_subword base_res 128 128 in
+    let hi_part := extract_subword base_res 1 128 in
     let hw_shift := 128 * wrd_hwsel in
     let hw_mask := wrepr U256 (Z.shiftl (Z.shiftl 1 128 - 1) hw_shift) in
     let new_wrd := wor (wand r (wnot hw_mask)) (wshl lo_part hw_shift) in
@@ -1182,8 +1187,8 @@ Definition desc_BN_MULQACC_SO_Z : instr_desc_t :=
     id_tout := mulqacc_so_tout;
     id_out := ad_mlz fg ++ [:: EXa 0; Xreg ACC ];
     id_semi :=
-      fun mf lf zf r x ix y ix sham =>
-        semi_BN_MULQACC_SO mf lf zf r x ix y ix 0%R sham;
+      fun mf lf zf r x ix y iy sham =>
+        semi_BN_MULQACC_SO mf lf zf r x ix y iy 0%R sham;
     id_args_kinds := ak_xreg_xreg_q_xreg_q_shift;
     id_nargs := 6;
     id_str_jas := pp_s (otbn_op_to_string (BN_MULQACC_SO_Z fg wb));
@@ -1417,3 +1422,140 @@ Section VALIDATION.
   by move=> [] // [] // []. Qed.
 
 End VALIDATION.
+
+(* -------------------------------------------------------------------------- *)
+
+Section VALIDATION_SEM.
+
+  Notation test2 op w1 w2 r :=
+    (is_ok
+       (Let r' := id_semi (desc_otbn_op op) w1 w2 in
+        assert (wunsigned r' == wunsigned r) ErrSemUndef)).
+
+  Notation test3 op w1 w2 w3 r :=
+    (is_ok
+       (Let r' := id_semi (desc_otbn_op op) w1 w2 w3 in
+        assert (wunsigned r' == wunsigned r) ErrSemUndef)).
+
+  Goal test3 BN_ADDM
+    (wrepr U256 5) (wrepr U256 7) (wrepr U256 100) (wrepr U256 12).
+  Proof. by []. Qed.
+
+  Goal test3 BN_SUBM
+    (wrepr U256 5) (wrepr U256 7) (wrepr U256 100) (wrepr U256 98).
+  Proof. by []. Qed.
+
+  Goal test3 BN_ADDM
+    (wrepr U256 0) (wrepr U256 0) (wrepr U256 100) (wrepr U256 0).
+  Proof. by []. Qed.
+
+  Goal test2 (RV32 SLL) (wrepr U32 1) (wrepr U32 32) (wrepr U32 1).
+  Proof. by []. Qed.
+
+  Goal test2 (RV32 SLL) (wrepr U32 1) (wrepr U32 33) (wrepr U32 2).
+  Proof. by []. Qed.
+
+  Goal test2 (RV32 SRL)
+    (wrepr U32 4294967295) (wrepr U32 36) (wrepr U32 268435455).
+  Proof. by []. Qed.
+
+  Goal test2 (RV32 SRL)
+    (wrepr U32 2147483648) (wrepr U32 32) (wrepr U32 2147483648).
+  Proof. by []. Qed.
+
+  Goal test2 (RV32 SRA)
+    (wrepr U32 2147483648) (wrepr U32 32) (wrepr U32 2147483648).
+  Proof. by []. Qed.
+
+  Goal test2 (RV32 SRA)
+    (wrepr U32 2147483648) (wrepr U32 33) (wrepr U32 3221225472).
+  Proof. by []. Qed.
+
+  Goal test2 (RV32 SLLI) (wrepr U32 1) (wrepr U32 4) (wrepr U32 16).
+  Proof. by []. Qed.
+
+  Goal test2 (RV32 SRAI)
+    (wrepr U32 2147483648) (wrepr U32 1) (wrepr U32 3221225472).
+  Proof. by []. Qed.
+
+  Notation test_so fg wb mf lf zf r x ix y iy acc sham mf' lf' zf' wrd_e acc_e :=
+    (is_ok
+       (Let res :=
+          id_semi (desc_otbn_op (BN_MULQACC_SO fg wb))
+            mf lf zf r x ix y iy acc sham
+        in
+        assert
+          [&& res.1 == mf', res.2.1 == lf', res.2.2.1 == zf',
+              wunsigned res.2.2.2.1 == wunsigned wrd_e
+            & wunsigned res.2.2.2.2 == wunsigned acc_e ]
+          ErrSemUndef)).
+
+  Goal test_so FG0 WB_lower false false false
+    (wrepr U256 0) (wrepr U256 3) (wrepr U8 0) (wrepr U256 5) (wrepr U8 0)
+    (wrepr U256 (Z.shiftl 9 128)%Z) (wrepr U8 0)
+    (Some false) (Some true) (Some false)
+    (wrepr U256 15) (wrepr U256 9).
+  Proof. by []. Qed.
+
+  Goal test_so FG0 WB_upper false false false
+    (wrepr U256 0) (wrepr U256 3) (wrepr U8 0) (wrepr U256 5) (wrepr U8 0)
+    (wrepr U256 (Z.shiftl 9 128)%Z) (wrepr U8 0)
+    (Some false) (Some false) (Some false)
+    (wrepr U256 (Z.shiftl 15 128)%Z) (wrepr U256 9).
+  Proof. by []. Qed.
+
+  Goal test_so FG0 WB_lower false false false
+    (wrepr U256 0) (wrepr U256 1) (wrepr U8 0) (wrepr U256 1) (wrepr U8 0)
+    (wrepr U256 1) (wrepr U8 128)
+    (Some false) (Some true) (Some false)
+    (wrepr U256 1) (wrepr U256 1).
+  Proof. by []. Qed.
+
+  Goal test_so FG0 WB_lower false true false
+    (wrepr U256 0) (wrepr U256 2) (wrepr U8 0) (wrepr U256 2) (wrepr U8 0)
+    (wrepr U256 0) (wrepr U8 192)
+    (Some false) (Some false) (Some true)
+    (wrepr U256 0) (wrepr U256 (Z.shiftl 1 66)%Z).
+  Proof. by []. Qed.
+
+  Goal test_so FG0 WB_upper false true true
+    (wrepr U256 0) (wrepr U256 0) (wrepr U8 0) (wrepr U256 0) (wrepr U8 0)
+    (wrepr U256 (Z.shiftl 1 127 + Z.shiftl 5 128)%Z) (wrepr U8 0)
+    (Some true) (Some true) (Some false)
+    (wrepr U256 (Z.shiftl 1 255)%Z) (wrepr U256 5).
+  Proof. by []. Qed.
+
+  Notation test_so_z fg wb mf lf zf r x ix y iy sham mf' lf' zf' wrd_e acc_e :=
+    (is_ok
+       (Let res :=
+          id_semi (desc_otbn_op (BN_MULQACC_SO_Z fg wb))
+            mf lf zf r x ix y iy sham
+        in
+        assert
+          [&& res.1 == mf', res.2.1 == lf', res.2.2.1 == zf',
+              wunsigned res.2.2.2.1 == wunsigned wrd_e
+            & wunsigned res.2.2.2.2 == wunsigned acc_e ]
+          ErrSemUndef)).
+
+  Goal test_so_z FG0 WB_lower false false false
+    (wrepr U256 0) (wrepr U256 (2 + 7 * 2 ^ 64)%Z) (wrepr U8 0)
+    (wrepr U256 (5 * 2 ^ 64)%Z) (wrepr U8 1) (wrepr U8 0)
+    (Some false) (Some false) (Some false)
+    (wrepr U256 10) (wrepr U256 0).
+  Proof. by []. Qed.
+
+  Goal test_so_z FG0 WB_upper false false false
+    (wrepr U256 0) (wrepr U256 (2 + 7 * 2 ^ 64)%Z) (wrepr U8 1)
+    (wrepr U256 (3 + 5 * 2 ^ 64)%Z) (wrepr U8 0) (wrepr U8 0)
+    (Some false) (Some false) (Some false)
+    (wrepr U256 (Z.shiftl 21 128)%Z) (wrepr U256 0).
+  Proof. by []. Qed.
+
+  Goal test_so_z FG0 WB_lower true true true
+    (wrepr U256 0) (wrepr U256 3) (wrepr U8 0)
+    (wrepr U256 (4 * 2 ^ 64)%Z) (wrepr U8 1) (wrepr U8 64)
+    (Some true) (Some false) (Some false)
+    (wrepr U256 (Z.shiftl 12 64)%Z) (wrepr U256 0).
+  Proof. by []. Qed.
+
+End VALIDATION_SEM.

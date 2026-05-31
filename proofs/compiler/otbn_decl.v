@@ -100,12 +100,17 @@ Definition register_to_string (r : register) : string :=
 (* -------------------------------------------------------------------------- *)
 (* OTBN has 32 general purpose wide registers: w0, ..., w31. *)
 
+(* OTBN's wide special registers (WSRs) are MOD, RND, URND, ACC and the four
+   KEY_S0/1_L/H registers. Only ACC and MOD are modeled here; the other WSRs
+   (RND, URND, KEY_S0_L, KEY_S0_H, KEY_S1_L, KEY_S1_H) are ignored for the
+   moment. *)
+
 #[only(eqbOK)] derive
 Variant wide_register : Type :=
 | W00 | W01 | W02 | W03 | W04 | W05 | W06 | W07 | W08 | W09 | W10 | W11 | W12
 | W13 | W14 | W15 | W16 | W17 | W18 | W19 | W20 | W21 | W22 | W23 | W24 | W25
 | W26 | W27 | W28 | W29 | W30 | W31
-| ACC | MOD (* TODO_OTBN these should be extra registers *)
+| ACC | MOD
 .
 
 #[export]
@@ -128,7 +133,7 @@ Proof. by case. Qed.
 Instance finTC_wide_register : finTypeC wide_register :=
   { cenum := wide_registers; cenumP := wide_register_fin_axiom; }.
 
-Canonical wide_register_finType := @cfinT_finType _ finTC_register.
+Canonical wide_register_finType := @cfinT_finType _ finTC_wide_register.
 
 Definition wide_register_to_string (w : wide_register) : string :=
   match w with
@@ -178,7 +183,8 @@ Instance xreg_toS : ToString (lword otbn_xreg_size) wide_register :=
 
 #[only(eqbOK)] derive
 Variant rflag : Type :=
-| CF0 | CF1 (* Carry condition flag (overflow). *)
+| CF0 | CF1 (* Carry flag: carry-out on add, borrow on sub (unsigned overflow,
+              not signed overflow). *)
 | MF0 | MF1 (* Most significant bit. *)
 | LF0 | LF1 (* Least significant bit. *)
 | ZF0 | ZF1 (* Zero flag. *)
