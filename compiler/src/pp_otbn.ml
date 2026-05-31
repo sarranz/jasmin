@@ -221,9 +221,9 @@ let pp_args_mulqacc_selectors op args =
 let pp_args op args =
   pp_args_shift op args |> pp_args_flag_group op |> pp_args_mulqacc_selectors op
 
-let need_nop c' =
-  match List.last c' with
-  | Label _ -> true
+let need_nop c =
+  match List.last c with
+  | LABEL _ | REPEATCALL _ -> true
   | _ -> false
   | exception Invalid_argument _ -> true
 
@@ -298,7 +298,7 @@ module OTBNTarget :
           | Datatypes.Coq_inr cz -> (Z.to_string (Conv.z_of_cz cz), "loopi")
         in
         let c' = List.concat_map (pp_instr_r fn) c in
-        let c' = if need_nop c' then c' @ [ Instr ("nop", []) ] else c' in
+        let c' = if need_nop c then c' @ [ Instr ("nop", []) ] else c' in
         let num_c' = Format.sprintf "%i" (List.count_matching notlbl c') in
         Instr (name, [ count; num_c' ]) :: c'
     | POPPC ->

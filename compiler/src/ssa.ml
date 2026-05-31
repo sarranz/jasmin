@@ -32,8 +32,8 @@ let written_vars_lvars allvars = List.fold_left (written_vars_lvar allvars)
 
 let rec written_vars_instr_r allvars w =
   function
-  | Cfor (_, s)
-    -> written_vars_stmt allvars w s
+  | Cfor (FIrepeat _, s) -> written_vars_stmt allvars w s
+  | Cfor (FIrange _, _) -> assert false
   | Cassert _ -> w
   | Cassgn (x, _, _, _) -> written_vars_lvar allvars w x
   | Copn (xs, _, _, _)

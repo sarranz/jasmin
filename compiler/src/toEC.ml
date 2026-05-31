@@ -1346,15 +1346,15 @@ let rec remove_for_i i =
     | Cassgn _ | Copn _ | Ccall _ | Csyscall _ | Cassert _ -> i.i_desc
     | Cif(e, c1, c2) -> Cif(e, remove_for c1, remove_for c2)
     | Cwhile(a, c1, e, loc, c2) -> Cwhile(a, remove_for c1, e, loc, remove_for c2)
-    | Cfor(FIrange(j, elo, ehi, d), c) ->
+    | Cfor(FIrange(j, d, elo, ehi), c) ->
       let jd = j.pl_desc in
-      if not (is_write_c jd c) then Cfor(FIrange(j, elo, ehi, d), remove_for c)
+      if not (is_write_c jd c) then Cfor(FIrange(j, d, elo, ehi), remove_for c)
       else
         let jd' = V.clone jd in
         let j' = { j with pl_desc = jd' } in
         let ii' = Cassgn (Lvar j, E.AT_inline, jd.v_ty, Pvar (gkvar j')) in
         let ii' = { i with i_desc = ii' } in
-        Cfor (FIrange(j', elo, ehi, d), ii' :: remove_for c)
+        Cfor (FIrange(j', d, elo, ehi), ii' :: remove_for c)
     | Cfor(FIrepeat e, c) -> Cfor(FIrepeat e, remove_for c)
   in
   { i with i_desc }
