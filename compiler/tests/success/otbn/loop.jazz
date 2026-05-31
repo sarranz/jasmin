@@ -12,7 +12,7 @@ fn main() -> reg u32 {
 
     repeat 4 { x = body(x); }
     repeat N { x = body(x); }
-    repeat (int)x { x = body(x); }
+    repeat (uint)x { x = body(x); }
     repeat (4 + N) { x = body(x); }
 
     inline int i;
@@ -20,5 +20,141 @@ fn main() -> reg u32 {
         repeat i { x = body(x); }
     }
 
+    return x;
+}
+
+// if/else at end of body: loop body ends with a LABEL (merge point) -> nop inserted
+export
+fn cond_at_end(reg u32 x) -> reg u32 {
+    repeat 4 {
+        if (x == 0) {
+            x += 1;
+        } else {
+            x += 2;
+        }
+    }
+    return x;
+}
+
+// if/else NOT at end: last instruction is an addi -> no nop from LABEL
+export
+fn cond_not_at_end(reg u32 x) -> reg u32 {
+    repeat 4 {
+        if (x == 0) {
+            x += 1;
+        } else {
+            x += 2;
+        }
+        x += 3;
+    }
+    return x;
+}
+
+// if without else at end: body ends with a LABEL -> nop inserted
+export
+fn if_only_at_end(reg u32 x) -> reg u32 {
+    repeat 4 {
+        if (x != 0) {
+            x += 1;
+        }
+    }
+    return x;
+}
+
+// nested loops where inner loop is last: body ends with REPEATLOOP -> nop inserted
+// (OTBN forbids two loops sharing their last instruction address)
+export
+fn nested_inner_last(reg u32 x) -> reg u32 {
+    repeat 4 {
+        repeat 3 {
+            x += 1;
+        }
+    }
+    return x;
+}
+
+// nested loops with an instruction after the inner loop: no nop from REPEATLOOP
+export
+fn nested_inner_not_last(reg u32 x) -> reg u32 {
+    repeat 4 {
+        repeat 3 {
+            x += 1;
+        }
+        x += 1;
+    }
+    return x;
+}
+
+// three levels of nesting: two nops inserted (one per level where inner loop is last)
+export
+fn triple_nested(reg u32 x) -> reg u32 {
+    repeat 2 {
+        repeat 3 {
+            repeat 4 {
+                x += 1;
+            }
+        }
+    }
+    return x;
+}
+
+// two sequential inner loops where the second (last) is at the end -> nop from REPEATLOOP
+export
+fn two_inner_second_last(reg u32 x) -> reg u32 {
+    repeat 4 {
+        repeat 2 { x += 1; }
+        repeat 3 { x += 2; }
+    }
+    return x;
+}
+
+// two sequential inner loops with a tail instruction -> no nop from REPEATLOOP
+export
+fn two_inner_with_tail(reg u32 x) -> reg u32 {
+    repeat 4 {
+        repeat 2 { x += 1; }
+        repeat 3 { x += 2; }
+        x += 4;
+    }
+    return x;
+}
+
+// register-count loop with conditional body: LABEL at end -> nop inserted
+export
+fn reg_count_cond_at_end(reg u32 x, reg u32 n) -> reg u32 {
+    repeat (uint)n {
+        if (x == 0) {
+            x += 1;
+        } else {
+            x += 2;
+        }
+    }
+    return x;
+}
+
+// while inside repeat: loop body ends with a backward Jcc -> no nop from LABEL/REPEATLOOP
+export
+fn while_in_repeat(reg u32 x, reg u32 y) -> reg u32 {
+    repeat 4 {
+        while (x != y) {
+            x += 1;
+        }
+    }
+    return x;
+}
+
+// nested loops where inner body has a conditional: inner ends with LABEL -> nop in inner;
+// outer ends with REPEATLOOP -> nop in outer
+export
+fn nested_with_cond(reg u32 x) -> reg u32 {
+    repeat 3 {
+        repeat 5 {
+            if (x == 0) {
+                x += 1;
+            } else {
+                x += 2;
+            }
+        }
+    }
     return x;
 }
