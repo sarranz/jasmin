@@ -3,7 +3,6 @@ open Otbn_decl
 open Otbn_instr_decl
 open AsmTargetBuilder
 open Asm_utils
-open Prog
 open Utils
 open PrintASM
 
@@ -39,7 +38,6 @@ end
 
 let arch = otbn_decl
 let imm_pre = ""
-let global_data_label = "glob_data"
 
 let pp_reg_address_aux base disp off scal =
   match (disp, off, scal) with
@@ -47,15 +45,9 @@ let pp_reg_address_aux base disp off scal =
   | Some disp, None, None -> Format.sprintf "%s(%s)" disp base
   | _, _, _ -> E.address_not_supported base disp off scal
 
-let pp_rip_address p =
-  Format.asprintf "%s+%a" global_data_label Z.pp_print (Conv.z_of_int32 p)
-
 (* -------------------------------------------------------------------------- *)
-(* TODO_OTBN: This is generic. *)
 
-let string_of_label name p = Format.sprintf "L%s$%d" name (Conv.int_of_pos p)
 let pp_label = string_of_label
-let pp_remote_label (fn, lbl) = string_of_label fn.fn_name lbl
 
 let hash_to_string_core (to_string : 'a -> string) =
   let tbl = Hashtbl.create 17 in
@@ -109,6 +101,31 @@ let pp_asm_arg (arg : (_, Arch_utils.empty, _, _, _) asm_arg) =
   match arg with
   | Condt (BNcond f) -> Some (pp_flag f)
   | Condt (RVcond _) -> None
+  (* TODO_OTBN: BUG - immediates are printed with the *unsigned* reading
+     ([z_unsigned_of_word] = [wunsigned]), but several operands are signed.
+     The RISC-V backend uses the *signed* reading ([Conv.z_of_word], see
+     [pp_riscv.ml]); note even this file's address path ([pp_reg_address])
+     already prints displacements signed.
+
+     OTBN's RV32 subset has signed immediates ([addi]/[andi]/[ori]/[xori] are
+     [simm12], [li] is [simm32]; the assembler infers bare [imm] operands as
+     [simm]). The backend does emit negative ones, e.g.
+       - [OTBNFopn_core.subi x y imm := addi x y (- imm)]
+       - [OTBNFopn_core.align x y al := andi x y (- (wsize_size al))], used
+         unconditionally in [set_up_sp_register] (stack alignment).
+     So e.g. [andi x2, x2, -32] is printed as [andi x2, x2, 4294967264] and
+     [addi x2, x2, -16] as [addi x2, x2, 4294967280]. The OTBN assembler
+     enforces the signed-12 range [-2048, 2047] and rejects these, breaking
+     ordinary function prologues.
+
+     FIX CAVEAT: do not blindly switch to [z_of_word] (signed). OTBN's wide
+     *unsigned* immediates are stored in [U8] words and exceed 127: the [bn]
+     shift amount (0..248) and the [mulqacc] shift (0/64/128/192). Signed
+     printing would render a 192-bit shift as [w2 << -64]. The correct fix is
+     to print each immediate according to its operand's declared signedness
+     (the [CAimm] checker already carries [Signed]/[Unsigned]). Pragmatically,
+     today all signed immediates are [U32] and all wide-unsigned ones are [U8],
+     so "[U8] -> unsigned, else signed" would also be correct for now. *)
   | Imm (ws, w) -> Some (pp_imm (Conv.z_unsigned_of_word ws w))
   | Reg r -> Some (pp_register r)
   | Regx _ -> .
@@ -173,7 +190,6 @@ let pp_args_shift op args =
 let string_of_bn_flag_group fg =
   match fg with Otbn_options.FG0 -> "FG0" | FG1 -> "FG1"
 
-(* We need to print the flag group as another argument, but only if it's FG1. *)
 let pp_args_flag_group op args =
   let sfg =
     match op with
@@ -223,7 +239,8 @@ let pp_args op args =
 
 let need_nop c =
   match (List.last c).asmi_i with
-  | LABEL _ | REPEATLOOP _ -> true
+  | LABEL _ | REPEATLOOP _ | JMP _ | JMPI _ | Jcc _ | JAL _ | CALL _ | POPPC
+  | SysCall _ -> true
   | _ -> false
   | exception Invalid_argument _ -> true
 
@@ -259,7 +276,7 @@ module OTBNTarget :
 
   (* [ret] is syntactic sugar for [JALR x0 ra 0 ]. *)
   let ret r =
-    if r == ra then Instr ("ret", [])
+    if String.equal r ra then Instr ("ret", [])
     else Instr ("jalr", [ x0; r; pp_imm Z.zero ])
 
   let pp_instr_r fn pp_cmd i =
