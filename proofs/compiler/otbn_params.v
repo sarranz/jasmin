@@ -67,28 +67,34 @@ Section SAPARAMS.
 
  (* TODO_OTBN use the smart constructors *)
  (* TODO_OTBN: Is the LEA case correct? *)
- (* TODO_OTBN: this is incorrect for [Pstkptr] (stack pointers). [mov_ofs]
-    dispatches only on [movk] and [ofs] and ignores the shape of [x] and [y],
-    so it never emits a load or a store:
-    - when [y] is a [Pload] (reading a pointer from a stack slot) we emit a
-      register MOV/ADDI reading a memory operand instead of a [LW];
-    - when [x] is an [Lmem] (writing a pointer to a stack slot, see
-      [alloc_array_move] with a [Pstkptr] destination) we emit a register
-      MOV/ADDI writing into memory instead of a [SW].
-    Fix by mirroring [riscv_mov_ofs]: in the [MK_MOV] branch, dispatch on
-    [is_Pload y] (emit [LW]) and on [x = Lvar]/[Lmem] (emit [SW]), failing
-    cleanly (return [None]) when [ofs <> 0] in the store case. *)
+  (* Mirrors [riscv_mov_ofs]: in the [MK_MOV] branch we dispatch on the shape
+     of [x] and [y] so that spilling/unspilling a [reg ptr] through a stack
+     slot emits a load ([LW]) or a store ([SW]) instead of a register move with
+     a memory operand (which would be rejected by asmgen as "invalid lvals").
+     The displacement [ofs] is already folded into the address, so we fail
+     cleanly (return [None]) when [ofs <> 0] in the load or store case. *)
   Definition mov_ofs
     (x : lval) (tag : assgn_tag) (movk : mov_kind) (y : pexpr) (ofs : pexpr) :
     option instr_r :=
-    let '(op, args) :=
-      match movk with
-      | MK_LEA => (BaseOp (None, RV32 LA), [:: add y ofs ])
-      | MK_MOV =>
-          if is_zero Uptr ofs then (ExtOp MOV, [:: y ])
-          else (BaseOp (None, RV32 ADDI), [:: y; ofs ])
-      end in
-    Some (Copn [:: x ] tag (Oasm op) args).
+    let mk oa :=
+      let: (op, args) := oa in
+      Some (Copn [:: x ] tag (Oasm op) args) in
+    match movk with
+    | MK_LEA => mk (BaseOp (None, RV32 LA), [:: add y ofs ])
+    | MK_MOV =>
+        match x with
+        | Lvar _ =>
+            if is_Pload y then
+              if is_zero Uptr ofs then mk (BaseOp (None, RV32 LW), [:: y ])
+              else None
+            else if is_zero Uptr ofs then mk (ExtOp MOV, [:: y ])
+            else mk (BaseOp (None, RV32 ADDI), [:: y; ofs ])
+        | Lmem _ _ _ _ =>
+            if is_zero Uptr ofs then mk (BaseOp (None, RV32 SW), [:: y ])
+            else None
+        | _ => None
+        end
+    end.
 
   Definition immediate (x : var_i) (imm : Z) : instr_r :=
     Copn [:: Lvar x ] AT_none (Ootbn (RV32 LI)) [:: cast_const imm ].
