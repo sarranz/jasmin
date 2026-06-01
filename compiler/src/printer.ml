@@ -518,6 +518,9 @@ let pp_return_address ~debug fmt = function
       (pp_tmp_option ~debug) o
       (pp_ra_return ~debug) ra_return
 
+  | Expr.RAhwstack o ->
+    Format.fprintf fmt "hwcs%a" (pp_tmp_option ~debug) o
+
   | Expr.RAnone   -> Format.fprintf fmt "_"
 
 let pp_sprog ~debug pd msfsize asmOp fmt ((funcs, p_extra):('info, 'asm) Prog.sprog) =

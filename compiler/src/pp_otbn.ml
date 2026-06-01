@@ -315,6 +315,7 @@ module OTBNTarget :
           Instr ("addi", [ sp; sp; pp_imm (Z.of_int 4) ]);
           ret ra;
         ]
+    | CALL_HWCS _ | RET_HWCS -> assert false
     | SysCall op -> [ Instr ("jal", [ ra; pp_syscall op ]) ]
     | Declassify_val (lty, a) ->
         declassify_val (fun _lty a -> Option.default "" (pp_asm_arg a)) lty a

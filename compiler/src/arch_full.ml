@@ -12,6 +12,9 @@ type 'a callstyle =
        - return:
          + true means that the register is also used for the return
          + false means that there is no constraint (stack is also ok) *)
+  | OnHWStack
+    (* call pushes the return address onto the hardware call stack;
+       no GP register and no data-stack word are used *)
 
 (* TODO: check that we cannot use sth already defined on the Coq side *)
 
@@ -204,6 +207,7 @@ module Arch_from_Core_arch (A : Core_arch) :
   let callstyle =
     match A.callstyle with
     | StackDirect -> StackDirect
+    | OnHWStack -> OnHWStack
     | ByReg { call; return } -> ByReg { call = Option.map var_of_reg call; return }
 
   let arch_info = Pretyping.{

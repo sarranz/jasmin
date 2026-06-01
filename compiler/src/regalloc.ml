@@ -535,6 +535,9 @@ type retaddr =
     (* StackByReg (ra_call, ra_return, tmp) *)
   | ByReg of var * var option
     (* ByReg (ra, tmp) *)
+  | HWStack of var option
+    (* ra on the hardware call stack; the var option is the tmp for large
+       stack-frame allocation. No ra register, no data-stack ra slot. *)
 
 let vars_retaddr ra =
   let oadd ov s =
@@ -545,6 +548,7 @@ let vars_retaddr ra =
   match ra with
   | StackByReg (ra_call, ra_return, tmp) -> oadd tmp (oadd ra_return (Sv.singleton ra_call))
   | ByReg (ra, tmp) -> oadd tmp (Sv.singleton ra)
+  | HWStack tmp -> oadd tmp Sv.empty
   | StackDirect -> Sv.empty
 
 let collect_variables_in_prog
@@ -665,6 +669,14 @@ module Regalloc (Arch : Arch_full.Arch)
          | Subroutine ->
            match Arch.callstyle with
            | Arch_full.StackDirect -> StackDirect
+           | Arch_full.OnHWStack ->
+             let tmp =
+               if Arch.alloc_stack_need_extra (get_internal_size fd)
+               then Some (V.mk ("tmp_"^f.f_name.fn_name) (Reg(Normal,Direct))
+                            (tu Arch.reg_size) f.f_loc [])
+               else None
+             in
+             HWStack tmp
            | Arch_full.ByReg { call = oreg; return } ->
              let dfl = oreg <> None && has_call_or_syscall f.f_body in
              let r = V.mk ("ra_"^f.f_name.fn_name) (Reg(Normal,Direct)) (tu Arch.reg_size) f.f_loc [] in
@@ -901,6 +913,7 @@ let allocate_forced_registers return_addresses nv (vars: int Hv.t) tr (cnf: conf
     | ByReg (ra, _) ->
       let i = Hv.find vars ra in
       allocate_one nv vars (Location.i_loc f.f_loc []) cnf ra i r a
+    | HWStack _ -> ()
     end
   | _ -> ());
   cnf
@@ -1115,6 +1128,7 @@ let subroutine_ra_by_stack f =
   assert (FInfo.is_subroutine f.f_cc);
   match Arch.callstyle with
   | Arch_full.StackDirect -> true
+  | Arch_full.OnHWStack -> false
   | Arch_full.ByReg { call = oreg } ->
     let dfl = oreg <> None && has_call_or_syscall f.f_body in
     match f.f_annot.retaddr_kind with
@@ -1414,12 +1428,20 @@ let global_allocation return_addresses (funcs: ('info, 'asm) func list) :
           end
         | ByReg (ra, tmp) ->
           let a = doit ra a f.f_args in
-          match tmp with
+          begin match tmp with
           | Some tmp ->
             (* tmp register used to increment the stack conflicts with function arguments and results *)
             let a = doit tmp a f.f_args in
             doit tmp a (List.map L.unloc f.f_ret)
-          | None -> a)
+          | None -> a
+          end
+        | HWStack tmp ->
+          begin match tmp with
+          | Some tmp ->
+            let a = doit tmp a f.f_args in
+            doit tmp a (List.map L.unloc f.f_ret)
+          | None -> a
+          end)
       conflicts funcs in
   (* Inter-procedural conflicts *)
   let conflicts =
@@ -1430,7 +1452,7 @@ let global_allocation return_addresses (funcs: ('info, 'asm) func list) :
         let cnf =
           match Hf.find return_addresses f.f_name with
           | ByReg (ra, _) -> cnf |> add_conflicts (Sv.remove ra vars) ra
-          | StackDirect | StackByReg _ -> cnf
+          | StackDirect | StackByReg _ | HWStack _ -> cnf
         in
         cnf |> Sv.fold (add_conflicts vars) live
       ) funcs conflicts in

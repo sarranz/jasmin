@@ -155,6 +155,7 @@ module RiscVTarget: AsmTarget
         assert false
 
     | REPEATLOOP _ -> assert false
+    | CALL_HWCS _ | RET_HWCS -> assert false
 
     | SysCall op ->
         [Instr ("call", [ Asm_utils.pp_syscall op ])]

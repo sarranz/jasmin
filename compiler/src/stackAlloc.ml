@@ -328,6 +328,7 @@ let memory_analysis pp_sr pp_err ~debug up =
           | StackByReg (ra_call, ra_return, tmp) ->
             RAstack (Some (Conv.cvar_of_var ra_call), Option.map Conv.cvar_of_var ra_return, Conv.cz_of_int 0, Option.map Conv.cvar_of_var tmp)
           | ByReg (r, tmp)      -> RAreg (Conv.cvar_of_var r, Option.map Conv.cvar_of_var tmp)
+          | HWStack tmp -> RAhwstack (Option.map Conv.cvar_of_var tmp)
       } in
       Hf.replace atbl fn csao
     | Internal -> assert false

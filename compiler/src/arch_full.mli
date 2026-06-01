@@ -11,6 +11,9 @@ type 'a callstyle =
        - return:
          + true means that the register is also used for the return
          + false means that there is no constraint (stack is also ok) *)
+  | OnHWStack
+    (* call pushes the return address onto the hardware call stack;
+       no GP register and no data-stack word are used *)
 
 (* x86    : StackDirect 
    arm v7 : ByReg (Some ra)

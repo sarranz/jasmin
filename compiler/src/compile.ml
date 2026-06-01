@@ -190,6 +190,7 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
           | RAnone -> Regalloc.StackDirect
           | RAreg (r, tmp) -> ByReg (conv r, oconv tmp)
           | RAstack (Some call, return, _, tmp) -> StackByReg (conv call, oconv return, oconv tmp)
+          | RAhwstack tmp -> HWStack (oconv tmp)
           in Hf.add ra fd.f_name r
           ) fds;
       ra
@@ -206,6 +207,7 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
           | RAnone -> RAnone;
           | RAreg (ret, tmp) -> RAreg (subst ret, osubst tmp)
           | RAstack (c, r, n, t) -> RAstack (osubst c, osubst r, n, osubst t)
+          | RAhwstack t -> RAhwstack (osubst t)
       }
     in
     let fds = List.map (fun (e, fd) -> subst_sf_return_address e, fd) fds in

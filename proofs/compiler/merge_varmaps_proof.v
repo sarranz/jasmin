@@ -852,19 +852,18 @@ Section LEMMA.
           ]
       | RAhwstack _ => True
       end.
-    - case heq : sf_return_address checked_ra => [ | ra ? | ra_call ra_return ofs ? | ?].
+    - case heq : sf_return_address checked_ra => [ | ra ? | ra_call ra_return ofs ? | //].
       + by t_xrbindP => ??.
       + t_xrbindP => -> /Sv_memP ra_not_written.
         by rewrite SvP.union_mem negb_or => /andP[] /Sv_memP ra_not_magic /Sv_memP ra_not_param.
-      + t_xrbindP=> hcall hreturn.
-        move: preserved_magic;
-          rewrite /writefun_ra ok_fd /ra_undef /ra_vm /ra_vm_return heq /disjoint => hempty.
-        split.
-        * case: ra_call heq hempty hcall => [ r | ] // heq.
-          by t_xrbindP => /Sv.is_empty_spec /= h ->; split => //; SvD.fsetdec.
-        case: ra_return heq hempty hreturn => [ r | ] // heq.
+      t_xrbindP=> hcall hreturn.
+      move: preserved_magic;
+        rewrite /writefun_ra ok_fd /ra_undef /ra_vm /ra_vm_return heq /disjoint => hempty.
+      split.
+      * case: ra_call heq hempty hcall => [ r | ] // heq.
         by t_xrbindP => /Sv.is_empty_spec /= h ->; split => //; SvD.fsetdec.
-      by [].
+      case: ra_return heq hempty hreturn => [ r | ] // heq.
+      by t_xrbindP => /Sv.is_empty_spec /= h ->; split => //; SvD.fsetdec.
     have ra_neq_magic :
       match sf_return_address (f_extra fd) with 
       | RAreg ra _ => [&& ra != vgd, ra != vrsp & convertible (vtype ra) (aword Uptr)]

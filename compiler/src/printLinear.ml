@@ -40,9 +40,14 @@ let rec pp_instr pd msfsize asmOp fmt i =
       (pp_list ",@ " pp_rexpr) es
   | Lsyscall o -> F.fprintf fmt "SysCall %s" (pp_syscall o)
   | Lcall(lr, lbl) ->
-      let pp_o fmt o = match o with None -> () | Some v -> Format.fprintf fmt "%a " pp_var_i v in
-      F.fprintf fmt "Call %a%a" pp_o lr pp_remote_label lbl
-  | Lret       -> F.fprintf fmt "Return"
+      let pp_lr fmt = function
+        | OnStack -> ()
+        | InReg v -> Format.fprintf fmt "%a " pp_var_i v
+        | OnHWCallStack -> Format.fprintf fmt "hwcs "
+      in
+      F.fprintf fmt "Call %a%a" pp_lr lr pp_remote_label lbl
+  | Lret              -> F.fprintf fmt "Return"
+  | Lret_hwcallstack  -> F.fprintf fmt "Return hwcs"
   | Lalign     -> F.fprintf fmt "Align"
   | Llabel (k, lbl) -> F.fprintf fmt "Label %a%a" pp_label_kind k pp_label lbl
   | Lgoto lbl -> F.fprintf fmt "Goto %a" pp_remote_label lbl

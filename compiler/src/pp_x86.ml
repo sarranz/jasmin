@@ -394,6 +394,7 @@ and type asm_op = X86_instr_decl.x86_op
     | POPPC ->
       [Instr ("ret", [])]
     | REPEATLOOP _ -> assert false
+    | CALL_HWCS _ | RET_HWCS -> assert false
     | SysCall(op) ->
       let name = "call" in
       [Instr(name, [pp_syscall op])]

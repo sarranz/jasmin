@@ -6,6 +6,9 @@ type retaddr =
   | StackDirect
   | StackByReg of var * var option * var option
   | ByReg of var * var option
+  | HWStack of var option
+    (* ra on the hardware call stack; the var option is the tmp for large
+       stack-frame allocation. No ra register, no data-stack ra slot. *)
 
 type reg_oracle_t = {
   ro_to_save : var list;

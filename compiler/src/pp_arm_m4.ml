@@ -268,6 +268,7 @@ and type asm_op = arm_op
         [ Instr ("pop", [ "{pc}" ]) ]
 
     | REPEATLOOP _ -> assert false
+    | CALL_HWCS _ | RET_HWCS -> assert false
 
     | SysCall op ->
         [Instr ("bl", [ pp_syscall op ])]
