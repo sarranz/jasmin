@@ -1,0 +1,60 @@
+export
+fn fg0(reg u256 a, reg u256 b) -> reg u256 {
+    reg u256 x;
+    reg bool cf;
+    ?{ CF0 = cf, MF0 = _mf0_, LF0 = _lf0_, ZF0 = _zf0_ }, x = #BN_ADD(a, b);
+    ?{}, x = #BN_ADDC(x, b, cf);
+    return x;
+}
+
+export
+fn fg1(reg u256 a, reg u256 b) -> reg u256 {
+    reg u256 x;
+    ?{ CF1 = _cf1_, MF1 = _mf1_, LF1 = _lf1_, ZF1 = _zf1_ }, x = #BN_ADD_FG1(a, b);
+    ?{}, x = #BN_ADDC_FG1(x, b, _cf1_);
+    return x;
+}
+
+export
+fn fg0_sel(reg u256 a, reg u256 b) -> reg u256 {
+    reg u256 x;
+    reg bool cf zf mf lf;
+
+    ?{ CF0 = cf }, x = #BN_ADD(a, b);
+    x = #BN_SEL(a, x, cf);
+    ?{ CF0 = cf }, x = #BN_ADD(x, b);
+    ?{}, x = #BN_ADDC(x, b, cf);
+
+    ?{ ZF0 = zf }, x = #BN_ADD(x, b);
+    x = #BN_SEL(a, x, zf);
+
+    ?{ MF0 = mf }, x = #BN_ADD(x, b);
+    x = #BN_SEL(a, x, mf);
+
+    ?{ LF0 = lf }, x = #BN_ADD(x, b);
+    x = #BN_SEL(a, x, lf);
+
+    return x;
+}
+
+export
+fn fg1_sel(reg u256 a, reg u256 b) -> reg u256 {
+    reg u256 x;
+    reg bool cf zf mf lf;
+
+    ?{ CF1 = cf }, x = #BN_ADD_FG1(a, b);
+    x = #BN_SEL(a, x, cf);
+    ?{ CF1 = cf }, x = #BN_ADD_FG1(x, b);
+    ?{}, x = #BN_ADDC_FG1(x, b, cf);
+
+    ?{ ZF1 = zf }, x = #BN_ADD_FG1(x, b);
+    x = #BN_SEL(a, x, zf);
+
+    ?{ MF1 = mf }, x = #BN_ADD_FG1(x, b);
+    x = #BN_SEL(a, x, mf);
+
+    ?{ LF1 = lf }, x = #BN_ADD_FG1(x, b);
+    x = #BN_SEL(a, x, lf);
+
+    return x;
+}
