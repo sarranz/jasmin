@@ -50,10 +50,6 @@ module OTBN_core = struct
   (* TODO_OTBN: check *)
   let is_doit_asm_extra (_o : extra_op) = true
 
-  (*
-  let reg_unallocatable = [ X00; X01 ]
-  let xreg_unallocatable = [ ACC; MOD ]
-  *)
 end
 
 module OTBN (Input : OTBN_input) :

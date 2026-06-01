@@ -18,6 +18,8 @@ module E = struct
   let invalid_jmpi = err "invalid JMPI"
   let invalid_jcc = err "invalid Jcc"
   let invalid_jal = err "invalid JAL"
+  let invalid_call = err "invalid CALL"
+  let invalid_poppc = err "invalid POPPC"
   let invalid_args = err "invalid arguments"
   let pp_error = err "found PP_error"
   let invalid_pp_aop_ext = err "invalid pp_aop_ext"
@@ -63,7 +65,6 @@ let x0 = "x0" (* TODO_OTBN check *)
 let ra = "x1" (* TODO_OTBN check *)
 let pp_register = hash_to_string arch.toS_r.to_string
 let pp_oregister = function Some r -> pp_register r | None -> x0
-let sp = pp_register X02
 let pp_xregister = hash_to_string arch.toS_x.to_string
 let pp_imm imm = Format.sprintf "%s%s" imm_pre (Z.to_string imm)
 
@@ -158,14 +159,6 @@ let pp_otbn_op pp =
   in
   let args = List.filter_map (fun (_, a) -> pp_asm_arg a) pp_args in
   (name, args)
-
-let addr_rsp =
-  {
-    ad_base = Some X02;
-    ad_disp = Conv.cz_of_int 0;
-    ad_scale = O;
-    ad_offset = None;
-  }
 
 let symbol_of_shift sh =
   match sh with Otbn_options.RS_left -> "<<" | RS_right -> ">>"
@@ -298,7 +291,7 @@ module OTBNTarget :
         | BNcond _ -> E.invalid_jcc ()
       end
     | JAL _ -> E.invalid_jal ()
-    | CALL lbl -> [ Instr ("jal", [ ra; pp_remote_label lbl ]) ]
+    | CALL _ -> E.invalid_call ()
     | REPEATLOOP (count, c) ->
         let count, name =
           match count with
@@ -309,12 +302,7 @@ module OTBNTarget :
         let c' = if need_nop c then c' @ [ Instr ("nop", []) ] else c' in
         let num_c' = Format.sprintf "%i" (List.count_matching notlbl c') in
         Instr (name, [ count; num_c' ]) :: c'
-    | POPPC ->
-        [
-          Instr ("lw", [ ra; pp_address (Areg addr_rsp) ]);
-          Instr ("addi", [ sp; sp; pp_imm (Z.of_int 4) ]);
-          ret ra;
-        ]
+    | POPPC -> E.invalid_poppc ()
     | CALL_HWCS lbl -> [ Instr ("jal", [ ra; pp_remote_label lbl ]) ]
     | RET_HWCS -> [ Instr ("ret", []) ]
     | SysCall op -> [ Instr ("jal", [ ra; pp_syscall op ]) ]
