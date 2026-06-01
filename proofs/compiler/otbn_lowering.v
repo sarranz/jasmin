@@ -403,7 +403,8 @@ Section LOWER_ASSIGN.
     | _ => skip
     end.
 
-  (* Lower a binary 32-bit operation. *)
+  (* Lower a binary 32-bit operation.
+     TODO: shifts should match masks of shift amount *)
   Definition lower_Papp2_small
     (_ : wsize) (op : sop2) (e0 e1 : pexpr) : low_instr :=
     let%lr (op, e1') :=

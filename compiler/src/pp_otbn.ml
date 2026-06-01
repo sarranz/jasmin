@@ -252,19 +252,10 @@ module OTBNTarget :
   let function_directives = []
 
   (* TODO_OTBN check *)
-  let function_header =
-    [
-      Instr ("addi", [ sp; sp; "-4" ]);
-      Instr ("sw", [ ra; pp_reg_address_aux sp None None None ]);
-    ]
+  let function_header = []
 
   (* TODO_OTBN check *)
-  let function_tail =
-    [
-      Instr ("lw", [ ra; pp_reg_address_aux sp None None None ]);
-      Instr ("addi", [ sp; sp; "4" ]);
-      Instr ("ret", []);
-    ]
+  let function_tail = [ Instr ("ret", []) ]
 
   (* [ret] is syntactic sugar for [JALR x0 ra 0 ]. *)
   let ret r =

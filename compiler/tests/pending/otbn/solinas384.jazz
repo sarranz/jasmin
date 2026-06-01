@@ -2,7 +2,7 @@ fn mul384(
     reg u256 w9, // Upper half of a
     reg u256 w8, // Lower half of a
     reg u256 w11, // Upper half of b
-    reg u256 w10, // Lower half of b
+    reg u256 w10 // Lower half of b
 ) -> reg u256, reg u256, reg u256 { // 768 bit result
 
     reg u256 acc;
