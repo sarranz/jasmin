@@ -11,4 +11,4 @@ trap "rm -r ${DIR}" EXIT
 set -x
 
 $(dirname $0)/../jasminc -arch otbn -o ${ASM} "$@"
-#otbn-as -o ${OBJ} ${ASM}
+$OTBN_AS -o ${OBJ} ${ASM}
