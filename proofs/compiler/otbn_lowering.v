@@ -164,6 +164,14 @@ Section UTILS.
   Definition chk_address_displacement (ws : wsize) (w : word ws) : cexec unit :=
     assert (check_nbits Signed 12 w) (E.imm_out_of_range ii w).
 
+  (* [bn.ld] and [bn.sd] *)
+  Definition check_bn_displacement (i : Z) : bool :=
+    [&& -16384 <=? i, i <=? 16352 & i mod 32 == 0 ]%Z.
+
+  Definition chk_bn_address_displacement
+    (ws : wsize) (w : word ws) : cexec unit :=
+    assert (check_bn_displacement (wsigned w)) (E.imm_out_of_range ii w).
+
   Definition reg_shift_of_sop2
     (ws : wsize) (op : sop2) : lresult bn_register_shift :=
     Let _ := chk_xreg_ws ws in
@@ -322,8 +330,9 @@ Section LOWER_ASSIGN.
        + a stack variable. *)
   Definition lower_Pvar (ws : wsize) (v : gvar) : low_instr :=
     let op :=
-      if (ws <= reg_size)%CMP
-      then if is_var_in_memory (gv v) then BaseOp (None, RV32 LW) else ExtOp MOV
+      if (ws <= reg_size)%CMP then
+        if is_var_in_memory (gv v) then BaseOp (None, RV32 LW) else ExtOp MOV
+      else if is_var_in_memory (gv v) then BaseOp (None, BN_LD)
       else BaseOp (None, BN_MOV)
     in
     li_ssimple op [:: Pvar v ].
@@ -339,14 +348,26 @@ Section LOWER_ASSIGN.
     | _ => None
     end.
 
-  (* Lower an expression of the form [(ws)[v]], [(ws)[v + e]] or [tab[ws e]]. *)
+  (* Lower an expression of the form [(ws)[v]], [(ws)[v + e]] or [tab[ws e]].
+     A 32-bit access becomes a [LW]; a 256-bit (wide) access becomes a
+     [BN.LD]. *)
   Definition lower_load (ws : wsize) (e : pexpr) : low_instr :=
-    Let _ := chk_reg_ws ii ws in
-    Let _ :=
-      if get_mem_disp e is Some wdisp then chk_address_displacement ii wdisp
-      else ok tt
-    in
-    li_simple (RV32 LW) [:: e ].
+    if (ws <= reg_size)%CMP
+    then
+      Let _ := chk_reg_ws ii ws in
+      Let _ :=
+        if get_mem_disp e is Some wdisp then chk_address_displacement ii wdisp
+        else ok tt
+      in
+      li_simple (RV32 LW) [:: e ]
+    else
+      Let _ := chk_xreg_ws ii ws in
+      Let _ :=
+        if get_mem_disp e is Some wdisp
+        then chk_bn_address_displacement ii wdisp
+        else ok tt
+      in
+      li_simple BN_LD [:: e ].
 
   (* Lower an expression of the form [<+> e].
      TODO_OTBN: introduce extra op for negation and lower [x = -y]. *)
@@ -498,19 +519,25 @@ Section LOWER_ASSIGN.
     | _ => None
     end.
 
+  (* A 32-bit store becomes a [SW]; a 256-bit (wide) store becomes a
+     [BN.SD]. *)
   Definition lower_store (ws : wsize) (e : pexpr) : low_instr :=
-    Let _ := chk_reg_ws ii ws in
-    li_simple (RV32 SW) [:: e ].
+    if (ws <= reg_size)%CMP
+    then Let _ := chk_reg_ws ii ws in li_simple (RV32 SW) [:: e ]
+    else Let _ := chk_xreg_ws ii ws in li_simple BN_SD [:: e ].
 
-  Definition chk_lower_store (lv : lval) :=
+  Definition chk_lower_store (ws : wsize) (lv : lval) : cexec unit :=
     if get_lval_memory_access lv is Some (_, wdisp)
-    then chk_address_displacement ii wdisp
+    then
+      if (ws <= reg_size)%CMP
+      then chk_address_displacement ii wdisp
+      else chk_bn_address_displacement ii wdisp
     else ok tt.
 
   Definition lower_cassgn_word (lv : lval) (ws : wsize) (e : pexpr) : low_cmd :=
     let%lr (pre, lvs, op, es) :=
       if is_lval_in_memory lv
-      then Let _ := chk_lower_store lv in no_pre (lower_store ws e)
+      then Let _ := chk_lower_store ws lv in no_pre (lower_store ws e)
       else lower_pexpr ws e
     in
     issue (pre, lvs ++ [:: lv ], op, es).

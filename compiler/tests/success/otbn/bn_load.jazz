@@ -1,0 +1,26 @@
+export
+fn bn_load(reg u32 p) -> reg u256 {
+    reg u256 acc x;
+
+    acc = [#aligned :u256 p];
+    x = [#aligned :u256 p + 32];
+    acc = acc ^256u x;
+    x = [#aligned :u256 p - 32];
+    acc = acc ^256u x;
+    x = [#aligned :u256 p + 16352];
+    acc = acc ^256u x;
+    x = [#aligned :u256 p - 16384];
+    acc = acc ^256u x;
+
+    stack u256 s;
+    s = acc;
+    x = s;
+    acc = acc ^256u x;
+
+    stack u256[1] t;
+    t[0] = acc;
+    x = t[0];
+    acc = acc ^256u x;
+
+    return acc;
+}

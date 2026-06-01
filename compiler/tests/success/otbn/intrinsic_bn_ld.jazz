@@ -1,0 +1,16 @@
+export
+fn bn_ld(reg u32 arg0) -> reg u256 {
+    reg u256 acc x;
+
+    acc = #BN_LD([#aligned :u256 arg0]);
+    x = #BN_LD([#aligned :u256 arg0 + 32]);
+    ?{}, acc = #BN_XOR(acc, x);
+    x = #BN_LD([#aligned :u256 arg0 - 32]);
+    ?{}, acc = #BN_XOR(acc, x);
+    x = #BN_LD([#aligned :u256 arg0 + 16352]);
+    ?{}, acc = #BN_XOR(acc, x);
+    x = #BN_LD([#aligned :u256 arg0 - 16384]);
+    ?{}, acc = #BN_XOR(acc, x);
+
+    return acc;
+}

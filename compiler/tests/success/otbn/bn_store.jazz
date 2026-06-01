@@ -1,0 +1,18 @@
+export
+fn bn_store(reg u32 p, reg u256 v) {
+    [#aligned :u256 p] = v;
+    [#aligned :u256 p + 32] = v;
+    [#aligned :u256 p - 32] = v;
+    [#aligned :u256 p + 16352] = v;
+    [#aligned :u256 p - 16384] = v;
+
+    stack u256 s;
+    s = v;
+    v = s;
+    [#aligned :u256 p] = v;
+
+    stack u256[1] t;
+    t[0] = v;
+    v = t[0];
+    [#aligned :u256 p] = v;
+}

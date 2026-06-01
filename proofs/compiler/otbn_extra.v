@@ -51,8 +51,6 @@ Let F (f : rflag) := ADImplicit (to_var f).
 #[only(eqbOK)] derive
 Variant extra_op :=
 | set0 of wsize
-| bn_indirect_load
-| bn_indirect_store
 | MOV  (* [ADDI x, y, 0]. *)
 | SUBI (* [ADDI x, y, -imm]. *)
 .
@@ -65,8 +63,6 @@ Instance eqTC_otbn_extra_op : eqTypeC extra_op := { ceqP := extra_op_eqb_OK }.
 Definition string_of_extra_op (eo : extra_op) : string :=
   match eo with
   | set0 _ => "set0"
-  | bn_indirect_load => "BN_INDIRECT_LOAD"
-  | bn_indirect_store => "BN_INDIRECT_STORE"
   | MOV => "MOV"
   | SUBI => "SUBI"
   end.
@@ -89,14 +85,6 @@ Definition desc_set0_large : instruction_desc :=
     (:: vf, vf, vt & 0%R)
     true.
 
-Definition desc_indirect : instruction_desc :=
-  mk_instr_desc_safe
-    (pp_s (string_of_extra_op bn_indirect_load))
-    [:: aword U256 ] [:: E 1 ]
-    [:: aword U256 ] [:: E 0 ]
-    id
-    true.
-
 Definition desc_MOV : instruction_desc :=
   mk_instr_desc_safe
     (pp_s (string_of_extra_op MOV))
@@ -116,15 +104,12 @@ Definition desc_SUBI : instruction_desc :=
 Definition get_instr_desc (eo : extra_op) : instruction_desc :=
   match eo with
   | set0 ws => if (ws <= reg_size)%CMP then desc_set0_small else desc_set0_large
-  | bn_indirect_load | bn_indirect_store => desc_indirect
   | MOV => desc_MOV
   | SUBI => desc_SUBI
   end.
 
 Definition prim_string : seq (string * prim_constructor extra_op) :=
   [:: (string_of_extra_op (set0 U8), prim_otbn_ws set0)
-    ; (string_of_extra_op bn_indirect_load, prim_otbn_none bn_indirect_load)
-    ; (string_of_extra_op bn_indirect_store, prim_otbn_none bn_indirect_store)
     ; (string_of_extra_op MOV, prim_otbn_none MOV)
     ; (string_of_extra_op SUBI, prim_otbn_none SUBI)
   ].
@@ -156,86 +141,9 @@ Section ASSEMBLE.
     let x := rvar (mk_var_i v) in
     ok [:: ((None, op), les, [:: x; x ]) ].
 
-  Definition idx_of_wide_register (wr : wide_register) : option Z :=
-    match wr with
-    | W00 => Some 0
-    | W01 => Some 1
-    | W02 => Some 2
-    | W03 => Some 3
-    | W04 => Some 4
-    | W05 => Some 5
-    | W06 => Some 6
-    | W07 => Some 7
-    | W08 => Some 8
-    | W09 => Some 9
-    | W10 => Some 10
-    | W11 => Some 11
-    | W12 => Some 12
-    | W13 => Some 13
-    | W14 => Some 14
-    | W15 => Some 15
-    | W16 => Some 16
-    | W17 => Some 17
-    | W18 => Some 18
-    | W19 => Some 19
-    | W20 => Some 20
-    | W21 => Some 21
-    | W22 => Some 22
-    | W23 => Some 23
-    | W24 => Some 24
-    | W25 => Some 25
-    | W26 => Some 26
-    | W27 => Some 27
-    | W28 => Some 28
-    | W29 => Some 29
-    | W30 => Some 30
-    | W31 => Some 31
-    | ACC => None
-    | MOD => None
-    end%Z.
-
-  Let uncons {X} := arm_extra.uncons (X := X) ii.
   Let uncons_LLvar := arm_extra.uncons_LLvar ii.
   Let uncons_rvar := arm_extra.uncons_rvar ii.
   Let uncons_wconst := arm_extra.uncons_wconst ii.
-
-  Definition assemble_bn_indirect_load
-    (les : seq lexpr)
-    (res : seq rexpr) :
-    cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
-    Let: (vrd, les) := uncons_LLvar les in
-    Let: (vwr, les) := uncons_LLvar les in
-    Let: (addr, _) := uncons res in
-    Let _ :=
-      if addr is Load _ U256 _ then ok tt else Error (E.invalid_rexprs ii)
-    in
-    Let wr := o2r (E.invalid_lexprs ii) (of_var vwr) in
-    Let nwr := o2r (E.invalid_lexprs ii) (idx_of_wide_register wr) in
-    ok [:: ((None, RV32 LI), [:: LLvar vrd ], [:: rconst reg_size nwr ])
-         ; ((None, BN_LID), [:: LLvar vwr ], [:: rvar vrd; addr ])
-        (* TODO_OTBN To give a semantics to this operator we should set the
-           small register to a fixed value.
-           Since indirect addressing has no semantics anyways, I skip it for
-           now.
-           ((None, RV32 LI), [:: LLvar vrd ], [:: rconst reg_size 0 ] ) *)
-      ].
-
-  Definition assemble_bn_indirect_store
-    (les : seq lexpr)
-    (res : seq rexpr) :
-    cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
-    Let: (vrd, les) := uncons_LLvar les in
-    Let: (addr, _) := uncons les in
-    Let _ :=
-      if addr is Store _ U256 _ then ok tt else Error (E.invalid_lexprs ii)
-    in
-    Let: (vwr, _) := uncons_rvar res in
-    Let wr := o2r (E.invalid_lexprs ii) (of_var vwr) in
-    Let nwr := o2r (E.invalid_lexprs ii) (idx_of_wide_register wr) in
-    ok [:: ((None, RV32 LI), [:: LLvar vrd ], [:: rconst reg_size nwr ])
-         ; ((None, BN_SID), [:: addr ], [:: rvar vrd; rvar vwr ])
-        (* ((None, RV32 LI), [:: LLvar vrd ], [:: rconst reg_size 0 ] ) *)
-    ].
 
   Definition assemble_MOV
     (les : seq lexpr)
@@ -262,8 +170,6 @@ Section ASSEMBLE.
     cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
     match eo with
     | set0 ws => assemble_set0 ws les res
-    | bn_indirect_load => assemble_bn_indirect_load les res
-    | bn_indirect_store => assemble_bn_indirect_store les res
     | MOV => assemble_MOV les res
     | SUBI => assemble_SUBI les res
     end.

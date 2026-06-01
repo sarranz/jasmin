@@ -1,0 +1,8 @@
+export
+fn bn_sd(reg u32 arg0, reg u256 v) {
+    [#aligned :u256 arg0] = #BN_SD(v);
+    [#aligned :u256 arg0 + 32] = #BN_SD(v);
+    [#aligned :u256 arg0 - 32] = #BN_SD(v);
+    [#aligned :u256 arg0 + 16352] = #BN_SD(v);
+    [#aligned :u256 arg0 - 16384] = #BN_SD(v);
+}

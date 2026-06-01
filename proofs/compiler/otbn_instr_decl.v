@@ -272,9 +272,9 @@ Variant otbn_op : Type :=
 | BN_MODR  (* Read from MOD register to wide register. *)
 | BN_MODW  (* Write from wide register to MOD register. *)
 
-(* Indirect indexing. *)
-| BN_LID
-| BN_SID
+(* Direct load and store. *)
+| BN_LD
+| BN_SD
 .
 
 #[export]
@@ -304,8 +304,8 @@ Definition otbn_op_to_string (op : otbn_op) : string :=
   | BN_ACCW => "BN.ACCW"
   | BN_MODR => "BN.MODR"
   | BN_MODW => "BN.MODW"
-  | BN_LID => "BN.LID"
-  | BN_SID => "BN.SID"
+  | BN_LD => "BN.LD"
+  | BN_SD => "BN.SD"
   end.
 
 (* -------------------------------------------------------------------------- *)
@@ -353,11 +353,8 @@ Section I_ARGS_KINDS.
   Definition ak_xreg_xreg_q_xreg_q_shift : i_args_kinds :=
     [:: [:: xreg; xreg; imm_q; xreg; imm_q; imm_mulqacc_shift ] ].
 
-  Definition ak_reg_mem : i_args_kinds :=
-    [:: [:: [:: CAreg ]; [:: CAmem true ] ]].
-
-  Definition ak_reg_xreg : i_args_kinds :=
-    [:: [:: [:: CAreg ]; [:: CAxmm ] ]].
+  Definition ak_xreg_mem : i_args_kinds :=
+    [:: [:: xreg; [:: CAmem false ] ]].
 
 End I_ARGS_KINDS.
 
@@ -1233,46 +1230,46 @@ Definition desc_BN_WSR op xr is_read : instr_desc_t :=
     id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
   |}.
 
-Definition desc_BN_LID : instr_desc_t :=
+Definition desc_BN_LD : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
-    id_tin := [:: lword32; lword256 ];
-    id_in := [:: EXa 0; Ea 1 ];
-    id_tout := [::];
-    id_out := [::];
-    id_semi := fun _ _ => Error E.no_semantics;
-    id_args_kinds := ak_reg_mem;
+    id_tin := [:: lword256 ];
+    id_in := [:: Ea 1 ];
+    id_tout := [:: lword256 ];
+    id_out := [:: Ea 0 ];
+    id_semi := fun x => ok x;
+    id_args_kinds := ak_xreg_mem;
     id_nargs := 2;
-    id_str_jas := pp_s (otbn_op_to_string BN_LID);
-    id_pp_asm := pp_otbn_op BN_LID;
-    id_valid := false;
+    id_str_jas := pp_s (otbn_op_to_string BN_LD);
+    id_pp_asm := pp_otbn_op BN_LD;
+    id_valid := true;
     id_safe := [::];
     id_eq_size := refl_equal;
-    id_check_dest := refl_equal;
+    id_check_dest := check_dest_unop_lword;
     id_safe_wf := refl_equal;
-    id_semi_errty := ltac:(done);
-    id_semi_safe := ltac:(done);
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
   |}.
 
-Definition desc_BN_SID : instr_desc_t :=
+Definition desc_BN_SD : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
-    id_tin := [:: lword32; lword256 ];
-    id_in := [:: Ea 0; EXa 1 ];
-    id_tout := [::];
-    id_out := [::];
-    id_semi := fun _ _ => Error E.no_semantics;
-    id_args_kinds := ak_reg_xreg;
+    id_tin := [:: lword256 ];
+    id_in := [:: Ea 0 ];
+    id_tout := [:: lword256 ];
+    id_out := [:: Ea 1 ];
+    id_semi := fun x => ok x;
+    id_args_kinds := ak_xreg_mem;
     id_nargs := 2;
-    id_str_jas := pp_s (otbn_op_to_string BN_SID);
-    id_pp_asm := pp_otbn_op BN_SID;
-    id_valid := false;
+    id_str_jas := pp_s (otbn_op_to_string BN_SD);
+    id_pp_asm := pp_otbn_op BN_SD;
+    id_valid := true;
     id_safe := [::];
     id_eq_size := refl_equal;
-    id_check_dest := refl_equal;
+    id_check_dest := check_dest_unop_lword;
     id_safe_wf := refl_equal;
-    id_semi_errty := ltac:(done);
-    id_semi_safe := ltac:(done);
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
   |}.
 
 Definition desc_otbn_op (op : otbn_op) : instr_desc_t :=
@@ -1297,8 +1294,8 @@ Definition desc_otbn_op (op : otbn_op) : instr_desc_t :=
   | BN_ACCW => desc_BN_WSR BN_ACCW ACC false
   | BN_MODR => desc_BN_WSR BN_MODR MOD true
   | BN_MODW => desc_BN_WSR BN_MODW MOD false
-  | BN_LID => desc_BN_LID
-  | BN_SID => desc_BN_SID
+  | BN_LD => desc_BN_LD
+  | BN_SD => desc_BN_SD
   end.
 
 Section PRIM_STRING.
@@ -1336,6 +1333,7 @@ Section PRIM_STRING.
       otbn_op_to_string
       prim_otbn_none
       [:: BN_MOV; BN_RSHI; BN_ADDM; BN_SUBM; BN_ACCR; BN_ACCW; BN_MODR; BN_MODW
+        ; BN_LD; BN_SD
       ].
 
   (* MULQACC intrinsic string does not change with flag group or writeback. *)
@@ -1396,7 +1394,7 @@ Section VALIDATION_PRIM.
   Goal all [predC bad_suffix] strings.
   done. Qed.
 
-  Let hidden := [:: "LA"; "BN_LID"; "BN_SID" ]%string.
+  Let hidden := [:: "LA" ]%string.
 
   Goal
     forall op,
