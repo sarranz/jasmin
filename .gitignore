@@ -48,4 +48,4 @@ Makefile.coq.conf
 # nix build output
 result
 
-.env-otbn-root
+.env-acc-root
