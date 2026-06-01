@@ -319,4 +319,4 @@ end
 
 module OTBNPrinter = AsmTargetBuilder.Make (OTBNTarget)
 
-let print_prog fmt prog = PrintASM.pp_asm fmt (OTBNPrinter.asm_of_prog prog)
+let print_prog fmt prog = PrintASM.pp_asm ~comment_prefix:"#" fmt (OTBNPrinter.asm_of_prog prog)

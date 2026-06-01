@@ -10,5 +10,5 @@ type asm_element =
 
 type asm = asm_element list
 
-val pp_asm : Format.formatter -> asm -> unit
+val pp_asm : ?comment_prefix:string -> Format.formatter -> asm -> unit
 (** Pretty print assembly code *)
