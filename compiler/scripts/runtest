@@ -64,7 +64,8 @@ class Scenario:
     def test_cases(self, options: Options):
         for dir, valid in self._test_case_dirs():
             for script in self._listdir(dir):
-                yield TestCase(valid, dir, self.args, self.bin, script, options)
+                if script not in self.exclude:
+                    yield TestCase(valid, dir, self.args, self.bin, script, options)
 
 
 @dataclass

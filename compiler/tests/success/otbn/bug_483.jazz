@@ -1,0 +1,13 @@
+inline fn f(reg u32 j) {
+    while (j != 0) {
+        j -= 1;
+    }
+}
+
+export
+fn main (reg u32 i) {
+    while (i != 0) {
+        f(i);
+        i -= 1;
+    }
+}
