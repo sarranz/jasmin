@@ -72,7 +72,6 @@ module OTBN (Input : OTBN_input) :
   let not_saved_stack = (Otbn_params.liparams atoI).lip_not_saved_stack
   let pp_asm = Pp_otbn.print_prog
 
-  (* TODO_OTBN: Fix this. *)
-  let callstyle = Arch_full.StackDirect
+  let callstyle = Arch_full.OnHWStack
   let internal_call_conv = Otbn_decl.internal_call_conv
 end

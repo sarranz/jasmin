@@ -239,8 +239,8 @@ let pp_args op args =
 
 let need_nop c =
   match (List.last c).asmi_i with
-  | LABEL _ | REPEATLOOP _ | JMP _ | JMPI _ | Jcc _ | JAL _ | CALL _ | POPPC
-  | SysCall _ -> true
+  | LABEL _ | REPEATLOOP _ | JMP _ | JMPI _ | Jcc _ | JAL _ | CALL _ | CALL_HWCS _
+  | RET_HWCS | POPPC | SysCall _ -> true
   | _ -> false
   | exception Invalid_argument _ -> true
 
@@ -315,7 +315,8 @@ module OTBNTarget :
           Instr ("addi", [ sp; sp; pp_imm (Z.of_int 4) ]);
           ret ra;
         ]
-    | CALL_HWCS _ | RET_HWCS -> assert false
+    | CALL_HWCS lbl -> [ Instr ("jal", [ ra; pp_remote_label lbl ]) ]
+    | RET_HWCS -> [ Instr ("ret", []) ]
     | SysCall op -> [ Instr ("jal", [ ra; pp_syscall op ]) ]
     | Declassify_val (lty, a) ->
         declassify_val (fun _lty a -> Option.default "" (pp_asm_arg a)) lty a
