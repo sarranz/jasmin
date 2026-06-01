@@ -1378,12 +1378,23 @@ Instance otbn_op_decl : asm_op_decl otbn_op :=
 Definition otbn_prog := asm_prog (asm_op_d := otbn_op_decl).
 
 (* Sanity check for prim_string. *)
-Section VALIDATION.
+Section VALIDATION_PRIM.
   Import strings.
 
   Let strings := Eval compute in map fst otbn_prim_string.
 
   Goal uniq strings. done. Qed.
+
+  Fixpoint str_ends_with (suf s : string) : bool :=
+    (s == suf) || if s is String _ s' then str_ends_with suf s' else false.
+
+  Definition bad_suffix s :=
+    has
+      (fun suf => str_ends_with suf s)
+      [:: "_FG0"; "_FG1"; "_L"; "_U" ]%string.
+
+  Goal all [predC bad_suffix] strings.
+  done. Qed.
 
   Let hidden := [:: "LA"; "BN_LID"; "BN_SID" ]%string.
 
@@ -1393,6 +1404,9 @@ Section VALIDATION.
       xorb (s \in hidden) (s \in strings).
   by move=> [] // [] //. Qed.
 
+End VALIDATION_PRIM.
+
+Section VALIDATION_ARGS.
   Definition aux (seen : seq nat) (x : arg_desc) : seq nat :=
     if x is ADExplicit _ n _
     then if n \notin seen then n :: seen else seen
@@ -1423,7 +1437,7 @@ Section VALIDATION.
       id_nargs t = count_explicit_arguments (id_in t ++ id_out t).
   by move=> [] // [] // []. Qed.
 
-End VALIDATION.
+End VALIDATION_ARGS.
 
 (* -------------------------------------------------------------------------- *)
 

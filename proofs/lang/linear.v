@@ -12,13 +12,20 @@ Context `{asmop:asmOp}.
 
 Record gen_linstr (A : Type) : Type := MkLI { li_ii : instr_info; li_i : A; }.
 
+Variant lcall_kind :=
+  | OnStack
+  | InReg of var_i
+  | OnHWCallStack.
+
 Inductive linstr_r :=
   | Lopn   : lexprs -> sopn -> rexprs -> linstr_r
   | Lsyscall : syscall_t -> linstr_r
-  | Lcall    : option var_i -> remote_label -> linstr_r
-     (* Lcall ra lbl:
-        if ra = Some r the return adress is stored in r else on top of the stack *)
+  | Lcall    : lcall_kind -> remote_label -> linstr_r
+     (* OnStack: ra on top of data stack; InReg r: ra in r;
+        OnHWCallStack: ra pushed to the hardware call stack. *)
   | Lret     : linstr_r
+  | Lret_hwcallstack : linstr_r
+     (* return using the hardware call stack (OTBN: RET) *)
   | Lalign : linstr_r
   | Llabel : label_kind -> label -> linstr_r
   | Lgoto  : remote_label -> linstr_r

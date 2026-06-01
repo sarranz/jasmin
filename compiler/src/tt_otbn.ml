@@ -38,7 +38,7 @@ let tt_prim err ps s sa =
         let name, ofg, owb = get_otbn_opts s in
         (name, ofg, owb, None)
     | Some (Sopn.PVp ws) -> (s, None, None, Some ws)
-    | _ -> raise (err "internal error in Tt_otbn.tt_prim sa")
+    | _ -> raise (err "unsupported size suffix")
   in
   match List.assoc name ps with
   | Sopn.PrimOTBN pr -> begin
@@ -50,4 +50,4 @@ let tt_prim err ps s sa =
       | Error msg -> raise (err msg)
     end
   | _ | (exception Not_found) ->
-      raise (err "internal error in Tt_otbn.tt_prim assoc")
+      raise (err "unknown mnemonic or invalid suffix")

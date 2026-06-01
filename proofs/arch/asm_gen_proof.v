@@ -1238,7 +1238,7 @@ Proof.
   elim: hall => // { lc ac }.
   move=> li ai lc ac ok_ai _.
   rewrite /label_in_lcmd -cat1s pmap_cat -(cat1s ai) flatten_cat /label_in_asm pmap_cat => ->; f_equal.
-  case: li ok_ai => ii [ l o es| | [] | | | | | | | | ] /=;
+  case: li ok_ai => ii [ l o es| | [| ? |] | | | | | | | | | ] /=;
     try (by rewrite /assemble_i /=; t_xrbindP => *; subst => //=).
   rewrite /assemble_i /=.
   case: is_declassify.
@@ -1266,13 +1266,13 @@ Lemma assemble_i_is_label (li : linstr) ai lbl :
   -> linear.is_label lbl li = has (arch_sem.is_label lbl) ai.
 Proof.
   rewrite /assemble_i /linear.is_label ; case li =>  ii
-   [es o xs | s [<-]| xi r | [<-]| [<-] | lk l [<-]| r [<-]| x | x l | e l | cnt c] //=; t_xrbindP.
+   [es o xs | s [<-]| xi r | [<-]| [<-]| [<-] | lk l [<-]| r [<-]| x | x l | e l | cnt c] //=; t_xrbindP.
   + case: is_declassify; t_xrbindP.
     + case => [aty | len] ?.
       + by case: xs => // ? [] //=; t_xrbindP => ? _ ? _ <- <-.
       by case: xs => // -[]// e [] //=; t_xrbindP => ? _ <- <-.
     by move=> z _ <-; elim z.
-  + by case xi => [lr| > [<-] //]; case: to_reg => //= > [<-].
+  + by case xi => [> [<-] //|lr|> [<-] //]; case: to_reg => //= > [<-].
   + by rewrite orbC.
   + by move=> _ ? _ <-.
   + by move=> z _ <-.
@@ -1903,7 +1903,7 @@ Proof.
 
   - move=> sc ok_i [?]; subst aci. by eauto using match_state_SysCall.
 
-  - move=> [xlr | ] r ok_i; rewrite /assemble_i /=.
+  - move=> [| xlr |//] r ok_i; rewrite /assemble_i /=; last first.
     + case heqlr: to_reg => [lr /= | //] [?]; subst aci.
       rewrite /linear_sem.eval_instr => /=; t_xrbindP => l hgetpc.
       t_xrbindP=> ptr /o2rP ptr_eq vm hset hjump.
@@ -1958,6 +1958,7 @@ Proof.
       by have [ ->] := to_var_rsp.
     move=> /(lom_eqv_write_var MSB_CLEAR hloeq) -/(_ ad_rsp erefl).
     by case=> *; constructor => //.
+  - move=> hok_i [?]; by rewrite /linear_sem.eval_instr /=.
   - move=> hok_i [?] [?]; subst aci ls'.
     apply (match_state_step1 (ls' := (setpc ls (lpc ls).+1)) hnth) => /=.
     eexists; first reflexivity.
@@ -2332,7 +2333,7 @@ Proof.
     + by apply hpc; rewrite /= leqnn addn1 ltnSn.
     by have [_ ] := match_state_SysCall_eval hloeq ok_fd heqf hass hac heq hip hnth ok_i hev.
 
-  - move=> [xlr | ] r ok_i; rewrite /assemble_i /=.
+  - move=> [| xlr |//] r ok_i; rewrite /assemble_i /=; last first.
     + case heqlr: to_reg => [lr /= | //] [?]; subst aci.
       rewrite /linear_sem.eval_instr => /=; t_xrbindP => l hgetpc.
       t_xrbindP=> ptr /o2rP ptr_eq vm hset hjump.

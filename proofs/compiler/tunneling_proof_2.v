@@ -359,8 +359,8 @@ Proof.
   rewrite /eval_instr.
   rewrite get_label_after_pcE label_in_lprogE lp_rspE.
   case: (li_i i) => //.
-  1: move=> [?|].
-  all: by move=> >; repeat (apply bind_eq => // ?); rewrite eval_jumpE.
+  1: move=> [|?|].
+  all: by move=> >; try done; repeat (apply bind_eq => // ?); rewrite eval_jumpE.
 Qed.
 
 Lemma find_instr_goto_targets P s fd i :

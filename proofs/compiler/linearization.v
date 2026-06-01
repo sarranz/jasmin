@@ -358,6 +358,7 @@ Definition ovar_of_ra (ra : return_address_location) : option var :=
   | RAreg ra _ => Some ra
   | RAstack ra_call _ _ _ => ra_call
   | RAnone => None
+  | RAhwstack _ => None
   end.
 
 Definition ovari_of_ra (ra : return_address_location) : option var_i :=
@@ -368,10 +369,20 @@ Definition tmp_of_ra (ra : return_address_location) : option var :=
   | RAreg _ o => o
   | RAstack _ _ _ o => o
   | RAnone => None
+  | RAhwstack o => o
   end.
 
 Definition tmpi_of_ra (ra : return_address_location) : option var_i :=
   omap mk_var_i (tmp_of_ra ra).
+
+Definition lcall_kind_of_ra (ra : return_address_location) : lcall_kind :=
+  match ra with
+  | RAreg r _ => InReg (mk_var_i r)
+  | RAstack (Some r) _ _ _ => InReg (mk_var_i r)
+  | RAstack None _ _ _ => OnStack
+  | RAhwstack _ => OnHWCallStack
+  | RAnone => OnStack
+  end.
 
 Definition repeat_call_count
   (ii : instr_info) (e : pexpr) : cexec (var_i + Z) :=
@@ -602,6 +613,7 @@ Definition check_fd (fn: funname) (fd:sfundef) :=
                         , ov_type_ptr ra_return
                         , ov_type_ptr tmp
                         & check_stack_ofs_internal_call e ofs Uptr]
+                  | RAhwstack tmp => ov_type_ptr tmp
                   end
                   (E.error "bad return-address") in
   let ok_save_stack :=
@@ -748,7 +760,7 @@ Fixpoint linear_i (i:instr) (lbl:label) (lc:lcmd) :=
            * 5. Continue.
            *)
         (lbl,    before
-              ++ MkLI ii (Lcall (ovari_of_ra ra) lcall)
+              ++ MkLI ii (Lcall (lcall_kind_of_ra ra) lcall)
               :: MkLI ii (ReturnTarget lret)
               :: after
               ++ lc
@@ -781,6 +793,11 @@ Definition linear_body (fi: fun_info) (e: stk_fun_extra) (body: cmd) : label * l
          (if ra_call is Some ra_call
           then [:: lstore fentry_ii rspi z (mk_var_i ra_call) ]
           else [::])
+       , 2%positive
+       )
+     | RAhwstack _ =>
+       ( [:: MkLI ret_ii Lret_hwcallstack ]
+       , [:: MkLI fentry_ii (Llabel 1) ]
        , 2%positive
        )
      | RAnone =>

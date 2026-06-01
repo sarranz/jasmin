@@ -38,6 +38,9 @@ Module OTBNFopn_core.
   Let op_bin_reg mn x y z : opn_args := op_gen mn x [:: rvar y; rvar z ].
   Let op_bin_imm mn x y imm : opn_args :=
     op_gen mn x [:: rvar y; rconst reg_size imm ].
+  (* Shift amounts are encoded as 8-bit immediates (5 significant bits). *)
+  Let op_bin_shamt mn x y imm : opn_args :=
+    op_gen mn x [:: rvar y; rconst U8 imm ].
 
   Definition add := op_bin_reg ADD.
   Definition sub := op_bin_reg SUB.
@@ -45,8 +48,8 @@ Module OTBNFopn_core.
   Definition li := op_un_imm LI.
   Definition addi := op_bin_imm ADDI.
   Definition subi x y imm : opn_args := addi x y (- imm).
-  Definition slli := op_bin_imm SLLI.
-  Definition srli := op_bin_imm SRLI.
+  Definition slli := op_bin_shamt SLLI.
+  Definition srli := op_bin_shamt SRLI.
   Definition andi := op_bin_imm ANDI.
 
   Definition mov x y: opn_args := addi x y 0.

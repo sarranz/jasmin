@@ -66,6 +66,17 @@ Section SAPARAMS.
 
  (* TODO_OTBN use the smart constructors *)
  (* TODO_OTBN: Is the LEA case correct? *)
+ (* TODO_OTBN: this is incorrect for [Pstkptr] (stack pointers). [mov_ofs]
+    dispatches only on [movk] and [ofs] and ignores the shape of [x] and [y],
+    so it never emits a load or a store:
+    - when [y] is a [Pload] (reading a pointer from a stack slot) we emit a
+      register MOV/ADDI reading a memory operand instead of a [LW];
+    - when [x] is an [Lmem] (writing a pointer to a stack slot, see
+      [alloc_array_move] with a [Pstkptr] destination) we emit a register
+      MOV/ADDI writing into memory instead of a [SW].
+    Fix by mirroring [riscv_mov_ofs]: in the [MK_MOV] branch, dispatch on
+    [is_Pload y] (emit [LW]) and on [x = Lvar]/[Lmem] (emit [SW]), failing
+    cleanly (return [None]) when [ofs <> 0] in the store case. *)
   Definition mov_ofs
     (x : lval) (tag : assgn_tag) (movk : mov_kind) (y : pexpr) (ofs : pexpr) :
     option instr_r :=

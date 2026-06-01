@@ -82,6 +82,7 @@ Definition ra_valid fd (k: Sv.t) : bool :=
   | RAreg ra _ =>
     [&& (ra != vgd), (ra != vrsp) & (~~ Sv.mem ra k) ]
   | RAnone => true
+  | RAhwstack _ => true
   end.
 
 Definition ra_undef_none (ss: saved_stack) (tmp: Sv.t) :=

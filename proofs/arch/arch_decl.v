@@ -598,6 +598,10 @@ Inductive asm_i_r : Type :=
   | JAL of reg_t & remote_label (* Direct jump; return address is saved in a register *)
   | CALL of remote_label (* Direct jump; return address is saved at the top of the stack *)
   | POPPC (* Pop a destination from the stack and jump there, arm : POP PC, x86 : RET *)
+  | CALL_HWCS of remote_label
+    (* Direct jump; return address pushed to the hardware call stack *)
+  | RET_HWCS
+    (* Pop a destination from the hardware call stack and jump there *)
   | REPEATLOOP of (reg_t + Z) & seq (gen_asm_i asm_i_r)
   (* Instructions exposed at source-level *)
   | AsmOp  of asm_op_t' & asm_args

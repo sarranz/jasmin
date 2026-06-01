@@ -649,7 +649,7 @@ Variant return_address_location :=
   (* The return address is passed by a register and
      kept in this register during function call,
      the option is for incrementing the large stack in arm. *)
-| RAstack of option var & option var & Z & option var.
+| RAstack of option var & option var & Z & option var
    (* The return address is saved on the stack for most of the execution of the
       function.
       - The first argument describes what happens at call time.
@@ -663,6 +663,10 @@ Variant return_address_location :=
           is inserted by linearization).
       - The third option specifies the offset of the stack where ra is written.
       - The fourth option is for incrementing the large stack in arm. *)
+| RAhwstack of option var.
+  (* The return address is pushed onto the hardware call stack at call time and
+     popped at return time; no GP register and no data-stack word are used.
+     The option var is the tmp for large stack-frame allocation (like RAreg). *)
 
 Definition is_RAnone ra :=
   if ra is RAnone then true else false.
@@ -678,13 +682,15 @@ Definition return_address_location_beq (r1 r2: return_address_location) : bool :
     if r2 is RAstack ra_call2 ra_return2 z2 o2 then
       [&& ra_call1 == ra_call2, ra_return1 == ra_return2, z1 == z2 & o1 == o2]
     else false
+  | RAhwstack o1 => if r2 is RAhwstack o2 then o1 == o2 else false
   end.
 
 Lemma return_address_location_eq_axiom : Equality.axiom return_address_location_beq.
 Proof.
-  case => [ | x1 o1 | ra_call1 ra_return1 z1 o1 ] [ | x2 o2 | ra_call2 ra_return2 z2 o2 ] /=; try by constructor.
+  case => [ | x1 o1 | ra_call1 ra_return1 z1 o1 | o1 ] [ | x2 o2 | ra_call2 ra_return2 z2 o2 | o2 ] /=; try by constructor.
   + by apply (iffP andP) => [ []/eqP-> /eqP-> | []-> ->].
-  by apply (iffP and4P) => [ []/eqP-> /eqP-> /eqP-> /eqP-> | []-> -> -> ->].
+  + by apply (iffP and4P) => [ []/eqP-> /eqP-> /eqP-> /eqP-> | []-> -> -> ->].
+  by apply (iffP eqP); congruence.
 Qed.
 
 HB.instance Definition _ := hasDecEq.Build return_address_location

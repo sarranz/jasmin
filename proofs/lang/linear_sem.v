@@ -140,7 +140,7 @@ Definition eval_instr (i : linstr) (s1: lstate) : exec lstate :=
     in
     Let s' := write_lvals true [::] s (to_lvals sig.(scs_vout)) vs in
     ok (lnext_pc (lset_estate' s1 s'))
-  | Lcall None d =>
+  | Lcall OnStack d =>
     let vrsp := v_var (vid (lp_rsp P)) in
     Let sp := get_var true s1.(lvm) vrsp >>= to_pointer in
     let nsp := (sp - wrepr Uptr (wsize_size Uptr))%R in
@@ -149,11 +149,13 @@ Definition eval_instr (i : linstr) (s1: lstate) : exec lstate :=
     Let p := rencode_label labels (lfn s1, lbl) in
     Let m := write s1.(lmem) Aligned nsp p in
     eval_jump d (lset_mem_vm s1 m vm)
-  | Lcall (Some r) d =>
+  | Lcall (InReg r) d =>
     Let lbl := get_label_after_pc s1 in
     Let p := rencode_label labels (lfn s1, lbl) in
     Let vm := set_var true s1.(lvm) r (Vword p) in
     eval_jump d (lset_vm s1 vm)
+  | Lcall OnHWCallStack _ => Error ErrSemUndef
+  | Lret_hwcallstack => Error ErrSemUndef
   | Lret =>
     let vrsp := v_var (vid (lp_rsp P)) in
     Let sp := get_var true s1.(lvm) vrsp >>= to_pointer in

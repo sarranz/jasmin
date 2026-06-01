@@ -279,6 +279,7 @@ Section CHECK.
                     (E.gen_error true None (pp_s "the function kills some callee-saved registers")) in
         assert (all (λ x : var_i, if vtype x is aword _ then true else false ) (f_params fd))
             (E.gen_error true None (pp_s "the export function has non-word arguments"))
+    | RAhwstack _ => ok tt
     end.
 
   Definition check_prog := map_cfprog_name check_fd (p_funcs p).

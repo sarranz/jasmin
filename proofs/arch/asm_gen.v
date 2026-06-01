@@ -598,14 +598,17 @@ Fixpoint assemble_i_r (rip : var) (ii : instr_info) (ir : linstr_r) : cexec (seq
   | Lsyscall o =>
       ok [:: mk (SysCall o) ]
 
-  | Lcall None l =>
+  | Lcall OnStack l =>
       ok [:: mk (CALL l) ]
 
-  | Lcall (Some r) l =>
+  | Lcall (InReg r) l =>
     Let r :=
       if to_reg r is Some r then ok r
       else Error (E.verror true "Not a register" ii r) in
       ok [:: mk (JAL r l) ]
+
+  | Lcall OnHWCallStack l =>
+      ok [:: mk (CALL_HWCS l) ]
 
   | Lrepeat_loop cnt c =>
       Let cnt' :=
@@ -621,6 +624,9 @@ Fixpoint assemble_i_r (rip : var) (ii : instr_info) (ir : linstr_r) : cexec (seq
 
   | Lret =>
       ok [:: mk POPPC ]
+
+  | Lret_hwcallstack =>
+      ok [:: mk RET_HWCS ]
 
   end.
 

@@ -239,7 +239,7 @@ Proof.
   move=> hzerolp.
   rewrite /eval_instr.
   case: i => [ii []] //=.
-  + case=> [p|].
+  + case=> [|p|//]; last first.
     * rewrite (label_in_lprogP hzerolp).
       t_xrbindP=> r lbl /(get_label_after_pcP hzerolp) -> /= w' -> /= vm ->.
       exact: eval_jumpP.
@@ -416,7 +416,9 @@ Proof.
   + by move=> *; subst s' => /=; move: hget; rewrite /= hget1 => -[<-].
   + move=> > _ [[??]?] _; t_xrbindP => *; subst s' => /=.
     by move: hget; rewrite /= hget1 => -[<-].
-  + by move=> [x|] r; t_xrbindP => *; apply: (eval_jump_in_bound hget); eauto.
+  + move=> [|x|//] r; last first.
+    * by t_xrbindP => *; apply: (eval_jump_in_bound hget); eauto.
+    by t_xrbindP => *; apply: (eval_jump_in_bound hget); eauto.
   + by move=> *; apply: (eval_jump_in_bound hget); eauto.
   + by move=> *; subst s' => /=; move: hget; rewrite /= hget1 => -[<-].
   + by move=> *; subst s' => /=; move: hget; rewrite /= hget1 => -[<-].
