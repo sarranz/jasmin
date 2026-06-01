@@ -512,6 +512,8 @@ Definition _desc_rv_mnemonic : instr_desc_t :=
   | SRL | SRLI => desc_rv_binop (fun x y => wshr x (Z.land (wunsigned y) 31))
   | SRA | SRAI => desc_rv_binop (fun x y => wsar x (Z.land (wunsigned y) 31))
   | LUI => desc_rv_unop (fun x => wshl x 12)
+  (* TODO_OTBN: LW/SW must check addr = (grs1 + offset) mod 2^32 is a valid
+     4-byte aligned DMEM address; otherwise raise BAD_DATA_ADDR. *)
   | LW => desc_rv_unop id (* TODO_OTBN double check that it fails on unaligned *)
   | SW => _desc_rv_unop (Ea 0) (Ea 1) id (* TODO_OTBN double check that it fails on unaligned *)
   | LI => desc_rv_unop id

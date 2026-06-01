@@ -519,8 +519,6 @@ End LOWER_ASSIGN.
 
 Definition lowering_options := unit.
 
-Definition fresh_vars := unit.
-
 Let i_of_low_instr ii tag '(lvs, op, es) :=
   MkI ii (instr_of_copn_args tag (lvs, Oasm op, es)).
 
