@@ -98,6 +98,8 @@ compiler/otbn.v
 compiler/otbn_decl.v
 compiler/otbn_extra.v
 compiler/otbn_instr_decl.v
+compiler/otbn_lower_addressing.v
+compiler/otbn_lower_addressing_proof.v
 compiler/otbn_lowering.v
 compiler/otbn_lowering_proof.v
 compiler/otbn_params.v

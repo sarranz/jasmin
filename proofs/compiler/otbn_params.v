@@ -17,6 +17,7 @@ Require Import
   otbn_decl
   otbn_extra
   otbn_instr_decl
+  otbn_lower_addressing
   otbn_lowering
   otbn_params_core
 .
@@ -276,7 +277,7 @@ End AGPARAMS.
 Section LAPARAMS.
 
 Definition laparams : lower_addressing_params :=
-  {| lap_lower_address := fun _ p => ok p; |}.
+  {| lap_lower_address := lower_addressing_prog; |}.
 
 End LAPARAMS.
 

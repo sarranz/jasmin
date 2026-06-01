@@ -32,6 +32,7 @@ Require Import
   otbn_extra
   otbn_instr_decl
   otbn
+  otbn_lower_addressing_proof
   otbn_lowering
   otbn_lowering_proof.
 Require Export otbn_params.
@@ -147,7 +148,13 @@ Proof. split=> *; [exact: lower_callP | exact: it_lower_callP]. Qed.
 (* Lowering of complex addressing mode (identity for OTBN). *)
 
 Lemma otbn_hlaparams : h_lower_addressing_params (ap_lap otbn_params).
-Proof. Admitted.
+Proof.
+  split=> /=.
+  + exact: lower_addressing_prog_invariants.
+  + exact: lower_addressing_fd_invariants.
+  + exact: lower_addressing_progP.
+  by move=> > /it_lower_addressing_progP.
+Qed.
 
 (* ------------------------------------------------------------------------ *)
 (* Assembly generation hypotheses. *)
