@@ -28,8 +28,12 @@ module OTBN_core = struct
   let asm_e = Otbn_extra.otbn_extra atoI
   let aparams = Otbn_params.otbn_params atoI
 
+  (* OTBN has two flag groups (FG0, FG1), each with carry/MSB/LSB/zero flags.
+     The keys must match the flag identifiers (flag_to_string in otbn_decl.v),
+     which are group-qualified ("CF0", "CF1", ...). *)
   let known_implicits =
-    [ ("CF", "_cf_"); ("MF", "_mf_"); ("LF", "_lf_"); ("ZF", "_zf_") ]
+    [ ("CF0", "_cf0_"); ("MF0", "_mf0_"); ("LF0", "_lf0_"); ("ZF0", "_zf0_")
+    ; ("CF1", "_cf1_"); ("MF1", "_mf1_"); ("LF1", "_lf1_"); ("ZF1", "_zf1_") ]
 
   let alloc_stack_need_extra sz =
     not (Otbn_params_core.is_arith_small (Conv.cz_of_z sz))
