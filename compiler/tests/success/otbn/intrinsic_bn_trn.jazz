@@ -1,0 +1,19 @@
+export
+fn bn_trn(reg u256 x y) -> reg u256 {
+    reg u256 r;
+
+    // Mode 1 (TRN1): interleave the even-indexed lanes.
+    // Element widths: 16, 32, 64 and 128 bits.
+    r = #BN_TRN1_16H(x, y);
+    r = #BN_TRN1_8S(r, y);
+    r = #BN_TRN1_4D(r, y);
+    r = #BN_TRN1_2Q(r, y);
+
+    // Mode 2 (TRN2): interleave the odd-indexed lanes.
+    r = #BN_TRN2_16H(r, y);
+    r = #BN_TRN2_8S(r, y);
+    r = #BN_TRN2_4D(r, y);
+    r = #BN_TRN2_2Q(r, y);
+
+    return r;
+}

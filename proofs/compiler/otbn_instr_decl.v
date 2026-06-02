@@ -233,9 +233,6 @@ Definition bn_basic_mnemonic_to_string (mn : bn_basic_mnemonic) : string :=
   end.
 
 (* -------------------------------------------------------------------------- *)
-(* Vector instructions.
-   [BN.ADDV], [BN.SUBV] and [BN.SHV] interpret a wide register as a vector of
-   either 8 32-bit elements ([.8S]) or 16 16-bit elements ([.16H]). *)
 
 #[only(eqbOK)] derive
 Variant vec_size :=
@@ -248,7 +245,6 @@ Instance eqTC_vec_size : eqTypeC vec_size := { ceqP := vec_size_eqb_OK; }.
 
 Canonical vec_size_eqType := ceqT_eqType (ceqT := eqTC_vec_size).
 
-(* Lane width as a word size. *)
 Definition ve_of_vec_size (vs : vec_size) : wsize :=
   match vs with
   | V8S => U32
@@ -260,6 +256,46 @@ Definition vec_size_to_string (vs : vec_size) : string :=
   | V8S => ".8S"
   | V16H => ".16H"
   end.
+
+#[only(eqbOK)] derive
+Variant trn_size :=
+| T16H  (* [.16H]: 16 lanes of 16 bits.  *)
+| T8S   (* [.8S]:   8 lanes of 32 bits.  *)
+| T4D   (* [.4D]:   4 lanes of 64 bits.  *)
+| T2Q   (* [.2Q]:   2 lanes of 128 bits. *)
+.
+
+#[export]
+Instance eqTC_trn_size : eqTypeC trn_size := { ceqP := trn_size_eqb_OK; }.
+
+Canonical trn_size_eqType := ceqT_eqType (ceqT := eqTC_trn_size).
+
+Definition ve_of_trn_size (ts : trn_size) : wsize :=
+  match ts with
+  | T16H => U16
+  | T8S => U32
+  | T4D => U64
+  | T2Q => U128
+  end.
+
+Definition trn_size_to_string (ts : trn_size) : string :=
+  match ts with
+  | T16H => ".16H"
+  | T8S => ".8S"
+  | T4D => ".4D"
+  | T2Q => ".2Q"
+  end.
+
+#[only(eqbOK)] derive
+Variant trn_mode :=
+| TRNMeven  (* Mode 1 *)
+| TRNModd   (* Mode 2 *)
+.
+
+#[export]
+Instance eqTC_trn_mode : eqTypeC trn_mode := { ceqP := trn_mode_eqb_OK; }.
+
+Canonical trn_mode_eqType := ceqT_eqType (ceqT := eqTC_trn_mode).
 
 #[only(eqbOK)] derive
 Variant otbn_op : Type :=
@@ -286,6 +322,9 @@ Variant otbn_op : Type :=
 (* Vector shift. The [bn_register_shift] gives the direction; the shift amount
    is an immediate operand. *)
 | BN_SHV of vec_size & bn_register_shift
+
+(* Transpose. *)
+| BN_TRN of trn_size & trn_mode
 
 (* Quarter-word multiply and accumulate. *)
 (* TODO_OTBN we should parameterize these by the quarterword selectors, such
@@ -339,6 +378,8 @@ Definition otbn_op_to_string (op : otbn_op) : string :=
   | BN_SUBV vs true => ("BN.SUBVM" ++ vec_size_to_string vs)%string
   | BN_SHV vs RS_left => ("BN.SHV" ++ vec_size_to_string vs ++ ".SHL")%string
   | BN_SHV vs RS_right => ("BN.SHV" ++ vec_size_to_string vs ++ ".SHR")%string
+  | BN_TRN ts TRNMeven => ("BN.TRN1" ++ trn_size_to_string ts)%string
+  | BN_TRN ts TRNModd => ("BN.TRN2" ++ trn_size_to_string ts)%string
   | BN_MULQACC => "BN.MULQACC"
   | BN_MULQACC_Z => "BN.MULQACC.Z"
   | BN_MULQACC_WO _ => "BN.MULQACC.WO"
@@ -1027,18 +1068,64 @@ Definition desc_bn_shv
 
 Definition desc_BN_ADDV (vs : vec_size) (modular : bool) : instr_desc_t :=
   let ve := ve_of_vec_size vs in
-  if modular
-  then desc_bn_vec_binop_mod (BN_ADDV vs true) ve (fun q x y => addv_reduce q (x + y))
+  if modular then
+    desc_bn_vec_binop_mod
+      (BN_ADDV vs true) ve (fun q x y => addv_reduce q (x + y))
   else desc_bn_vec_binop (BN_ADDV vs false) ve Z.add.
 
 Definition desc_BN_SUBV (vs : vec_size) (modular : bool) : instr_desc_t :=
   let ve := ve_of_vec_size vs in
-  if modular
-  then desc_bn_vec_binop_mod (BN_SUBV vs true) ve (fun q x y => subv_reduce q (x - y))
+  if modular then
+    desc_bn_vec_binop_mod
+      (BN_SUBV vs true) ve (fun q x y => subv_reduce q (x - y))
   else desc_bn_vec_binop (BN_SUBV vs false) ve Z.sub.
 
-Definition desc_BN_SHV (vs : vec_size) (sh : bn_register_shift) : instr_desc_t :=
+Definition desc_BN_SHV
+  (vs : vec_size) (sh : bn_register_shift) : instr_desc_t :=
   desc_bn_shv (BN_SHV vs sh) (ve_of_vec_size vs) sh.
+
+(* [BN.TRN]: partial transpose. View the wide registers as vectors of [ve]-bit
+   lanes and interleave selected lanes of [a] (low) and [b] (high). [TRN1]
+   ([odd = false]) keeps the even-indexed lanes, [TRN2] ([odd = true]) the
+   odd-indexed ones. This mirrors the reference simulator ([insn.py]: BNTRN)
+   and the RTL ([acc_alu_bignum.sv]): each output lane pair is [{b_i, a_i}]
+   with [a]'s lane in the low half. *)
+Definition trn_lanes (ve : wsize) (m : trn_mode) (a b : u256) : seq (word ve) :=
+  let la := split_vec ve a in
+  let lb := split_vec ve b in
+  let d := wrepr ve 0 in
+  let o := (if m is TRNModd then 1 else 0)%nat in
+  flatten
+    [seq [:: nth d la (o + 2 * j)%nat; nth d lb (o + 2 * j)%nat]
+    | j <- iota 0 (size la)./2 ].
+
+Definition wtrn (ve : wsize) (m : trn_mode) (a b : u256) : u256 :=
+  make_vec U256 (trn_lanes ve m a b).
+
+Definition desc_bn_trn
+  (op : otbn_op) (ve : wsize) (m : trn_mode) : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := [:: lword256; lword256 ];
+    id_in := [:: EXa 1; EXa 2 ];
+    id_tout := [:: lword256 ];
+    id_out := [:: EXa 0 ];
+    id_semi := fun a b => ok (wtrn ve m a b);
+    id_args_kinds := ak_xreg_xreg_xreg;
+    id_nargs := 3;
+    id_str_jas := pp_s (otbn_op_to_string op);
+    id_pp_asm := pp_otbn_op op;
+    id_valid := true;
+    id_safe := [::];
+    id_eq_size := refl_equal;
+    id_check_dest := refl_equal;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+  |}.
+
+Definition desc_BN_TRN (ts : trn_size) (m : trn_mode) : instr_desc_t :=
+  desc_bn_trn (BN_TRN ts m) (ve_of_trn_size ts) m.
 
 End VECTOR_OP.
 
@@ -1452,6 +1539,7 @@ Definition desc_otbn_op (op : otbn_op) : instr_desc_t :=
   | BN_ADDV vs modular => desc_BN_ADDV vs modular
   | BN_SUBV vs modular => desc_BN_SUBV vs modular
   | BN_SHV vs sh => desc_BN_SHV vs sh
+  | BN_TRN ts m => desc_BN_TRN ts m
   | BN_MULQACC => desc_BN_MULQACC
   | BN_MULQACC_Z => desc_BN_MULQACC_Z
   | BN_MULQACC_WO fg => desc_BN_MULQACC_WO fg
@@ -1516,6 +1604,10 @@ Section PRIM_STRING.
         ; BN_SUBV V8S true;  BN_SUBV V16H true
         ; BN_SHV V8S RS_left;  BN_SHV V8S RS_right
         ; BN_SHV V16H RS_left; BN_SHV V16H RS_right
+        ; BN_TRN T16H TRNMeven; BN_TRN T8S TRNMeven
+        ; BN_TRN T4D TRNMeven;  BN_TRN T2Q TRNMeven
+        ; BN_TRN T16H TRNModd;  BN_TRN T8S TRNModd
+        ; BN_TRN T4D TRNModd;   BN_TRN T2Q TRNModd
       ].
 
   (* MULQACC intrinsic string does not change with flag group or writeback. *)
@@ -1814,6 +1906,47 @@ Section VALIDATION_SEM.
 
   Goal test2 (BN_SHV V16H RS_right) a16 (wrepr U8 2)
     (wrepr U256 0x200000010000000100193fff00000000%Z).
+  Proof. by []. Qed.
+
+  (* [BN.TRN]: partial transpose. The inputs have distinct 16-bit lanes
+     (0..15 and 16..31), so every element width and mode is exercised and the
+     interleaving is visible. The expected results were produced by the
+     reference simulator ([insn.py]: BNTRN). *)
+  Notation ta :=
+    (wrepr U256 0xf000e000d000c000b000a0009000800070006000500040003000200010000%Z).
+  Notation tb :=
+    (wrepr U256 0x1f001e001d001c001b001a0019001800170016001500140013001200110010%Z).
+
+  Goal test2 (BN_TRN T16H TRNMeven) ta tb
+    (wrepr U256 0x1e000e001c000c001a000a0018000800160006001400040012000200100000%Z).
+  Proof. by []. Qed.
+
+  Goal test2 (BN_TRN T8S TRNMeven) ta tb
+    (wrepr U256 0x1d001c000d000c001900180009000800150014000500040011001000010000%Z).
+  Proof. by []. Qed.
+
+  Goal test2 (BN_TRN T4D TRNMeven) ta tb
+    (wrepr U256 0x1b001a00190018000b000a0009000800130012001100100003000200010000%Z).
+  Proof. by []. Qed.
+
+  Goal test2 (BN_TRN T2Q TRNMeven) ta tb
+    (wrepr U256 0x17001600150014001300120011001000070006000500040003000200010000%Z).
+  Proof. by []. Qed.
+
+  Goal test2 (BN_TRN T16H TRNModd) ta tb
+    (wrepr U256 0x1f000f001d000d001b000b0019000900170007001500050013000300110001%Z).
+  Proof. by []. Qed.
+
+  Goal test2 (BN_TRN T8S TRNModd) ta tb
+    (wrepr U256 0x1f001e000f000e001b001a000b000a00170016000700060013001200030002%Z).
+  Proof. by []. Qed.
+
+  Goal test2 (BN_TRN T4D TRNModd) ta tb
+    (wrepr U256 0x1f001e001d001c000f000e000d000c00170016001500140007000600050004%Z).
+  Proof. by []. Qed.
+
+  Goal test2 (BN_TRN T2Q TRNModd) ta tb
+    (wrepr U256 0x1f001e001d001c001b001a00190018000f000e000d000c000b000a00090008%Z).
   Proof. by []. Qed.
 
 End VALIDATION_SEM.
