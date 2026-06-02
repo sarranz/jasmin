@@ -1,0 +1,16 @@
+export
+fn bn_subv(reg u256 x y) -> reg u256 {
+    reg u256 mod z r;
+
+    // Non-modular variants: 8x32-bit and 16x16-bit lanes.
+    r = #BN_SUBV_8S(x, y);
+    r = #BN_SUBV_16H(r, y);
+
+    // Modular variants add the lowest element of MOD to a negative lane.
+    ?{}, z = #set0_256();
+    mod = #BN_MODW(z);
+    r = #BN_SUBVM_8S(r, y, mod);
+    r = #BN_SUBVM_16H(r, y, mod);
+
+    return r;
+}

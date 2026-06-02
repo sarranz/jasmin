@@ -240,6 +240,7 @@ Section LOWER_OPN.
 
   (* TODO_OTBN: use the checker from the instruction description to fail early
      for unsafe programs. *)
+  (* TODO_OTBN: the other operations should be skipped, not give an error *)
   Definition lower_base_op
     (lvs : seq lval) (op : otbn_op) (es : seq pexpr) : low_instr :=
     match op with
@@ -483,8 +484,7 @@ Section LOWER_ASSIGN.
 
   (* Lower an expression of the form [e0 <+> e1]. *)
   Definition lower_Papp2 (ws : wsize) (op : sop2) (e0 e1 : pexpr) : low_instr :=
-    if (ws <= reg_size)%CMP
-    then lower_Papp2_small ws op e0 e1
+    if (ws <= reg_size)%CMP then lower_Papp2_small ws op e0 e1
     else lower_Papp2_large ws op e0 e1.
 
   Definition lower_pexpr_aux (ws : wsize) (e : pexpr) : low_instr :=
@@ -503,8 +503,7 @@ Section LOWER_ASSIGN.
     li_simple (BN_SEL FG0) [:: e0; e1; econd ].
 
   Definition lower_pexpr (ws : wsize) (e : pexpr) : low_cmd :=
-    if e is Pif (aword ws') econd e0 e1
-    then
+    if e is Pif (aword ws') econd e0 e1 then
       Let _ := assert (ws == ws') (E.invalid_wsize ii) in
       Let: (pre, econd') := lower_condition ii econd in
       with_pre pre (lower_Pif ws econd' e0 e1)
@@ -541,17 +540,15 @@ Section LOWER_ASSIGN.
     else Let _ := chk_xreg_ws ii ws in li_simple BN_SD [:: e ].
 
   Definition chk_lower_store (ws : wsize) (lv : lval) : cexec unit :=
-    if get_lval_memory_access lv is Some (_, wdisp)
-    then
-      if (ws <= reg_size)%CMP
-      then chk_address_displacement ii wdisp
+    if get_lval_memory_access lv is Some (_, wdisp) then
+      if (ws <= reg_size)%CMP then chk_address_displacement ii wdisp
       else chk_bn_address_displacement ii wdisp
     else ok tt.
 
   Definition lower_cassgn_word (lv : lval) (ws : wsize) (e : pexpr) : low_cmd :=
     let%lr (pre, lvs, op, es) :=
-      if is_lval_in_memory lv
-      then Let _ := chk_lower_store ws lv in no_pre (lower_store ws e)
+      if is_lval_in_memory lv then
+        Let _ := chk_lower_store ws lv in no_pre (lower_store ws e)
       else lower_pexpr ws e
     in
     issue (pre, lvs ++ [:: lv ], op, es).

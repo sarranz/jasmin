@@ -232,6 +232,35 @@ Definition bn_basic_mnemonic_to_string (mn : bn_basic_mnemonic) : string :=
   | BN_CMPB => "BN.CMPB"
   end.
 
+(* -------------------------------------------------------------------------- *)
+(* Vector instructions.
+   [BN.ADDV], [BN.SUBV] and [BN.SHV] interpret a wide register as a vector of
+   either 8 32-bit elements ([.8S]) or 16 16-bit elements ([.16H]). *)
+
+#[only(eqbOK)] derive
+Variant vec_size :=
+| V8S   (* [.8S]:  8 lanes of 32 bits. *)
+| V16H  (* [.16H]: 16 lanes of 16 bits. *)
+.
+
+#[export]
+Instance eqTC_vec_size : eqTypeC vec_size := { ceqP := vec_size_eqb_OK; }.
+
+Canonical vec_size_eqType := ceqT_eqType (ceqT := eqTC_vec_size).
+
+(* Lane width as a word size. *)
+Definition ve_of_vec_size (vs : vec_size) : wsize :=
+  match vs with
+  | V8S => U32
+  | V16H => U16
+  end.
+
+Definition vec_size_to_string (vs : vec_size) : string :=
+  match vs with
+  | V8S => ".8S"
+  | V16H => ".16H"
+  end.
+
 #[only(eqbOK)] derive
 Variant otbn_op : Type :=
 | RV32 of rv_mnemonic
@@ -247,6 +276,16 @@ Variant otbn_op : Type :=
 
 | BN_ADDM  (* Pseudo-modulo add. *)
 | BN_SUBM  (* Pseudo-modulo subtraction. *)
+
+(* Vector add and subtract.
+   The boolean selects the pseudo-modulo variants ([m.8S]/[m.16H]), which
+   reduce each lane by the lowest element of the [MOD] register. *)
+| BN_ADDV of vec_size & bool
+| BN_SUBV of vec_size & bool
+
+(* Vector shift. The [bn_register_shift] gives the direction; the shift amount
+   is an immediate operand. *)
+| BN_SHV of vec_size & bn_register_shift
 
 (* Quarter-word multiply and accumulate. *)
 (* TODO_OTBN we should parameterize these by the quarterword selectors, such
@@ -294,6 +333,12 @@ Definition otbn_op_to_string (op : otbn_op) : string :=
   | BN_SEL _ => "BN.SEL"
   | BN_ADDM => "BN.ADDM"
   | BN_SUBM => "BN.SUBM"
+  | BN_ADDV vs false => ("BN.ADDV" ++ vec_size_to_string vs)%string
+  | BN_ADDV vs true => ("BN.ADDVM" ++ vec_size_to_string vs)%string
+  | BN_SUBV vs false => ("BN.SUBV" ++ vec_size_to_string vs)%string
+  | BN_SUBV vs true => ("BN.SUBVM" ++ vec_size_to_string vs)%string
+  | BN_SHV vs RS_left => ("BN.SHV" ++ vec_size_to_string vs ++ ".SHL")%string
+  | BN_SHV vs RS_right => ("BN.SHV" ++ vec_size_to_string vs ++ ".SHR")%string
   | BN_MULQACC => "BN.MULQACC"
   | BN_MULQACC_Z => "BN.MULQACC.Z"
   | BN_MULQACC_WO _ => "BN.MULQACC.WO"
@@ -320,6 +365,7 @@ Section I_ARGS_KINDS.
   Definition ak_bn_shift := CAimm CAimmC_otbn_bn_shift U8.
 
   Let xreg := [:: CAxmm ].
+  Let imm_u5 := [:: CAimm (CAimmC_otbn_nbits Unsigned 5) U8 ].
   Let imm_u8 := [:: ak_u8 ].
   Let imm_u10 := [:: ak_u10 ].
   Let imm_s12 := [:: ak_s12 ].
@@ -340,6 +386,9 @@ Section I_ARGS_KINDS.
 
   Definition ak_xreg_xreg_imm10 : i_args_kinds :=
     [:: [:: xreg; xreg; imm_u10 ] ].
+
+  Definition ak_xreg_xreg_imm5 : i_args_kinds :=
+    [:: [:: xreg; xreg; imm_u5 ] ].
 
   Definition ak_xreg_xreg_xreg_bool : i_args_kinds :=
     [:: [:: xreg; xreg; xreg; [:: CAcond ] ] ].
@@ -378,6 +427,9 @@ Section PP_ASM_OP.
     | BN_MODW => mk "bn.wsrw" (wsr_code_MOD :: args)
     | BN_ACCR => mk "bn.wsrr" (rcons args wsr_code_ACC)
     | BN_ACCW => mk "bn.wsrw" (wsr_code_ACC :: args)
+    (* The shift direction is rendered as a [<<]/[>>] operand (see [pp_otbn.ml]),
+       so the assembly mnemonic only carries the element size. *)
+    | BN_SHV vs _ => mk ("BN.SHV" ++ vec_size_to_string vs)%string args
     | _ => mk (otbn_op_to_string op) args
     end.
 
@@ -877,6 +929,119 @@ Definition desc_BN_SUBM : instr_desc_t :=
 
 End MODULAR_OP.
 
+(* -------------------------------------------------------------------------- *)
+(* Vector instructions [BN.ADDV], [BN.SUBV] and [BN.SHV].
+   These operate lanewise on a wide register seen as a vector of [ve]-bit
+   elements (see [vec_size]). They never read or write flags. *)
+
+Section VECTOR_OP.
+
+(* Per-lane modulo reduction of a lane result computed over [Z], before
+   truncation to the lane width. These mirror [cmod_single_addv] and
+   [cmod_single_subv] in the reference simulator. *)
+Definition addv_reduce (q n : Z) : Z := if q <=? n then n - q else n.
+Definition subv_reduce (q n : Z) : Z := if n <? 0 then n + q else n.
+
+(* The reduction modulus is the lowest [ve]-bit element of [MOD]. *)
+Definition vec_modulus (ve : wsize) (m : u256) : Z := wunsigned (zero_extend ve m).
+
+(* Lanewise binary operation: split the operands into [ve]-bit lanes, apply [f]
+   over [Z] to each pair, and truncate to the lane width. *)
+Definition vec_binop (ve : wsize) (f : Z -> Z -> Z) (a b : u256) : u256 :=
+  lift2_vec ve (fun ai bi => wrepr ve (f (wunsigned ai) (wunsigned bi))) U256 a b.
+
+(* Lanewise logical shift by [wsham] bits in direction [sh]. *)
+Definition vec_shift
+  (ve : wsize) (sh : bn_register_shift) (a : u256) (wsham : u8) : u256 :=
+  lift1_vec ve (fun ai => word_shift_of_reg_shift sh ai (wunsigned wsham)) U256 a.
+
+(* [BN.ADDV]/[BN.SUBV], non-modular variants: [wrd] = [a] op [b] lanewise. *)
+Definition desc_bn_vec_binop
+  (op : otbn_op) (ve : wsize) (f : Z -> Z -> Z) : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := [:: lword256; lword256 ];
+    id_in := [:: EXa 1; EXa 2 ];
+    id_tout := [:: lword256 ];
+    id_out := [:: EXa 0 ];
+    id_semi := fun a b => ok (vec_binop ve f a b);
+    id_args_kinds := ak_xreg_xreg_xreg;
+    id_nargs := 3;
+    id_str_jas := pp_s (otbn_op_to_string op);
+    id_pp_asm := pp_otbn_op op;
+    id_valid := true;
+    id_safe := [::];
+    id_eq_size := refl_equal;
+    id_check_dest := refl_equal;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+  |}.
+
+(* [BN.ADDV]/[BN.SUBV], modular variants: each lane is reduced by the lowest
+   element of [MOD] (read implicitly). [g q x y] is the reduced lane result. *)
+Definition desc_bn_vec_binop_mod
+  (op : otbn_op) (ve : wsize) (g : Z -> Z -> Z -> Z) : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := [:: lword256; lword256; lword256 ];
+    id_in := [:: EXa 1; EXa 2; Xreg MOD ];
+    id_tout := [:: lword256 ];
+    id_out := [:: EXa 0 ];
+    id_semi := fun a b m => ok (vec_binop ve (g (vec_modulus ve m)) a b);
+    id_args_kinds := ak_xreg_xreg_xreg;
+    id_nargs := 3;
+    id_str_jas := pp_s (otbn_op_to_string op);
+    id_pp_asm := pp_otbn_op op;
+    id_valid := true;
+    id_safe := [::];
+    id_eq_size := refl_equal;
+    id_check_dest := refl_equal;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+  |}.
+
+(* [BN.SHV]: lanewise shift by an immediate. *)
+Definition desc_bn_shv
+  (op : otbn_op) (ve : wsize) (sh : bn_register_shift) : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := [:: lword256; lword8 ];
+    id_in := [:: EXa 1; Ea 2 ];
+    id_tout := [:: lword256 ];
+    id_out := [:: EXa 0 ];
+    id_semi := fun a wsham => ok (vec_shift ve sh a wsham);
+    id_args_kinds := ak_xreg_xreg_imm5;
+    id_nargs := 3;
+    id_str_jas := pp_s (otbn_op_to_string op);
+    id_pp_asm := pp_otbn_op op;
+    id_valid := true;
+    id_safe := [::];
+    id_eq_size := refl_equal;
+    id_check_dest := refl_equal;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+  |}.
+
+Definition desc_BN_ADDV (vs : vec_size) (modular : bool) : instr_desc_t :=
+  let ve := ve_of_vec_size vs in
+  if modular
+  then desc_bn_vec_binop_mod (BN_ADDV vs true) ve (fun q x y => addv_reduce q (x + y))
+  else desc_bn_vec_binop (BN_ADDV vs false) ve Z.add.
+
+Definition desc_BN_SUBV (vs : vec_size) (modular : bool) : instr_desc_t :=
+  let ve := ve_of_vec_size vs in
+  if modular
+  then desc_bn_vec_binop_mod (BN_SUBV vs true) ve (fun q x y => subv_reduce q (x - y))
+  else desc_bn_vec_binop (BN_SUBV vs false) ve Z.sub.
+
+Definition desc_BN_SHV (vs : vec_size) (sh : bn_register_shift) : instr_desc_t :=
+  desc_bn_shv (BN_SHV vs sh) (ve_of_vec_size vs) sh.
+
+End VECTOR_OP.
+
 Definition semi_binopI_cmlz
   (semi : u256 -> u256 -> u256)
   (semiZ : Z -> Z -> Z) :
@@ -1284,6 +1449,9 @@ Definition desc_otbn_op (op : otbn_op) : instr_desc_t :=
   | BN_SEL fg => desc_BN_SEL fg
   | BN_ADDM => desc_BN_ADDM
   | BN_SUBM => desc_BN_SUBM
+  | BN_ADDV vs modular => desc_BN_ADDV vs modular
+  | BN_SUBV vs modular => desc_BN_SUBV vs modular
+  | BN_SHV vs sh => desc_BN_SHV vs sh
   | BN_MULQACC => desc_BN_MULQACC
   | BN_MULQACC_Z => desc_BN_MULQACC_Z
   | BN_MULQACC_WO fg => desc_BN_MULQACC_WO fg
@@ -1336,6 +1504,20 @@ Section PRIM_STRING.
         ; BN_LD; BN_SD
       ].
 
+  (* The element size, modular flag and shift direction are all encoded in the
+     mnemonic, so these take no suffix. *)
+  Let bn_vec_prim_string :=
+    map_prim_string
+      otbn_op_to_string
+      prim_otbn_none
+      [:: BN_ADDV V8S false; BN_ADDV V16H false
+        ; BN_ADDV V8S true;  BN_ADDV V16H true
+        ; BN_SUBV V8S false; BN_SUBV V16H false
+        ; BN_SUBV V8S true;  BN_SUBV V16H true
+        ; BN_SHV V8S RS_left;  BN_SHV V8S RS_right
+        ; BN_SHV V16H RS_left; BN_SHV V16H RS_right
+      ].
+
   (* MULQACC intrinsic string does not change with flag group or writeback. *)
   Let bn_mulqacc_prim_string :=
       let fg := FG0 in
@@ -1362,6 +1544,7 @@ Section PRIM_STRING.
        ++ bn_basic_prim_string
        ++ bn_fg_prim_string
        ++ bn_no_opt_prim_string
+       ++ bn_vec_prim_string
        ++ bn_mulqacc_prim_string).
 
 End PRIM_STRING.
@@ -1400,7 +1583,7 @@ Section VALIDATION_PRIM.
     forall op,
       let: s := replace_dot (otbn_op_to_string op) in
       xorb (s \in hidden) (s \in strings).
-  by move=> [] // [] //. Qed.
+  by move=> [] // [] // [] //. Qed.
 
 End VALIDATION_PRIM.
 
@@ -1570,6 +1753,67 @@ Section VALIDATION_SEM.
     (wrepr U256 (4 * 2 ^ 64)%Z) (wrepr U8 1) (wrepr U8 64)
     (Some true) (Some false) (Some false)
     (wrepr U256 (Z.shiftl 12 64)%Z) (wrepr U256 0).
+  Proof. by []. Qed.
+
+  (* Vector instructions. The expected results below were produced by the
+     reference simulator ([insn.py]: BNADDV, BNSUBV, BNSHV). *)
+  Notation a32 :=
+    (wrepr U256 0x8000000000000007000000000000000500000064ffffffff0000000200000001%Z).
+  Notation b32 :=
+    (wrepr U256 0x80000000000000030000000000000005000000c800000001000000140000000a%Z).
+  Notation a16 :=
+    (wrepr U256 0x3000300030003000300030003000380000007000000050064ffff00020001%Z).
+  Notation b16 :=
+    (wrepr U256 0x10001000100010001000100010001800000030000000500c800010014000a%Z).
+  Notation m :=
+    (wrepr U256 0x61%Z).
+
+  Goal test2 (BN_ADDV V8S false) a32 b32
+    (wrepr U256 0xa000000000000000a0000012c00000000000000160000000b%Z).
+  Proof. by []. Qed.
+
+  Goal test3 (BN_ADDV V8S true) a32 b32 m
+    (wrepr U256 0xffffff9f0000000a000000000000000a000000cbffffff9f000000160000000b%Z).
+  Proof. by []. Qed.
+
+  Goal test2 (BN_ADDV V16H false) a16 b16
+    (wrepr U256 0x400040004000400040004000400040000000a0000000a012c00000016000b%Z).
+  Proof. by []. Qed.
+
+  Goal test3 (BN_ADDV V16H true) a16 b16 m
+    (wrepr U256 0x40004000400040004000400040004ff9f000a0000000a00cbff9f0016000b%Z).
+  Proof. by []. Qed.
+
+  Goal test2 (BN_SUBV V8S false) a32 b32
+    (wrepr U256 0x40000000000000000ffffff9cfffffffeffffffeefffffff7%Z).
+  Proof. by []. Qed.
+
+  Goal test3 (BN_SUBV V8S true) a32 b32 m
+    (wrepr U256 0x40000000000000000fffffffdfffffffe0000004f00000058%Z).
+  Proof. by []. Qed.
+
+  Goal test2 (BN_SUBV V16H false) a16 b16
+    (wrepr U256 0x200020002000200020002000200020000000400000000ff9cfffeffeefff7%Z).
+  Proof. by []. Qed.
+
+  Goal test3 (BN_SUBV V16H true) a16 b16 m
+    (wrepr U256 0x200020002000200020002000200020000000400000000fffdfffe004f0058%Z).
+  Proof. by []. Qed.
+
+  Goal test2 (BN_SHV V8S RS_left) a32 (wrepr U8 3)
+    (wrepr U256 0x38000000000000002800000320fffffff80000001000000008%Z).
+  Proof. by []. Qed.
+
+  Goal test2 (BN_SHV V8S RS_right) a32 (wrepr U8 5)
+    (wrepr U256 0x40000000000000000000000000000000000000307ffffff0000000000000000%Z).
+  Proof. by []. Qed.
+
+  Goal test2 (BN_SHV V16H RS_left) a16 (wrepr U8 4)
+    (wrepr U256 0x30003000300030003000300030003000000070000000500640fff000200010%Z).
+  Proof. by []. Qed.
+
+  Goal test2 (BN_SHV V16H RS_right) a16 (wrepr U8 2)
+    (wrepr U256 0x200000010000000100193fff00000000%Z).
   Proof. by []. Qed.
 
 End VALIDATION_SEM.

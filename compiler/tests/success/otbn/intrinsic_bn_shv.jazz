@@ -1,0 +1,16 @@
+export
+fn bn_shv(reg u256 x) -> reg u256 {
+    reg u256 r;
+
+    // Lanewise logical shifts, left and right, on 32-bit and 16-bit lanes.
+    r = #BN_SHV_8S_SHL(x, 3);
+    r = #BN_SHV_8S_SHR(r, 5);
+    r = #BN_SHV_16H_SHL(r, 4);
+    r = #BN_SHV_16H_SHR(r, 2);
+
+    // Boundary shift amounts (uimm5 range is 0..31).
+    r = #BN_SHV_8S_SHL(r, 0);
+    r = #BN_SHV_16H_SHR(r, 31);
+
+    return r;
+}

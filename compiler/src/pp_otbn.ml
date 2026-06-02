@@ -178,6 +178,7 @@ let pp_args_shift op args =
   match op with
   | Otbn_instr_decl.BN_basic_shift (_, _, sh) -> pp_shift sh
   | BN_RSHI -> pp_shift Otbn_options.RS_right
+  | BN_SHV (_, sh) -> pp_shift sh
   | _ -> args
 
 let string_of_bn_flag_group fg =

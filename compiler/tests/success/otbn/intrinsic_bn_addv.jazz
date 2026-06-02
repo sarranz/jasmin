@@ -1,0 +1,16 @@
+export
+fn bn_addv(reg u256 x y) -> reg u256 {
+    reg u256 mod z r;
+
+    // Non-modular variants: 8x32-bit and 16x16-bit lanes.
+    r = #BN_ADDV_8S(x, y);
+    r = #BN_ADDV_16H(r, y);
+
+    // Modular variants reduce each lane by the lowest element of MOD.
+    ?{}, z = #set0_256();
+    mod = #BN_MODW(z);
+    r = #BN_ADDVM_8S(r, y, mod);
+    r = #BN_ADDVM_16H(r, y, mod);
+
+    return r;
+}
