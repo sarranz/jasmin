@@ -240,8 +240,12 @@ module OTBNTarget :
 
   let headers = []
 
+  (* OTBN has a Harvard architecture: instructions live in IMEM and data in
+     DMEM. Globals are accessed through DMEM loads/stores (bn.ld/bn.sd, lw/sw),
+     so the data segment must go into [.data] (which the ACC linker script maps
+     to DMEM) rather than the default [.text] section (mapped to IMEM). *)
   let data_segment_header =
-    [ Instr (".p2align", [ "5" ]); Label global_datas_label ]
+    [ Header (".data", []); Instr (".p2align", [ "5" ]); Label global_datas_label ]
 
   let function_directives = []
 

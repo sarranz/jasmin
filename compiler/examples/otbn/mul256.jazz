@@ -1,0 +1,79 @@
+fn mul256(reg u256 x y) -> reg u256, reg u256 {
+    reg u256 acc rlo rhi;
+    reg bool mf0 lf0 zf0;
+
+    ?{mf0, lf0, zf0}, rlo = #set0_256();
+
+    acc = #BN_MULQACC_Z(x, 0, y, 0, 0);                        /* a0b0 */
+    acc = #BN_MULQACC(x, 0, y, 1, acc, 64);                    /* a0b1 */
+    ?{mf0, lf0, zf0, acc}, rlo =                               /* a1b0 */
+        #BN_MULQACC_SO_L(mf0, lf0, zf0, rlo, x, 1, y, 0, acc, 64);
+    acc = #BN_MULQACC(x, 0, y, 2, acc, 0);                     /* a0b2 */
+    acc = #BN_MULQACC(x, 1, y, 1, acc, 0);                     /* a1b1 */
+    acc = #BN_MULQACC(x, 2, y, 0, acc, 0);                     /* a2b0 */
+    acc = #BN_MULQACC(x, 0, y, 3, acc, 64);                    /* a0b3 */
+    acc = #BN_MULQACC(x, 1, y, 2, acc, 64);                    /* a1b2 */
+    acc = #BN_MULQACC(x, 2, y, 1, acc, 64);                    /* a2b1 */
+                                                               /* a3b0 */
+    ?{acc}, rlo = #BN_MULQACC_SO_U(mf0, lf0, zf0, rlo, x, 3, y, 0, acc, 64);
+    acc = #BN_MULQACC(x, 1, y, 3, acc, 0);                     /* a1b3 */
+    acc = #BN_MULQACC(x, 2, y, 2, acc, 0);                     /* a2b2 */
+    acc = #BN_MULQACC(x, 3, y, 1, acc, 0);                     /* a3b1 */
+    acc = #BN_MULQACC(x, 2, y, 3, acc, 64);                    /* a2b3 */
+    acc = #BN_MULQACC(x, 3, y, 2, acc, 64);                    /* a3b2 */
+    ?{}, rhi = #BN_MULQACC_WO(x, 3, y, 3, acc, 128);           /* a3b3 */
+
+    return rlo, rhi;
+}
+
+inline
+fn _main(reg u256 x y) -> reg u256, reg u256 {
+    reg u256 rlo rhi;
+    x = x;
+    rlo, rhi = mul256(x, y);
+    return rlo, rhi;
+}
+
+// Load the two 256-bit operands from DMEM at [inp], compute the 512-bit
+// product, and write [rlo, rhi] back to DMEM at [outp].
+export
+fn main(reg u32 inp outp) {
+    reg u256 x y;
+    x = [#aligned :u256 inp];        // x = inp[0..256)
+    y = [#aligned :u256 inp + 32];   // y = inp[256..512)
+
+    reg u256 rlo rhi;
+    rlo, rhi = _main(x, y);
+
+    [#aligned :u256 outp]      = rlo; // outp[0..256)   = rlo
+    [#aligned :u256 outp + 32] = rhi; // outp[256..512) = rhi
+}
+
+
+// -----------------------------------------------------------------------------
+// Mock
+
+// These bytes, in the .data section, will be overwritten by the main core:
+// that's how it passes arguments to OTBN.
+u64[4 * 2] data =
+    {
+        0x1, 0x0, 0x0, 0x0, // x
+        0x2, 0x0, 0x0, 0x0  // y
+    };
+
+export
+fn mock() -> reg u256, reg u256 {
+    reg ptr u256[2] p;
+    p = data;
+
+    reg u256 x y;
+    x = p[0]; // direct load of x from DMEM
+    y = p[1]; // direct load of y from DMEM
+
+    reg u256 rlo rhi;
+    rlo, rhi = _main(x, y);
+
+    return rlo, rhi;
+}
+
+//exec mock()
