@@ -100,7 +100,7 @@ Section SAPARAMS.
     Copn [:: Lvar x ] AT_none (Ootbn (RV32 LI)) [:: cast_const imm ].
 
   Definition swap (t : assgn_tag) (x y z w : var_i) : instr_r :=
-    TODO_OTBN "swap not implemented".
+    Copn [:: Lvar x; Lvar y ] t (Oasm (ExtOp (SWAP reg_size))) [:: Plvar z; Plvar w ].
 
   Definition saparams : stack_alloc_params :=
     {|

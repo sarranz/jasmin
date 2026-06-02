@@ -281,6 +281,19 @@ Section LOWER_OPN.
     let op := carry_op is_add has_carry in
     li_issue lvs' (BN_basic op FG1) es'.
 
+  (* A register swap becomes the [SWAP] extra op, assembled (in [otbn_extra]) as
+     three [XOR]s. A wide swap's three [BN_XOR]s also write the M/L/Z flags,
+     which are declared as implicit FG1 outputs of the wide swap op and discarded
+     here via [lnone_mlz]. Array swaps are handled earlier by stack allocation
+     ([sap_swap]). *)
+  Definition lower_swap
+    (ty : atype) (lvs : seq lval) (es : seq pexpr) : low_instr :=
+    if ty is aword sz then
+      if (sz <= reg_size)%CMP then li_xissue lvs (SWAP sz) es
+      else if (sz == xreg_size)%CMP then li_xissue (lnone_mlz ++ lvs) (SWAP sz) es
+      else Error (E.not_implemented ii)
+    else skip.
+
   Definition lower_pseudo_operator
     (lvs : seq lval) (op : pseudo_operator) (es : seq pexpr) : low_instr :=
     let%lr (lvs', op', es') :=
@@ -288,6 +301,7 @@ Section LOWER_OPN.
       | Oaddcarry _ => lower_carry_op true lvs es
       | Osubcarry _ => lower_carry_op false lvs es
       | Omulu _ => Error (E.cant_lower_mulu ii)
+      | Oswap ty => lower_swap ty lvs es
       | _ => skip
       end
     in

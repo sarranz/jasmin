@@ -2104,7 +2104,9 @@ let rec tt_instr arch_info (env : 'asm Env.env) ((pannot,pi) : S.pinstr) : 'asm 
                       (tyerror ~loc:(L.loc ey) (TypeMismatch (yty, xty))) in
            let () = match ty with
              | P.ETarr _ -> ()
-             | P.ETword(_, ws) when ws <= U64 -> ()
+             (* Any word size is accepted here; each backend's lowering rejects
+                the sizes it does not support (e.g. OTBN allows u32 and u256). *)
+             | P.ETword _ -> ()
              | _ ->
                 let w = match ty with P.ETword(w, _ws) -> w | _ -> None in
                 let ty = match P.gty_of_gety ty with P.Bty ty -> ty | _ -> assert false in

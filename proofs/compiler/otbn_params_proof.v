@@ -182,7 +182,7 @@ Definition otbn_hagparams : h_asm_gen_params (ap_agp otbn_params) :=
 End ASM_GEN.
 
 (* ------------------------------------------------------------------------ *)
-(* Speculative execution. *)
+(* SLH. *)
 
 Lemma otbn_hshp : slh_lowering_proof.h_sh_params (ap_shp otbn_params).
 Proof. by constructor; move=> ???? []. Qed.
@@ -198,9 +198,9 @@ Proof. Admitted.
 (* Shared hypotheses. *)
 
 Lemma otbn_is_move_opP op vx v :
-  ap_is_move_op otbn_params op
-  -> exec_sopn (Oasm op) [:: vx ] = ok v
-  -> List.Forall2 value_uincl v [:: vx ].
+  ap_is_move_op otbn_params op ->
+  exec_sopn (Oasm op) [:: vx ] = ok v ->
+  List.Forall2 value_uincl v [:: vx ].
 Proof. Admitted.
 
 (* ------------------------------------------------------------------------ *)

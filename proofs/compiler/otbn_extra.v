@@ -23,14 +23,33 @@ Require arm_extra.
 
 Module E.
 
+  Import compiler_util.
+
   Definition pass_name : string := "assembly generation".
 
   Definition internal_error (msg : string) (ii : instr_info) : pp_error_loc :=
     (pp_internal_error_s_at pass_name ii msg).
 
+  Definition internal_error_pp (pp : pp_error) (ii : instr_info) : pp_error_loc :=
+    pp_at_ii ii (pp_internal_error pass_name pp).
+
   Definition invalid_lexprs := internal_error "invalid destination".
   Definition invalid_rexprs := internal_error "invalid arguments".
   Definition invalid_args := internal_error "invalid destination or arguments".
+
+  (* [assemble_swap] errors. *)
+  Definition bad_swap_lexprs := internal_error "bad swap: invalid destinations".
+  Definition bad_swap_rexprs := internal_error "bad swap: invalid sources".
+  Definition bad_swap_size (ws : wsize) (ii : instr_info) : pp_error_loc :=
+    internal_error_pp
+      (pp_box [:: pp_s "bad swap: expected size"; pp_s (string_of_wsize ws) ]) ii.
+  Definition bad_swap_dst_arg :=
+    internal_error
+      "bad swap arguments: first destination should be different from last argument".
+  Definition bad_swap_dsts :=
+    internal_error "bad swap arguments: destination registers should be different".
+  Definition bad_swap_ty :=
+    internal_error "bad swap: operands must be a register or a wide register".
 
 End E.
 
@@ -53,6 +72,7 @@ Variant extra_op :=
 | set0 of wsize
 | MOV  (* [ADDI x, y, 0]. *)
 | SUBI (* [ADDI x, y, -imm]. *)
+| SWAP of wsize (* Three [XOR]s. *)
 .
 
 HB.instance Definition _ := hasDecEq.Build extra_op extra_op_eqb_OK.
@@ -65,6 +85,7 @@ Definition string_of_extra_op (eo : extra_op) : string :=
   | set0 _ => "set0"
   | MOV => "MOV"
   | SUBI => "SUBI"
+  | SWAP _ => "swap"
   end.
 
 Definition desc_set0_small : instruction_desc :=
@@ -101,11 +122,21 @@ Definition desc_SUBI : instruction_desc :=
     (fun x y => x - y)%R
     true.
 
+Definition desc_swap_large : instruction_desc :=
+  mk_instr_desc_safe
+    (pp_s (string_of_extra_op (SWAP U256)))
+    [:: aword U256; aword U256 ] [:: E 0; E 1 ]
+    [:: abool; abool; abool; aword U256; aword U256 ]
+    [:: F MF1; F LF1; F ZF1; E 0; E 1 ]
+    (fun z w => (:: MF_of_word w, LF_of_word w, ZF_of_word w, w & z))
+    true.
+
 Definition get_instr_desc (eo : extra_op) : instruction_desc :=
   match eo with
   | set0 ws => if (ws <= reg_size)%CMP then desc_set0_small else desc_set0_large
   | MOV => desc_MOV
   | SUBI => desc_SUBI
+  | SWAP ws => if (ws <= reg_size)%CMP then Oswap_instr (aword ws) else desc_swap_large
   end.
 
 Definition prim_string : seq (string * prim_constructor extra_op) :=
@@ -127,52 +158,97 @@ Instance extra_op_decl : asmOp extra_op | 1 :=
 
 Section ASSEMBLE.
 
-  Context (ii : instr_info).
+Context (ii : instr_info).
 
-  Definition assemble_set0
-    (ws : wsize)
-    (les : seq lexpr)
-    (res : seq rexpr) :
-    cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
-    let '(op, v) :=
-      if (ws <= reg_size)%CMP then (RV32 XOR, to_var X03)
-      else (BN_basic BN_XOR FG0, to_var W01)
-    in
-    let x := rvar (mk_var_i v) in
-    ok [:: ((None, op), les, [:: x; x ]) ].
+Definition assemble_set0
+  (ws : wsize)
+  (les : seq lexpr)
+  (res : seq rexpr) :
+  cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
+  let '(op, v) :=
+    if (ws <= reg_size)%CMP then (RV32 XOR, to_var X03)
+    else (BN_basic BN_XOR FG0, to_var W01)
+  in
+  let x := rvar (mk_var_i v) in
+  ok [:: ((None, op), les, [:: x; x ]) ].
 
-  Let uncons_LLvar := arm_extra.uncons_LLvar ii.
-  Let uncons_rvar := arm_extra.uncons_rvar ii.
-  Let uncons_wconst := arm_extra.uncons_wconst ii.
+Let uncons_LLvar := arm_extra.uncons_LLvar ii.
+Let uncons_rvar := arm_extra.uncons_rvar ii.
+Let uncons_wconst := arm_extra.uncons_wconst ii.
 
-  Definition assemble_MOV
-    (les : seq lexpr)
-    (res : seq rexpr) :
-    cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
-    Let: (x, _) := uncons_LLvar les in
-    Let: (y, _) := uncons_rvar res in
-    ok (asm_args_of_opn_args (OTBNFopn_core.smart_mov x y)).
+Definition assemble_MOV
+  (les : seq lexpr)
+  (res : seq rexpr) :
+  cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
+  Let: (x, _) := uncons_LLvar les in
+  Let: (y, _) := uncons_rvar res in
+  ok (asm_args_of_opn_args (OTBNFopn_core.smart_mov x y)).
 
-  Definition assemble_SUBI
-    (les : seq lexpr)
-    (res : seq rexpr) :
-    cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
-    Let: (x, _) := uncons_LLvar les in
-    Let: (y, res) := uncons_rvar res in
-    Let: (imm, _) := uncons_wconst res in
-    Let args := o2r (E.invalid_args ii) (OTBNFopn_core.smart_subi x y imm) in
-    ok (asm_args_of_opn_args args).
+Definition assemble_SUBI
+  (les : seq lexpr)
+  (res : seq rexpr) :
+  cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
+  Let: (x, _) := uncons_LLvar les in
+  Let: (y, res) := uncons_rvar res in
+  Let: (imm, _) := uncons_wconst res in
+  Let args := o2r (E.invalid_args ii) (OTBNFopn_core.smart_subi x y imm) in
+  ok (asm_args_of_opn_args args).
 
-  Definition assemble_extra
-    (eo : extra_op)
-    (les : seq lexpr)
-    (res : seq rexpr) :
-    cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
-    match eo with
-    | set0 ws => assemble_set0 ws les res
-    | MOV => assemble_MOV les res
-    | SUBI => assemble_SUBI les res
-    end.
+(* [x, y = swap(z, w)] using the standard three-[XOR] sequence:
+   - [x = z ^ w];
+   - [y = x ^ w = z];
+   - [x = x ^ y = w].
+   A 32-bit swap uses [RV32 XOR] with no flag dests ([fl] empty). A wide swap
+   uses [BN_XOR]; its M/L/Z flag dests [fl] are the swap op's implicit FG1
+   outputs, already materialized by register allocation (discarded -- they were
+   [Lnone] in the lowering). *)
+Definition assemble_swap
+  (ws : wsize)
+  (les : seq lexpr)
+  (res : seq rexpr) :
+  cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
+  Let: (z, w) :=
+    if res is [:: Rexpr (Fvar z); Rexpr (Fvar w) ] then ok (z, w)
+    else Error (E.bad_swap_rexprs ii)
+  in
+  Let: (op, fl, x, y) :=
+    match les with
+    | [:: LLvar x; LLvar y ] =>
+        Let _ :=
+          assert (ws == reg_size)%CMP (E.bad_swap_size reg_size ii)
+        in
+        ok (RV32 XOR, [::], x, y)
+    | [:: fM; fL; fZ; LLvar x; LLvar y ] =>
+        Let _ :=
+          assert (ws == xreg_size)%CMP (E.bad_swap_size xreg_size ii)
+        in
+        ok (BN_basic BN_XOR FG1, [:: fM; fL; fZ ], x, y)
+    | _ => Error (E.bad_swap_lexprs ii)
+    end
+  in
+  Let _ := assert (v_var x != v_var w) (E.bad_swap_dst_arg ii) in
+  Let _ := assert (v_var y != v_var x) (E.bad_swap_dsts ii) in
+  Let _ :=
+    assert
+      (all (fun v => convertible v.(v_var).(vtype) (aword ws)) [:: x; y; z; w ])
+      (E.bad_swap_ty ii)
+  in
+  let xor (d a b : var_i) :=
+    ((None, op), fl ++ [:: LLvar d ], [:: Rexpr (Fvar a); Rexpr (Fvar b) ])
+  in
+  ok [:: xor x z w; xor y x w; xor x x y ].
+
+Definition assemble_extra
+  (eo : extra_op)
+  (les : seq lexpr)
+  (res : seq rexpr) :
+  cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
+  match eo with
+  | set0 ws => assemble_set0 ws les res
+  | MOV => assemble_MOV les res
+  | SUBI => assemble_SUBI les res
+  | SWAP ws => assemble_swap ws les res
+  end.
 
 End ASSEMBLE.
 

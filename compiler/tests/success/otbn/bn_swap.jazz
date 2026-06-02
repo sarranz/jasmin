@@ -1,0 +1,33 @@
+export
+fn bn_swap(reg u256 a b) -> reg u256 {
+  reg u256 c;
+  a, b = #swap(a, b);
+  c = a ^256u b;
+  return c;
+}
+
+export
+fn bn_swap_twice(reg u256 a b) -> reg u256 {
+  reg u256 c;
+  a, b = #swap(a, b);
+  a, b = #swap(a, b);
+  c = a ^256u b;
+  return c;
+}
+
+export
+fn reg_swap(reg u32 a b) -> reg u32 {
+  reg u32 c;
+  a, b = #swap(a, b);
+  c = a + b;
+  return c;
+}
+
+export
+fn reg_swap_twice(reg u32 a b) -> reg u32 {
+  reg u32 c;
+  a, b = #swap(a, b);
+  a, b = #swap(a, b);
+  c = a + b;
+  return c;
+}
