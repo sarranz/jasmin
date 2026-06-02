@@ -98,36 +98,19 @@ let pp_reg_address addr =
 let pp_address addr =
   match addr with Areg ra -> pp_reg_address ra | Arip r -> pp_rip_address r
 
+
+(* TODO_OTBN: Some instructions need signedness and some don't accept it.
+   Currently the only ones that don't accept signedness are the ones that take
+   [U8]s, so this is a hack. *)
 let pp_asm_arg (arg : (_, Arch_utils.empty, _, _, _) asm_arg) =
   match arg with
   | Condt (BNcond f) -> Some (pp_flag f)
   | Condt (RVcond _) -> None
-  (* TODO_OTBN: BUG - immediates are printed with the *unsigned* reading
-     ([z_unsigned_of_word] = [wunsigned]), but several operands are signed.
-     The RISC-V backend uses the *signed* reading ([Conv.z_of_word], see
-     [pp_riscv.ml]); note even this file's address path ([pp_reg_address])
-     already prints displacements signed.
-
-     OTBN's RV32 subset has signed immediates ([addi]/[andi]/[ori]/[xori] are
-     [simm12], [li] is [simm32]; the assembler infers bare [imm] operands as
-     [simm]). The backend does emit negative ones, e.g.
-       - [OTBNFopn_core.subi x y imm := addi x y (- imm)]
-       - [OTBNFopn_core.align x y al := andi x y (- (wsize_size al))], used
-         unconditionally in [set_up_sp_register] (stack alignment).
-     So e.g. [andi x2, x2, -32] is printed as [andi x2, x2, 4294967264] and
-     [addi x2, x2, -16] as [addi x2, x2, 4294967280]. The OTBN assembler
-     enforces the signed-12 range [-2048, 2047] and rejects these, breaking
-     ordinary function prologues.
-
-     FIX CAVEAT: do not blindly switch to [z_of_word] (signed). OTBN's wide
-     *unsigned* immediates are stored in [U8] words and exceed 127: the [bn]
-     shift amount (0..248) and the [mulqacc] shift (0/64/128/192). Signed
-     printing would render a 192-bit shift as [w2 << -64]. The correct fix is
-     to print each immediate according to its operand's declared signedness
-     (the [CAimm] checker already carries [Signed]/[Unsigned]). Pragmatically,
-     today all signed immediates are [U32] and all wide-unsigned ones are [U8],
-     so "[U8] -> unsigned, else signed" would also be correct for now. *)
-  | Imm (ws, w) -> Some (pp_imm (Conv.z_unsigned_of_word ws w))
+  | Imm (ws, w) ->
+      let read =
+        if ws = Wsize.U8 then Conv.z_unsigned_of_word else Conv.z_of_word
+      in
+      Some (pp_imm (read ws w))
   | Reg r -> Some (pp_register r)
   | Regx _ -> .
   | Addr addr -> Some (pp_address addr)
