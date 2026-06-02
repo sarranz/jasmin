@@ -1,0 +1,61 @@
+/*
+  x10 x11 addresses of inputs
+  x12 address of output
+
+  .globl poly_add
+  poly_add:
+  li x4, 1
+
+  bn.addi w2, w31, 1
+  bn.rshi w2, w2, w31 >> 240
+  bn.subi w2, w2, 1 // mask = 0xffff
+
+  LOOPI 16, 9
+      bn.ld x0, 0(x10)
+      bn.ld x4, 0(x11)
+      LOOPI 16, 5
+          bn.and  w3, w0, w2
+          bn.and  w4, w1, w2
+          bn.addm w3, w3, w4
+          bn.rshi w0, w3, w0 >> 16
+          bn.rshi w1, w31, w1 >> 16
+      bn.sd x0, 0(x12)
+    ret
+*/
+
+fn body2(reg u256 a b mask m) -> reg u256, reg u256 {
+    reg u256 amasked;
+    amasked = a &256u mask;
+    reg u256 bmasked;
+    bmasked = b &256u mask;
+    reg u256 c;
+    c = #BN_ADDM(amasked, bmasked, m);
+    reg u256 newa;
+    newa = #BN_RSHI(c, a, 16);
+    reg u256 newb;
+    newb = #BN_RSHI(b, b, 16);
+    return newa, newb;
+}
+
+fn body1(reg u32 ap bp cp, reg u256 mask m) {
+    reg u256 a b;
+    a = [#aligned :u256 ap];
+    b = [#aligned :u256 bp];
+    repeat 16 { #[inline] a, b = body2(a, b, mask, m); }
+    [#aligned :u256 cp] = a;
+}
+
+export
+fn poly_add(reg u32 ap bp cp, reg u256 mod) {
+    reg u256 m;
+    m = #BN_MODW(mod);
+    reg u256 z mask;
+    ?{}, z = #set0_256();
+    mask = z +256u 1;
+    mask = #BN_RSHI(mask, z, 240); // should be mask = (2u256)[mask, z] >> 240;
+    mask = mask -256u 1;
+    repeat 16 {
+        #[inline] body1(ap, bp, cp, mask, m);
+        ap += 32; bp += 32; cp += 32;
+   }
+}
