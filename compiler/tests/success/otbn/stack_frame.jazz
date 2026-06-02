@@ -1,0 +1,19 @@
+// A function with a 32-byte (u256) stack slot, forcing [set_up_sp_register] to
+// emit the stack-pointer setup prologue
+//   addi x2, x12, -32
+//   andi x2, x2, -32
+// The negative immediates must be printed *signed*: printing them unsigned
+// (4294967264) puts them outside the RV i-type simm12 range [-2048, 2047], so
+// the ACC assembler rejects them. See compiler/tests/otbn-stack-frame.t.
+export
+fn stack_frame(reg u32 p) -> reg u256 {
+    reg u256 acc x;
+    acc = [#aligned :u256 p];
+
+    stack u256 s;
+    s = acc;
+    x = s;
+    acc = acc ^256u x;
+
+    return acc;
+}
