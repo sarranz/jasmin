@@ -1,0 +1,9 @@
+export
+fn repeat_plus() {
+    reg u64 x;
+    x = 0;
+
+    repeat (x + 4) { x += 1; }
+
+    [x] = 0;
+}

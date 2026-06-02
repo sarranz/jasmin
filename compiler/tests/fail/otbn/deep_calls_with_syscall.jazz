@@ -1,0 +1,24 @@
+// Negative test: a syscall consumes a hardware call-stack slot, just like a
+// call.  The chain main -> f1 -> ... -> f8 is eight calls deep, and f8 performs
+// a syscall, for a total depth of nine -- overflowing the depth-8 call stack.
+fn f8() -> reg u32 {
+    stack u8[32] s;
+    reg u32 r;
+    s = #randombytes(s);
+    r = 0;
+    return r;
+}
+fn f7() -> reg u32 { reg u32 r; r = f8(); return r; }
+fn f6() -> reg u32 { reg u32 r; r = f7(); return r; }
+fn f5() -> reg u32 { reg u32 r; r = f6(); return r; }
+fn f4() -> reg u32 { reg u32 r; r = f5(); return r; }
+fn f3() -> reg u32 { reg u32 r; r = f4(); return r; }
+fn f2() -> reg u32 { reg u32 r; r = f3(); return r; }
+fn f1() -> reg u32 { reg u32 r; r = f2(); return r; }
+
+export
+fn main() -> reg u32 {
+    reg u32 r;
+    r = f1();
+    return r;
+}

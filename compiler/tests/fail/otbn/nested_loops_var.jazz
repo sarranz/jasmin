@@ -1,0 +1,25 @@
+export
+fn main(reg u32 n) -> reg u32 {
+    reg u32 x;
+    x = 0;
+    repeat n {
+      repeat 3 {
+        repeat n {
+          repeat 3 {
+            repeat n {
+              repeat 3 {
+                repeat n {
+                  repeat 3 {
+                    repeat n {
+                      x += 1;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    return x;
+}

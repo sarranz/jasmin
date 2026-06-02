@@ -1,0 +1,25 @@
+fn f9(reg u32 x) -> reg u32 { x += 1; return x; }
+fn f8(reg u32 x) -> reg u32 { x = f9(x); return x; }
+fn f7(reg u32 x) -> reg u32 { x = f8(x); return x; }
+fn f6(reg u32 x) -> reg u32 { x = f7(x); return x; }
+fn f5(reg u32 x) -> reg u32 { x = f6(x); return x; }
+fn f4(reg u32 x) -> reg u32 { x = f5(x); return x; }
+fn f3(reg u32 x) -> reg u32 { x = f4(x); return x; }
+fn f2(reg u32 x) -> reg u32 { x = f3(x); return x; }
+
+fn f1_inline(reg u32 x) -> reg u32 { #[inline] x = f2(x); return x; }
+
+export
+fn main_inline(reg u32 x) -> reg u32 {
+    x = f1_inline(x);
+    return x;
+}
+
+
+fn f1_twice3(reg u32 x) -> reg u32 { x = f3(x); x = f3(x); return x; }
+
+export
+fn main_twice3(reg u32 x) -> reg u32 {
+    x = f1_twice3(x);
+    return x;
+}

@@ -1,0 +1,15 @@
+fn g9(reg u32 x) -> reg u32 { x += 1; return x; }
+fn g8(reg u32 x) -> reg u32 { x = g9(x); return x; }
+fn g7(reg u32 x) -> reg u32 { x = g8(x); return x; }
+fn g6(reg u32 x) -> reg u32 { x = g7(x); return x; }
+fn g5(reg u32 x) -> reg u32 { x = g6(x); return x; }
+fn g4(reg u32 x) -> reg u32 { x = g5(x); return x; }
+fn g3(reg u32 x) -> reg u32 { x = g4(x); return x; }
+fn g2(reg u32 x) -> reg u32 { x = g3(x); return x; }
+fn g1(reg u32 x) -> reg u32 { x = g2(x); return x; }
+
+export
+fn main(reg u32 x) -> reg u32 {
+    repeat x { x = g1(x); }
+    return x;
+}

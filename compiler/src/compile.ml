@@ -417,6 +417,10 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
         (fun s p ->
           warn_extra s p;
           eprint s pp_csprog p;
+          (* Right after register allocation, on OTBN, reject programs that
+             would overflow the hardware loop or call stack (both depth 8). *)
+          if s = Compiler.RegAllocation && !target_arch = OTBN then
+            Otbn_check.check_prog (Conv.prog_of_csprog p);
           p);
       Compiler.print_linear =
         (fun s p ->
