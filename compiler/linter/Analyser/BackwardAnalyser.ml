@@ -132,7 +132,6 @@ struct
   The proxy variable is then removed from the annotation after fixpoint is reached.
 
   For simpler implementation, we do not call the analyse_while function here and prefer to mimic it's behavior.
-  [FIrepeat] bodies are analysed without a proxy variable.
   *)
   let rec analyse_for
       (loc : Location.i_loc)
@@ -174,8 +173,15 @@ struct
           let in_annotation = Annotation.bind in_annotation (L.forget proxy_var) in
           (body, in_annotation)
       | FIrepeat _ ->
-          let body, annotation = analyse_stmt body out_annotation in
-          (Cfor (fi, body), annotation)
+          let rec loop out_dom =
+              let body, in_dom = analyse_stmt body out_dom in
+              let out_dom' = L.account (Pconst (Z.of_int 0)) in_dom out_annotation in
+              if Annotation.included out_dom' out_dom L.included then
+                (Cfor (fi, body), out_dom')
+              else
+                loop out_dom'
+          in
+          loop out_annotation
 
   (**
     Analysis of while loop
