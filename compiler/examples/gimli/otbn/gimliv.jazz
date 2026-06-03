@@ -53,19 +53,19 @@ fn gimli_body(reg u256 x, reg u256 y, reg u256 z) -> reg u256, reg u256, reg u25
         reg u256 yz = y &256u z;
         reg u256 yz2 = shift(yz, 2);
         reg u256 nz = x ^256u z1;
-        nz = nz ^256u yz2;
+        nz ^256u= yz2;
 
         // new y = (y ^ x) ^ ((x | z) << 1)
         reg u256 xz = x |256u z;
         reg u256 xz1 = shift(xz, 1);
         reg u256 ny = y ^256u x;
-        ny = ny ^256u xz1;
+        ny ^256u= xz1;
 
         // new x = (z ^ y) ^ ((x & y) << 3)
         reg u256 xy = x &256u y;
         reg u256 xy3 = shift(xy, 3);
         reg u256 nx = z ^256u y;
-        nx = nx ^256u xy3;
+        nx ^256u= xy3;
 
         x = nx;
         y = ny;
@@ -84,10 +84,10 @@ fn gimli_body(reg u256 x, reg u256 y, reg u256 z) -> reg u256, reg u256, reg u25
         if (round % 4) == 0 {   // add round constant into column 0 (lane 0)
             // (8u32)[...] packs element 0 into the *high* lane, so the lane-0
             // constant is the last element.
-            // This becomes several different globals in the data section.
+            // This becomes N_ROUND/4 different globals in the data section.
             global u256 g = (8u32)[0, 0, 0, 0, 0, 0, 0, ROUND_CONSTANT + round];
             reg u256 rc = g;
-            x = x ^256u rc;
+            x ^256u= rc;
         }
     }
 

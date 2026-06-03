@@ -52,19 +52,19 @@ fn gimli(reg ptr u32[12] state) -> reg ptr u32[12] {
             reg u32 a = x ^ tmp;
             reg u32 b = y & z;
             tmp = b << 2;
-            a = a ^ tmp;
+            a ^= tmp;
             state[8 + column] = a;
 
             a = y ^ x;
             b = x | z;
             tmp = b << 1;
-            a = a ^ tmp;
+            a ^= tmp;
             state[4 + column] = a;
 
             a = z ^ y;
             b = x & y;
             tmp = b << 3;
-            a = a ^ tmp;
+            a ^= tmp;
             state[0 + column] = a;
         }
 
