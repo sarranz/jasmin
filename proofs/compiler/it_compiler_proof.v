@@ -182,7 +182,8 @@ rewrite !print_uprogP => pf ok_pf.
 rewrite !print_uprogP => pg ok_pg.
 rewrite !print_uprogP => ph ok_ph pi ok_pi.
 rewrite !print_uprogP => plc ok_plc.
-rewrite !print_uprogP => ok_fvars pj ok_pj pp.
+rewrite !print_uprogP => ok_fvars plow ok_plow.
+rewrite !print_uprogP => pj ok_pj pp.
 rewrite !print_uprogP => ok_pp <- {p'} ok_fn.
 
 apply: (wiequiv_f_trans_EE_EU (wsw2:=nosubword) (dc2:=indirect_c)).
@@ -214,9 +215,9 @@ apply: wiequiv_f_trans_EU_EU; first exact: RGP.it_remove_globP ok_pi.
 apply: wiequiv_f_trans_EE_EU; first exact: (it_load_constants_progP ok_plc).
 apply: wiequiv_f_trans_EE_EU; first exact:
   (hlop_it_lower_callP
+    (pT := progUnit)
     (hap_hlop haparams)
-    (lowering_opt cparams)
-    (warning cparams)
+    ok_plow
     ok_fvars).
 apply: wiequiv_f_trans_UU_EU; first exact: (it_pi_callP _ ok_pj).
 apply: wiequiv_f_trans_EE_EU;

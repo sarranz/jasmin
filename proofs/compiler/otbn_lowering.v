@@ -63,15 +63,22 @@ Module E.
     Definition cant_lower_mulu := user_error_s "can't lower MULU".
 
     Definition invalid_sham (e : pexpr) : pp_error_loc :=
-      let err := pp_box [:: pp_s "invalid shift amount"; pp_e e ] in
+      let err := pp_box
+        [:: pp_s "invalid shift amount:"
+         ; pp_e e
+         ; pp_s ". Must be in the range [0, 31] or masked with 0x1f."
+        ]
+      in
       user_error err ii.
 
     Definition imm_out_of_range {ws : wsize} (w : word ws) : pp_error_loc :=
-      let err := pp_box [:: pp_s "immediate out of range"; pp_e (wconst w) ] in
+      let err :=
+        pp_box [:: pp_s "immediate out of range:"; pp_e (wconst w) ]
+      in
       user_error err ii.
 
     Definition invalid_address (e : pexpr) : pp_error_loc :=
-      let err := pp_box [:: pp_s "invalid address"; pp_e e ] in
+      let err := pp_box [:: pp_s "invalid address:"; pp_e e ] in
       user_error err ii.
 
     Definition bn_immediate (e : pexpr) : pp_error_loc :=
@@ -248,7 +255,7 @@ Section LOWER_OPN.
     | BN_basic mn fg =>
         let%lr (sh, es') := lower_basic_shift mn es in
         li_issue lvs (BN_basic_shift mn fg sh) es'
-    | _ => Error (E.not_implemented ii)
+    | _ => skip
     end.
 
   (* ------------------------------------------------------------------------ *)
@@ -271,8 +278,7 @@ Section LOWER_OPN.
     end.
 
   Definition carry_op (is_add has_carry : bool) : bn_basic_mnemonic :=
-    if is_add
-    then if has_carry then BN_ADDC else BN_ADD
+    if is_add then if has_carry then BN_ADDC else BN_ADD
     else if has_carry then BN_SUBB else BN_SUB.
 
   Definition lower_carry_op
@@ -282,17 +288,15 @@ Section LOWER_OPN.
     let op := carry_op is_add has_carry in
     li_issue lvs' (BN_basic op FG1) es'.
 
-  (* A register swap becomes the [SWAP] extra op, assembled (in [otbn_extra]) as
-     three [XOR]s. A wide swap's three [BN_XOR]s also write the M/L/Z flags,
-     which are declared as implicit FG1 outputs of the wide swap op and discarded
-     here via [lnone_mlz]. Array swaps are handled earlier by stack allocation
-     ([sap_swap]). *)
   Definition lower_swap
     (ty : atype) (lvs : seq lval) (es : seq pexpr) : low_instr :=
     if ty is aword sz then
-      if (sz <= reg_size)%CMP then li_xissue lvs (SWAP sz) es
-      else if (sz == xreg_size)%CMP then li_xissue (lnone_mlz ++ lvs) (SWAP sz) es
-      else Error (E.not_implemented ii)
+      let%lr lvs :=
+        if (sz == reg_size)%CMP then ok (Some lvs)
+        else if (sz == xreg_size)%CMP then ok (Some (lnone_mlz ++ lvs))
+        else Error (E.not_implemented ii)
+      in
+      li_xissue lvs (SWAP sz) es
     else skip.
 
   Definition lower_pseudo_operator
@@ -581,14 +585,14 @@ Let i_of_low_instr ii tag '(lvs, op, es) :=
 Let c_of_low_cmd ii tag '(pre, lvs, op, es) :=
   map (i_of_low_instr ii tag) (rcons pre (lvs, op, es)).
 
-Fixpoint lower_i_aux (i : instr) : cexec cmd :=
-  let lower_i i := ok (if lower_i_aux i is Ok irs then irs else [:: i ]) in
+Fixpoint lower_i (i : instr) : cexec cmd :=
   let '(MkI ii ir) := i in
   match ir with
   | Cassgn lv tag ty e =>
-      Let ws := o2r (E.invalid_type ii) (is_word_type ty) in
-      Let oargs := lower_cassgn_word ii lv ws e in
-      ok (oapp (c_of_low_cmd ii tag) [:: i ] oargs)
+      if is_word_type ty is Some ws then
+        Let oargs := lower_cassgn_word ii lv ws e in
+        ok (oapp (c_of_low_cmd ii tag) [:: i ] oargs)
+      else ok [:: i ]
 
   | Copn lvs tag op es =>
       Let oargs := lower_copn ii lvs op es in
@@ -612,9 +616,5 @@ Fixpoint lower_i_aux (i : instr) : cexec cmd :=
   | Csyscall _ _ _
   | Ccall _ _ _ => ok [:: i ]
   end.
-
-(* TODO_OTBN: Generalize [lowering.v] to accept results. *)
-Definition lower_i (i : instr) : cmd :=
-  if lower_i_aux i is Ok irs then irs else [:: i ].
 
 End WITH_PARAMS.

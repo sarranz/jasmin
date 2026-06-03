@@ -132,7 +132,7 @@ End LINEARIZATION.
 
 Definition x86_loparams : lowering_params lowering_options :=
   {|
-    lop_lower_i := lower_i;
+    lop_lower_i o w fv i := ok (lower_i o w fv i);
     lop_fvars_correct := fvars_correct;
   |}.
 

@@ -51,16 +51,15 @@ Notation lower_prog :=
      warning
      fv).
 
-Notation p' := (lower_prog p).
-
 (* -------------------------------------------------------------------- *)
 
 Section SEM.
 
 Lemma lower_callP
-  (f : funname) scs mem scs' mem' (va vr : seq value) :
+  (f : funname) scs mem scs' mem' (va vr : seq value) lp :
+  lower_prog p = ok lp ->
   sem_call p ev scs mem f va scs' mem' vr
-  -> sem_call (lower_prog p) ev scs mem f va scs' mem' vr.
+  -> sem_call lp ev scs mem f va scs' mem' vr.
 Proof.
 Admitted.
 
@@ -70,8 +69,9 @@ Section IT.
 
 Context {E E0: Type -> Type} {wE : with_Error E E0} {rE0 : EventRels E0}.
 
-Lemma it_lower_callP fn :
-  wiequiv_f p p' ev ev (rpreF (eS:= eq_spec)) fn fn (rpostF (eS:=eq_spec)).
+Lemma it_lower_callP fn lp :
+  lower_prog p = ok lp ->
+  wiequiv_f p lp ev ev (rpreF (eS:= eq_spec)) fn fn (rpostF (eS:=eq_spec)).
 Proof.
 Admitted.
 

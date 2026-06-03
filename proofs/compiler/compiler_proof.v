@@ -328,7 +328,8 @@ Proof.
   rewrite !print_uprogP => pg ok_pg.
   rewrite !print_uprogP => ph ok_ph pi ok_pi.
   rewrite !print_uprogP => plc ok_plc.
-  rewrite !print_uprogP => ok_fvars pj ok_pj pp.
+  rewrite !print_uprogP => ok_fvars plow ok_plow.
+  rewrite !print_uprogP => pj ok_pj pp.
   rewrite !print_uprogP => ok_pp <- {p'} ok_fn exec_p.
 
   apply: compose_pass.
@@ -343,9 +344,9 @@ Proof.
   - move => vr'.
     exact:
       (hlop_lower_callP
+         (pT := progUnit)
          (hap_hlop haparams)
-         (lowering_opt cparams)
-         (warning cparams)
+         ok_plow
          ok_fvars).
   apply: compose_pass.
   + by move=> vr'; apply: load_constants_progP; apply ok_plc.

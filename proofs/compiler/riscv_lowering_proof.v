@@ -39,20 +39,18 @@ Context
   (options : lowering_options)
   (warning : instr_info -> warning_msg -> instr_info)
   (fv : fresh_vars).
-Notation lower_cmd :=
-  (lower_cmd
-     (fun _ _ _ => lower_i)
-     options
-     warning
-     fv).
+Notation mlower_prog :=
+  (lowering.lower_prog (fun _ _ _ i => ok (lower_i i)) options warning fv).
+Notation lower_cmd := (conc_map lower_i).
 Notation lower_prog :=
-  (lower_prog
-     (fun _ _ _ => lower_i)
-     options
-     warning
-     fv).
+  (map_prog (fun fd => with_body fd (conc_map lower_i (f_body fd)))).
 
 Notation p' := (lower_prog p).
+
+(* The generic (monadic) lowering pass coincides with the total one, since
+   RISC-V lowering never fails. *)
+Lemma lower_progE pp : mlower_prog pp = ok (lower_prog pp).
+Proof. by apply: (lower_prog_ext (gi := lower_i)). Qed.
 
 (* -------------------------------------------------------------------- *)
 
@@ -728,7 +726,7 @@ Proof.
   by apply: EcallRun; first (by rewrite get_map_prog hget /=; reflexivity); eassumption.
 Qed.
 
-Lemma lower_callP
+Lemma lower_callP_total
   (f : funname) scs mem scs' mem' (va vr : seq value) :
   (* Calling f in a given context implies calling f in the same context except p -> p compiled. *)
   sem_call p ev scs mem f va scs' mem' vr
@@ -754,6 +752,13 @@ Proof.
        Hproc).
 Qed.
 
+Lemma lower_callP
+  (f : funname) scs mem scs' mem' (va vr : seq value) lp :
+  mlower_prog p = ok lp ->
+  sem_call p ev scs mem f va scs' mem' vr
+  -> sem_call lp ev scs mem f va scs' mem' vr.
+Proof. by rewrite lower_progE => -[<-]; apply: lower_callP_total. Qed.
+
 End SEM.
 
 Section IT.
@@ -777,14 +782,16 @@ Proof. apply checker_st_eqP => //. Qed.
 #[local] Hint Resolve checker_st_eqP_ : core.
 
 (* Remark: excepted the case of Cassgn and Copn, the proof if the same than the arm one *)
-Lemma it_lower_callP fn :
-  wiequiv_f p p' ev ev (rpreF (eS:= eq_spec)) fn fn (rpostF (eS:=eq_spec)).
+Lemma it_lower_callP fn lp :
+  mlower_prog p = ok lp ->
+  wiequiv_f p lp ev ev (rpreF (eS:= eq_spec)) fn fn (rpostF (eS:=eq_spec)).
 Proof.
+  rewrite lower_progE => -[<-].
   apply wequiv_fun_ind => {}fn _ fs _ [<- <-] fd hget.
-  rewrite get_map_prog hget /= /lower_fd.
+  rewrite get_map_prog hget /=.
   eexists; first reflexivity.
   move=> s.
-  set c' := lowering.lower_cmd _ _ _ _ _.
+  set c' := conc_map lower_i (f_body fd).
   move=> /(eq_initialize (fd':= with_body fd c')) -/(_ p' erefl erefl erefl erefl) hinit.
   exists s => //; exists (st_eq tt), (st_eq tt); split => //=; last by apply st_eq_finalize.
   subst c'; move: (f_body fd). clear fn fs fd hget hinit s.
@@ -793,7 +800,7 @@ Proof.
   apply (cmd_rect (Pr := Pi_r_) (Pi:=Pi_) (Pc:=Pc_)) => //; rewrite /Pi_r_ /Pi_ /Pc_.
   + by apply (wequiv_nil (sip:=sip)).
   + move=> i c hi hc.
-    rewrite /lowering.lower_cmd /= /conc_map /= -cat1s.
+    rewrite /= -cat1s.
     by apply (wequiv_cat (sip:=sip)) with (st_eq tt).
   (* Assgn *)
   + move=> x tg ty e ii.

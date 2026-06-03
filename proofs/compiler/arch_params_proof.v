@@ -36,21 +36,16 @@ Record h_lowering_params
         (options : lowering_options)
         (warning : instr_info -> warning_msg -> instr_info)
         (fv : lowering.fresh_vars)
+        (lp : prog)
+        (_ : lowering.lower_prog (lop_lower_i loparams) options warning fv p
+             = ok lp)
         (_ : lop_fvars_correct loparams fv (p_funcs p))
         (f : funname)
         (scs: syscall_state_t) (mem : low_memory.mem)
         (scs': syscall_state_t) (mem' : low_memory.mem)
         (va vr : seq value),
         sem_call p ev scs mem f va scs' mem' vr
-        -> let lprog :=
-             lowering.lower_prog
-               (lop_lower_i loparams)
-               options
-               warning
-               fv
-               p
-           in
-           sem_call lprog ev scs mem f va scs' mem' vr;
+        -> sem_call lp ev scs mem f va scs' mem' vr;
     hlop_it_lower_callP :
       forall
         {pT : progT}
@@ -63,12 +58,11 @@ Record h_lowering_params
         (options : lowering_options)
         (warning : instr_info -> warning_msg -> instr_info)
         {fv : lowering.fresh_vars}
+        {lp : prog}
         {fn : funname},
-        let: p' :=
-          lowering.lower_prog (lop_lower_i loparams) options warning fv p
-        in
+        lowering.lower_prog (lop_lower_i loparams) options warning fv p = ok lp ->
         lop_fvars_correct loparams fv (p_funcs p) ->
-        wiequiv_f p p' ev ev pre_eq fn fn post_eq
+        wiequiv_f p lp ev ev pre_eq fn fn post_eq
   }.
 
 (* Lowering of complex addressing mode for RISC-V.

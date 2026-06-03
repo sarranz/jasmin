@@ -22,7 +22,7 @@ Record lowering_params
       -> (instr_info -> warning_msg -> instr_info)
       -> lowering.fresh_vars
       -> instr              (* Source instruction. *)
-      -> cmd;
+      -> cexec cmd;
 
     (* Whether all fresh vars are different from each other and
      from those in a list of function declarations. *)

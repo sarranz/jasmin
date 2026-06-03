@@ -365,7 +365,13 @@ Proof. exists LR; exact: to_identK. Qed.
 (* Lowering hypotheses. *)
 
 Definition arm_hloparams : h_lowering_params (ap_lop arm_params).
-Proof. split=> *; [exact: lower_callP | exact: it_lower_callP]. Qed.
+Proof.
+  split.
+  - move=> pT sCP p ev opts warn fv lp heq hfv f scs mem scs' mem' va vr hsem.
+    exact: (lower_callP hfv heq hsem).
+  move=> pT sCP E E0 wE rE p ev opts warn fv lp fn heq hfv.
+  exact: (it_lower_callP ev hfv heq).
+Qed.
 
 (* ------------------------------------------------------------------------ *)
 (* Lowering of complex addressing mode for RISC-V.

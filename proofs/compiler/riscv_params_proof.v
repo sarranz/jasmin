@@ -344,7 +344,11 @@ Proof. exists X29; exact: to_identK. Qed.
 (* Lowering hypotheses. *)
 
 Definition riscv_hloparams : h_lowering_params (ap_lop riscv_params).
-Proof. split=> *; [exact: lower_callP | exact: it_lower_callP]. Qed.
+Proof.
+  split=> *;
+    [ by apply: lower_callP; eassumption
+    | by apply: it_lower_callP; eassumption ].
+Qed.
 
 (* ------------------------------------------------------------------------ *)
 (* Lowering of complex addressing mode for RISC-V *)

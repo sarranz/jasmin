@@ -324,7 +324,7 @@ Definition compiler_first_part (to_keep: seq funname) (p: uprog) : cexec uprog :
       (pp_internal_error_s "lowering" "lowering check fails")
   in
 
-  let p :=
+  Let p :=
     lower_prog
       (lop_lower_i loparams)
       (lowering_opt cparams)

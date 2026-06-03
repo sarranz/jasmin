@@ -36,10 +36,16 @@ Section PROOF.
   Context (warning: instr_info -> warning_msg -> instr_info).
   Variable fv : fresh_vars.
 
+  Definition mlower_prog :=
+    (lowering.lower_prog (asmop := _asmop)
+       (fun o w fv0 i => ok (lower_i o w fv0 i)) options warning fv).
+  Notation lower_cmd := (conc_map (lower_i options warning fv)).
   Notation lower_prog :=
-    (lower_prog (asmop := _asmop) lower_i options warning fv).
-  Notation lower_cmd :=
-    (lower_cmd (asmop := _asmop) lower_i options warning fv).
+    (map_prog (fun fd =>
+       with_body fd (conc_map (lower_i options warning fv) (f_body fd)))).
+
+  Lemma lower_progE pp : mlower_prog pp = ok (lower_prog pp).
+  Proof. by apply: (lower_prog_ext (gi := lower_i options warning fv)). Qed.
 
   Hypothesis fvars_correct: fvars_correct fv (p_funcs p).
 
@@ -83,7 +89,7 @@ Section PROOF.
   Local Hint Resolve of_in_fv cf_in_fv sf_in_fv zf_in_fv multiplicand_in_fv : core.
 
   Local
-  Definition p' := lower_prog p.
+  Definition p' : prog (asmop := _asmop) := lower_prog p.
 
   Definition eq_exc_fresh s1 s2 := st_eq_ex fvars s1 s2.
 
@@ -2064,7 +2070,7 @@ Section PROOF.
     done. done.
   Qed.
 
-  Lemma lower_callP f scs mem scs' mem' va vr:
+  Lemma lower_callP_total f scs mem scs' mem' va vr:
     sem_call p  ev scs mem f va scs' mem' vr ->
     sem_call p' ev scs mem f va scs' mem' vr.
   Proof.
@@ -2086,6 +2092,12 @@ Section PROOF.
          Hcall
          Hproc).
   Qed.
+
+  Lemma lower_callP f scs mem scs' mem' va vr lp :
+    mlower_prog p = ok lp ->
+    sem_call p  ev scs mem f va scs' mem' vr ->
+    sem_call lp ev scs mem f va scs' mem' vr.
+  Proof. by rewrite lower_progE => -[<-]; apply: lower_callP_total. Qed.
 
   End SEM.
 
@@ -2111,16 +2123,18 @@ Section PROOF.
   #[local] Hint Resolve checker_st_eq_exP_ : core.
 
   (* Remark: excepted the case of Cassgn and Copn, the proof if the same than the arm one *)
-  Lemma it_lower_callP fn :
-    wiequiv_f p p' ev ev (rpreF (eS:= eq_spec)) fn fn (rpostF (eS:=eq_spec)).
+  Lemma it_lower_callP fn lp :
+    mlower_prog p = ok lp ->
+    wiequiv_f p lp ev ev (rpreF (eS:= eq_spec)) fn fn (rpostF (eS:=eq_spec)).
   Proof.
+    rewrite lower_progE => -[<-].
     apply wequiv_fun_ind => {}fn _ fs _ [<- <-] fd hget.
     have := fvars_fun hget.
     move=> /disjoint_union [Hdisjp /disjoint_union [Hdisjr Hdisjc]].
-    rewrite get_map_prog hget /= /lower_fd.
+    rewrite get_map_prog hget /=.
     eexists; first reflexivity.
     move=> s.
-    set c' := lowering.lower_cmd _ _ _ _ _.
+    set c' := conc_map (lower_i options warning fv) (f_body fd).
     move=> /(eq_initialize (fd':= with_body fd c')) -/(_ p' erefl erefl erefl erefl) hinit.
     exists s=> //; exists eq_exc_fresh, eq_exc_fresh; split => //=; last by apply st_eq_ex_finalize.
     subst c'; move: (f_body fd) Hdisjc. clear fn fs fd hget Hdisjp Hdisjr hinit s.
@@ -2130,7 +2144,7 @@ Section PROOF.
     apply (cmd_rect (Pr := Pi_r_) (Pi:=Pi_) (Pc:=Pc_)) => //; rewrite /Pi_r_ /Pi_ /Pc_.
     + by move=> _; apply (wequiv_nil (sip:=sip)).
     + move=> i c hi hc /disj_fvars_vars_c_cons [/hi{}hi /hc{}hc].
-      rewrite /lowering.lower_cmd /= /conc_map /= -cat1s.
+      rewrite /= -cat1s.
       by apply (wequiv_cat (sip:=sip)) with eq_exc_fresh.
     (* Assgn *)
     + move=> x tg ty e ii hdisj.
