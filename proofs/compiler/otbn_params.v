@@ -320,7 +320,7 @@ Definition otbn_params : architecture_params lowering_options :=
   {|
     ap_sap := saparams;
     ap_lip := liparams;
-    ap_plp := false; (* TODO_OTBN: probably needs to be true *)
+    ap_plp := true;
     ap_lop := loparams;
     ap_agp := agparams;
     ap_lap := laparams;
