@@ -1452,19 +1452,7 @@ Definition incl_table (table1 table2 : table) := [&&
 
 Variable ii:instr_info.
 
-Variable check_c : region_map -> cexec (region_map * pexpr * seq cmd).
 Variable check_c2 : table -> region_map -> cexec (((table * region_map) * (table * region_map)) * (pexpr * seq cmd * seq cmd) ).
-Variable dom : Sv.t.
-
-Fixpoint loop_for
-  (fuel : nat) (m : region_map) : cexec (region_map * pexpr * cmd) :=
-  if fuel is S n
-  then
-    Let: (m', e', cs) := check_c m in
-    if incl m m'
-    then ok (m, e', flatten cs)
-    else loop_for n (merge dom m m')
-  else Error (ii_loop_iterator E.pass ii).
 
 Fixpoint loop2 (n:nat) table (rmap:region_map) :=
   match n with
@@ -1824,13 +1812,14 @@ Fixpoint alloc_i sao (trmap:table*region_map) (i: instr) : cexec (table * region
 
   | Cfor fi c =>
       if fi is FIrepeat e then
-        let check_c rm :=
-          Let: ((_, rm'), cs) := fmapM (alloc_i sao) (table, rmap) c in
-          Let e' := add_iinfo ii (alloc_e rm' e aint) in
-          ok (rm', e', cs)
+        let check_c2 t r :=
+          Let e' := add_iinfo ii (alloc_e r e aint) in
+          Let: ((t2, r2), c2) := fmapM (alloc_i sao) (t, r) c in
+          ok ((t, r), (t2, r2), (e', [::], c2))
         in
-        Let: (rm, e', c') := loop_for ii check_c table.(vars) loop_counter rmap in
-        ok (table, rm, [:: MkI ii (Cfor (FIrepeat e') c') ])
+        Let: (tf, rf, (e', _, cbody)) :=
+          loop2 ii check_c2 loop_counter table rmap in
+        ok (tf, rf, [:: MkI ii (Cfor (FIrepeat e') (flatten cbody))])
       else Error (pp_at_ii ii (stk_ierror_no_var "don't deal with for loop"))
 
   end.

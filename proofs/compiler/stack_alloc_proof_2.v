@@ -2387,32 +2387,6 @@ Proof.
   by apply wfr_VARS_STATUS_merge.
 Qed.
 
-Lemma loop_for_invariant table ii check_c n ramp rmap' e' c' :
-  (forall rm rm' e'' cs,
-    check_c rm = ok (rm', e'', cs) ->
-    exists Y, wfr_VARS_ZONE Y rm') ->
-  loop_for ii check_c (vars table) n ramp = ok (rmap', e', c') ->
-  wf_table_vars table ramp ->
-  wf_table_vars table rmap'.
-Proof.
-  move=> hcheck.
-  elim: n ramp => //= n hrec ramp.
-  t_xrbindP=> -[[m' e''] cs'] hc.
-  have [Y hm'z] := hcheck _ _ _ _ hc.
-  move=> hif [hvars_t hvarsz hvars_s].
-  move: hif; case: ifP => _.
-  - by move=> [<- _ _]; split.
-  - move=> hloop'.
-    apply: (hrec _ hloop').
-    split.
-    + exact: hvars_t.
-    + move=> x sr hxsr.
-      have hmz := (@wfr_VARS_ZONE_merge (vars table) Y ramp m' (vars table) hvarsz hm'z) x sr hxsr.
-      apply: subset_vars_wf_vars_zone hmz.
-      clear; SvD.fsetdec.
-    + exact: wfr_VARS_STATUS_merge.
-Qed.
-
 Local Lemma Wassert a: Pi_r (Cassert a).
 Proof. done. Qed.
 
@@ -2422,23 +2396,6 @@ Proof.
   t_xrbindP=> ? _ [[table1' rmap1']?] /Hc1{}Hc1.
   t_xrbindP=> -[[{}table2 {}rmap2] ?] /Hc2{}Hc2 [<- <- _] /= hvars.
   apply wf_table_vars_merge; auto.
-Qed.
-
-Local Lemma Wfor fi c: Pc c -> Pi_r (Cfor fi c).
-Proof.
-  move=> Hc table1 rmap1 table2 rmap2 ii c2 /=.
-  case: fi => [_ _ _ _|e]; first by [].
-  t_xrbindP=> -[[rm e'] c'] hloop [<- <- _] hvars1.
-  split; last by clear; SvD.fsetdec.
-  apply: loop_for_invariant.
-  2: exact hloop.
-  2: exact hvars1.
-  move=> rm0 rm0' e'' cs_out /=.
-  apply: rbindP => -[[table_out rm_body] cs_body] hfmap h2.
-  move: h2 => /=.
-  apply: rbindP => e_body _ /= [<- _ _].
-  case: (Hc table1 rmap1 table_out rm_body cs_body hfmap hvars1) => [[_ hz _] _].
-  by exists (vars table_out).
 Qed.
 
 Lemma loop2_invariant ii check_c2 n table rmap table' rmap' e' c1' c2':
@@ -2462,6 +2419,18 @@ Proof.
   have [hwf hsub]:= wf_table_vars_merge h h2.
   move=> /hrec{} [] // ? /= hsub'; split => //.
   clear -hsub hsub'; SvD.fsetdec.
+Qed.
+
+Local Lemma Wfor fi c: Pc c -> Pi_r (Cfor fi c).
+Proof.
+  move=> Hc table1 rmap1 table2 rmap2 ii c2 /=.
+  case: fi => [_ _ _ _|e]; first by [].
+  t_xrbindP=> -[[{}table2 {}rmap2] [[??]?]] hloop [<- <- _].
+  apply: loop2_invariant hloop.
+  move=> table rmap t1 r1 t2 r2 e'' c1' c2'.
+  t_xrbindP=> ? _ [[t2' r2'] ?] /Hc{}Hc [<- <- <- <- _ _ _] hvarst.
+  have [hvarst2 hsubset2] := Hc hvarst.
+  do 2!split=> //.
 Qed.
 
 Local Lemma Wwhile a c e ei c': Pc c -> Pc c' -> Pi_r (Cwhile a c e ei c').
@@ -2926,6 +2895,49 @@ Proof.
   right.
   case: hdef3 => // -[-> ->] vme.
   by apply wfr_STATUS_merge.
+Qed.
+
+Lemma loop_forP pmap sao (c : cmd) e ii n table rmap tf rf e' c1' cbody :
+  let check_c2 t r :=
+    Let e_val := add_iinfo ii (alloc_e pmap r e aint) in
+    Let: ((t2, r2), c2) := fmapM (alloc_i pmap local_alloc P sao) (t, r) c in
+    ok ((t, r), (t2, r2), (e_val, [::], c2))
+  in
+  loop2 ii check_c2 n table rmap = ok (tf, rf, (e', c1', cbody)) ->
+  wf_table_vars table rmap ->
+  exists table_b rmap_b, [/\
+    incl_table tf table,
+    wf_table_vars tf rf /\ Sv.Subset table.(vars) tf.(vars),
+    Incl rf rmap,
+    (tf = table /\ rf = rmap) \/
+      (forall vme, wft_DEF tf.(vars) vme -> wfr_STATUS rf vme),
+    fmapM (alloc_i pmap local_alloc P sao) (tf, rf) c =
+      ok (table_b, rmap_b, cbody),
+    alloc_e pmap rf e aint = ok e',
+    incl_table tf table_b & incl rf rmap_b ].
+Proof.
+  move=> check_c2 hloop hvarst.
+  have hcheck_c2 : forall ta ra t1 r1 t2 r2 ev c1x c2x,
+      check_c2 ta ra = ok ((t1, r1), (t2, r2), (ev, c1x, c2x)) ->
+      wf_table_vars ta ra ->
+      (wf_table_vars t1 r1 /\ Sv.Subset ta.(vars) t1.(vars)) /\
+      (wf_table_vars t2 r2 /\ Sv.Subset ta.(vars) t2.(vars)).
+  + move=> ta ra t1 r1 t2 r2 ev0 c1x c2x.
+    rewrite /check_c2.
+    t_xrbindP=> ? _ [[tb' rb'] ?] hfmap [<- <- <- <- _ _ _] hvarst0.
+    have [hvarst2 hsubset2] := alloc_is_invariant hfmap hvarst0.
+    do 2!split=> //.
+  have [tinv [rinv [tbody [rbody [hinclt1 [hvarst1 hsubset1] hinclr1 hdef1
+      hc2 hinclt2 hinclr2]]]]]
+    := loop2P hcheck_c2 hloop hvarst.
+  move: hc2; rewrite /check_c2.
+  t_xrbindP=> ? he [[tb' rb'] cbody'] hfmap /ok_inj [h1 h2 h3 h4 h5 h6 h7].
+  subst tinv rinv tb' rb' cbody'.
+  exists tbody, rbody; split=> //.
+  + case: hdef1 => [[-> ->] | hr].
+    + by left.
+    by right.
+  by rewrite -h5.
 Qed.
 
 Lemma sao_frame_size_ge0 sao :
@@ -3430,7 +3442,23 @@ Let Pc s1 (c1:cmd) s2 :=
     valid_state pmap glob_size rsp rip Slots Addr Writable Align P table2 rmap2 vme' m0 s2 s2' &
     vme =[table1.(vars)] vme'].
 
-Let Pfor (oi: option var_i) (vs: seq Z) (s1: estate) (c: cmd) (s2: estate) := True.
+Let Pfor (oi: option var_i) (vs: seq Z) (s1: estate) (c: cmd) (s2: estate) :=
+  oi = None ->
+  forall pmap rsp Slots Addr Writable Align table rmap table' rmap' cs,
+  wf_pmap pmap rsp rip Slots Addr Writable Align ->
+  wf_Slots Slots Addr Writable Align ->
+  forall sao,
+  fmapM (alloc_i pmap local_alloc P sao) (table, rmap) c = ok (table', rmap', cs) ->
+  incl_table table table' -> incl rmap rmap' ->
+  wf_table_vars table rmap ->
+  forall vme m0 s1',
+  valid_state pmap glob_size rsp rip Slots Addr Writable Align P table rmap vme m0 s1 s1' ->
+  extend_mem (emem s1) (emem s1') rip global_data ->
+  wf_sao rsp (emem s1') sao ->
+  exists s2' vme', [/\
+    sem_for P' rip None vs s1' (flatten cs) s2',
+    valid_state pmap glob_size rsp rip Slots Addr Writable Align P table rmap vme' m0 s2 s2' &
+    vme =[table.(vars)] vme' ].
 
 Let Pfun (scs1: syscall_state) (m1: mem) (fn: funname) (vargs: seq value)
          (scs2: syscall_state) (m2: mem) (vres: seq value) :=
@@ -3810,27 +3838,86 @@ Qed.
 
 Local Lemma Hfor : sem_Ind_for P ev Pi_r Pfor.
 Proof.
-  (* TODO: semantic correctness for FIrepeat.
-     FIrange: alloc_i returns Error, goal is vacuous (by []).
-     FIrepeat e: alloc_i now succeeds (produces Cfor (FIrepeat e') c').
-     Proof requires threading valid_state through sem_for iterations.
-     Strategy: either (a) make Pfor non-trivial so Hfor_cons accumulates
-     the body IH at each step, or (b) show Incl rmap1 rm_body from the
-     loop_for convergence condition and use valid_state_Incl_gen to
-     restore the invariant after each iteration. *)
-  move=> s1 s2 fi c rn _ _ _
+  move=> s1 s2 fi c rn hsemfi _ hpfor
     pmap rsp Slots Addr Writable Align table1 rmap1 table2 rmap2 ii1 c2
     hpmap hwf sao /=.
-  case: fi => [_ _ _ _|e]; first by [].
-  t_xrbindP=> -[[rm e'] c'] _ [<- <- <-].
+  case: fi hsemfi hpfor => [b e1 d e2|e] hsemfi hpfor; first by [].
+  set check_c2 := (X in loop2 _ X _ _ _).
+  t_xrbindP=> -[[{}table2 {}rmap2] [[e'_alloc c1'_alloc] cbody_alloc]] hloop -[<- <- <-] {c2}.
   move=> vme m0 s1' hvs hext hsao.
-  Admitted.
+  have hvarst1 := valid_state_wf_table_vars hvs.
+  have [hvars1 hvarsz1 hvarss1] := hvarst1.
+  have [tbody [rbody [hincltf [hvarst_tf hsubset_tf] hinclrf hdef_tf halloc_body he_alloc
+      hinclt_b hincl_b]]] := loop_forP hloop hvarst1.
+  have [hvars_tf hvarsz_tf hvarss_tf] := hvarst_tf.
+  have hwft1 := hvs.(vs_wf_table).
+  have hwft2 : wf_table table2 vme s1.(evm) :=
+    wf_table_incl hincltf hvars_tf hwft1.
+  have hwfst2 : wfr_STATUS rmap2 vme.
+  + case: hdef_tf.
+    + by move=> [_ ->]; exact: hvs.(vs_wf_region).(wfr_status).
+    by apply; apply hwft2.(wft_def).
+  have hvs2 := valid_state_Incl_gen hwft2 hinclrf hwfst2 hvarsz_tf hvarss_tf hvs.
+  (* target count evaluation *)
+  move: hsemfi; rewrite /sem_fi /=.
+  t_xrbindP=> z hz_pexpr_int hrn.
+  subst rn.
+  have hz_pexpr : sem_pexpr true (p_globs P) s1 e = ok (Vint z).
+  + move: hz_pexpr_int; rewrite /sem_pexpr_int.
+    t_xrbindP=> v hv hz.
+    by rewrite -(to_intI hz).
+  have := alloc_eP hwf.(wfsl_no_overflow) hwf.(wfsl_align) hpmap hvs2 he_alloc hz_pexpr erefl.
+  rewrite -P'_globs.
+  move=> [z' [hz'_tgt /truncate_valI [_ hz'_eq]]]; subst z'.
+  have hfi_tgt : sem_fi true (p_globs P') s1' (FIrepeat e'_alloc) = ok (ziota 0 z).
+  + by rewrite /sem_fi /= /sem_pexpr_int hz'_tgt.
+  have [s2' [vme' [hs_for hvs' vme_eq]]] :=
+    hpfor erefl pmap rsp Slots Addr Writable Align table2 rmap2 tbody rbody cbody_alloc
+      hpmap hwf sao halloc_body hinclt_b hincl_b hvarst_tf vme m0 s1' hvs2 hext hsao.
+  exists s2', vme'; split=> //.
+  + apply sem_seq1; constructor.
+    exact: Efor hfi_tgt hs_for.
+  exact: eq_onI hsubset_tf vme_eq.
+Qed.
 
 Local Lemma Hfor_nil : sem_Ind_for_nil Pfor.
-Proof. by []. Qed.
+Proof.
+  move=> s oi c hoi pmap rsp Slots Addr Writable Align table rmap table' rmap' cs
+    hpmap hwf sao _ _ _ _ vme m0 s1' hvs hext hsao.
+  exists s1', vme; split=> //.
+  exact: EForDone.
+Qed.
 
 Local Lemma Hfor_cons : sem_Ind_for_cons P ev Pc Pfor.
-Proof. by []. Qed.
+Proof.
+  move=> s1 s1' s2 s3 oi w ws c hiter hsem Hc _ Pftail.
+  rewrite /Pfor => hoi pmap rsp Slots Addr Writable Align table rmap table' rmap' cs
+    hpmap hwf sao halloc hinclt hinclr hvarst vme m0 t1' hvs hext hsao.
+  subst oi.
+  have hs1_eq : s1 = s1' by move: hiter; rewrite /init_iteration /= => /ok_inj ->.
+  subst s1'.
+  have [hvars hvarsz hvarss] := hvarst.
+  have hwfst : wfr_STATUS rmap vme := hvs.(vs_wf_region).(wfr_status).
+  have [t2' [vme_b [hs_sem hvs2 vme_eq]]] :=
+    Hc pmap rsp Slots Addr Writable Align table rmap table' rmap' cs
+      hpmap hwf sao halloc vme m0 t1' hvs hext hsao.
+  have hwfst_b : wfr_STATUS rmap vme_b.
+  + move=> r x.
+    exact: wf_status_eq_on vme_eq (hvarss r x) (hwfst r x).
+  have hwft2 : wf_table table vme_b s2.(evm).
+  + exact: wf_table_incl hinclt hvars hvs2.(vs_wf_table).
+  have hvs_tail :=
+    valid_state_Incl_gen hwft2 (incl_Incl hinclr) hwfst_b hvarsz hvarss hvs2.
+  have hsao2 := stack_stable_wf_sao (sem_stack_stable_sprog hs_sem) hsao.
+  have hext2 := valid_state_extend_mem hwf hvs hext hvs_tail
+    (sem_validw_stable_uprog hsem) (sem_validw_stable_sprog hs_sem).
+  have [t3' [vme3 [hs_for hvs3 vme_eq2]]] :=
+    Pftail erefl pmap rsp Slots Addr Writable Align table rmap table' rmap' cs
+      hpmap hwf sao halloc hinclt hinclr hvarst vme_b m0 t2' hvs_tail hext2 hsao2.
+  exists t3', vme3; split=> //.
+  + apply: EForOne; [done | exact: hs_sem | exact: hs_for].
+  exact: eq_onT vme_eq vme_eq2.
+Qed.
 
 Local Lemma Hcall : sem_Ind_call P ev Pi_r Pfun.
 Proof.
