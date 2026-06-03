@@ -1,5 +1,5 @@
 export
-fn store(reg u32 arg0) {
+fn sw(reg u32 arg0) {
     [#aligned arg0] = #SW(arg0);
     [#aligned arg0 + 1] = #SW(arg0);
     [#aligned arg0 - 1] = #SW(arg0);

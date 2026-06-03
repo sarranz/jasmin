@@ -2,8 +2,8 @@ export
 fn srl(reg u32 arg0, reg u32 arg1) {
     reg u32 x;
 
-    x = arg0 >> arg1;
-    x >>= arg0;
+    x = arg0 >> (arg1 & 31);
+    x >>= (arg0 & 31);
     [#aligned x] = x;
 
     x = arg0 >> 1;

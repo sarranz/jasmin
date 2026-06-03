@@ -1,0 +1,7 @@
+export
+fn nop(reg u32 arg0) {
+    reg u32 x;
+    x = arg0;
+    #NOP();
+    [#aligned x] = x;
+}

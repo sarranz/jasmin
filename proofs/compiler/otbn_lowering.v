@@ -62,8 +62,8 @@ Module E.
     Definition invalid_carry_pexprs := user_error_s "invalid carry arguments".
     Definition cant_lower_mulu := user_error_s "can't lower MULU".
 
-    Definition invalid_sham (z : Z) : pp_error_loc :=
-      let err := pp_box [:: pp_s "invalid shift amount"; pp_e (Pconst z) ] in
+    Definition invalid_sham (e : pexpr) : pp_error_loc :=
+      let err := pp_box [:: pp_s "invalid shift amount"; pp_e e ] in
       user_error err ii.
 
     Definition imm_out_of_range {ws : wsize} (w : word ws) : pp_error_loc :=
@@ -159,7 +159,7 @@ Section UTILS.
   Definition chk_xreg_ws := chk_ws xreg_size.
 
   Definition chk_bn_shift (z : Z) : cexec unit :=
-    assert (check_bn_shift z) (E.invalid_sham ii z).
+    assert (check_bn_shift z) (E.invalid_sham ii (Pconst z)).
 
   Definition chk_address_displacement (ws : wsize) (w : word ws) : cexec unit :=
     assert (check_nbits Signed 12 w) (E.imm_out_of_range ii w).
@@ -402,10 +402,10 @@ Section LOWER_ASSIGN.
   Definition rv_expected_Imn_size (op : sop2) : option wsize :=
     match op with
     | Oadd _ | Osub _ | Oland _ | Olor _ | Olxor _ => Some U32
-    | Olsl _ | Olsr _ | Oasr _ => Some U8
     | _ => None
     end.
 
+  (* Shifts are special cases *)
   Definition rv_Imn_of_op2
     (op : sop2)
     (ws : wsize)
@@ -418,12 +418,10 @@ Section LOWER_ASSIGN.
     | Oland _ => mk ANDI
     | Olor _ => mk ORI
     | Olxor _ => mk XORI
-    | Olsl _ => mk SLLI
-    | Olsr _ => mk SRLI
-    | Oasr _ => mk SRAI
     | _ => skip
     end.
 
+  (* Shifts are special cases *)
   Definition rv_mn_of_op2
     (op : sop2) (e : pexpr) : lresult (rv_mnemonic * pexpr) :=
     let mk mn := issue (mn, e) in
@@ -433,25 +431,45 @@ Section LOWER_ASSIGN.
     | Oland _ => mk AND
     | Olor _ => mk OR
     | Olxor _ => mk XOR
-    | Olsl _ => mk SLL
-    | Olsr _ => mk SRL
-    | Oasr _ => mk SRA
     | _ => skip
     end.
 
-  (* Lower a binary 32-bit operation.
-     TODO: shifts should match masks of shift amount *)
+  Definition check_shift_amount (e : pexpr) : option pexpr :=
+    let mask := wrepr U8 31 in
+    if is_wconst U8 e is Some n
+    then let%opt _ := oassert (n == wand n mask) in Some e
+    else if e is Papp2 (Oland _) a b then
+      let%opt n := is_wconst U8 b in
+      let%opt _ := oassert (n == mask) in
+      Some a
+    else None.
+
+  Definition lower_shift
+    (mn_imm mn_reg : rv_mnemonic) (e0 e1 : pexpr) : low_instr :=
+    if check_shift_amount e1 is Some e1'
+    then
+      let mn := if is_wconst U8 e1' then mn_imm else mn_reg in
+      li_simple (RV32 mn) [:: e0; e1' ]
+    else Error (E.invalid_sham ii e1).
+
+  (* Lower a binary 32-bit operation. *)
   Definition lower_Papp2_small
     (_ : wsize) (op : sop2) (e0 e1 : pexpr) : low_instr :=
-    let%lr (op, e1') :=
-      if rv_expected_Imn_size op is Some ws then
-        if is_wconst ws e1 is Some w then
-          let%lr (mn, wimm) := rv_Imn_of_op2 op w in
-          issue (mn, wconst wimm)
-        else rv_mn_of_op2 op e1
-      else rv_mn_of_op2 op e1
-    in
-    li_simple (RV32 op) [:: e0; e1' ].
+    match op with
+    | Olsl _ => lower_shift SLLI SLL e0 e1
+    | Olsr _ => lower_shift SRLI SRL e0 e1
+    | Oasr _ => lower_shift SRAI SRA e0 e1
+    | _ =>
+        let%lr (op, e1') :=
+          if rv_expected_Imn_size op is Some ws then
+            if is_wconst ws e1 is Some w then
+              let%lr (mn, wimm) := rv_Imn_of_op2 op w in
+              issue (mn, wconst wimm)
+            else rv_mn_of_op2 op e1
+          else rv_mn_of_op2 op e1
+        in
+        li_simple (RV32 op) [:: e0; e1' ]
+    end.
 
   Definition otbn_Iop_of_op2
     (op : sop2) (fg : bn_flag_group) : lresult (seq lval * otbn_op) :=
@@ -476,8 +494,7 @@ Section LOWER_ASSIGN.
   Definition lower_Papp2_large
     (ws : wsize) (op : sop2) (e0 e1 : pexpr) : low_instr :=
     let%lr (lvs, op) :=
-      if isSome (is_wconst ws e1)
-      then otbn_Iop_of_op2 op FG0
+      if isSome (is_wconst ws e1) then otbn_Iop_of_op2 op FG0
       else otbn_op_of_op2 op FG0
     in
     li_issue lvs op [:: e0; e1 ].

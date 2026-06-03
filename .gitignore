@@ -49,3 +49,4 @@ Makefile.coq.conf
 result
 
 .env-acc-root
+compiler/examples/gimli/otbn/build/

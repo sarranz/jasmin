@@ -1,0 +1,6 @@
+export
+fn slli_too_large(reg u32 arg0) {
+    reg u32 x;
+    x = arg0 << 32;
+    [#aligned x] = x;
+}

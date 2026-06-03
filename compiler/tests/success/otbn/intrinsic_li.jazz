@@ -2,6 +2,9 @@ export
 fn li() {
     reg u32 x;
 
+    x = #LI(0);
+    [#aligned x] = x;
+
     x = #LI(1);
     [#aligned x] = x;
 
@@ -9,5 +12,11 @@ fn li() {
     [#aligned x] = x;
 
     x = #LI(0xabcdef01);
+    [#aligned x] = x;
+
+    x = #LI(2147483647);
+    [#aligned x] = x;
+
+    x = #LI(-2147483648);
     [#aligned x] = x;
 }
