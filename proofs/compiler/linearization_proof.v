@@ -3095,7 +3095,7 @@ Section PROOF.
   Proof. by []. Qed.
 
   Local Lemma Hfor : sem_Ind_for p var_tmps Pi_r Pfor.
-  Proof. Admitted.
+  Proof. Admitted. (* TODO_OTBN: no semantics for repeat loops. *)
 
   Lemma has_label_allocate_stack_frame p1 b ii z tmp rastack lbl :
     ~~has (is_label lbl) (allocate_stack_frame liparams p1 b ii z tmp rastack).
@@ -3177,8 +3177,7 @@ Section PROOF.
       + case: sf_return_address ok_ret_addr vrsp_ne_aux => //=.
         + by move=> v [x|] //= /andP [] _.
         + by move=> ra_call ra_return z [x|] //= /and5P [_ _ + _ _].
-        (* TODO_OTBN: admitted until HW call stack semantics are defined *)
-        admit.
+        admit. (* TODO_OTBN: no semantics for HW call stack *)
       by rewrite /get_var /with_vm /= vm2_rsp.
 
     set ra := sf_return_address (f_extra fd').
@@ -3306,8 +3305,7 @@ Section PROOF.
         (ts - wrepr Uptr sz)%R
         by ssrring.ssring.
       by rewrite top_stack_after_aligned_alloc // wrepr_opp => ->.
-      (* TODO_OTBN: admitted until HW call stack semantics are defined *)
-      admit.
+      admit. (* TODO_OTBN: no semantics for HW call stack *)
 
     set ls1 := setcpc (lset_estate ls (escs s1) m' vm') fn' 1.
     have huincl : (kill_vars (killed_on_entry ra) (kill_tmp_call p fn' s1)).[vrsp <- Vword s] <=1  vm'.
@@ -3367,8 +3365,7 @@ Section PROOF.
       + case: sf_return_address ok_ret_addr vrsp_ne_aux => //=.
         + by move=> v [x|] //= /andP [] _.
         + by move=> ?? z [x|] //= /and5P [_ _ + _ _].
-        (* TODO_OTBN: admitted until HW call stack semantics are defined *)
-        admit.
+        admit. (* TODO_OTBN: no semantics for HW call stack *)
       + by rewrite /get_var /with_vm /= vm2'_rsp.
       rewrite /= !size_cat /= !addnS addn0 -/after' => vm2'_b [H1 H2 H3]; exists vm2'_b; split => //.
       rewrite H3 /ts /s /sz; f_equal; case: ifP => _; rewrite ?wrepr_sub ?wrepr0; ssrring.ssring.
@@ -3414,8 +3411,7 @@ Section PROOF.
     + by etransitivity; eauto.
     + exact hmatch'.
     by etransitivity; [exact: U | exact: U'].
-  (* TODO_OTBN: admitted because RAhwstack sub-case requires HW call stack semantics *)
-  Admitted.
+  Admitted. (* TODO_OTBN: RAhwstack sub-case requires HW call stack semantics *)
 
   Lemma push_to_save_has_no_label ii lbl m sp:
     ~~ has (is_label lbl) (push_to_save liparams p ii m sp).
@@ -4733,10 +4729,8 @@ Section PROOF.
       + exact: mm_free M2.
       by transitivity mi.
     }
-    (* TODO_OTBN: RAhwstack - admitted until HW call stack semantics are defined *)
-    { admit. }
-  (* TODO_OTBN: admitted because RAhwstack sub-case requires HW call stack semantics *)
-  Admitted.
+    { admit. (* TODO_OTBN: no HW call stack semantics *) }
+  Admitted. (* TODO_OTBN: RAhwstack sub-case requires HW call stack semantics *)
 
   Lemma linear_fdP ii k s1 fn s2 :
     sem_call p var_tmps ii k s1 fn s2 →

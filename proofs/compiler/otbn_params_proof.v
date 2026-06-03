@@ -56,13 +56,66 @@ Context
 Section STACK_ALLOC.
 
 Lemma otbn_mov_ofsP : mov_ofs_correct (ap_sap otbn_params).(sap_mov_ofs).
-Proof. Admitted.
+Proof.
+  move=> P' ev s1 e w ofs pofs x tag mk ii ins s2 P'_globs.
+  t_xrbindP=> ve ok_ve ok_w vofs ok_vofs ok_pofs.
+  rewrite /sap_mov_ofs /= /mov_ofs.
+  case: mk.
+  (* MK_LEA: [LA] evaluates the address [add e ofs] to [w + pofs]. *)
+  + move=> [<-] hw; exists (evm s2); last done.
+    rewrite with_vm_same /sem_sopn /= P'_globs /exec_sopn /=.
+    rewrite ok_ve ok_vofs /= /sem_sop2 /= ok_w ok_pofs /=.
+    by rewrite truncate_word_u /= hw.
+  (* MK_MOV. *)
+  case: x => //.
+  (* x = Lvar. *)
+  - move=> x_.
+    case: ifP => _.
+    (* [e] is a load: copy it with [LW] (requires [ofs = 0]). *)
+    + case: is_zeroP => // hz [<-] hw; exists (evm s2); last done.
+      rewrite with_vm_same /sem_sopn /= P'_globs /exec_sopn /= ok_ve /= ok_w /=.
+      move: hz ok_vofs ok_pofs hw => -> /=.
+      rewrite /sem_sop1 /= => -[<-].
+      rewrite /to_word /= truncate_word_u => -[<-].
+      by rewrite wunsigned0 wrepr0 GRing.addr0 => ->.
+    case: is_zeroP => [hz [<-] hw | hnz].
+    (* [ofs = 0]: register move via the [MOV] extra op. *)
+    + exists (evm s2); last done.
+      rewrite with_vm_same /sem_sopn /= P'_globs /exec_sopn /= ok_ve /=.
+      rewrite /sopn_sem /sopn_sem_ /= ok_w /=.
+      move: hz ok_vofs ok_pofs hw => -> /=.
+      rewrite /sem_sop1 /= => -[<-].
+      rewrite /to_word /= truncate_word_u => -[<-].
+      by rewrite wunsigned0 wrepr0 GRing.addr0 => ->.
+    (* [ofs <> 0]: [ADDI] computes [wadd w pofs = w + pofs] directly. *)
+    move=> [<-] hw; exists (evm s2); last done.
+    rewrite with_vm_same /sem_sopn /= P'_globs /exec_sopn /= ok_ve ok_vofs /=.
+    rewrite ok_w ok_pofs /=.
+    by move: hw => /= ->.
+  (* x = Lmem: store the word with [SW] (requires [ofs = 0]). *)
+  move=> a ws_ vi p_.
+  case: is_zeroP => // hz [<-] hw; exists (evm s2); last done.
+  rewrite with_vm_same /sem_sopn /= P'_globs /exec_sopn /= ok_ve /= ok_w /=.
+  move: hz ok_vofs ok_pofs hw => -> /=.
+  rewrite /sem_sop1 /= => -[<-].
+  rewrite /to_word /= truncate_word_u => -[<-].
+  by rewrite wunsigned0 wrepr0 GRing.addr0 => ->.
+Qed.
 
 Lemma otbn_immediateP : immediate_correct (ap_sap otbn_params).(sap_immediate).
-Proof. Admitted.
+Proof.
+  move=> P' ev s ii x z.
+  case: x => - [] [] // [] // x xi _ /=.
+  by rewrite /sem_sopn /= /exec_sopn /= truncate_word_u.
+Qed.
 
 Lemma otbn_swapP : swap_correct (ap_sap otbn_params).(sap_swap).
-Proof. Admitted.
+Proof.
+  move=> P' ev s ii tag x y z w pz pw hxty hyty hzty hwty hz hw.
+  rewrite /= /sem_sopn /= /get_gvar /= /get_var /= hz hw /=.
+  rewrite /exec_sopn /= !truncate_word_u /= /write_var /set_var /=.
+  by rewrite (convertible_eval_atype hxty) (convertible_eval_atype hyty).
+Qed.
 
 End STACK_ALLOC.
 
