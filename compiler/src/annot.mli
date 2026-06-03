@@ -86,5 +86,11 @@ val ensure_uniq1 :
   Annotations.annotations ->
   'a option
 
+val get_pos_int_annot :
+  ?case_sensitive:bool ->
+  string ->
+  Annotations.annotations ->
+  int option
+
 val consume :
   string -> Annotations.annotations -> Annotations.annotations

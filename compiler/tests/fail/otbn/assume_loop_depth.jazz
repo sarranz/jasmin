@@ -1,0 +1,14 @@
+// Negative: an assumed loop depth propagates to the caller and overflows.
+// inner is asserted (via assume_loop_depth) to use eight loop-stack slots; main
+// wraps one repeat loop around the call to it, for a total of nine -- over the
+// depth-8 loop stack.  The failing function is main.
+#[assume_loop_depth=8]
+fn inner(reg u32 x) -> reg u32 { x += 1; return x; }
+
+export
+fn main(reg u32 x) -> reg u32 {
+    repeat 2 {
+      x = inner(x);
+    }
+    return x;
+}

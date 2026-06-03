@@ -1,0 +1,12 @@
+// Negative: an assumed call depth propagates to the caller and overflows.
+// deep is asserted (via assume_call_depth) to use eight call-stack slots; main
+// then calls it, for a total of nine -- over the depth-8 call stack.  The
+// failing function is main (deep, at the assumed depth 8, is within the limit).
+#[assume_call_depth=8]
+fn deep(reg u32 x) -> reg u32 { x += 1; return x; }
+
+export
+fn main(reg u32 x) -> reg u32 {
+    x = deep(x);
+    return x;
+}

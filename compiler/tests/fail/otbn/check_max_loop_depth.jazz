@@ -1,0 +1,15 @@
+// Negative: check_max_loop_depth tightens the limit below the actual depth.
+// main nests three repeat loops, but the limit for main is set to 2.  The
+// failing function is main.
+#[check_max_loop_depth=2]
+export
+fn main(reg u32 x) -> reg u32 {
+    repeat 2 {
+      repeat 2 {
+        repeat 2 {
+          x += 1;
+        }
+      }
+    }
+    return x;
+}

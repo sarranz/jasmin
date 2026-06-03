@@ -145,5 +145,9 @@ let ensure_uniq ?(case_sensitive = true)
 let ensure_uniq1 ?(case_sensitive = true) id f annot =
   ensure_uniq ~case_sensitive [ (id, f) ] annot
 
+(* Read the unique non-negative integer annotation named [id], if present. *)
+let get_pos_int_annot ?case_sensitive id annot =
+  ensure_uniq1 ?case_sensitive id (pos_int None) annot |> Option.map Z.to_int
+
 let consume id annot : A.annotations =
   List.filter (fun (k, _) -> not (String.equal id (L.unloc k))) annot

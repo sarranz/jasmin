@@ -1,0 +1,35 @@
+// assume_loop_depth on an instruction overrides the analysis of that loop and
+// its body.
+//
+// Same shape as the function-level test, but the annotation sits on inner's
+// outermost repeat loop: it is counted as a single loop level regardless of the
+// three loops nested inside it, so inner contributes 1 and main is 5 + 1 = 6.
+fn inner(reg u32 x) -> reg u32 {
+    #[assume_loop_depth=1]
+    repeat 2 {
+      repeat 2 {
+        repeat 2 {
+          repeat 2 {
+            x += 1;
+          }
+        }
+      }
+    }
+    return x;
+}
+
+export
+fn main(reg u32 x) -> reg u32 {
+    repeat 2 {
+      repeat 2 {
+        repeat 2 {
+          repeat 2 {
+            repeat 2 {
+              x = inner(x);
+            }
+          }
+        }
+      }
+    }
+    return x;
+}
