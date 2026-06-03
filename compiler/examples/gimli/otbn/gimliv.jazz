@@ -1,0 +1,108 @@
+/*
+ * Vectorized Gimli permutation for OTBN, using the wide (big-number) vector
+ * instructions of the ISA. Inspired by the x86-64 SSE version
+ * (../x86-64/gimliv.jinc), which keeps each of the three Gimli rows in a
+ * 128-bit SIMD register holding the four columns.
+ *
+ * OTBN's wide data registers (WDRs) are 256 bits = 8 x u32 lanes, but Gimli
+ * has only 4 columns, so each row uses the low 4 lanes (low 128 bits) of a
+ * WDR and the high 4 lanes are kept zero. The per-lane work uses the PQC
+ * vector instructions:
+ *   - BN.SHV.8S  : lanewise (u32) logical shift, for the column shifts/rotates
+ *                  (OTBN has no rotate, so a rotate is shl | shr like elsewhere)
+ *   - BN.AND/OR/XOR (256-bit) : the SP-box bitwise mixing
+ *   - BN.TRN     : the small/big column swaps (the VPSHUFD of the SSE version)
+ *
+ * NB: BN.SHV and BN.TRN are PQC-mode instructions; the simulator must run with
+ * --pqc.
+ *
+ * Layout in memory (DMEM), pointed to by `io`, three 256-bit slots:
+ *   io +  0 : [ s0, s1, s2, s3, 0,0,0,0 ]   (row x)
+ *   io + 32 : [ s4, s5, s6, s7, 0,0,0,0 ]   (row y)
+ *   io + 64 : [ s8, s9, s10,s11,0,0,0,0 ]   (row z)
+ * i.e. the 12 state words occupy the low four u32 lanes of each slot.
+ */
+
+param int N_ROUND = 24;
+param int ROUND_CONSTANT = 0x9e377900;
+
+/* Lanewise (u32) logical shift left by `count`. */
+inline fn shift(reg u256 x, inline int count) -> reg u256 {
+    reg u256 r = #BN_SHV_8S_SHL(x, count);
+    return r;
+}
+
+/* Lanewise (u32) rotate left by `count`: (x << count) | (x >> (32 - count)). */
+inline fn rotate(reg u256 x, inline int count) -> reg u256 {
+    reg u256 hi = #BN_SHV_8S_SHL(x, count);
+    reg u256 lo = #BN_SHV_8S_SHR(x, 32 - count);
+    reg u256 r = hi |256u lo;
+    return r;
+}
+
+inline
+fn gimli_body(reg u256 x, reg u256 y, reg u256 z) -> reg u256, reg u256, reg u256 {
+    inline int round;
+
+    for round = N_ROUND downto 0 {
+        x = rotate(x, 24);
+        y = rotate(y, 9);
+
+        // new z = x ^ (z << 1) ^ ((y & z) << 2)
+        reg u256 z1 = shift(z, 1);
+        reg u256 yz = y &256u z;
+        reg u256 yz2 = shift(yz, 2);
+        reg u256 nz = x ^256u z1;
+        nz = nz ^256u yz2;
+
+        // new y = (y ^ x) ^ ((x | z) << 1)
+        reg u256 xz = x |256u z;
+        reg u256 xz1 = shift(xz, 1);
+        reg u256 ny = y ^256u x;
+        ny = ny ^256u xz1;
+
+        // new x = (z ^ y) ^ ((x & y) << 3)
+        reg u256 xy = x &256u y;
+        reg u256 xy3 = shift(xy, 3);
+        reg u256 nx = z ^256u y;
+        nx = nx ^256u xy3;
+
+        x = nx;
+        y = ny;
+        z = nz;
+
+        if (round % 4) == 0 {   // small swap: [c0,c1,c2,c3] -> [c1,c0,c3,c2]
+            reg u256 t = #BN_TRN2_8S(x, x);
+            x = #BN_TRN1_8S(t, x);
+        }
+
+        if (round % 4) == 2 {   // big swap: [c0,c1,c2,c3] -> [c2,c3,c0,c1]
+            reg u256 t = #BN_TRN2_4D(x, x);
+            x = #BN_TRN1_4D(t, x);
+        }
+
+        if (round % 4) == 0 {   // add round constant into column 0 (lane 0)
+            // (8u32)[...] packs element 0 into the *high* lane, so the lane-0
+            // constant is the last element.
+            // This becomes several different globals in the data section.
+            global u256 g = (8u32)[0, 0, 0, 0, 0, 0, 0, ROUND_CONSTANT + round];
+            reg u256 rc = g;
+            x = x ^256u rc;
+        }
+    }
+
+    return (x, y, z);
+}
+
+export
+fn gimliv(reg u32 io) {
+    reg u256 x = [#aligned :u256 io +  0];
+    reg u256 y = [#aligned :u256 io + 32];
+    reg u256 z = [#aligned :u256 io + 64];
+
+    (x, y, z) = gimli_body(x, y, z);
+
+    [#aligned :u256 io +  0] = x;
+    [#aligned :u256 io + 32] = y;
+    [#aligned :u256 io + 64] = z;
+}
