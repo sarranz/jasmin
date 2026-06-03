@@ -4487,13 +4487,49 @@ Proof.
       by apply/incl_Incl/incl_merge_r.
     by apply: ihc2.
 
-  (* For: FIrange -> alloc returns Error (vacuous); FIrepeat -> TODO *)
   + move=> fi c _ihc ii table1 rmap1 table2 rmap2 vme c2 /=.
-    move: fi => [fi_v fi_d fi_lo fi_hi|e] /=.
-    - by [].
-    (* TODO: wequiv_rec correctness for FIrepeat (analogous to Hfor above).
-       Requires threading st_sa_pre/post through sem_for iterations. *)
-    admit.
+    move: fi => [//|e].
+    set check_c2 := (X in loop2 _ X _ _ _).
+    t_xrbindP=> -[[{}table2 {}rmap2] [[e' c1'] cbody]] hloop -[<- <- <-] {c2}
+      hvarst1.
+    have [tbody [rbody [hincltf [hvarst_tf hsubset_tf] hinclrf hdef_tf
+        halloc_body he_alloc hinclt_b hincl_b]]] := loop_forP hloop hvarst1.
+    have [hvars_tf hvarsz_tf hvarss_tf] := hvarst_tf.
+    have [hvars1 hvarsz1 hvarss1] := hvarst1.
+    have hweaken : forall s s',
+      st_sa_pre table1 rmap1 vme s s' -> st_sa_pre table2 rmap2 vme s s'.
+    + move=> s s' /[dup] hpre0 [hvs0 _ _ _ _].
+      apply: st_sa_pre_incl hpre0 => //.
+      case: hdef_tf.
+      + by move=> [_ ->]; exact: hvs0.(vs_wf_region).(wfr_status).
+      move=> hr; apply: hr.
+      exact: (wf_table_incl hincltf hvars_tf hvs0.(vs_wf_table)).(wft_def).
+    apply wequiv_for_repeat.
+    + move=> s s' hpre0.
+      exists vme; first exact: hweaken hpre0.
+      done.
+    + move=> s1 s2 r /[dup] hpre0 /hweaken-[hvsv _ _ _ _].
+      rewrite {1}/sem_fi /=.
+      t_xrbindP=> z hz_int <-.
+      have hz_pexpr : sem_pexpr true (p_globs P) s1 e = ok (Vint z).
+      + move: hz_int; rewrite /sem_pexpr_int.
+        t_xrbindP=> v hv hz.
+        by rewrite -(to_intI hz).
+      have := alloc_eP hwf_Slots.(wfsl_no_overflow) hwf_Slots.(wfsl_align)
+        hwf_pmap hvsv he_alloc hz_pexpr erefl.
+      rewrite -P'_globs => -[v' [hv'_tgt /truncate_valI [_ ?]]]; subst v'.
+      exists (ziota 0 z); last by [].
+      by rewrite /sem_pexpr_int hv'_tgt /=.
+    move=> s1 s2 [vme2 hpre heq].
+    have := _ihc _ _ _ _ _ _ halloc_body hvarst_tf _ _ hpre.
+    apply xrutt_facts.xrutt_weaken => //.
+    move=> s1' s2' [vme3 hpre3 heq3].
+    have [hvs_inv _ _ _ _] := hpre.
+    exists vme3; last by apply: (eq_onT heq (eq_onI hsubset_tf heq3)).
+    apply: st_sa_pre_incl hpre3 => //; last by apply: incl_Incl hincl_b.
+    move=> r x.
+    exact: (wf_status_eq_on heq3 (hvarss_tf r x)
+      (hvs_inv.(vs_wf_region).(wfr_status) r x)).
 
   (* While *)
   + move=> al c1 e ii' c2 ihc1 ihc2 ii table1 rmap1 table3 rmap3 vme c_.
@@ -4721,7 +4757,7 @@ Proof.
   apply: (valid_state_extend_mem hwf_Slots hvs' _ hvs'') => //=.
   + by move=> ???; rewrite hvalw hvalidws hvalw1.
   by move=> ???; rewrite hvalw' hvalidwt hvalw2.
-Admitted.
+Qed.
 
 End CMD.
 
@@ -5095,7 +5131,6 @@ Proof.
   have := [elaborate
    it_check_cP
       hext.(em_no_overflow)
-      ev
       hmap
       (P':=P')
       refl_equal
