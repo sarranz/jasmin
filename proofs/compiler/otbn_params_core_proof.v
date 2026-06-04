@@ -131,7 +131,17 @@ Lemma smart_mov_sem_fopns_args s (w : wreg) (xi:var_i) y :
     [/\ sem_fopns_args s lc = ok (with_vm s vm)
       , vm =[\ Sv.singleton xi ] evm s
       & get_var true vm xi >>= to_word Uptr = ok w ].
-Proof. Admitted.
+Proof.
+  move=> hc hgety.
+  rewrite /OTBNFopn_core.smart_mov /=.
+  case: eqP => heq /=.
+  - case : y heq hgety=> y yi /= *; subst y.
+    rewrite -{1}(with_vm_same s); eexists; split; eauto.
+  rewrite (mov_sem_fopn_args hc hgety) /=.
+  eexists; split; first reflexivity.
+  + by move=> z /Sv.singleton_spec hz; t_vm_get.
+  by rewrite /get_var Vm.setP_eq /= (convertible_eval_atype hc) /= truncate_word_u.
+Qed.
 
 (* Unlike RISC-V's [gen_smart_opi], the OTBN combinator returns
    [option (seq opn_args)]: it yields [Some lc] exactly when emitting [lc] is

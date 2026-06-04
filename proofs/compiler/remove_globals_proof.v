@@ -1017,9 +1017,9 @@ Module RGP. Section PROOFS.
       have [vlo' hvlo' hvloU] := remove_glob_eP hval hlo zlo.
       have [vhi' hvhi' hvhiU] := remove_glob_eP hval hhi zhi.
       rewrite hvlo' /=.
-      case: (wrequiv_to_int hvloU hzlo) => z' [htz heqz].
+      case: (wrequiv_to_int hvloU hzlo) => z' htz heqz.
       rewrite -heqz in htz; rewrite htz /= hvhi' /=.
-      case: (wrequiv_to_int hvhiU hzhi) => z'' [htz' heqz'].
+      case: (wrequiv_to_int hvhiU hzhi) => z'' htz' heqz'.
       rewrite -heqz' in htz'; by rewrite htz'.
     + t_xrbindP => fi e' he <- [m2 c2] /loopP [m1 [hc hincl1 hincl2]] /= [<-].
       move=> <-.
@@ -1036,7 +1036,7 @@ Module RGP. Section PROOFS.
       rewrite /sem_fi /sem_pexpr_int /=.
       have [vz' hvz' hvzU] := remove_glob_eP hval he hz.
       rewrite hvz' /=.
-      case: (wrequiv_to_int hvzU htz) => z'' [htz' heqz].
+      case: (wrequiv_to_int hvzU htz) => z'' htz' heqz.
       rewrite -heqz in htz'; by rewrite htz'.
   Qed.
 
