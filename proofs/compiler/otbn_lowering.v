@@ -282,7 +282,8 @@ Section LOWER_OPN.
     else if has_carry then BN_SUBB else BN_SUB.
 
   Definition lower_carry_op
-    (is_add : bool) (lvs : seq lval) (es : seq pexpr) : low_instr :=
+    (is_add : bool) (sz : wsize) (lvs : seq lval) (es : seq pexpr) : low_instr :=
+    Let _ := chk_xreg_ws ii sz in
     Let lvs' := get_carry_lvals lvs in
     Let: (has_carry, es') := get_carry_pexprs es in
     let op := carry_op is_add has_carry in
@@ -303,8 +304,8 @@ Section LOWER_OPN.
     (lvs : seq lval) (op : pseudo_operator) (es : seq pexpr) : low_instr :=
     let%lr (lvs', op', es') :=
       match op with
-      | Oaddcarry _ => lower_carry_op true lvs es
-      | Osubcarry _ => lower_carry_op false lvs es
+      | Oaddcarry sz => lower_carry_op true sz lvs es
+      | Osubcarry sz => lower_carry_op false sz lvs es
       | Omulu _ => Error (E.cant_lower_mulu ii)
       | Oswap ty => lower_swap ty lvs es
       | _ => skip

@@ -9,6 +9,7 @@ Require Import
   expr
   lowering
   lowering_lemmas
+  pseudo_operator
   psem
   utils.
 Require Import
@@ -52,11 +53,6 @@ Notation lower_prog :=
      fv).
 
 (* -------------------------------------------------------------------- *)
-(* Plumbing: the OTBN lowering is genuinely monadic ([lower_i] can fail
-   and produces a [cmd]), so [lower_cmd] = [conc_mapM lower_i] and
-   [lower_prog] threads through [map_cfprog]. The following lemmas expose
-   the structure of a successful lowering. *)
-
 Lemma lower_cmd_nil lc : lower_cmd [::] = ok lc -> lc = [::].
 Proof. by move=> [<-]. Qed.
 
@@ -99,13 +95,260 @@ Lemma Hassgn_esem (p' : prog) (hglob : p_globs p' = p_globs p)
 Proof.
 Admitted.
 
+(* ==================================================================== *)
+(* Correctness of [lower_copn].  Each operation [lower_copn] may emit is
+   handled by one auxiliary "case" lemma below, then assembled in
+   [lower_copnP].  [RV32 mn] is emitted verbatim (identity, discharged
+   inline in [lower_copnP]).  The other three transformations each get a
+   case lemma plus the helper lemmas it relies on, with an implementation
+   plan in a comment.  Every auxiliary/helper lemma is still [Admitted];
+   [lower_copnP] (and hence [Hopn_esem]) is proved modulo them. *)
+
+(* -------------------------------------------------------------------- *)
+(* SHIFT ABSORPTION: [BN_basic mn fg] -> [BN_basic_shift mn fg sh].
+   Model: ARM.  Mirror arm_lowering_proof.v: [get_arg_shiftP] (operand
+   shift evaluation), [with_shift_unop]/[with_shift_binop]/
+   [with_shift_terop] (shifted-instruction exec vs base exec on the
+   shifted operand), and the [arg_shift] branch of [lower_Papp2P] /
+   [lower_base_op].
+
+   Call-site context (lower_copnP, BN_basic branch): the source op is
+   [Oasm (BaseOp (None, BN_basic mn fg))]; [lower_basic_shift] returned
+   [Some (sh, es'')], i.e. the operand it inspected had the form
+   [base << sham] / [base >> sham]; [lvs] is unchanged.
+
+   Key definitions (Print/Search them; no need to open other files):
+   [get_arg_shift], [reg_shift_of_sop2] (Olsl (Op_w U256) -> RS_left,
+   Olsr U256 -> RS_right), [word_shift_of_reg_shift] (RS_left -> wshl,
+   RS_right -> wshr), [desc_bn_basic_shift_mnemonic] (built from the base
+   desc via [arch_mk_semi1_shifted]/[arch_mk_semi2_2_shifted]/
+   [arch_mk_semi3_2_shifted], which apply [word_shift_of_reg_shift] to one
+   operand and append the U8 shift amount as the last input), [exec_sopn],
+   [app_sopn]. *)
+
+(* [get_arg_shiftP]: if [get_arg_shift] accepts [e] then [e] evaluates to
+   the shifted base value.  Idea (cf. ARM [get_arg_shiftP]): [e] must be
+   [Papp2 op (Pvar x) (Papp1 (Oword_of_int U8) (Pconst z))] with [op] a
+   256-bit [Olsl]/[Olsr]; its typed [sem_sop2] computes exactly
+   [word_shift_of_reg_shift sh base (wunsigned sham)].  Destruct [e] to
+   that shape, read off [ebase = Pvar x] and [esham], and relate [sem_sop2]
+   to [word_shift_of_reg_shift].  Check whether a [zero_extend] to
+   xreg_size appears (ARM zero-extends the base; here it is already
+   256-bit). *)
+Lemma get_arg_shiftP ii ws e ebase sh esham s v :
+  get_arg_shift ii ws e = ok (Some (ebase, sh, esham)) ->
+  sem_pexpr true (p_globs p) s e = ok v ->
+  exists (wb : word ws) (wa : word U8),
+    [/\ sem_pexpr true (p_globs p) s ebase = ok (Vword wb)
+      , sem_pexpr true (p_globs p) s esham = ok (Vword wa)
+      & to_word ws v = ok (word_shift_of_reg_shift sh wb (wunsigned wa)) ].
+Proof.
+Admitted.
+
+(* [bn_shifted_unopP]/[bn_shifted_binopP]/[bn_shifted_teropP]: the shifted
+   instruction's [exec_sopn] equals the base one's when the operand that
+   gets shifted is supplied pre-shifted.  The three lemmas match the three
+   arities [lower_basic_shift] uses: unop [BN_NOT] (1 wide operand); binop
+   [BN_ADD/SUB/AND/OR/XOR/CMP/CMPB] (shift on the 2nd operand); carry-terop
+   [BN_ADDC/SUBB] (operands x, base, cf; the U8 shift amount appended
+   last).  Idea (cf. ARM [with_shift_unop]/[with_shift_binop]/
+   [with_shift_terop]): unfold [exec_sopn]/[app_sopn]; the shifted [semi]
+   (via [arch_mk_semiN_2_shifted]) is the base [semi] precomposed with
+   [word_shift_of_reg_shift] on the designated operand.  Note: [BN_ADDC]/
+   [BN_SUBB] read the carry from the flag group [current_CF fg] (id_in
+   [F]); reconcile the [cf] argument position with the instruction
+   description. *)
+Lemma bn_shifted_unopP fg sh (wb : word arch_decl.xreg_size) (wa : word U8) x vs r :
+  to_word arch_decl.xreg_size x
+  = ok (word_shift_of_reg_shift sh wb (wunsigned wa)) ->
+  exec_sopn (Oasm (BaseOp (None, BN_basic BN_NOT fg))) [:: x & vs] = ok r ->
+  exec_sopn (Oasm (BaseOp (None, BN_basic_shift BN_NOT fg sh)))
+    [:: Vword wb, Vword wa & vs] = ok r.
+Proof.
+Admitted.
+
+Lemma bn_shifted_binopP mn fg sh (wb : word arch_decl.xreg_size) (wa : word U8) x y vs r :
+  mn \in [:: BN_ADD; BN_SUB; BN_AND; BN_OR; BN_XOR; BN_CMP; BN_CMPB ] ->
+  to_word arch_decl.xreg_size y
+  = ok (word_shift_of_reg_shift sh wb (wunsigned wa)) ->
+  exec_sopn (Oasm (BaseOp (None, BN_basic mn fg))) [:: x, y & vs] = ok r ->
+  exec_sopn (Oasm (BaseOp (None, BN_basic_shift mn fg sh)))
+    [:: x, Vword wb, Vword wa & vs] = ok r.
+Proof.
+Admitted.
+
+Lemma bn_shifted_teropP mn fg sh (wb : word arch_decl.xreg_size) (wa : word U8) x y cf vs r :
+  mn \in [:: BN_ADDC; BN_SUBB ] ->
+  to_word arch_decl.xreg_size y
+  = ok (word_shift_of_reg_shift sh wb (wunsigned wa)) ->
+  exec_sopn (Oasm (BaseOp (None, BN_basic mn fg))) [:: x, y, cf & vs] = ok r ->
+  exec_sopn (Oasm (BaseOp (None, BN_basic_shift mn fg sh)))
+    [:: x, Vword wb, cf, Vword wa & vs] = ok r.
+Proof.
+Admitted.
+
+(* [lower_basic_shiftP] (case lemma assembling the above): from
+   [lower_basic_shift ii mn es = Some (sh, es'')] conclude the
+   [BN_basic_shift] sem_sopn on [es''] equals the [BN_basic] sem_sopn on
+   [es].  Idea (cf. ARM [lower_Papp2P] arg_shift branch + [lower_base_op]):
+   unfold [lower_basic_shift] (it cases [mn] into the three arity groups,
+   splits off the inspected operand with [rsnoc]/[rsnoc2]/[rsnoc3], and
+   reshuffles to [pre ++ ebase :: pos ++ [:: esham]]); apply [get_arg_shiftP]
+   to that operand; dispatch to the matching [bn_shifted_*P].  Unfold
+   [sem_sopn] on both sides ([sem_pexprs] of [es] vs [es''] then
+   [exec_sopn]); [lvs] is identical, so the [write_lvals] step is shared
+   once the exec results agree.  Output type is preserved (cf. ARM
+   [sopn_tout_with_shift]). *)
+Lemma lower_basic_shiftP ii mn fg lvs es sh es'' s0 s1 :
+  lower_basic_shift ii mn es = ok (Some (sh, es'')) ->
+  sem_sopn (p_globs p) (Oasm (BaseOp (None, BN_basic mn fg))) s0 lvs es = ok s1 ->
+  sem_sopn (p_globs p) (Oasm (BaseOp (None, BN_basic_shift mn fg sh))) s0 lvs es''
+  = ok s1.
+Proof.
+Admitted.
+
+(* -------------------------------------------------------------------- *)
+(* CARRY: [Oaddcarry sz]/[Osubcarry sz] -> [BN_basic (BN_ADD(C)/BN_SUB(B))
+   FG1].  Model: ARM.  Mirror arm_lowering_proof.v [lower_add_carryP] and
+   the arithmetic lemma [wunsigned_carry], plus [write_Lnone] for the dummy
+   flag lvals.
+
+   Call-site context (lower_copnP, carry branch): [sz = xreg_size] (U256),
+   guaranteed by the [chk_xreg_ws] guard in [lower_carry_op] (the
+   [ok (Some ..)] result means the assert passed); [is_add] selects
+   add/sub.  [get_carry_lvals] matched [lvs = [:: cf; r]] (exactly two, as
+   the source has two outputs) and produced
+   [lvs' = [:: cf; lnoneb; lnoneb; lnoneb; r]].  [get_carry_pexprs] matched
+   [es = [:: e0; e1; ecf]] with [ecf] either [Pbool false]
+   (has_carry = false -> [BN_ADD]/[BN_SUB], [es' = [:: e0; e1]]) or a [Pvar]
+   (has_carry = true -> [BN_ADDC]/[BN_SUBB], [es' = [:: e0; e1; ecf]]).
+
+   Key definitions: [Oaddcarry_instr]/[Osubcarry_instr] (semi =
+   [waddcarry]/[wsubcarry]), [desc_bn_basic_carry_binop] /
+   [desc_bn_basic_binop] (semi = [semi_carry_binop_cmlz] / [with_cmlz],
+   producing [CF_of_Z] then 3 m/l/z flags then the result),
+   [get_carry_lvals], [get_carry_pexprs], [carry_op], [current_CF],
+   [lnoneb]. *)
+
+(* [waddsubcarry_cmlzP]: the wide-carry op's flag and result match the
+   pseudo-op's [waddcarry]/[wsubcarry].  The carry-out [CF_of_Z z] (= [Some]
+   of bit 256 of [z]) equals the boolean carry, and the wide result equals
+   the word result.  Idea (cf. ARM [wunsigned_carry], proving
+   [(wbase <=? res') = (res != res')]): additionally relate [CF_of_Z]'s
+   bit-256 extraction to that overflow predicate -- for
+   [z = wunsigned x +/- wunsigned y +/- b2z c], [z] stays in a range where
+   bit 256 equals [wbase <=? z] (add) / the borrow (sub).  Pure word/[Z]
+   arithmetic: [wunsigned_range], [wbase] bounds, [wrepr]/[wunsigned]
+   round-trips, [lia]. *)
+Lemma waddsubcarry_cmlzP is_add (x y : word arch_decl.xreg_size) (c : bool) :
+  let fZ := if is_add then Z.add else Z.sub in
+  let fw := if is_add then +%R else (fun a b : word arch_decl.xreg_size => a - b)%R in
+  CF_of_Z (fZ (fZ (wunsigned x) (wunsigned y)) (Z.b2z c))
+  = Some (if is_add then (waddcarry x y c).1 else (wsubcarry x y c).1)
+  /\ fw (fw x y) (wrepr arch_decl.xreg_size (Z.b2z c))
+     = (if is_add then (waddcarry x y c).2 else (wsubcarry x y c).2).
+Proof.
+Admitted.
+
+(* [lower_carry_opP] (case lemma): the lowered [BN_basic] sem_sopn
+   reproduces the source [Oaddcarry]/[Osubcarry].  Idea (cf. ARM
+   [lower_add_carryP]): unfold [lower_carry_op] (extract the
+   [sz = xreg_size] assert, [get_carry_lvals], [get_carry_pexprs]); unfold
+   both [sem_sopn].  Source [semi] is [waddcarry]/[wsubcarry]; target [semi]
+   is [semi_carry_binop_cmlz] (has_carry) or [semi_binop_cmlz] (no carry).
+   Use [waddsubcarry_cmlzP] to equate the carry flag and the result; the 3
+   extra m/l/z flags are written to the [lnoneb] dummies, which are no-ops
+   (write to [Lnone_b] is identity, cf. ARM [write_Lnone] / a general
+   [write_lval] of [Lnone] lemma).  Split on [has_carry] ([Pvar] vs
+   [Pbool false]). *)
+Lemma lower_carry_opP ii is_add sz lvs es lvs' op' es' s0 s1 :
+  let: op := if is_add then Oaddcarry else Osubcarry in
+  lower_carry_op ii is_add sz lvs es = ok (Some (lvs', op', es')) ->
+  sem_sopn (p_globs p) (Opseudo_op (op sz)) s0 lvs es
+  = ok s1 ->
+  sem_sopn (p_globs p) (Oasm op') s0 lvs' es' = ok s1.
+Proof.
+Admitted.
+
+(* -------------------------------------------------------------------- *)
+(* SWAP: [Oswap (aword sz)] -> [ExtOp (SWAP sz)].  Model: RISC-V, which
+   lowers swap to an extra op the same way; mirror the [Oswap] case of
+   riscv_lowering_proof.v's [Hopn_esem] (via [lower_swap] -> [SWAP]).
+
+   Call-site context (lower_copnP, swap branch): [ty = aword sz] with [sz]
+   in {reg_size, xreg_size} (other sizes make [lower_swap] error, so the
+   [ok (Some ..)] branch fixes this); [es] is unchanged.  For
+   [sz = reg_size], [lvs' = lvs]; for [sz = xreg_size],
+   [lvs' = lnone_mlz ++ lvs] (3 dummy flag lvals prepended).
+
+   Key definitions: [lower_swap], [lnone_mlz] (= [nseq 3 lnoneb]),
+   [li_xissue], otbn_extra [get_instr_desc] ([SWAP sz] -> [Oswap_instr
+   (aword sz)] when [sz <= reg_size], else [desc_swap_large]),
+   [desc_swap_large] (outputs 3 flags then the two swapped words),
+   [Oswap_instr]/[swap_semi]. *)
+
+(* [lower_swapP] (case lemma): the [SWAP] extra op reproduces [Oswap].
+   Idea: case on [sz].  For [reg_size], otbn_extra's
+   [get_instr_desc (SWAP sz)] is [Oswap_instr (aword sz)] (same as the
+   source), with [lvs]/[es] unchanged, so [sem_sopn] coincides -- a near
+   identity, exactly like RISC-V.  For [xreg_size], the op is
+   [desc_swap_large], which emits 3 leading flags (M/L/Z) absorbed by the
+   [lnone_mlz] dummies (write to [Lnone] is a no-op) followed by the two
+   swapped words. *)
+Lemma lower_swapP ii ty lvs es lvs' op' es' s0 s1 :
+  lower_swap ii ty lvs es = ok (Some (lvs', op', es')) ->
+  sem_sopn (p_globs p) (Opseudo_op (Oswap ty)) s0 lvs es = ok s1 ->
+  sem_sopn (p_globs p) (Oasm op') s0 lvs' es' = ok s1.
+Proof.
+Admitted.
+
+(* [lower_copnP]: assemble the case lemmas.  The dispatch leaves four real
+   cases; three are discharged by the case lemmas above (shift absorption /
+   carry / swap), and [RV32 mn] is verbatim. *)
+Lemma lower_copnP ii lvs op es lvs' op' es' s0 s1 :
+  lower_copn ii lvs op es = ok (Some (lvs', op', es')) ->
+  sem_sopn (p_globs p) op s0 lvs es = ok s1 ->
+  sem_sopn (p_globs p) (Oasm op') s0 lvs' es' = ok s1.
+Proof.
+  rewrite /lower_copn.
+  case: op => [pop | slh | [ [msb aop] | eo ] ] //=.
+  - rewrite /lower_pseudo_operator.
+    case: pop => //=.
+    + move=> sz.
+      t_xrbindP=> o Ho.
+      case: o Ho => [[[a b] c]|] Ho //= [<- <- <-] hsrc.
+      exact: (lower_carry_opP Ho hsrc).
+    + move=> sz.
+      t_xrbindP=> o Ho.
+      case: o Ho => [[[a b] c]|] Ho //= [<- <- <-] hsrc.
+      exact: (lower_carry_opP Ho hsrc).
+    + move=> ty.
+      t_xrbindP=> o Ho.
+      case: o Ho => [[[a b] c]|] Ho //= [<- <- <-] hsrc.
+      exact: (lower_swapP Ho hsrc).
+  case: msb => [m|] //=.
+  rewrite /lower_base_op.
+  case: aop => //=.
+  - by move=> mn [<- <- <-].
+  move=> mn fg.
+  t_xrbindP=> o Ho.
+  case: o Ho => [[sh es'']|] Ho //= [<- <- <-] hsrc.
+  exact: (lower_basic_shiftP Ho hsrc).
+Qed.
+
 Lemma Hopn_esem (p' : prog) (hglob : p_globs p' = p_globs p)
   {ii lvs tag op es s0 s1 lc} :
   sem_sopn (p_globs p) op s0 lvs es = ok s1 ->
   lower_i (MkI ii (Copn lvs tag op es)) = ok lc ->
   esem p' ev lc s0 = ok s1.
 Proof.
-Admitted.
+  move=> hsem /=.
+  t_xrbindP=> oargs hoargs <-.
+  rewrite esem1.
+  case: oargs hoargs => [[[lvs' op'] es']|] hoargs /=; rewrite hglob;
+    last exact: hsem.
+  exact: (lower_copnP hoargs hsem).
+Qed.
 
 (* -------------------------------------------------------------------- *)
 
