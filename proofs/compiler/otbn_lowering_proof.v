@@ -242,7 +242,7 @@ Admitted.
    round-trips, [lia]. *)
 Lemma waddsubcarry_cmlzP is_add (x y : word arch_decl.xreg_size) (c : bool) :
   let fZ := if is_add then Z.add else Z.sub in
-  let fw := if is_add then +%R else (fun a b : word arch_decl.xreg_size => a - b)%R in
+  let fw := if is_add then +%R else (fun a b => a - b)%R in
   CF_of_Z (fZ (fZ (wunsigned x) (wunsigned y)) (Z.b2z c))
   = Some (if is_add then (waddcarry x y c).1 else (wsubcarry x y c).1)
   /\ fw (fw x y) (wrepr arch_decl.xreg_size (Z.b2z c))
@@ -268,33 +268,143 @@ Lemma lower_carry_opP ii is_add sz lvs es lvs' op' es' s0 s1 :
   = ok s1 ->
   sem_sopn (p_globs p) (Oasm op') s0 lvs' es' = ok s1.
 Proof.
-Admitted.
+  rewrite /lower_carry_op /chk_xreg_ws.
+  t_xrbindP=> /eqP ? hlvs hc es0 hes0 hli; subst sz.
+  move: hc; rewrite /get_carry_lvals /rsnoc2 /rsnoc.
+  case: lvs => [//|cf [//|r lvs_rest]] /= hcr.
+  have ? := ok_inj hcr; subst hlvs.
+  move: hes0; rewrite /get_carry_pexprs /rsnoc3 /rsnoc2 /rsnoc /=.
+  case: es => [//|e0 [//|e1 [//|ecf es_rest]]] /=.
+  case: ecf => //= [b | g]; first case: b => //=.
+  all: move=> /ok_inj /esym ?; subst es0.
+  all: move: hli; rewrite /li_issue /= => [[<- <- <-]].
+  case: is_add => /=.
+  3: case: is_add => /=.
+  (* ---- BN_ADD: no-carry, add ---- *)
+  - move=> hsrc; move: hsrc; rewrite /sem_sopn /=.
+    t_xrbindP=> v0 hv0 v1 hv1 hexec hwrite.
+    move=> hv1'.
+    move=> z4 z5 hz5 <- <- <- hexec2 hwrite2.
+    rewrite hv1 hv1' /=.
+    move: hexec2; rewrite /exec_sopn /= /sopn_sem /sopn_sem_ /=.
+    t_xrbindP=> r1 w0 hw0 w1 hw1.
+    case: z5 hz5 => [hz5 | a l hz5] /=.
+    + move=> /ok_inj <- hres; rewrite -hres in hwrite2.
+      move: hwrite2 => /=.
+      t_xrbindP=> s_cf hcf s_r hr hlr.
+      case: lvs_rest hlr => [/ok_inj <- | ? ? //].
+      rewrite hw0 hw1.
+      have hinner : (Let v := ok w0 in Let v2 := ok w1 in
+        @semi_to_atype [:: lword256; lword256] (ty_cmlz ++ [:: lword256])
+          (fun x y : u256 =>
+            ok (with_cmlz (wadd x y) (wunsigned x + wunsigned y))) v v2)
+        = ok (with_cmlz (wadd w0 w1)
+            (wunsigned w0 + wunsigned w1)) := erefl.
+      rewrite hinner; cbn - [with_cmlz].
+      rewrite /with_cmlz /add_tuple /with_mlz.
+      cbn [sem_ot eval_ltype ty_mlz ltuple].
+      have [hCF hR] := waddsubcarry_cmlzP true w0 w1 false.
+      rewrite Z.add_0_r in hCF.
+      rewrite wrepr0 GRing.addr0 in hR.
+      rewrite hCF /= hcf /= /write_none /=.
+      change (word.word.add_word w0 w1) with ((w0 + w1)%w).
+      by rewrite add_wordE hR /waddcarry /= hr /=.
+    + by move=> //.
+  (* ---- BN_SUB: no-carry, sub ---- *)
+  - move=> hsrc; move: hsrc; rewrite /sem_sopn /=.
+    t_xrbindP=> v0 hv0 v1 hv1 hexec hwrite.
+    move=> hv1'; move=> z4 z5 hz5 <- <- <- hexec2 hwrite2.
+    rewrite hv1 hv1' /=.
+    move: hexec2; rewrite /exec_sopn /= /sopn_sem /sopn_sem_ /=.
+    t_xrbindP=> r1 w0 hw0 w1 hw1.
+    case: z5 hz5 => [hz5 | a l hz5] /=.
+    2: by [].
+    move=> /ok_inj <- hres; rewrite -hres in hwrite2.
+    move: hwrite2 => /=.
+    t_xrbindP=> s_cf hcf s_r hr hlr.
+    case: lvs_rest hlr => [/ok_inj <- | ? ? //].
+    rewrite hw0 hw1.
+    have hinner : (Let v := ok w0 in Let v2 := ok w1 in
+      @semi_to_atype [:: lword256; lword256] (ty_cmlz ++ [:: lword256])
+        (fun x y : u256 => ok (with_cmlz (wsub x y)
+          (Z.sub (wunsigned x) (wunsigned y)))) v v2)
+      = ok (with_cmlz (wsub w0 w1)
+          (Z.sub (wunsigned w0) (wunsigned w1))) := erefl.
+    rewrite hinner; cbn - [with_cmlz].
+    rewrite /with_cmlz /add_tuple /with_mlz.
+    cbn [sem_ot eval_ltype ty_mlz ltuple].
+    have [hCF hR] := waddsubcarry_cmlzP false w0 w1 false.
+    rewrite Z.sub_0_r in hCF.
+    rewrite wrepr0 GRing.subr0 in hR.
+    rewrite hCF /= hcf /= /write_none /=.
+    change (word.word.sub_word w0 w1) with ((w0 - w1)%w).
+    change (word.word.add_word w0 (word.word.opp_word w1)) with ((w0 - w1)%R).
+    rewrite hR /wsubcarry /= hr /=.
+    done.
+  (* ---- BN_ADDC: carry, add ---- *)
+  - move=> hsrc; move: hsrc; rewrite /sem_sopn /=.
+    t_xrbindP=> v0 hv0 v1 hv1 hexec hwrite.
+    move=> hv1' hcarry hcarry_proof.
+    move=> hv2 z6 hz6 <- <- <- hexec2 hwrite2.
+    rewrite hv1 hv1' hv2 /=.
+    move: hexec2; rewrite /exec_sopn /= /sopn_sem /sopn_sem_ /=.
+    t_xrbindP=> r1 w0 hw0 w1 hw1 b_carry hbcarry.
+    case: z6 hz6 => [hz6 | a l hz6] /=.
+    2: by move=> //.
+    move=> /ok_inj <- hres; rewrite -hres in hwrite2.
+    move: hwrite2 => /=.
+    t_xrbindP=> s_cf hcf s_r hr hlr.
+    case: lvs_rest hlr => [/ok_inj <- | ? ? //].
+    rewrite hw0 hw1 hbcarry.
+    have hinner : (Let v := ok w0 in Let v2 := ok w1 in Let v3 := ok b_carry in
+      @semi_to_atype [:: lword256; lword256; lbool] (ty_cmlz ++ [:: lword256])
+        (semi_carry_binop_cmlz wadd Z.add) v v2 v3)
+      = ok (with_cmlz (wadd (wadd w0 w1) (wrepr U256 (Z.b2z b_carry)))
+          (Z.add (Z.add (wunsigned w0) (wunsigned w1))
+            (Z.b2z b_carry))) := erefl.
+    rewrite hinner; cbn - [with_cmlz].
+    rewrite /with_cmlz /add_tuple /with_mlz.
+    cbn [sem_ot eval_ltype ty_mlz ltuple].
+    have [hCF hR] := waddsubcarry_cmlzP true w0 w1 b_carry.
+    rewrite hCF /= hcf /= /write_none /=.
+    change (word.word.add_word (word.word.add_word w0 w1)
+             (wrepr U256 (Z.b2z b_carry)))
+      with (((w0 + w1) + wrepr U256 (Z.b2z b_carry))%R).
+    by rewrite hR /waddcarry /= hr /=.
+  (* ---- BN_SUBB: carry, sub ---- *)
+  - move=> hsrc; move: hsrc; rewrite /sem_sopn /=.
+    t_xrbindP=> v0 hv0 v1 hv1 hexec hwrite.
+    move=> hv1' hcarry hcarry_proof.
+    move=> hv2 z6 hz6 <- <- <- hexec2 hwrite2.
+    rewrite hv1 hv1' hv2 /=.
+    move: hexec2; rewrite /exec_sopn /= /sopn_sem /sopn_sem_ /=.
+    t_xrbindP=> r1 w0 hw0 w1 hw1 b_carry hbcarry.
+    case: z6 hz6 => [hz6 | a l hz6] /=.
+    2: by move=> //.
+    move=> /ok_inj <- hres; rewrite -hres in hwrite2.
+    move: hwrite2 => /=.
+    t_xrbindP=> s_cf hcf s_r hr hlr.
+    case: lvs_rest hlr => [/ok_inj <- | ? ? //].
+    rewrite hw0 hw1 hbcarry.
+    have hinner : (Let v := ok w0 in Let v2 := ok w1 in Let v3 := ok b_carry in
+      @semi_to_atype [:: lword256; lword256; lbool] (ty_cmlz ++ [:: lword256])
+        (semi_carry_binop_cmlz wsub Z.sub) v v2 v3)
+      = ok (with_cmlz (wsub (wsub w0 w1) (wrepr U256 (Z.b2z b_carry)))
+          (Z.sub (Z.sub (wunsigned w0) (wunsigned w1))
+            (Z.b2z b_carry))) := erefl.
+    rewrite hinner; cbn - [with_cmlz].
+    rewrite /with_cmlz /add_tuple /with_mlz.
+    cbn [sem_ot eval_ltype ty_mlz ltuple].
+    have [hCF hR] := waddsubcarry_cmlzP false w0 w1 b_carry.
+    rewrite hCF /= hcf /= /write_none /=.
+    change (word.word.add_word
+             (word.word.add_word w0 (word.word.opp_word w1))
+             (word.word.opp_word (wrepr U256 (Z.b2z b_carry))))
+      with (((w0 - w1) - wrepr U256 (Z.b2z b_carry))%R).
+    by rewrite hR /wsubcarry /= hr /=.
+Qed.
 
 (* -------------------------------------------------------------------- *)
-(* SWAP: [Oswap (aword sz)] -> [ExtOp (SWAP sz)].  Model: RISC-V, which
-   lowers swap to an extra op the same way; mirror the [Oswap] case of
-   riscv_lowering_proof.v's [Hopn_esem] (via [lower_swap] -> [SWAP]).
-
-   Call-site context (lower_copnP, swap branch): [ty = aword sz] with [sz]
-   in {reg_size, xreg_size} (other sizes make [lower_swap] error, so the
-   [ok (Some ..)] branch fixes this); [es] is unchanged.  For
-   [sz = reg_size], [lvs' = lvs]; for [sz = xreg_size],
-   [lvs' = lnone_mlz ++ lvs] (3 dummy flag lvals prepended).
-
-   Key definitions: [lower_swap], [lnone_mlz] (= [nseq 3 lnoneb]),
-   [li_xissue], otbn_extra [get_instr_desc] ([SWAP sz] -> [Oswap_instr
-   (aword sz)] when [sz <= reg_size], else [desc_swap_large]),
-   [desc_swap_large] (outputs 3 flags then the two swapped words),
-   [Oswap_instr]/[swap_semi]. *)
-
-(* [lower_swapP] (case lemma): the [SWAP] extra op reproduces [Oswap].
-   Idea: case on [sz].  For [reg_size], otbn_extra's
-   [get_instr_desc (SWAP sz)] is [Oswap_instr (aword sz)] (same as the
-   source), with [lvs]/[es] unchanged, so [sem_sopn] coincides -- a near
-   identity, exactly like RISC-V.  For [xreg_size], the op is
-   [desc_swap_large], which emits 3 leading flags (M/L/Z) absorbed by the
-   [lnone_mlz] dummies (write to [Lnone] is a no-op) followed by the two
-   swapped words. *)
 Lemma lower_swapP ii ty lvs es lvs' op' es' s0 s1 :
   lower_swap ii ty lvs es = ok (Some (lvs', op', es')) ->
   sem_sopn (p_globs p) (Opseudo_op (Oswap ty)) s0 lvs es = ok s1 ->
@@ -303,11 +413,9 @@ Proof.
   rewrite /lower_swap.
   case: ty => [| | ws len | sz] //=.
   case: ifP => [/eqP -> | hneq_reg].
-  - (* reg_size: SWAP U32 uses Oswap_instr, same as Oswap (aword U32) *)
     move=> /= [<- <- <-] hsrc.
     by rewrite /sem_sopn /exec_sopn /= in hsrc.
   case: ifP => [/eqP -> | //] /=.
-  (* xreg_size: SWAP U256 uses desc_swap_large; 3 flag writes to lnoneb are no-ops *)
   move=> /= [<- <- <-] hsrc.
   rewrite /sem_sopn.
   move: hsrc; rewrite /sem_sopn.
@@ -348,15 +456,15 @@ Proof.
     + move=> sz.
       t_xrbindP=> o Ho.
       case: o Ho => [[[a b] c]|] Ho //= [<- <- <-] hsrc.
-      exact: (lower_carry_opP Ho hsrc).
+      exact: (@lower_carry_opP _ _ _ _ _ _ _ _ _ _ Ho hsrc).
     + move=> sz.
       t_xrbindP=> o Ho.
       case: o Ho => [[[a b] c]|] Ho //= [<- <- <-] hsrc.
-      exact: (lower_carry_opP Ho hsrc).
+      exact: (@lower_carry_opP _ _ _ _ _ _ _ _ _ _ Ho hsrc).
     + move=> ty.
       t_xrbindP=> o Ho.
       case: o Ho => [[[a b] c]|] Ho //= [<- <- <-] hsrc.
-      exact: (lower_swapP Ho hsrc).
+      exact: (@lower_swapP _ _ _ _ _ _ _ _ _ Ho hsrc).
   case: msb => [m|] //=.
   rewrite /lower_base_op.
   case: aop => //=.
@@ -364,7 +472,7 @@ Proof.
   move=> mn fg.
   t_xrbindP=> o Ho.
   case: o Ho => [[sh es'']|] Ho //= [<- <- <-] hsrc.
-  exact: (lower_basic_shiftP Ho hsrc).
+  exact: (@lower_basic_shiftP _ _ _ _ _ _ _ _ _ Ho hsrc).
 Qed.
 
 Lemma Hopn_esem (p' : prog) (hglob : p_globs p' = p_globs p)
@@ -378,7 +486,7 @@ Proof.
   rewrite esem1.
   case: oargs hoargs => [[[lvs' op'] es']|] hoargs /=; rewrite hglob;
     last exact: hsem.
-  exact: (lower_copnP hoargs hsem).
+  exact: (@lower_copnP _ _ _ _ _ _ _ _ _ hoargs hsem).
 Qed.
 
 (* -------------------------------------------------------------------- *)
