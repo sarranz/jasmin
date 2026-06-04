@@ -201,7 +201,7 @@ Proof.
     | by apply: it_lower_callP; eassumption ].
 Qed.
 
-(* ------------------------------------------------------------------------ *)
+(* -------------------------------------------------------------------------- *)
 (* Lowering of complex addressing mode (identity for OTBN). *)
 
 Lemma otbn_hlaparams : h_lower_addressing_params (ap_lap otbn_params).
@@ -213,19 +213,74 @@ Proof.
   by move=> > /it_lower_addressing_progP.
 Qed.
 
-(* ------------------------------------------------------------------------ *)
+(* -------------------------------------------------------------------------- *)
 (* Assembly generation hypotheses. *)
 
 Section ASM_GEN.
 
 Lemma otbn_eval_assemble_cond : assemble_cond_spec (ap_agp otbn_params).
+Proof.
+  move=> ii m rr rf e c v eqr eqf.
+  elim: e c v => [| x | op1 e hind | op2 e0 hind0 e1 hind1 |] //= c v.
+  (* [Fvar x] is a flag read, assembled as [BNcond f]. *)
+  - t_xrbindP=> f hf ?; subst c; move=> hv.
+    rewrite /eval_cond /= get_rf_to_bool_of_rbool value_of_bool_to_bool_of_rbool.
+    eexists; first reflexivity.
+    exact: (xgetflag_ex eqf hf hv).
+  (* [Fapp1 Onot e]: the inner condition must be an [RVcond], which we negate. *)
+  - case: op1 => //=.
+    t_xrbindP=> c0 ok_c0 hcn ve ok_ve hsop1.
+    have [v1 hev huincl] := hind _ _ ok_c0 ok_ve.
+    move: hsop1 => /sem_sop1I /= [b [bb] [hb [?] ?]]; subst v bb.
+    have hc := value_uincl_to_bool_value_of_bool huincl hb hev.
+    have -> : eval_cond rr (get_rf rf) c = ok (~~ b).
+    { move: hcn hc; clear ok_c0 hev; case: c0 => [is_eq r0 r1 | f] //=.
+      by move=> [<-] [<-]; case: is_eq => /=; rewrite ?negbK. }
+    by eexists.
+  (* [Fapp2 o e0 e1]: a register comparison, assembled as [RVcond]. *)
+  rewrite /assemble_cond_app2.
+  t_xrbindP=> is_eq hokeq r0 hr0 r1 hr1 ?; subst c.
+  t_xrbindP=> v0 ok_v0 w ok_w ok_v.
+  (* Each operand evaluates to (a word uincl to) [sem_cond_arg rr ri]. *)
+  have hargP : forall (ea : fexpr) (ora : option register) (va : value),
+    oreg_of_fexpr ii (Fapp2 op2 e0 e1) ea = ok ora ->
+    sem_fexpr (evm m) ea = ok va ->
+    value_uincl va (Vword (riscv.sem_cond_arg rr ora)).
+  - move=> ea ora va; rewrite /oreg_of_fexpr; case: ifP => [hz | hnz].
+    + move=> [<-]; move: hz; rewrite /is_fzero; case: ea => //= op a.
+      by case: op => //= ws'; case: a => //= z; case: z => //=
+        /eqP ->{ws'} /= [<-]; exact: value_uincl_refl.
+    + rewrite /is_fvar; move: hnz; case: ea => //= x _.
+      t_xrbindP=> r hr ?; subst ora.
+      move=> /get_varP [-> _ _] /=.
+      by rewrite -(of_var_eI hr); apply: eqr.
+  have hincl0 := hargP _ _ _ hr0 ok_v0.
+  have hincl1 := hargP _ _ _ hr1 ok_w.
+  rewrite /eval_cond /=.
+  move: hokeq ok_v; clear hr0 hr1 hargP; case: op2 => //=.
+  (* [Oeq]: [is_eq = true]. *)
+  - case=> //= ws; rewrite /assert; case: eqP => //= ?; subst ws => -[<-].
+    rewrite /sem_sop2 /=.
+    t_xrbindP=> x0 hx0 x1 hx1 <-.
+    move/to_wordI': hx0 => [sz0 [w0' [hle0 ? ?]]]; subst v0 x0.
+    move/to_wordI': hx1 => [sz1 [w1' [hle1 ? ?]]]; subst w x1.
+    move: hincl0 hincl1; rewrite /= /word_uincl => /andP[_ /eqP ->] /andP[_ /eqP ->].
+    by eexists; first reflexivity; rewrite !(zero_extend_idem, zero_extend_u).
+  (* [Oneq]: [is_eq = false]. *)
+  case=> //= ws; rewrite /assert; case: eqP => //= ?; subst ws => -[<-].
+  rewrite /sem_sop2 /=.
+  t_xrbindP=> x0 hx0 x1 hx1 <-.
+  move/to_wordI': hx0 => [sz0 [w0' [hle0 ? ?]]]; subst v0 x0.
+  move/to_wordI': hx1 => [sz1 [w1' [hle1 ? ?]]]; subst w x1.
+  move: hincl0 hincl1; rewrite /= /word_uincl => /andP[_ /eqP ->] /andP[_ /eqP ->].
+  by eexists; first reflexivity; rewrite !(zero_extend_idem, zero_extend_u).
+Qed.
+
+Lemma otbn_assemble_extra_op op :
+  assemble_extra_correct (ap_agp otbn_params) op.
 Proof. Admitted.
 
-Lemma otbn_assemble_extra_op : forall op, assemble_extra_correct (ap_agp otbn_params) op.
-Proof. Admitted.
-
-Lemma otbn_assemble_extra_sz :
-  forall ii op lvs args ops,
+Lemma otbn_assemble_extra_sz ii op lvs args ops :
   to_asm ii op lvs args = ok ops -> ssrnat.leq 1 (size ops).
 Proof. Admitted.
 
@@ -249,7 +304,7 @@ Proof. by constructor; move=> ???? []. Qed.
 
 Lemma otbn_hszparams :
   stack_zeroization_proof.h_stack_zeroization_params (ap_szp otbn_params).
-Proof. Admitted.
+Proof. by split. Qed.
 
 (* ------------------------------------------------------------------------ *)
 (* Shared hypotheses. *)
@@ -258,7 +313,21 @@ Lemma otbn_is_move_opP op vx v :
   ap_is_move_op otbn_params op ->
   exec_sopn (Oasm op) [:: vx ] = ok v ->
   List.Forall2 value_uincl v [:: vx ].
-Proof. Admitted.
+Proof.
+  case: op => [[msb o] | eo] /=.
+  - case: msb => //; case: o => // _.
+    rewrite /exec_sopn /sopn_sem /sopn_sem_ /=.
+    t_xrbindP=> wx hwx hto [<-] <-.
+    constructor=> //.
+    move/to_wordI: hto => [ws [w0 [-> htr]]].
+    exact: (truncate_word_uincl htr).
+  case: eo => // _.
+  rewrite /exec_sopn /sopn_sem /sopn_sem_ /=.
+  t_xrbindP=> wx hwx hto <- <-.
+  constructor=> //.
+  move/to_wordI: hto => [ws [w0 [-> htr]]].
+  exact: (truncate_word_uincl htr).
+Qed.
 
 (* ------------------------------------------------------------------------ *)
 

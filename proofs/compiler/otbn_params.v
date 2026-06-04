@@ -303,9 +303,7 @@ Section SZPARAMS.
   Import stack_zeroization.
 
   Definition szparams : stack_zeroization_params :=
-    {|
-      szp_cmd := fun _ _ _ _ _ _ => Error E.szp_cmd;
-    |}.
+    {| szp_cmd := fun _ _ _ _ _ _ => Error E.szp_cmd; |}.
 
 End SZPARAMS.
 
