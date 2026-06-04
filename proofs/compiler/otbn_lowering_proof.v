@@ -300,7 +300,38 @@ Lemma lower_swapP ii ty lvs es lvs' op' es' s0 s1 :
   sem_sopn (p_globs p) (Opseudo_op (Oswap ty)) s0 lvs es = ok s1 ->
   sem_sopn (p_globs p) (Oasm op') s0 lvs' es' = ok s1.
 Proof.
-Admitted.
+  rewrite /lower_swap.
+  case: ty => [| | ws len | sz] //=.
+  case: ifP => [/eqP -> | hneq_reg].
+  - (* reg_size: SWAP U32 uses Oswap_instr, same as Oswap (aword U32) *)
+    move=> /= [<- <- <-] hsrc.
+    by rewrite /sem_sopn /exec_sopn /= in hsrc.
+  case: ifP => [/eqP -> | //] /=.
+  (* xreg_size: SWAP U256 uses desc_swap_large; 3 flag writes to lnoneb are no-ops *)
+  move=> /= [<- <- <-] hsrc.
+  rewrite /sem_sopn.
+  move: hsrc; rewrite /sem_sopn.
+  move=> hsrc; move: hsrc.
+  rewrite /exec_sopn /= /sopn_sem /sopn_sem_ /=.
+  t_xrbindP => vs r.
+  move=> hr t htexec hvs hw.
+  rewrite hr /=.
+  move: hr htexec hw.
+  case: r.
+  - by move=> _ /=.
+  move=> a; case.
+  - move=> _ htmp _; case: (to_word U256 a) htmp => //.
+  move=> a0 l hr; move: hr; case: l.
+  - move=> _ hw_exec hw_write.
+    move: hw_exec; t_xrbindP => w0 hw0 w1 hw1 ht.
+    rewrite hw0 hw1 /= /MF_of_word /LF_of_word /ZF_of_word /=.
+    rewrite -ht /swap_semi /= in hvs.
+    rewrite -hvs in hw_write.
+    exact: hw_write.
+  by move=> c rest _ /=;
+     case: (to_word U256 a) => //;
+     move=> w; case: (to_word U256 a0) => //.
+Qed.
 
 (* [lower_copnP]: assemble the case lemmas.  The dispatch leaves four real
    cases; three are discharged by the case lemmas above (shift absorption /
