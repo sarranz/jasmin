@@ -15,11 +15,6 @@ Require Import
 
 Require Export otbn_lower_addressing.
 
-Set Uniform Inductive Parameters.
-Set Implicit Arguments.
-Unset Strict Implicit.
-Unset Printing Implicit Defensive.
-
 Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then remove the line when requiring MathComp >= 2.6 *)
 
 (* ** proofs
