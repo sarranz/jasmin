@@ -248,7 +248,52 @@ Lemma waddsubcarry_cmlzP is_add (x y : word arch_decl.xreg_size) (c : bool) :
   /\ fw (fw x y) (wrepr arch_decl.xreg_size (Z.b2z c))
      = (if is_add then (waddcarry x y c).2 else (wsubcarry x y c).2).
 Proof.
-Admitted.
+  case: is_add => /=; split.
+  - (* add CF *)
+    rewrite /CF_of_Z; congr Some; rewrite Z.shiftr_div_pow2 //.
+    have hx := wunsigned_range x.
+    have hy := wunsigned_range y.
+    have hb : (0 <= Z.b2z c <= 1)%Z by case: c.
+    have hbas : (wbase arch_decl.xreg_size = 2^256)%Z by vm_compute.
+    have hbas256 : (wbase U256 = 2^256)%Z by vm_compute.
+    case: ZleP => hz.
+    + have hq : ((wunsigned x + wunsigned y + Z.b2z c) / 2^256 = 1)%Z.
+        have h1 : (1 <= (wunsigned x + wunsigned y + Z.b2z c) / 2^256)%Z.
+          apply Z.div_le_lower_bound; first by vm_compute.
+          by rewrite Z.mul_1_r -hbas256.
+        have h2 : ((wunsigned x + wunsigned y + Z.b2z c) / 2^256 < 2)%Z.
+          apply Z.div_lt_upper_bound; first by vm_compute.
+          by move: hx hy hb hbas; t_lia.
+        by move: h1 h2; t_lia.
+      by rewrite hq; vm_compute.
+    + have hq : ((wunsigned x + wunsigned y + Z.b2z c) / 2^256 = 0)%Z.
+        apply Z.div_small; split; first by move: hx hy hb; t_lia.
+        move: hz => /Z.lt_nge hz; rewrite -hbas256; exact hz.
+      by rewrite hq; vm_compute.
+  - by rewrite wrepr_add wrepr_add wrepr_unsigned wrepr_unsigned.
+  - (* sub CF *)
+    rewrite /CF_of_Z; congr Some; rewrite Z.shiftr_div_pow2 //.
+    have hx := wunsigned_range x.
+    have hy := wunsigned_range y.
+    have hb : (0 <= Z.b2z c <= 1)%Z by case: c.
+    have hbas : (wbase arch_decl.xreg_size = 2^256)%Z by vm_compute.
+    case: ZltP => hz.
+    + have hq : ((wunsigned x - wunsigned y - Z.b2z c) / 2^256 = -1)%Z.
+        have h1 : ((wunsigned x - wunsigned y - Z.b2z c) / 2^256 < 0)%Z.
+          apply Z.div_lt_upper_bound; first by vm_compute.
+          rewrite Z.mul_0_r; exact hz.
+        have h2 : (-1 <= (wunsigned x - wunsigned y - Z.b2z c) / 2^256)%Z.
+          apply Z.div_le_lower_bound; first by vm_compute.
+          by move: hx hy hb hbas; t_lia.
+        by move: h1 h2; t_lia.
+      by rewrite hq; vm_compute.
+    + have hq : ((wunsigned x - wunsigned y - Z.b2z c) / 2^256 = 0)%Z.
+        apply Z.div_small; split.
+        + move: hz => /Z.le_ngt hz; exact hz.
+        + by move: hx hy hb hbas; t_lia.
+      by rewrite hq; vm_compute.
+  - by rewrite wrepr_sub wrepr_sub wrepr_unsigned wrepr_unsigned.
+Qed.
 
 (* [lower_carry_opP] (case lemma): the lowered [BN_basic] sem_sopn
    reproduces the source [Oaddcarry]/[Osubcarry].  Idea (cf. ARM

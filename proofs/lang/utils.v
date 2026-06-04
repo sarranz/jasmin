@@ -1,4 +1,5 @@
 (* ** Imports and settings *)
+From Coq Require Lia.
 From elpi.apps Require Import derive.std.
 From HB Require Import structures.
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat eqtype choice.
@@ -2187,3 +2188,5 @@ Lemma is_reflect_some_inv {A B : Type} {P : A -> B} {e a} :
   is_reflect P e (Some a) ->
   e = P a.
 Proof. by rewrite -/(if Some a is Some a' then e = P a' else True) => -[]. Qed.
+
+Ltac t_lia := clear; simpl; Lia.lia.
