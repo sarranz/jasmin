@@ -32,14 +32,14 @@ Module OTBNFopn_core.
 
   Definition opn_args := (seq lexpr * otbn_op * seq rexpr)%type.
 
-  Let op_gen mn x res : opn_args := ([:: LLvar x ], RV32 mn, res).
-  Let op_un_reg mn x y : opn_args := op_gen mn x [:: rvar y ].
-  Let op_un_imm mn x imm : opn_args := op_gen mn x [:: rconst reg_size imm ].
-  Let op_bin_reg mn x y z : opn_args := op_gen mn x [:: rvar y; rvar z ].
-  Let op_bin_imm mn x y imm : opn_args :=
+  Definition op_gen mn x res : opn_args := ([:: LLvar x ], RV32 mn, res).
+  Definition op_un_reg mn x y : opn_args := op_gen mn x [:: rvar y ].
+  Definition op_un_imm mn x imm : opn_args := op_gen mn x [:: rconst reg_size imm ].
+  Definition op_bin_reg mn x y z : opn_args := op_gen mn x [:: rvar y; rvar z ].
+  Definition op_bin_imm mn x y imm : opn_args :=
     op_gen mn x [:: rvar y; rconst reg_size imm ].
   (* Shift amounts are encoded as 8-bit immediates (5 significant bits). *)
-  Let op_bin_shamt mn x y imm : opn_args :=
+  Definition op_bin_shamt mn x y imm : opn_args :=
     op_gen mn x [:: rvar y; rconst U8 imm ].
 
   Definition add := op_bin_reg ADD.
@@ -64,11 +64,11 @@ Module OTBNFopn_core.
 
   Definition align x y al : opn_args := andi x y (- (wsize_size al)).
 
-  Let is_mov neutral imm := if neutral is Some n then (imm =? n)%Z else false.
+  Definition is_mov neutral imm := if neutral is Some n then (imm =? n)%Z else false.
 
   (* Compute [R[x] := R[y] <o> imm % 2^32].
      Precondition: if [imm] is large and not neutral, [y <> tmp]. *)
-  Let gen_unsafe_smart_opi
+  Definition gen_unsafe_smart_opi
     (on_reg : var_i -> var_i -> var_i -> opn_args)
     (on_imm : var_i -> var_i -> Z -> opn_args)
     (is_small : Z -> bool)
@@ -82,7 +82,7 @@ Module OTBNFopn_core.
 
   (* Compute [R[x] := R[y] <o> imm % 2^32].
      Fail when [imm] is large and [y = tmp] (we compare only [v_var]). *)
-  Let gen_smart_opi
+  Definition gen_smart_opi
     (on_reg : var_i -> var_i -> var_i -> opn_args)
     (on_imm : var_i -> var_i -> Z -> opn_args)
     (is_small : Z -> bool)

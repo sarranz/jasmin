@@ -32,6 +32,7 @@ Require Import
   otbn_extra
   otbn_instr_decl
   otbn
+  otbn_params_core_proof
   otbn_lower_addressing_proof
   otbn_lowering
   otbn_lowering_proof.
@@ -128,43 +129,287 @@ Definition otbn_hsaparams :
   |}.
 
 (* ------------------------------------------------------------------------ *)
+(* Bridge: OTBNFopn_coreP.sem_fopn_args <-> linear sem_fopn_args *)
+
+Lemma otbn_sem_fopn_equiv (o : seq lexpr * otbn_op * seq rexpr) (s : estate) :
+  OTBNFopn_coreP.sem_fopn_args o s =
+  sem_fopn_args (fopn_args_of_opn_args o) s.
+Proof.
+  case: o => -[xs op] es /=.
+  case: sem_rexprs => //= args.
+  rewrite /exec_sopn /= /sopn_sem /=; case: id_valid => //=.
+  rewrite /sopn_sem_ /= /semi_to_atype.
+  move: (computational_eq _) (computational_eq _) => e1 e2.
+  rewrite <- e1, <- e2. by case: app_sopn.
+Qed.
+
+Lemma otbn_sem_fopns_equiv s (lc : seq (seq lexpr * otbn_op * seq rexpr)) :
+  OTBNFopn_coreP.sem_fopns_args s lc =
+  sem_fopns_args s (map fopn_args_of_opn_args lc).
+Proof.
+  elim: lc s => //= o lc ih s.
+  rewrite -otbn_sem_fopn_equiv.
+  by case: OTBNFopn_coreP.sem_fopn_args.
+Qed.
+
+(* ------------------------------------------------------------------------ *)
 (* Linearization hypotheses. *)
 
 Section LINEARIZATION.
 
+(* Helper: smart_subi_tmp correctness for allocate_stack_frame *)
+Lemma otbn_smart_subi_tmp_sem_fopns (rspi tmp : var_i) (sz : Z) s (ts : wreg) :
+  v_var rspi <> v_var tmp ->
+  convertible (vtype rspi) (aword Uptr) ->
+  convertible (vtype tmp) (aword Uptr) ->
+  get_var true (evm s) (v_var rspi) >>= to_word Uptr = ok ts ->
+  exists vm',
+    [/\ sem_fopns_args s (map fopn_args_of_opn_args
+          (odflt [:: otbn_params_core.OTBNFopn_core.subi rspi rspi sz]
+            (otbn_params_core.OTBNFopn_core.smart_subi_tmp rspi tmp sz))) =
+        ok (with_vm s vm')
+      , evm s =[\ Sv.add rspi (Sv.singleton tmp)] vm'
+      & vm'.[v_var rspi] = Vword (ts - wrepr Uptr sz) ].
+Proof.
+  move=> hne hrspi htmp hget.
+  rewrite /otbn_params_core.OTBNFopn_core.smart_subi_tmp
+          /otbn_params_core.OTBNFopn_core.gen_smart_opi_tmp
+          /otbn_params_core.OTBNFopn_core.gen_smart_opi.
+  have hneq : v_var rspi != v_var tmp by apply/eqP.
+  rewrite hneq !orbT /= -otbn_sem_fopns_equiv.
+  have hlc : otbn_params_core.OTBNFopn_core.gen_smart_opi
+      otbn_params_core.OTBNFopn_core.sub
+      otbn_params_core.OTBNFopn_core.subi
+      otbn_params_core.is_arith_small_neg (Some 0%Z) tmp rspi rspi sz =
+      Some (otbn_params_core.OTBNFopn_core.gen_unsafe_smart_opi
+        otbn_params_core.OTBNFopn_core.sub
+        otbn_params_core.OTBNFopn_core.subi
+        otbn_params_core.is_arith_small_neg (Some 0%Z) tmp rspi rspi sz).
+  { by rewrite /otbn_params_core.OTBNFopn_core.gen_smart_opi hneq !orbT. }
+  have neutral_ok : forall (wr : word reg_size), (wr - wrepr reg_size 0%Z)%R = wr.
+  { by move=> wr; rewrite wrepr0 GRing.subr0. }
+  have [vm' [hsem heq hgetx]] :=
+    OTBNFopn_coreP.gen_smart_opi_sem_fopn_args
+      (op := fun (x y : word reg_size) => (x - y)%R)
+      (on_reg := otbn_params_core.OTBNFopn_core.sub)
+      (on_imm := otbn_params_core.OTBNFopn_core.subi)
+      (is_small := otbn_params_core.is_arith_small_neg)
+      (neutral := Some 0%Z)
+      (fun s0 xi y wy z wz hc hgy hgz => OTBNFopn_coreP.sub_sem_fopn_args hc hgy hgz)
+      (fun s0 xi y imm wy hc hgy => OTBNFopn_coreP.subi_sem_fopn_args hc hgy)
+      neutral_ok htmp hrspi hlc hget.
+  exists vm'; split => //.
+  + by apply: eq_exS.
+  + move: hgetx => /get_varP [-> _ _]; done.
+Qed.
+Arguments otbn_smart_subi_tmp_sem_fopns rspi tmp sz s ts _ _ _ _ : clear implicits.
+
+(* Helper: smart_addi_tmp correctness for free_stack_frame *)
+Lemma otbn_smart_addi_tmp_sem_fopns (rspi tmp : var_i) (sz : Z) s (ts : wreg) :
+  v_var rspi <> v_var tmp ->
+  convertible (vtype rspi) (aword Uptr) ->
+  convertible (vtype tmp) (aword Uptr) ->
+  get_var true (evm s) (v_var rspi) >>= to_word Uptr = ok ts ->
+  exists vm',
+    [/\ sem_fopns_args s (map fopn_args_of_opn_args
+          (odflt [:: otbn_params_core.OTBNFopn_core.addi rspi rspi sz]
+            (otbn_params_core.OTBNFopn_core.smart_addi_tmp rspi tmp sz))) =
+        ok (with_vm s vm')
+      , evm s =[\ Sv.add rspi (Sv.singleton tmp)] vm'
+      & vm'.[v_var rspi] = Vword (ts + wrepr Uptr sz) ].
+Proof.
+  move=> hne hrspi htmp hget.
+  rewrite /otbn_params_core.OTBNFopn_core.smart_addi_tmp
+          /otbn_params_core.OTBNFopn_core.gen_smart_opi_tmp
+          /otbn_params_core.OTBNFopn_core.gen_smart_opi.
+  have hneq : v_var rspi != v_var tmp by apply/eqP.
+  rewrite hneq !orbT /= -otbn_sem_fopns_equiv.
+  have hlc : otbn_params_core.OTBNFopn_core.gen_smart_opi
+      otbn_params_core.OTBNFopn_core.add
+      otbn_params_core.OTBNFopn_core.addi
+      otbn_params_core.is_arith_small (Some 0%Z) tmp rspi rspi sz =
+      Some (otbn_params_core.OTBNFopn_core.gen_unsafe_smart_opi
+        otbn_params_core.OTBNFopn_core.add
+        otbn_params_core.OTBNFopn_core.addi
+        otbn_params_core.is_arith_small (Some 0%Z) tmp rspi rspi sz).
+  { by rewrite /otbn_params_core.OTBNFopn_core.gen_smart_opi hneq !orbT. }
+  have neutral_ok : forall (wr : word reg_size), (wr + wrepr reg_size 0%Z)%R = wr.
+  { by move=> wr; rewrite wrepr0 GRing.addr0. }
+  have [vm' [hsem heq hgetx]] :=
+    OTBNFopn_coreP.gen_smart_opi_sem_fopn_args
+      (op := fun (x y : word reg_size) => (x + y)%R)
+      (on_reg := otbn_params_core.OTBNFopn_core.add)
+      (on_imm := otbn_params_core.OTBNFopn_core.addi)
+      (is_small := otbn_params_core.is_arith_small)
+      (neutral := Some 0%Z)
+      (fun s0 xi y wy z wz hc hgy hgz => OTBNFopn_coreP.add_sem_fopn_args hc hgy hgz)
+      (fun s0 xi y imm wy hc hgy => OTBNFopn_coreP.addi_sem_fopn_args hc hgy)
+      neutral_ok htmp hrspi hlc hget.
+  exists vm'; split => //.
+  + by apply: eq_exS.
+  + move: hgetx => /get_varP [-> _ _]; done.
+Qed.
+Arguments otbn_smart_addi_tmp_sem_fopns rspi tmp sz s ts _ _ _ _ : clear implicits.
+
+(* Helper: smart_addi_fopn correctness for lstores/lloads *)
+Lemma otbn_smart_addi_sem_fopns (xi : var_i) y imm s (w : wreg) :
+  convertible xi.(vtype) (aword otbn_reg_size) ->
+  otbn_params_core.is_arith_small imm \/ v_var xi <> v_var y ->
+  get_var true (evm s) (v_var y) >>= to_word Uptr = ok w ->
+  exists vm',
+    [/\ sem_fopns_args s (smart_addi_fopn xi y imm) = ok (with_vm s vm')
+      , vm' =[\ Sv.singleton xi ] evm s
+      & get_var true vm' xi = ok (Vword (w + wrepr reg_size imm)%R) ].
+Proof.
+  move=> hc hor hget.
+  rewrite /smart_addi_fopn /smart_addi
+          /otbn_params_core.OTBNFopn_core.smart_addi
+          /otbn_params_core.OTBNFopn_core.gen_smart_opi.
+  have hcond : [|| (0 =? imm)%Z, otbn_params_core.is_arith_small imm
+                 | v_var y != v_var xi].
+  { case: hor => [h | h].
+    + by rewrite h !orbT.
+    + by apply/orP; right; apply/orP; right;
+       apply/eqP => heq; exact (h (esym heq)). }
+  rewrite hcond /= -otbn_sem_fopns_equiv.
+  have hlc : otbn_params_core.OTBNFopn_core.gen_smart_opi
+      otbn_params_core.OTBNFopn_core.add
+      otbn_params_core.OTBNFopn_core.addi
+      otbn_params_core.is_arith_small (Some 0%Z) xi xi y imm =
+      Some (otbn_params_core.OTBNFopn_core.gen_unsafe_smart_opi
+        otbn_params_core.OTBNFopn_core.add
+        otbn_params_core.OTBNFopn_core.addi
+        otbn_params_core.is_arith_small (Some 0%Z) xi xi y imm).
+  { by rewrite /otbn_params_core.OTBNFopn_core.gen_smart_opi hcond. }
+  have neutral_ok : forall (wr : word reg_size), (wr + wrepr reg_size 0%Z)%R = wr.
+  { by move=> wr; rewrite wrepr0 GRing.addr0. }
+  have [vm' [hsem heq hgetx]] :=
+    OTBNFopn_coreP.gen_smart_opi_sem_fopn_args
+      (op := fun (x y : word reg_size) => (x + y)%R)
+      (on_reg := otbn_params_core.OTBNFopn_core.add)
+      (on_imm := otbn_params_core.OTBNFopn_core.addi)
+      (is_small := otbn_params_core.is_arith_small)
+      (neutral := Some 0%Z)
+      (fun s0 xi0 y0 wy0 z0 wz0 hc0 hgy0 hgz0 =>
+         OTBNFopn_coreP.add_sem_fopn_args hc0 hgy0 hgz0)
+      (fun s0 xi0 y0 imm0 wy0 hc0 hgy0 =>
+         OTBNFopn_coreP.addi_sem_fopn_args hc0 hgy0)
+      neutral_ok hc hc hlc hget.
+  exists vm'; split => //.
+  by apply: eq_exI heq; SvD.fsetdec.
+Qed.
+Arguments otbn_smart_addi_sem_fopns xi y imm s w _ _ _ : clear implicits.
+
 Lemma otbn_spec_lip_allocate_stack_frame :
   allocate_stack_frame_correct (ap_lip otbn_params).
-Proof. Admitted.
+Proof.
+  move=> sp_rsp tmp s ts sz htmp hget /=.
+  rewrite /lip_allocate_stack_frame /= /allocate_stack_frame /=.
+  case: tmp htmp => [tmp [h1 h2] | _] /=.
+  (* Some tmp: use smart_subi_tmp *)
+  + have [vm' [-> heq hgetx]] :=
+      otbn_smart_subi_tmp_sem_fopns
+        (mk_var_i {| vtype := aword U32; vname := sp_rsp |})
+        tmp sz s ts h1 erefl h2 (to_word_get_var hget).
+    by exists vm'; split => //.
+  (* None: direct subi *)
+  + have hget2 : get_var true (evm s) {| vtype := aword U32; vname := sp_rsp |} =
+        ok (Vword (s:=U32) ts).
+    { move: hget; exact. }
+    rewrite hget2 /= /exec_sopn /= !truncate_word_u /=.
+    eexists; split.
+    + reflexivity.
+    + move=> z hz; rewrite Vm.setP_neq //; apply/eqP; SvD.fsetdec.
+    + by rewrite Vm.setP_eq /= /wadd wrepr_opp.
+Qed.
 
 Lemma otbn_spec_lip_free_stack_frame :
   free_stack_frame_correct (ap_lip otbn_params).
-Proof. Admitted.
+Proof.
+  move=> sp_rsp tmp s ts sz htmp hget /=.
+  rewrite /lip_free_stack_frame /= /free_stack_frame /=.
+  case: tmp htmp => [tmp [h1 h2] | _] /=.
+  (* Some tmp: use smart_addi_tmp *)
+  + have [vm' [-> heq hgetx]] :=
+      otbn_smart_addi_tmp_sem_fopns
+        (mk_var_i {| vtype := aword U32; vname := sp_rsp |})
+        tmp sz s ts h1 erefl h2 (to_word_get_var hget).
+    by exists vm'; split => //.
+  (* None: direct addi *)
+  + have hget2 : get_var true (evm s) {| vtype := aword U32; vname := sp_rsp |} =
+        ok (Vword (s:=U32) ts).
+    { move: hget; exact. }
+    rewrite hget2 /= /exec_sopn /= !truncate_word_u /=.
+    eexists; split.
+    + reflexivity.
+    + move=> z hz; rewrite Vm.setP_neq //; apply/eqP; SvD.fsetdec.
+    + by rewrite Vm.setP_eq /=.
+Qed.
 
 Lemma otbn_spec_lip_set_up_sp_register :
   set_up_sp_register_correct (ap_lip otbn_params).
 Proof. Admitted.
 
 Lemma otbn_lmove_correct : lmove_correct (ap_lip otbn_params).
-Proof. Admitted.
+Proof.
+  move=> xd xs w ws w' s htxd htxs hget htr.
+  rewrite /lip_lmove /= /lmove /fopn_args_of_opn_args /= hget /=.
+  rewrite /exec_sopn /= htr /=.
+  rewrite truncate_word_u /=.
+  rewrite /wadd wrepr0 GRing.addr0 set_var_eq_type ?htxd //.
+Qed.
 
-Lemma otbn_lstore_correct : lstore_correct_aux (lip_check_ws (ap_lip otbn_params)) (lip_lstore (ap_lip otbn_params)).
-Proof. Admitted.
+Lemma otbn_lstore_correct :
+  lstore_correct_aux (lip_check_ws (ap_lip otbn_params))
+                     (lip_lstore (ap_lip otbn_params)).
+Proof.
+  move=> xd xs ofs ws w wp s m htxs /eqP hchk; t_xrbindP; subst ws.
+  move=> vd hgetd htrd vs hgets htrs hwr.
+  rewrite /lip_lstore /= /lstore /fopn_args_of_opn_args /= hgets hgetd /=
+          /exec_sopn /= htrs /=.
+  rewrite /sem_sop2 /= htrd /= !truncate_word_u /=.
+  rewrite truncate_word_u /= add_wordE hwr //.
+Qed.
 
-Lemma otbn_lload_correct : lload_correct_aux (lip_check_ws (ap_lip otbn_params)) (lip_lload (ap_lip otbn_params)).
-Proof. Admitted.
+Lemma otbn_lload_correct :
+  lload_correct_aux (lip_check_ws (ap_lip otbn_params))
+                    (lip_lload (ap_lip otbn_params)).
+Proof.
+  move=> xd xs ofs ws top s w vm heq hcheck.
+  t_xrbindP => ? hgets hto hread hset.
+  move/eqP: hcheck => ?; subst ws.
+  rewrite /lip_lload /= /lload /fopn_args_of_opn_args /= hgets /=.
+  rewrite /sem_sop2 /= hto /= !truncate_word_u /= add_wordE.
+  rewrite truncate_word_u /= hread /= /exec_sopn /= truncate_word_u /= hset //.
+Qed.
+
+Lemma otbn_smart_addi_correct : ladd_imm_correct_aux smart_addi_fopn.
+Proof.
+  move=> [[_ xn] xii] x2 s w ofs /= -> hne hget.
+  apply: otbn_smart_addi_sem_fopns hget => //.
+  by right => h; exact (hne h).
+Qed.
 
 Lemma otbn_lstores_correct : lstores_correct (ap_lip otbn_params).
-Proof. Admitted.
+Proof.
+  apply/lstores_imm_dfl_correct.
+  + by apply otbn_lstore_correct.
+  apply otbn_smart_addi_correct.
+Qed.
 
 Lemma otbn_lloads_correct : lloads_correct (ap_lip otbn_params).
-Proof. Admitted.
+Proof.
+  apply/lloads_imm_dfl_correct.
+  + by apply otbn_lload_correct.
+  apply otbn_smart_addi_correct.
+Qed.
 
 Lemma otbn_tmp_correct :
   lip_tmp (ap_lip otbn_params) <> lip_tmp2 (ap_lip otbn_params).
-Proof. Admitted.
+Proof. by move=> h; assert (h1 := inj_to_ident h). Qed.
 
 Lemma otbn_check_ws_correct : lip_check_ws (ap_lip otbn_params) Uptr.
-Proof. Admitted.
+Proof. done. Qed.
 
 End LINEARIZATION.
 
@@ -185,11 +430,11 @@ Definition otbn_hliparams :
 
 Lemma otbn_ok_lip_tmp :
   exists r : reg_t, of_ident (lip_tmp (ap_lip otbn_params)) = Some r.
-Proof. Admitted.
+Proof. exists X28; exact: to_identK. Qed.
 
 Lemma otbn_ok_lip_tmp2 :
   exists r : reg_t, of_ident (lip_tmp2 (ap_lip otbn_params)) = Some r.
-Proof. Admitted.
+Proof. exists X29; exact: to_identK. Qed.
 
 (* ------------------------------------------------------------------------ *)
 (* Lowering hypotheses. *)

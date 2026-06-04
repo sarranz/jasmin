@@ -129,7 +129,7 @@ Section LIPARAMS.
     (rspi : var_i) (tmp : option var_i) (sz : Z) : seq fopn_args :=
     let c := [:: OTBNFopn_core.subi rspi rspi sz ] in
     let c' :=
-      let%opt aux := tmp in OTBNFopn_core.smart_subi_tmp rspi vtmpi sz
+      let%opt aux := tmp in OTBNFopn_core.smart_subi_tmp rspi aux sz
     in
     [seq fopn_args_of_opn_args x | x <- odflt c c' ].
 
@@ -137,7 +137,7 @@ Section LIPARAMS.
     (rspi : var_i) (tmp : option var_i) (sz : Z) : seq fopn_args :=
     let c := [:: OTBNFopn_core.addi rspi rspi sz ] in
     let c' :=
-      let%opt aux := tmp in OTBNFopn_core.smart_addi_tmp rspi vtmpi sz
+      let%opt aux := tmp in OTBNFopn_core.smart_addi_tmp rspi aux sz
     in
     [seq fopn_args_of_opn_args x | x <- odflt c c' ].
 

@@ -105,6 +105,7 @@ compiler/otbn_lowering.v
 compiler/otbn_lowering_proof.v
 compiler/otbn_params.v
 compiler/otbn_params_core.v
+compiler/otbn_params_core_proof.v
 compiler/otbn_params_proof.v
 compiler/post_unrolling_check.v
 compiler/propagate_inline.v
