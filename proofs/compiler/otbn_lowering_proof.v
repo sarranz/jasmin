@@ -298,12 +298,88 @@ have hexec' := bn_shifted_teropP h_shift hexec ltac:(by vm_compute).
 rewrite hx /= h_ebase /= hcf /= mapM_cat hvrest /= h_esham /= hexec' /= hw //.
 Qed.
 
+(* The semantic condition extracted from [bn_shifted_binopP]: for [mn],
+   shifting the second operand commutes between [BN_basic] and
+   [BN_basic_shift] at the [exec_sopn] level.  Every binop mnemonic satisfies
+   it (via [bn_shifted_binopP]).  The generic lemma
+   [gen_lower_basic_shift_binopP] below is proved uniformly from this
+   condition, with no case analysis on [mn]. *)
+Definition bn_basic_shift_commutes
+  (mn : bn_basic_mnemonic)
+  (fg : otbn_options.bn_flag_group)
+  (sh : otbn_options.bn_register_shift) : Prop :=
+  forall (wb : word arch_decl.xreg_size) (wa : word U8) x y vs r,
+    to_word arch_decl.xreg_size y
+    = ok (word_shift_of_reg_shift sh wb (wunsigned wa)) ->
+    exec_sopn (Oasm (BaseOp (None, BN_basic mn fg))) [:: x, y & vs] = ok r ->
+    exec_sopn (Oasm (BaseOp (None, BN_basic_shift mn fg sh)))
+      (x :: Vword wb :: vs ++ [:: Vword wa]) = ok r.
+
+(* Structural characterization of [lower_basic_shift] on the seven binop
+   mnemonics: it peels the first operand, recognizes a shift on the second,
+   and appends the shift amount.  This isolates the only place the proof needs
+   to reduce the [match mn] in [lower_basic_shift]. *)
+Lemma lower_basic_shift_binopE ii mn es sh es'' :
+  mn \in [:: BN_ADD; BN_SUB; BN_AND; BN_OR; BN_XOR; BN_CMP; BN_CMPB] ->
+  lower_basic_shift ii mn es = ok (Some (sh, es'')) ->
+  exists e1 e2 es2 ebase esham,
+    [/\ es = [:: e1, e2 & es2]
+      , get_arg_shift ii arch_decl.xreg_size e2 = ok (Some (ebase, sh, esham))
+      & es'' = [:: e1, ebase & es2 ++ [:: esham] ] ].
+Proof.
+  move=> hmn hshift.
+  move: hshift hmn; case: mn => /= hshift hmn //;
+    (rewrite /lower_basic_shift in hshift;
+     move: hshift; t_xrbindP=> z [[x_e y_e] rest] hrsnoc /ok_inj <- hget;
+     apply: rbindP hget => o hgas;
+     case: o hgas => [[[ebase sh0] esham] | ] hgas; last by [];
+     rewrite /issue => /ok_inj /Some_inj [<- <-];
+     move: hgas;
+     case: es hrsnoc => [| e1 [| e2 es2]] hrsnoc //=;
+     move/ok_inj: hrsnoc => [<- <- <-];
+     move=> hgas;
+     by exists e1, e2, es2, ebase, esham).
+Qed.
+
+(* Generic, uniform binop lemma: given the semantic commutation condition and
+   the structural shape produced by [lower_basic_shift], the [BN_basic_shift]
+   [sem_sopn] reproduces the [BN_basic] one.  No case analysis on [mn]. *)
+Lemma gen_lower_basic_shift_binopP
+  ii mn fg lvs es sh es'' s0 s1 e1 e2 es2 ebase esham :
+  bn_basic_shift_commutes mn fg sh ->
+  es = [:: e1, e2 & es2] ->
+  get_arg_shift ii arch_decl.xreg_size e2 = ok (Some (ebase, sh, esham)) ->
+  es'' = [:: e1, ebase & es2 ++ [:: esham] ] ->
+  sem_sopn (p_globs p) (Oasm (BaseOp (None, BN_basic mn fg))) s0 lvs es = ok s1 ->
+  sem_sopn (p_globs p) (Oasm (BaseOp (None, BN_basic_shift mn fg sh))) s0 lvs es''
+  = ok s1.
+Proof.
+  move=> hcomm -> hgas -> hsrc.
+  rewrite /sem_sopn in hsrc |- *.
+  move: hsrc; t_xrbindP => vs hvs r hexec hw.
+  move: hexec.
+  move: r; rewrite /sem_pexprs /=.
+  apply: rbindP => x_v hx.
+  apply: rbindP => ys hys.
+  move/ok_inj => <-.
+  move=> hexec.
+  move: hys.
+  apply: rbindP => y_v hy.
+  apply: rbindP => vrest hvrest.
+  move/ok_inj => heq; subst ys.
+  have [wb [wa [h_ebase h_esham h_shift]]] := get_arg_shiftP hgas hy.
+  have hexec' := hcomm _ _ _ _ _ _ h_shift hexec.
+  rewrite hx /= h_ebase /= mapM_cat hvrest /= h_esham /= hexec' /= hw //.
+Qed.
+
 (* [lower_basic_shift_binopP] (case lemma for the seven binop mnemonics
-   BN_ADD/BN_SUB/BN_AND/BN_OR/BN_XOR/BN_CMP/BN_CMPB): assembles
-   [get_arg_shiftP] and [bn_shifted_binopP] for a single binop [mn].
-   The membership hypothesis [mn \in [:: BN_ADD; ...]] is placed last so
-   callers can supply it with [ltac:(by vm_compute)] after the other two
-   explicit arguments. *)
+   BN_ADD/BN_SUB/BN_AND/BN_OR/BN_XOR/BN_CMP/BN_CMPB): obtained uniformly, with
+   no case analysis on [mn], by combining the structural characterization
+   [lower_basic_shift_binopE] with the generic [gen_lower_basic_shift_binopP],
+   discharging the latter's semantic condition [bn_basic_shift_commutes] via
+   [bn_shifted_binopP].  The membership hypothesis [mn \in [:: BN_ADD; ...]] is
+   placed last so callers can supply it with [ltac:(by vm_compute)] after the
+   other two explicit arguments. *)
 Lemma lower_basic_shift_binopP ii mn fg lvs es sh es'' s0 s1 :
   lower_basic_shift ii mn es = ok (Some (sh, es'')) ->
   sem_sopn (p_globs p) (Oasm (BaseOp (None, BN_basic mn fg))) s0 lvs es = ok s1 ->
@@ -312,32 +388,11 @@ Lemma lower_basic_shift_binopP ii mn fg lvs es sh es'' s0 s1 :
   = ok s1.
 Proof.
 move=> hshift hsrc hmn.
-move: hshift hsrc hmn; case: mn => /= hshift hsrc hmn //.
-all: rewrite /lower_basic_shift in hshift.
-all: move: hshift; t_xrbindP.
-all: (move=> z [[x_e y_e] rest] hrsnoc /ok_inj <- hget;
-    apply: rbindP hget => o hgas;
-    case: o hgas => [[[ebase sh0] esham] | ] hgas; last by [];
-    rewrite /issue => /ok_inj /Some_inj [<- <-];
-    move: hgas;
-    case: es hrsnoc hsrc => [| e1 [| e2 es2]] hrsnoc hsrc //=;
-    move/ok_inj: hrsnoc => [[<- <-] <-];
-    move=> hgas;
-    rewrite /sem_sopn in hsrc |- *;
-    move: hsrc; t_xrbindP => vs hvs r hexec hw;
-    move: hexec;
-    move: r; rewrite /sem_pexprs /=;
-    apply: rbindP => x_v hx;
-    apply: rbindP => ys hys;
-    move/ok_inj => <-;
-    move=> hexec;
-    move: hys;
-    apply: rbindP => y_v hy;
-    apply: rbindP => vrest hvrest;
-    move/ok_inj => heq; subst ys;
-    have [wb [wa [h_ebase h_esham h_shift]]] := get_arg_shiftP hgas hy;
-    have hexec' := bn_shifted_binopP h_shift hexec ltac:(by vm_compute);
-    rewrite hx /= h_ebase /= mapM_cat hvrest /= h_esham /= hexec' /= hw //).
+have [e1 [e2 [es2 [ebase [esham [hes hgas hes'']]]]]] :=
+  lower_basic_shift_binopE hmn hshift.
+have hcomm : bn_basic_shift_commutes mn fg sh.
+  by move=> wb wa x y vs r hsh hexec; exact: (bn_shifted_binopP hsh hexec hmn).
+exact: (gen_lower_basic_shift_binopP hcomm hes hgas hes'' hsrc).
 Qed.
 
 (* [lower_basic_shiftP] (case lemma assembling the above): from
