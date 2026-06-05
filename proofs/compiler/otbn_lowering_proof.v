@@ -148,7 +148,50 @@ Lemma get_arg_shiftP ii ws e ebase sh esham s v :
       , sem_pexpr true (p_globs p) s esham = ok (Vword wa)
       & to_word ws v = ok (word_shift_of_reg_shift sh wb (wunsigned wa)) ].
 Proof.
-Admitted.
+move=> hshift hsem.
+rewrite /get_arg_shift /= in hshift.
+case: e hshift hsem => // op e1 e2 hshift hsem /=.
+case: e1 hshift hsem => // x hshift hsem /=.
+case: e2 hshift hsem => // s0 e3 hshift hsem /=.
+case: s0 hshift hsem => // ws0 hshift hsem /=.
+case: ws0 hshift hsem => // hshift hsem /=.
+case: e3 hshift hsem => // z hshift hsem /=.
+move: hshift; t_xrbindP => o hrso.
+case: o hrso => [sh0 |] hrso //=.
+move=> hbn; move: hbn; apply: rbindP => _ _.
+move=> /ok_inj /Some_inj [[<- <-] <-].
+move: hrso; rewrite /reg_shift_of_sop2 /chk_xreg_ws /assert.
+case: ifP => // /eqP -> hmatcho.
+move: hmatcho => /= hmatcho.
+case: op hmatcho hsem => //=.
+- move=> ws0' hmatcho hsem.
+  case: ws0' hmatcho hsem => //= hmatcho hsem.
+  move: hmatcho => /ok_inj /Some_inj <-.
+  move: hsem; apply: rbindP => v1 hv1 hsop.
+  move: hsop; rewrite /sem_sop2 /=; t_xrbindP => wb hwb wa hwa hres.
+  rewrite -hres.
+  move: hwb => /to_wordI' [sz0 [wb0 [hcmp hv1_eq hwb_eq]]].
+  case: sz0 hcmp wb0 hv1_eq hwb_eq => //= _ wb0 hv1_eq hwb_eq; subst wb v1.
+  move: hwa => /truncate_wordP [_ ->]; rewrite zero_extend_u.
+  exists wb0, (wrepr U8 z); split.
+  + exact: hv1.
+  + by rewrite /sem_sop1 /=.
+  + by rewrite zero_extend_u /to_word /= truncate_word_u /sem_shr.
+- move=> op1 hmatcho hsem.
+  case: op1 hmatcho hsem => //= ws0' hmatcho hsem.
+  case: ws0' hmatcho hsem => //= hmatcho hsem.
+  move: hmatcho => /ok_inj /Some_inj <-.
+  move: hsem; apply: rbindP => v1 hv1 hsop.
+  move: hsop; rewrite /sem_sop2 /=; t_xrbindP => wb hwb wa hwa hres.
+  rewrite -hres.
+  move: hwb => /to_wordI' [sz0 [wb0 [hcmp hv1_eq hwb_eq]]].
+  case: sz0 hcmp wb0 hv1_eq hwb_eq => //= _ wb0 hv1_eq hwb_eq; subst wb v1.
+  move: hwa => /truncate_wordP [_ ->]; rewrite zero_extend_u.
+  exists wb0, (wrepr U8 z); split.
+  + exact: hv1.
+  + by rewrite /sem_sop1 /=.
+  + by rewrite zero_extend_u /to_word /= truncate_word_u /sem_shl.
+Qed.
 
 (* [bn_shifted_unopP]/[bn_shifted_binopP]/[bn_shifted_teropP]: the shifted
    instruction's [exec_sopn] equals the base one's when the operand that
@@ -170,7 +213,20 @@ Lemma bn_shifted_unopP fg sh (wb : word arch_decl.xreg_size) (wa : word U8) x vs
   exec_sopn (Oasm (BaseOp (None, BN_basic_shift BN_NOT fg sh)))
     (Vword wb :: vs ++ [:: Vword wa]) = ok r.
 Proof.
-Admitted.
+move=> hshift hexec.
+rewrite /exec_sopn /= /sopn_sem /sopn_sem_ /= in hexec |- *.
+move: hexec; t_xrbindP => wx hwx.
+move=> htw.
+case: vs => [ | ? ?] //= hmatch.
+move=> <-.
+rewrite /arch_utils.arch_mk_semi1_shifted /=.
+rewrite truncate_word_u /= truncate_word_u /=.
+have heq : hwx = word_shift_of_reg_shift sh wb (wunsigned wa)
+  by move: htw; rewrite hshift => /ok_inj.
+rewrite heq in hmatch.
+move: hmatch; rewrite /semi_to_atype /= => /ok_inj <-.
+by rewrite /with_mlz /=.
+Qed.
 
 Lemma bn_shifted_binopP mn fg sh (wb : word arch_decl.xreg_size) (wa : word U8) x y vs r :
   to_word arch_decl.xreg_size y
@@ -180,7 +236,25 @@ Lemma bn_shifted_binopP mn fg sh (wb : word arch_decl.xreg_size) (wa : word U8) 
   exec_sopn (Oasm (BaseOp (None, BN_basic_shift mn fg sh)))
     (x :: Vword wb :: vs ++ [:: Vword wa]) = ok r.
 Proof.
-Admitted.
+move=> hshift hexec hmn.
+have letok : forall (eT aT rT : Type) (a : aT) (f : aT -> result eT rT),
+    (Let x := ok a in f x) = f a by move=> *.
+rewrite !inE in hmn.
+case: mn hmn hexec => hmn hexec //.
+all: rewrite /exec_sopn /= /sopn_sem /sopn_sem_ /= in hexec |- *.
+all: (move: hexec; t_xrbindP => hwx hx hwy hy;
+      move=> hwy_eq; case: vs => [| a vs'] //= hsemi <-).
+all: rewrite hwy !truncate_word_u !letok.
+all: have hwy_val : word_shift_of_reg_shift sh wb (wunsigned wa) = hy
+       by move: hshift; rewrite hwy_eq => /ok_inj <-.
+all: rewrite /semi_to_atype /= in hsemi.
+1-6: (rewrite hwy_val; move/ok_inj: hsemi => hsemi; rewrite hsemi //).
+(* BN_CMPB: vs' is abstract, extract vs'=[] from hsemi *)
+case: vs' hsemi => [| ?? ] //= hsemi.
+2: by case: (to_bool a) hsemi.
+rewrite truncate_word_u /semi_to_atype /= /arch_utils.arch_mk_semi3_2_shifted /= hwy_val.
+rewrite hsemi //.
+Qed.
 
 Lemma bn_shifted_teropP mn fg sh (wb : word arch_decl.xreg_size) (wa : word U8) x y cf vs r :
   to_word arch_decl.xreg_size y
@@ -190,7 +264,19 @@ Lemma bn_shifted_teropP mn fg sh (wb : word arch_decl.xreg_size) (wa : word U8) 
   exec_sopn (Oasm (BaseOp (None, BN_basic_shift mn fg sh)))
     (x :: Vword wb :: cf :: vs ++ [:: Vword wa]) = ok r.
 Proof.
-Admitted.
+move=> hshift hexec hmn.
+have letok : forall (eT aT rT : Type) (a : aT) (f : aT -> result eT rT),
+    (Let x := ok a in f x) = f a by move=> *.
+rewrite !inE in hmn.
+case: mn hmn hexec => hmn hexec //.
+all: rewrite /exec_sopn /= /sopn_sem /sopn_sem_ /= in hexec |- *.
+all: (move: hexec; t_xrbindP => hwx hx hwy hy hwy_eq hcf hcf_eq;
+      case: vs => [| a vs'] //= hsemi <-).
+all: rewrite hwy !truncate_word_u hcf_eq !letok.
+all: have hwy_val : word_shift_of_reg_shift sh wb (wunsigned wa) = hy
+       by move: hshift; rewrite hwy_eq => /ok_inj <-.
+all: (rewrite hwy_val; move/ok_inj: hsemi => hsemi; rewrite hsemi //).
+Qed.
 
 Lemma lower_basic_shift_notP ii fg lvs es sh es'' s0 s1 :
   lower_basic_shift ii BN_NOT es = ok (Some (sh, es'')) ->
