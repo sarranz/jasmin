@@ -290,7 +290,29 @@ Lemma lower_storeP ii ws e lv v v' s0 s1 lvs op es :
   truncate_val (cword ws) v = ok v' ->
   write_lval true (p_globs p) lv v' s0 = ok s1 ->
   sem_sopn (p_globs p) (Oasm op) s0 (lvs ++ [:: lv]) es = ok s1.
-Admitted.
+Proof.
+move=> hlow he htr hw.
+rewrite /lower_store in hlow.
+case: ifP hlow => h_le hlow.
+- move: hlow; apply: rbindP => [[]] /assertP /eqP h_ws.
+  move=> /ok_inj /Some_inj [[<- <-] <-].
+  subst ws.
+  rewrite cat0s /sem_sopn /= he /= /exec_sopn /=.
+  have [w [ws' [w' [htw hv hv']]]] := truncate_val_typeE htr.
+  subst v v'.
+  change arch_decl.reg_size with U32 in htw.
+  rewrite /= /to_word htw /= /sopn_sem_ /= /write_lvals /=.
+  by rewrite hw.
+move: hlow; apply: rbindP => [[]] /assertP /eqP h_ws.
+move=> /ok_inj /Some_inj [[<- <-] <-].
+subst ws.
+rewrite cat0s /sem_sopn /= he /= /exec_sopn /=.
+have [w [ws' [w' [htw hv hv']]]] := truncate_val_typeE htr.
+subst v v'.
+change arch_decl.xreg_size with U256 in htw.
+rewrite /= /to_word htw /= /sopn_sem_ /= /write_lvals /=.
+by rewrite hw.
+Qed.
 
 (* Register move [ExtOp MOV] / [BN_MOV] (identity up to [sign_extend_u] /
    [zero_extend_u]) or stack load [RV32 LW] / [BN_LD] when
