@@ -367,7 +367,31 @@ Lemma lower_loadP ii ws e lv v v' s0 s1 lvs op es :
   truncate_val (cword ws) v = ok v' ->
   write_lval true (p_globs p) lv v' s0 = ok s1 ->
   sem_sopn (p_globs p) (Oasm op) s0 (lvs ++ [:: lv]) es = ok s1.
-Admitted.
+Proof.
+move=> hlow he htr hw.
+rewrite /lower_load in hlow.
+case: ifP hlow => h_le hlow.
+- move: hlow; apply: rbindP => [[]] /assertP /eqP h_ws.
+  apply: rbindP => [[]] _.
+  move=> /ok_inj /Some_inj [<- <- <-].
+  subst ws.
+  rewrite cat0s /sem_sopn /= he /= /exec_sopn /=.
+  have [w [ws' [w' [htw hv hv']]]] := truncate_val_typeE htr.
+  subst v v'.
+  change arch_decl.reg_size with U32 in htw.
+  rewrite /= /to_word htw /= /sopn_sem_ /= /write_lvals /=.
+  by rewrite hw.
+- move: hlow; apply: rbindP => [[]] /assertP /eqP h_ws.
+  apply: rbindP => [[]] _.
+  move=> /ok_inj /Some_inj [<- <- <-].
+  subst ws.
+  rewrite cat0s /sem_sopn /= he /= /exec_sopn /=.
+  have [w [ws' [w' [htw hv hv']]]] := truncate_val_typeE htr.
+  subst v v'.
+  change arch_decl.xreg_size with U256 in htw.
+  rewrite /= /to_word htw /= /sopn_sem_ /= /write_lvals /=.
+  by rewrite hw.
+Qed.
 
 (* [Oword_of_int] (ws <= reg_size) -> [RV32 LI] (immediate;
    [es = [:: Papp1 op1 e1]]); [Olnot] (ws = xreg_size) -> [BN_NOT FG1] with
