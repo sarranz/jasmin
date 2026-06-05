@@ -193,6 +193,8 @@ Definition assemble_SUBI
   Let: (x, _) := uncons_LLvar les in
   Let: (y, res) := uncons_rvar res in
   Let: (imm, _) := uncons_wconst res in
+  Let _ := assert (convertible x.(vtype) (aword U32))
+                  (E.internal_error "subi: bad register type" ii) in
   Let args := o2r (E.invalid_args ii) (OTBNFopn_core.smart_subi x y imm) in
   ok (asm_args_of_opn_args args).
 

@@ -791,7 +791,60 @@ Admitted.
    assemble_opsP shape). *)
 Lemma otbn_assemble_MOV_correct :
   assemble_extra_correct (ap_agp otbn_params) MOV.
-Proof. Admitted.
+Proof.
+  move=> rip ii lvs args m xs ys m' s ops ops'.
+  move=> hrex hexec hwle hops hmap hlom.
+  move: hops; rewrite /to_asm /= /assemble_extra /assemble_MOV.
+  move: hrex hwle.
+  case: lvs => // -[] // [[xt xn] xii] [] //.
+  case: args => // -[] // [] // y [] //=.
+  (* --- Goal 1: main case --- *)
+  move=> hrex hwle; t_xrbindP => hc hops_eq.
+  set xi := {| v_var := {| vtype := xt; vname := xn |}; v_info := xii |}.
+  move: hrex hexec hwle hmap hlom.
+  t_xrbindP => vy hvy <-.
+  rewrite /exec_sopn /sopn_sem /sopn_sem_ /=.
+  change (to_word U32) with (to_word Uptr).
+  case hwy: (to_word Uptr vy) => [wy |] /= // [<-].
+  case heq: (set_var true (evm m) {| vtype := xt; vname := xn |} (Vword wy))
+    => [vm1 |] /= // [<-] hmap hlom.
+  have hc' : convertible xi.(vtype) (aword otbn_reg_size) := hc.
+  have hget : get_var true (evm m) y >>= to_word Uptr = ok wy
+    by rewrite hvy /= hwy.
+  have [vm' [hsem heq_vm hgetx]] :=
+    OTBNFopn_coreP.smart_mov_sem_fopns_args hc' hget.
+  have hsopns : sem_sopns m ops = ok (with_vm m vm')
+    by rewrite -hops_eq otbn_sem_sopns_asm_args -otbn_sem_fopns_equiv; exact: hsem.
+  have hall : all (fun '(op, _, _) =>
+    match op.1 with | Some _ => false | None => true end) ops
+    by rewrite -hops_eq all_map; apply/allT => -[[]].
+  have [s' hfold hlom'] :=
+    assemble_opsP otbn_eval_assemble_cond hmap hall hsopns hlom.
+  exists s' => //.
+  apply: (lom_eqv_ext _ hlom') => z /=.
+  move/set_varP: heq => [_ _ ->].
+  rewrite Vm.setP (convertible_eval_atype hc).
+  case: eqP => [<- | hne];
+    last by apply: heq_vm; rewrite Sv.singleton_spec; exact: not_eq_sym hne.
+  have hvxi := get_var_to_word hc' hgetx.
+  move/get_varP: hvxi => [h1 h2 h3].
+  by rewrite -h1.
+  (* --- Goal 2: extra args --- *)
+  move=> a l hrex _ _.
+  move: hrex hexec.
+  t_xrbindP => y0 hy0 ys0 y1 hy1 ys0' hys0' <- <- hexec.
+  rewrite /exec_sopn /sopn_sem /sopn_sem_ /= in hexec.
+  case: (to_word U32 y0) hexec => //= w hexec.
+  (* --- Goal 3: extra dests --- *)
+  move=> a l hrex hwle _.
+  case: ys hexec hwle => [| b [| b0 lb]] hexec hwle.
+  - move: hexec hrex; rewrite /exec_sopn /sopn_sem /sopn_sem_ /=.
+    by case: xs => [| v [| v' vs]] /=; try case: (to_word U32 v).
+  - move: hwle; rewrite /write_lexprs /=.
+    by case: (set_var true (evm m) {| vtype := xt; vname := xn |} b).
+  - move: hexec hrex; rewrite /exec_sopn /sopn_sem /sopn_sem_ /=.
+    by case: xs => [| v [| v' vs]] /=; try case: (to_word U32 v).
+Qed.
 
 (* Proof plan (SUBI) -- uses the common assemble_opsP bridge above.
 
@@ -829,7 +882,87 @@ Proof. Admitted.
    cf. riscv_params_proof.v assemble_add_large_imm_correct. *)
 Lemma otbn_assemble_SUBI_correct :
   assemble_extra_correct (ap_agp otbn_params) SUBI.
-Proof. Admitted.
+Proof.
+  move=> rip ii lvs args m xs ys m' s ops ops'.
+  move=> hrex hexec hwle hops hmap hlom.
+  move: hops; rewrite /to_asm /= /assemble_extra /assemble_SUBI.
+  move: hrex hwle.
+  case: lvs => // -[] // [[xt xn] xii] [] //.
+  case: args => // -[] //.
+  move=> f l.
+  case: f => //= y.
+  (* peel the [wconst] immediate *)
+  rewrite /arm_extra.uncons_wconst.
+  case: l => // -[] // -[] //.
+  move=> s0 f0 l0.
+  case: s0 => //= ws.
+  case: f0 => //= imm.
+  (* peel the assemble premise: [hc] (the dest type assert), [args0], etc. *)
+  move=> hrex hwle; t_xrbindP => hc args0 hsmart hops_eq.
+  set xi := {| v_var := {| vtype := xt; vname := xn |}; v_info := xii |}.
+  move: hrex hexec hwle hmap hlom.
+  (* peel [sem_rexprs]; note the scrambled binder order from the nested Lets *)
+  t_xrbindP => vy hvy vs hvs.
+  move=> hvl heqv heqxs; subst vs; subst xs.
+  move=> hexec; move: hexec.
+  rewrite /exec_sopn /sopn_sem /sopn_sem_ /=.
+  change (to_word U32) with (to_word Uptr).
+  (* split off the degenerate l0-tail: [main], [l0-tail], [extra dests] *)
+  case: hvs hvl => [|v1 vl1] hvl /=.
+  (* --- main case --- *)
+  change (to_word U32) with (to_word Uptr).
+  t_xrbindP => tval wyv hvyw wiv htr hsub heqys.
+  subst tval; subst ys.
+  case heq: (set_var true (evm m) {| vtype := xt; vname := xn |}
+                       (Vword (wyv - wiv)%R))
+    => [vm1 |] /= // [<-] hmap hlom.
+  have hc' : convertible xi.(vtype) (aword otbn_reg_size) := hc.
+  have hget : get_var true (evm m) y >>= to_word U32 = ok wyv
+    by rewrite hvy /=; exact hvyw.
+  have hsome : otbn_params_core.OTBNFopn_core.smart_subi xi y imm = Some args0
+    := o2rP hsmart.
+  have HOR : otbn_params_core.is_arith_small_neg imm \/ v_var xi <> v_var y.
+  move: hsome;
+    rewrite /otbn_params_core.OTBNFopn_core.smart_subi
+            /otbn_params_core.OTBNFopn_core.gen_smart_opi
+            /otbn_params_core.OTBNFopn_core.is_mov;
+    case: ifP => // hg _;
+    move: hg => /or3P [/Z.eqb_eq -> | hsmall | hne];
+    [ by left | by left | by right => h; move: hne; rewrite h eqxx ].
+  have [vm' [hsem heq_vm hgetx]] := otbn_smart_subi_sem_fopns hc' HOR hget.
+  have hargs_eq :
+    smart_subi_fopn xi y imm = [seq fopn_args_of_opn_args a | a <- args0]
+    by rewrite /smart_subi_fopn /smart_subi hsome /=.
+  have hsopns : sem_sopns m ops = ok (with_vm m vm')
+    by rewrite -hops_eq otbn_sem_sopns_asm_args -hargs_eq; exact: hsem.
+  have hall : all (fun '(op, _, _) =>
+    match op.1 with | Some _ => false | None => true end) ops
+    by rewrite -hops_eq all_map; apply/allT => -[[]].
+  have [s' hfold hlom'] :=
+    assemble_opsP otbn_eval_assemble_cond hmap hall hsopns hlom.
+  exists s' => //.
+  apply: (lom_eqv_ext _ hlom') => z /=.
+  (* the immediate reconciliation: [wiv = wrepr reg_size imm] *)
+  have hwiv : wiv = wrepr U32 imm
+    by move: htr => /truncate_wordP [hle ->]; rewrite zero_extend_wrepr.
+  move/set_varP: heq => [_ _ ->].
+  rewrite Vm.setP (convertible_eval_atype hc).
+  case: eqP => [<- | hne];
+    last by apply: heq_vm; rewrite Sv.singleton_spec; exact: not_eq_sym hne.
+  rewrite hwiv.
+  move/get_varP: hgetx => [h1 _ _].
+  by rewrite -h1.
+  (* --- l0-tail (degenerate: SUBI reads only [y] and [imm]) --- *)
+  by move=> /=; case: (to_word U32 vy) => //= ?;
+     case: (truncate_word U32 (wrepr ws imm)) => //=.
+  (* --- extra dests (SUBI has exactly one output) --- *)
+  move=> a l hrex hwle _.
+  case: ys hexec hwle => [| b [| b0 lb]] hexec hwle.
+  - move: hexec; rewrite /exec_sopn /sopn_sem /sopn_sem_ /=; by t_xrbindP.
+  - move: hwle; rewrite /write_lexprs /=.
+    by case: (set_var true (evm m) {| vtype := xt; vname := xn |} b).
+  - by move: hexec; rewrite /exec_sopn /sopn_sem /sopn_sem_ /=; t_xrbindP.
+Qed.
 
 (* Proof plan (SWAP ws) -- uses assemble_opsP (common block) but computes
    sem_sopns directly: the three XOR ops are raw asm tuples, NOT
