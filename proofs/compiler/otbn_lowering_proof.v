@@ -21,6 +21,11 @@ Require Import
   otbn_instr_decl
   otbn_lowering.
 
+Set Uniform Inductive Parameters.
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
+
 Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then remove the line when requiring MathComp >= 2.6 *)
 
 Section PROOF.
@@ -163,29 +168,96 @@ Lemma bn_shifted_unopP fg sh (wb : word arch_decl.xreg_size) (wa : word U8) x vs
   = ok (word_shift_of_reg_shift sh wb (wunsigned wa)) ->
   exec_sopn (Oasm (BaseOp (None, BN_basic BN_NOT fg))) [:: x & vs] = ok r ->
   exec_sopn (Oasm (BaseOp (None, BN_basic_shift BN_NOT fg sh)))
-    [:: Vword wb, Vword wa & vs] = ok r.
+    (Vword wb :: vs ++ [:: Vword wa]) = ok r.
 Proof.
 Admitted.
 
 Lemma bn_shifted_binopP mn fg sh (wb : word arch_decl.xreg_size) (wa : word U8) x y vs r :
-  mn \in [:: BN_ADD; BN_SUB; BN_AND; BN_OR; BN_XOR; BN_CMP; BN_CMPB ] ->
   to_word arch_decl.xreg_size y
   = ok (word_shift_of_reg_shift sh wb (wunsigned wa)) ->
   exec_sopn (Oasm (BaseOp (None, BN_basic mn fg))) [:: x, y & vs] = ok r ->
+  mn \in [:: BN_ADD; BN_SUB; BN_AND; BN_OR; BN_XOR; BN_CMP; BN_CMPB ] ->
   exec_sopn (Oasm (BaseOp (None, BN_basic_shift mn fg sh)))
-    [:: x, Vword wb, Vword wa & vs] = ok r.
+    (x :: Vword wb :: vs ++ [:: Vword wa]) = ok r.
 Proof.
 Admitted.
 
 Lemma bn_shifted_teropP mn fg sh (wb : word arch_decl.xreg_size) (wa : word U8) x y cf vs r :
-  mn \in [:: BN_ADDC; BN_SUBB ] ->
   to_word arch_decl.xreg_size y
   = ok (word_shift_of_reg_shift sh wb (wunsigned wa)) ->
   exec_sopn (Oasm (BaseOp (None, BN_basic mn fg))) [:: x, y, cf & vs] = ok r ->
+  mn \in [:: BN_ADDC; BN_SUBB ] ->
   exec_sopn (Oasm (BaseOp (None, BN_basic_shift mn fg sh)))
-    [:: x, Vword wb, cf, Vword wa & vs] = ok r.
+    (x :: Vword wb :: cf :: vs ++ [:: Vword wa]) = ok r.
 Proof.
 Admitted.
+
+Lemma lower_basic_shift_notP ii fg lvs es sh es'' s0 s1 :
+  lower_basic_shift ii BN_NOT es = ok (Some (sh, es'')) ->
+  sem_sopn (p_globs p) (Oasm (BaseOp (None, BN_basic BN_NOT fg))) s0 lvs es
+  = ok s1 ->
+  sem_sopn (p_globs p)
+    (Oasm (BaseOp (None, BN_basic_shift BN_NOT fg sh))) s0 lvs es'' = ok s1.
+Proof.
+move=> hshift hsrc.
+rewrite /lower_basic_shift in hshift.
+move: hshift; t_xrbindP.
+move=> z [x0 rest0] hrsnoc /ok_inj <- hget.
+apply: rbindP hget => o hgas.
+case: o hgas => [[[ebase sh0] esham] | ] hgas; last by [].
+rewrite /issue cat0s => /ok_inj /Some_inj [<- <-].
+move: hgas.
+case: es hrsnoc hsrc => [| a bs] hrsnoc hsrc //=.
+move/ok_inj: hrsnoc => [<- <-].
+move=> hgas.
+rewrite /sem_sopn in hsrc |- *.
+move: hsrc; t_xrbindP => vs hvs r hexec hw.
+move: hexec.
+move: r; rewrite /sem_pexprs /=; t_xrbindP => x_v hx vrest hvrest <-.
+move=> hexec.
+have [wb [wa [h_ebase h_esham h_shift]]] := get_arg_shiftP hgas hx.
+have hexec' := bn_shifted_unopP h_shift hexec.
+rewrite h_ebase /= mapM_cat hvrest /= h_esham /= hexec' /= hw //.
+Qed.
+
+Lemma lower_basic_shift_addcP ii fg lvs es sh es'' s0 s1 :
+  lower_basic_shift ii BN_ADDC es = ok (Some (sh, es'')) ->
+  sem_sopn (p_globs p) (Oasm (BaseOp (None, BN_basic BN_ADDC fg))) s0 lvs es
+  = ok s1 ->
+  sem_sopn (p_globs p)
+    (Oasm (BaseOp (None, BN_basic_shift BN_ADDC fg sh))) s0 lvs es'' = ok s1.
+Proof.
+move=> hshift hsrc.
+rewrite /lower_basic_shift in hshift.
+move: hshift; t_xrbindP.
+move=> z [[[x_e y_e] cf_e] rest] hrsnoc /ok_inj <- hget.
+apply: rbindP hget => o hgas.
+case: o hgas => [[[ebase sh0] esham] | ] hgas; last by [].
+rewrite /issue => /ok_inj /Some_inj [<- <-].
+move: hgas.
+case: es hrsnoc hsrc => [| e1 [| e2 [| e3 es3]]] hrsnoc hsrc //=.
+move/ok_inj: hrsnoc => [[[<- <-] <-] <-].
+move=> hgas.
+rewrite /sem_sopn in hsrc |- *.
+move: hsrc; t_xrbindP => vs hvs r hexec hw.
+move: hexec.
+move: r; rewrite /sem_pexprs /=.
+apply: rbindP => x_v hx.
+apply: rbindP => ys_x hys_x.
+move/ok_inj => <-.
+move=> hexec.
+move: hys_x.
+apply: rbindP => y_v hy.
+apply: rbindP => ys_y hys_y.
+move/ok_inj => heq_x; subst ys_x.
+move: hys_y.
+apply: rbindP => cf_v hcf.
+apply: rbindP => vrest hvrest.
+move/ok_inj => heq_y; subst ys_y.
+have [wb [wa [h_ebase h_esham h_shift]]] := get_arg_shiftP hgas hy.
+have hexec' := bn_shifted_teropP h_shift hexec ltac:(by vm_compute).
+rewrite hx /= h_ebase /= hcf /= mapM_cat hvrest /= h_esham /= hexec' /= hw //.
+Qed.
 
 (* [lower_basic_shiftP] (case lemma assembling the above): from
    [lower_basic_shift ii mn es = Some (sh, es'')] conclude the
@@ -205,7 +277,71 @@ Lemma lower_basic_shiftP ii mn fg lvs es sh es'' s0 s1 :
   sem_sopn (p_globs p) (Oasm (BaseOp (None, BN_basic_shift mn fg sh))) s0 lvs es''
   = ok s1.
 Proof.
-Admitted.
+move=> hshift hsrc.
+case: mn hshift hsrc.
+(* BN_NOT (goal 7) - unop *)
+7: exact: lower_basic_shift_notP.
+(* BN_ADDC (goal 2) - carry terop *)
+2: exact: lower_basic_shift_addcP.
+all: move=> hshift hsrc.
+all: rewrite /lower_basic_shift in hshift.
+all: move: hshift; t_xrbindP.
+(* BN_ADD, BN_SUB, BN_AND, BN_OR, BN_XOR, BN_CMP, BN_CMPB - binop *)
+(* After 7+2: closes BN_NOT+BN_ADDC; renumbering: 1=BN_ADD, 2=BN_SUB, *)
+(* 3=BN_SUBB, 4=BN_AND, 5=BN_OR, 6=BN_XOR, 7=BN_CMP, 8=BN_CMPB *)
+1,2,4,5,6,7,8: (move=> z [[x_e y_e] rest] hrsnoc /ok_inj <- hget;
+    apply: rbindP hget => o hgas;
+    case: o hgas => [[[ebase sh0] esham] | ] hgas; last by [];
+    rewrite /issue => /ok_inj /Some_inj [<- <-];
+    move: hgas;
+    case: es hrsnoc hsrc => [| e1 [| e2 es2]] hrsnoc hsrc //=;
+    move/ok_inj: hrsnoc => [[<- <-] <-];
+    move=> hgas;
+    rewrite /sem_sopn in hsrc |- *;
+    move: hsrc; t_xrbindP => vs hvs r hexec hw;
+    move: hexec;
+    move: r; rewrite /sem_pexprs /=;
+    apply: rbindP => x_v hx;
+    apply: rbindP => ys hys;
+    move/ok_inj => <-;
+    move=> hexec;
+    move: hys;
+    apply: rbindP => y_v hy;
+    apply: rbindP => vrest hvrest;
+    move/ok_inj => heq; subst ys;
+    have [wb [wa [h_ebase h_esham h_shift]]] := get_arg_shiftP hgas hy;
+    have hexec' := bn_shifted_binopP h_shift hexec ltac:(by vm_compute);
+    rewrite hx /= h_ebase /= mapM_cat hvrest /= h_esham /= hexec' /= hw //).
+(* After binop goals closed: 1=BN_SUBB *)
+(* BN_SUBB - carry *)
+1: (move=> z [[[x_e y_e] cf_e] rest] hrsnoc /ok_inj <- hget;
+    apply: rbindP hget => o hgas;
+    case: o hgas => [[[ebase sh0] esham] | ] hgas; last by [];
+    rewrite /issue => /ok_inj /Some_inj [<- <-];
+    move: hgas;
+    case: es hrsnoc hsrc => [| e1 [| e2 [| e3 es3]]] hrsnoc hsrc //=;
+    move/ok_inj: hrsnoc => [[[<- <-] <-] <-];
+    move=> hgas;
+    rewrite /sem_sopn in hsrc |- *;
+    move: hsrc; t_xrbindP => vs hvs r hexec hw;
+    move: hexec;
+    move: r; rewrite /sem_pexprs /=;
+    apply: rbindP => x_v hx;
+    apply: rbindP => ys_x hys_x;
+    move/ok_inj => <-;
+    move=> hexec;
+    move: hys_x;
+    apply: rbindP => y_v hy;
+    apply: rbindP => ys_y hys_y;
+    move/ok_inj => heq_x; subst ys_x;
+    move: hys_y;
+    apply: rbindP => cf_v hcf;
+    apply: rbindP => vrest hvrest;
+    move/ok_inj => heq_y; subst ys_y;
+    have [wb [wa [h_ebase h_esham h_shift]]] := get_arg_shiftP hgas hy;
+    have hexec' := bn_shifted_teropP h_shift hexec ltac:(by vm_compute);
+    rewrite hx /= h_ebase /= hcf /= mapM_cat hvrest /= h_esham /= hexec' /= hw //).
+Qed.
 
 (* -------------------------------------------------------------------- *)
 (* CARRY: [Oaddcarry sz]/[Osubcarry sz] -> [BN_basic (BN_ADD(C)/BN_SUB(B))
