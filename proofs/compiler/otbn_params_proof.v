@@ -1,3 +1,7 @@
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
+
 From Coq Require Import Relations.
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssralg.
 From mathcomp Require Import word_ssrZ.
@@ -725,13 +729,99 @@ Arguments otbn_sem_sopns_asm_args m lc : clear implicits.
 Lemma otbn_assemble_set0_correct ws :
   assemble_extra_correct (ap_agp otbn_params) (set0 ws).
 Proof.
-move=> rip ii lvs vs m xs ys m' xm args ops ops' ho hw ++ hm.
-rewrite /to_asm /= /assemble_set0.
-case hws: (ws <= reg_size)%CMP => -[?];
-  subst args => /=;
-  t_xrbindP=> -[op args] hop ?;
-  subst ops.
-Admitted.
+move=> rip ii lvs vs m xs ys m' s ops ops'.
+move=> ho hexec hwle hops hmap hlom.
+rewrite /to_asm /= /assemble_extra /assemble_set0 in hops.
+case hws: (ws <= reg_size)%CMP in hops.
+(* Small case: ws <= reg_size, scratch = X03, op = RV32 XOR *)
+- case: hops => heq; subst ops.
+  rewrite /= in hmap.
+  move: hmap; t_xrbindP => -[op' asm_args] hass <- /=.
+  assert (h := assemble_asm_opI hass); case: h => hca hcd hidc -> /= {hass}.
+  rewrite /id_args_kinds /= in hidc.
+  rewrite orbF /check_args_kinds /= in hidc.
+  move: hexec ho.
+  rewrite /exec_sopn /sopn_sem /sopn_sem_ /= hws /=.
+  case: xs => [|//]; move=> hexec _.
+  simpl in hexec.
+  move: hexec => /ok_inj hexeq; rewrite -hexeq in hwle.
+  case: asm_args hidc hca hcd =>
+    [// | a0 [// | a1 [// | a2 [// | a3 rest]]]] hidc hca hcd.
+  + by rewrite /= /= /= in hidc; move: hidc; rewrite !andbF.
+  + move: hca; rewrite /check_sopn_args /= => /and3P [hca1 hca2 _].
+    rewrite /check_sopn_arg /= in hca1 hca2.
+    case hxr: (xreg_of_var ii (mk_var_i (to_var X03))) => [r03|//] in hca1 hca2.
+    have hr03 := xreg_of_varI hxr.
+    case: r03 hxr hr03 hca1 hca2 => [r03|r03|r03|||] hxr hr03 hca1 hca2;
+      try (by move: hr03).
+    move: hca1 hca2; rewrite andbT /compat_imm /= => /orP [/eqP ha1|//] /orP [/eqP ha2|//].
+    rewrite orbF in ha2. move: ha2 => /eqP/eqP ha2.
+    rewrite -ha1 -ha2.
+    rewrite /arch_sem.eval_op /arch_sem.exec_instr_op /arch_sem.eval_instr_op /=.
+    have hcheck : (check_arg_kind a0 CAreg || false) && true || false = true.
+    { rewrite /= /= /= in hidc.
+      move: hidc => /and3P [h0 _ _].
+      by rewrite /= h0. }
+    rewrite /assert hcheck /= !truncate_word_u /= wxor_xx /=.
+    rewrite -ha1 -ha2 in hcd.
+    set id := instr_desc (None, RV32 XOR).
+    have hsize : size (id_out id) = size (id_tout id)
+      by exact: eqP (andP (id_eq_size id)).2.
+    have [s' hfold hlom'] :=
+      compile_lvals (agparams := ap_agp otbn_params) MSB_MERGE
+        hsize hwle hlom hcd id.(id_check_dest).
+    by exists s'; [rewrite hfold | exact: hlom'].
+  + by rewrite /= /= /= in hidc; move: hidc; rewrite !andbF.
+(* Wide case: ws > reg_size, scratch = W01, op = BN_basic BN_XOR FG0 *)
+- case: hops => heq; subst ops.
+  rewrite /= in hmap.
+  move: hmap; t_xrbindP => -[op' asm_args] hass <- /=.
+  assert (h := assemble_asm_opI hass); case: h => hca hcd hidc -> /= {hass}.
+  rewrite /id_args_kinds /= in hidc.
+  rewrite orbF /check_args_kinds /= in hidc.
+  move: hexec ho.
+  rewrite /exec_sopn /sopn_sem /sopn_sem_ /=.
+  move=> hexec _.
+  rewrite /= hws /= in hexec.
+  case: xs hexec => [|//]; move=> hexec.
+  simpl in hexec.
+  move: hexec => /ok_inj hexeq; rewrite -hexeq in hwle.
+  case: asm_args hidc hca hcd =>
+    [// | a0 [// | a1 [// | a2 [// | a3 rest]]]] hidc hca hcd.
+  + by rewrite /= /= /= in hidc; move: hidc; rewrite !andbF.
+  + move: hca; rewrite /check_sopn_args /= => /and3P [hca1 hca2 _].
+    rewrite /check_sopn_arg /= in hca1 hca2.
+    case hxr: (xreg_of_var ii (mk_var_i (to_var W01))) => [r01|//] in hca1 hca2.
+    have hr01 := xreg_of_varI hxr.
+    case: r01 hxr hr01 hca1 hca2 => [r01|r01|r01|||] hxr hr01 hca1 hca2;
+      try (by move: hr01).
+    rewrite /compat_imm /= orbF in hca2.
+    move: hca2 => /andP [/eqP ha1 hnotin1].
+    move=> hca2; rewrite /compat_imm /= orbF in hca2.
+    move: hca2 => /andP [/eqP ha2 hnotin2].
+    rewrite -ha1 -ha2.
+    rewrite -ha1 -ha2 in hcd hnotin1 hnotin2.
+    rewrite /arch_sem.eval_op /arch_sem.exec_instr_op /arch_sem.eval_instr_op /=.
+    have hcheck : (check_arg_kind a0 CAxmm || false) && true || false = true.
+    { rewrite /= /= /= in hidc.
+      move: hidc => /and3P [h0 _ _].
+      by rewrite /= h0. }
+    rewrite /assert hcheck hnotin1 /= !truncate_word_u /= wxor_xx /=.
+    rewrite /lsb w0E msb0 eqxx /=.
+    set id := instr_desc (None, BN_basic BN_XOR otbn_options.FG0).
+    have hid_tout : id_tout id = [:: lbool; lbool; lbool; lword256] by rewrite /id /=.
+    have hid_out : id_out id = [:: F MF0; F LF0; F ZF0; EXa 0] by rewrite /id /=.
+    rewrite hid_out hid_tout in hcd.
+    have hsize : size (id_out id) = size (id_tout id)
+      by exact: eqP (andP (id_eq_size id)).2.
+    have [s' hfold hlom'] :=
+      compile_lvals (agparams := ap_agp otbn_params)
+        (id_tout := [:: lbool; lbool; lbool; lword256])
+        (vt := (Some false, (Some false, (Some true, (0%R : word U256)))))
+        MSB_MERGE hsize hwle hlom hcd id.(id_check_dest).
+    by exists s'; [rewrite hfold | exact: hlom'].
+  + by rewrite /= /= /= in hidc; move: hidc; rewrite !andbF.
+Qed.
 
 (* --------------------------------------------------------------------------
    Common skeleton for MOV / SUBI / SWAP (the assemble_opsP bridge).
@@ -929,7 +1019,9 @@ Proof.
     case: ifP => // hg _;
     move: hg => /or3P [/Z.eqb_eq -> | hsmall | hne];
     [ by left | by left | by right => h; move: hne; rewrite h eqxx ].
-  have [vm' [hsem heq_vm hgetx]] := otbn_smart_subi_sem_fopns hc' HOR hget.
+  have [vm' [hsem heq_vm hgetx]] :=
+    otbn_smart_subi_sem_fopns (xi := xi) (y := y) (imm := imm)
+      (s := m) (w := wyv) hc' HOR hget.
   have hargs_eq :
     smart_subi_fopn xi y imm = [seq fopn_args_of_opn_args a | a <- args0]
     by rewrite /smart_subi_fopn /smart_subi hsome /=.
