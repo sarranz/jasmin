@@ -349,13 +349,18 @@ Section LOWER_ASSIGN.
        + a register.
        + a stack variable. *)
   Definition lower_Pvar (ws : wsize) (v : gvar) : low_instr :=
-    let op :=
-      if (ws <= reg_size)%CMP then
+    if (ws == reg_size)%CMP then
+      let op :=
         if is_var_in_memory (gv v) then BaseOp (None, RV32 LW) else ExtOp MOV
-      else if is_var_in_memory (gv v) then BaseOp (None, BN_LD)
-      else BaseOp (None, BN_MOV)
-    in
-    li_ssimple op [:: Pvar v ].
+      in
+      li_ssimple op [:: Pvar v ]
+    else if (ws == xreg_size)%CMP then
+      let op :=
+        if is_var_in_memory (gv v) then BaseOp (None, BN_LD)
+        else BaseOp (None, BN_MOV)
+      in
+      li_ssimple op [:: Pvar v ]
+    else skip.
 
   (* Match a memory access and return the base pointer and displacement (in
      bytes). *)

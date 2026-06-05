@@ -295,7 +295,7 @@ move=> hlow he htr hw.
 rewrite /lower_store in hlow.
 case: ifP hlow => h_le hlow.
 - move: hlow; apply: rbindP => [[]] /assertP /eqP h_ws.
-  move=> /ok_inj /Some_inj [[<- <-] <-].
+  move=> /ok_inj /Some_inj [<- <- <-].
   subst ws.
   rewrite cat0s /sem_sopn /= he /= /exec_sopn /=.
   have [w [ws' [w' [htw hv hv']]]] := truncate_val_typeE htr.
@@ -304,7 +304,7 @@ case: ifP hlow => h_le hlow.
   rewrite /= /to_word htw /= /sopn_sem_ /= /write_lvals /=.
   by rewrite hw.
 move: hlow; apply: rbindP => [[]] /assertP /eqP h_ws.
-move=> /ok_inj /Some_inj [[<- <-] <-].
+move=> /ok_inj /Some_inj [<- <- <-].
 subst ws.
 rewrite cat0s /sem_sopn /= he /= /exec_sopn /=.
 have [w [ws' [w' [htw hv hv']]]] := truncate_val_typeE htr.
@@ -323,7 +323,40 @@ Lemma lower_PvarP ws gv lv v v' s0 s1 lvs op es :
   truncate_val (cword ws) v = ok v' ->
   write_lval true (p_globs p) lv v' s0 = ok s1 ->
   sem_sopn (p_globs p) (Oasm op) s0 (lvs ++ [:: lv]) es = ok s1.
-Admitted.
+Proof.
+move=> hlow he htr hw.
+have hge : get_gvar true (p_globs p) (evm s0) gv = ok v := he.
+rewrite /lower_Pvar in hlow.
+case: eqP hlow => [?|_].
+- subst ws.
+  case: ifP => h_mem [???]; subst lvs op es.
+  + rewrite cat0s /sem_sopn /= /exec_sopn /= hge /=.
+    have [w [ws' [w' [htw hv hv']]]] := truncate_val_typeE htr.
+    subst v v'.
+    change arch_decl.reg_size with U32 in htw.
+    rewrite /= /to_word htw /= /sopn_sem_ /= /write_lvals /=.
+    by rewrite hw.
+  + rewrite cat0s /sem_sopn /= /exec_sopn /= hge /=.
+    have [w [ws' [w' [htw hv hv']]]] := truncate_val_typeE htr.
+    subst v v'.
+    change arch_decl.reg_size with U32 in htw.
+    rewrite /= /to_word htw /= /sopn_sem_ /= /write_lvals /=.
+    by rewrite hw.
+case: eqP => [?|//]; subst ws.
+case: ifP => h_mem [???]; subst lvs op es.
++ rewrite cat0s /sem_sopn /= /exec_sopn /= hge /=.
+  have [w [ws' [w' [htw hv hv']]]] := truncate_val_typeE htr.
+  subst v v'.
+  change arch_decl.xreg_size with U256 in htw.
+  rewrite /= /to_word htw /= /sopn_sem_ /= /write_lvals /=.
+  by rewrite hw.
+rewrite cat0s /sem_sopn /= /exec_sopn /= hge /=.
+have [w [ws' [w' [htw hv hv']]]] := truncate_val_typeE htr.
+subst v v'.
+change arch_decl.xreg_size with U256 in htw.
+rewrite /= /to_word htw /= /sopn_sem_ /= /write_lvals /=.
+by rewrite hw.
+Qed.
 
 (* [RV32 LW] (ws <= reg_size) or [BN_LD] (wide); memory load
    ([sign_extend_u]).  [lvs = [::]], [es = [:: e]].  Displacement checks
@@ -395,7 +428,7 @@ Proof.
     case: (chk_lower_store ii ws lv) => [[] | ] //= in hlow.
     rewrite /no_pre /= in hlow.
     case h_store: (lower_store ii ws e) => [ [[[lvs_i op_i] es_i] | ] | ] //= in hlow.
-    move: hlow => /ok_inj /Some_inj [[[<- hlvs] <-] <-].
+    move: hlow => /ok_inj /Some_inj [<- hlvs <- <-].
     split; first by [].
     rewrite -hlvs.
     exact: lower_storeP h_store he htr hw.
@@ -404,31 +437,32 @@ Proof.
     case: e he hlow; try (move=> *; by []).
     + move=> gv he hlow.
       rewrite /= in hlow.
-      move: hlow => /ok_inj /Some_inj [[[<- <-] <-] <-].
+      case h_pvar: (lower_Pvar ws gv) => [ [[[lvs_i op_i] es_i] | ] | ] //= in hlow.
+      move: hlow => /ok_inj /Some_inj [<- hlvs <- <-].
       split; first by [].
-      exact: lower_PvarP erefl he htr hw.
+      rewrite -hlvs; exact: lower_PvarP h_pvar he htr hw.
     + move=> a a0 w g p0 he hlow.
       rewrite /= in hlow.
       case h_load: (lower_load ii ws (Pget a a0 w g p0)) => [ [[[lvs_i op_i] es_i] | ] | ] //= in hlow.
-      move: hlow => /ok_inj /Some_inj [[[<- hlvs] <-] <-].
+      move: hlow => /ok_inj /Some_inj [<- hlvs <- <-].
       split; first by [].
       rewrite -hlvs; exact: lower_loadP h_load he htr hw.
     + move=> a wl p0 he hlow.
       rewrite /= in hlow.
       case h_load: (lower_load ii ws (Pload a wl p0)) => [ [[[lvs_i op_i] es_i] | ] | ] //= in hlow.
-      move: hlow => /ok_inj /Some_inj [[[<- hlvs] <-] <-].
+      move: hlow => /ok_inj /Some_inj [<- hlvs <- <-].
       split; first by [].
       rewrite -hlvs; exact: lower_loadP h_load he htr hw.
     + move=> op1 e1 he hlow.
       rewrite /= in hlow.
       case h_app1: (lower_Papp1 ii ws op1 e1) => [ [[[lvs_i op_i] es_i] | ] | ] //= in hlow.
-      move: hlow => /ok_inj /Some_inj [[[<- hlvs] <-] <-].
+      move: hlow => /ok_inj /Some_inj [<- hlvs <- <-].
       split; first by [].
       rewrite -hlvs; exact: lower_Papp1P h_app1 he htr hw.
     + move=> op2 a b he hlow.
       rewrite /= in hlow.
       case h_app2: (lower_Papp2 ii ws op2 a b) => [ [[[lvs_i op_i] es_i] | ] | ] //= in hlow.
-      move: hlow => /ok_inj /Some_inj [[[<- hlvs] <-] <-].
+      move: hlow => /ok_inj /Some_inj [<- hlvs <- <-].
       split; first by [].
       rewrite -hlvs; exact: lower_Papp2P h_app2 he htr hw.
     + move=> ty econd e0 e1 he hlow.
@@ -438,7 +472,7 @@ Proof.
       case h_cond: (lower_condition ii econd) => [[pre_c econd'] | ] //= in hlow.
       case h_pif: (lower_Pif ii ws econd' e0 e1) => [ [[[lvs_i op_i] es_i] | ] | ] //= in hlow.
       case: econd he hlow h_cond => //= [f] he hlow h_cond.
-      move: hlow => /ok_inj /Some_inj [[[<- hlvs] <-] <-].
+      move: hlow => /ok_inj /Some_inj [<- hlvs <- <-].
       move: h_cond => /ok_inj [<- heq_cond].
       rewrite -heq_cond in h_pif.
       split; first by [].
@@ -531,7 +565,7 @@ case: e3 hshift hsem => // z hshift hsem /=.
 move: hshift; t_xrbindP => o hrso.
 case: o hrso => [sh0 |] hrso //=.
 move=> hbn; move: hbn; apply: rbindP => _ _.
-move=> /ok_inj /Some_inj [[<- <-] <-].
+move=> /ok_inj /Some_inj [<- <- <-].
 move: hrso; rewrite /reg_shift_of_sop2 /chk_xreg_ws /assert.
 case: ifP => // /eqP -> hmatcho.
 move: hmatcho => /= hmatcho.
@@ -694,7 +728,7 @@ case: o hgas => [[[ebase sh0] esham] | ] hgas; last by [].
 rewrite /issue => /ok_inj /Some_inj [<- <-].
 move: hgas.
 case: es hrsnoc hsrc => [| e1 [| e2 [| e3 es3]]] hrsnoc hsrc //=.
-move/ok_inj: hrsnoc => [[[<- <-] <-] <-].
+move/ok_inj: hrsnoc => [<- <- <- <-].
 move=> hgas.
 rewrite /sem_sopn in hsrc |- *.
 move: hsrc; t_xrbindP => vs hvs r hexec hw.
@@ -733,7 +767,7 @@ case: o hgas => [[[ebase sh0] esham] | ] hgas; last by [].
 rewrite /issue => /ok_inj /Some_inj [<- <-].
 move: hgas.
 case: es hrsnoc hsrc => [| e1 [| e2 [| e3 es3]]] hrsnoc hsrc //=.
-move/ok_inj: hrsnoc => [[[<- <-] <-] <-].
+move/ok_inj: hrsnoc => [<- <- <- <-].
 move=> hgas.
 rewrite /sem_sopn in hsrc |- *.
 move: hsrc; t_xrbindP => vs hvs r hexec hw.
