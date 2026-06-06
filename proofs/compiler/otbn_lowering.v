@@ -341,6 +341,10 @@ End LOWER_CONDITION.
 (* Convert an assignment into an architecture-specific operation. *)
 Section LOWER_ASSIGN.
 
+(* TODO_OTBN define a helper for case analysis
+   Variant isa_variant := Vsmall | Vwide | Vwrong.
+   with a reflection lemma and move all nested ifs to that. *)
+
   Context (ii : instr_info).
 
   (* Lower an expression of the form [v].
@@ -349,18 +353,17 @@ Section LOWER_ASSIGN.
        + a register.
        + a stack variable. *)
   Definition lower_Pvar (ws : wsize) (v : gvar) : low_instr :=
-    if (ws == reg_size)%CMP then
-      let op :=
-        if is_var_in_memory (gv v) then BaseOp (None, RV32 LW) else ExtOp MOV
-      in
-      li_ssimple op [:: Pvar v ]
-    else if (ws == xreg_size)%CMP then
-      let op :=
-        if is_var_in_memory (gv v) then BaseOp (None, BN_LD)
-        else BaseOp (None, BN_MOV)
-      in
-      li_ssimple op [:: Pvar v ]
-    else skip.
+    let%lr op :=
+      if is_var_in_memory (gv v) then
+        if (ws == reg_size)%CMP then issue (BaseOp (None, RV32 LW))
+        else if (ws == xreg_size)%CMP then issue (BaseOp (None, BN_LD))
+        else skip
+      else
+        if (ws == reg_size)%CMP then issue (ExtOp MOV)
+        else if (ws == xreg_size)%CMP then issue (BaseOp (None, BN_MOV))
+        else skip
+    in
+    li_ssimple op [:: Pvar v ].
 
   (* Match a memory access and return the base pointer and displacement (in
      bytes). *)
@@ -377,33 +380,36 @@ Section LOWER_ASSIGN.
      A 32-bit access becomes a [LW]; a 256-bit (wide) access becomes a
      [BN.LD]. *)
   Definition lower_load (ws : wsize) (e : pexpr) : low_instr :=
-    if (ws <= reg_size)%CMP
-    then
-      Let _ := chk_reg_ws ii ws in
-      Let _ :=
-        if get_mem_disp e is Some wdisp then chk_address_displacement ii wdisp
-        else ok tt
-      in
-      li_simple (RV32 LW) [:: e ]
-    else
-      Let _ := chk_xreg_ws ii ws in
-      Let _ :=
-        if get_mem_disp e is Some wdisp
-        then chk_bn_address_displacement ii wdisp
-        else ok tt
-      in
-      li_simple BN_LD [:: e ].
+    let%lr op :=
+      if ws == reg_size then
+        Let _ :=
+          if get_mem_disp e is Some wdisp then chk_address_displacement ii wdisp
+          else ok tt
+        in
+        issue (RV32 LW)
+      else if ws == xreg_size then
+        Let _ :=
+          if get_mem_disp e is Some wdisp
+          then chk_bn_address_displacement ii wdisp
+          else ok tt
+        in
+        issue BN_LD
+      else skip
+    in
+    li_simple op [:: e ].
 
   (* Lower an expression of the form [<+> e].
      TODO_OTBN: introduce extra op for negation and lower [x = -y]. *)
   Definition lower_Papp1 (ws : wsize) (op : sop1) (e : pexpr) : low_instr :=
     match op with
-    | Oword_of_int ws =>
-        if (ws <= reg_size)%CMP then li_simple (RV32 LI) [:: Papp1 op e ]
-        else Error (E.bn_immediate ii e)
+    | Oword_of_int _ =>
+        if ws == reg_size then
+          li_simple (RV32 LI) [:: Papp1 op e ]
+        else skip
     | Olnot _ =>
-        let%lr _ := ok (oassert (ws == xreg_size)) in
-        li_issue lnone_mlz (BN_basic BN_NOT FG1) [:: e ]
+        if ws == xreg_size then
+          li_issue lnone_mlz (BN_basic BN_NOT FG1) [:: e ]
+        else skip
     | _ => Error (E.not_implemented ii)
     end.
 
@@ -464,7 +470,7 @@ Section LOWER_ASSIGN.
 
   (* Lower a binary 32-bit operation. *)
   Definition lower_Papp2_small
-    (_ : wsize) (op : sop2) (e0 e1 : pexpr) : low_instr :=
+    (ws : wsize) (op : sop2) (e0 e1 : pexpr) : low_instr :=
     match op with
     | Olsl _ => lower_shift SLLI SLL e0 e1
     | Olsr _ => lower_shift SRLI SRL e0 e1
@@ -511,8 +517,9 @@ Section LOWER_ASSIGN.
 
   (* Lower an expression of the form [e0 <+> e1]. *)
   Definition lower_Papp2 (ws : wsize) (op : sop2) (e0 e1 : pexpr) : low_instr :=
-    if (ws <= reg_size)%CMP then lower_Papp2_small ws op e0 e1
-    else lower_Papp2_large ws op e0 e1.
+    if ws == reg_size then lower_Papp2_small ws op e0 e1
+    else if ws == xreg_size then lower_Papp2_large ws op e0 e1
+    else Error (E.invalid_wsize ii).
 
   Definition lower_pexpr_aux (ws : wsize) (e : pexpr) : low_instr :=
     match e with
@@ -562,9 +569,9 @@ Section LOWER_ASSIGN.
   (* A 32-bit store becomes a [SW]; a 256-bit (wide) store becomes a
      [BN.SD]. *)
   Definition lower_store (ws : wsize) (e : pexpr) : low_instr :=
-    if (ws <= reg_size)%CMP
-    then Let _ := chk_reg_ws ii ws in li_simple (RV32 SW) [:: e ]
-    else Let _ := chk_xreg_ws ii ws in li_simple BN_SD [:: e ].
+    if ws == reg_size then li_simple (RV32 SW) [:: e ]
+    else if ws == xreg_size then li_simple BN_SD [:: e ]
+    else Error (E.invalid_wsize ii).
 
   Definition chk_lower_store (ws : wsize) (lv : lval) : cexec unit :=
     if get_lval_memory_access lv is Some (_, wdisp) then

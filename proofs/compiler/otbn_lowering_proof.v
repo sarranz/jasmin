@@ -13,6 +13,7 @@ Require Import
   psem
   utils.
 Require Import
+  arch_decl
   arch_extra
   sem_params_of_arch_extra.
 Require Import
@@ -291,25 +292,19 @@ Lemma lower_storeP ii ws e lv v v' s0 s1 lvs op es :
   write_lval true (p_globs p) lv v' s0 = ok s1 ->
   sem_sopn (p_globs p) (Oasm op) s0 (lvs ++ [:: lv]) es = ok s1.
 Proof.
-move=> hlow he htr hw.
-rewrite /lower_store in hlow.
-case: ifP hlow => h_le hlow.
-- move: hlow; apply: rbindP => [[]] /assertP /eqP h_ws.
-  move=> /ok_inj /Some_inj [<- <- <-].
-  subst ws.
-  rewrite cat0s /sem_sopn /= he /= /exec_sopn /=.
+move=> + he htr hw.
+rewrite /lower_store.
+case: eqP => [?|_].
+- subst ws => -[???]; subst lvs op es.
+  rewrite /sem_sopn /= he /= /exec_sopn /=.
   have [w [ws' [w' [htw hv hv']]]] := truncate_val_typeE htr.
   subst v v'.
-  change arch_decl.reg_size with U32 in htw.
   rewrite /= /to_word htw /= /sopn_sem_ /= /write_lvals /=.
   by rewrite hw.
-move: hlow; apply: rbindP => [[]] /assertP /eqP h_ws.
-move=> /ok_inj /Some_inj [<- <- <-].
-subst ws.
-rewrite cat0s /sem_sopn /= he /= /exec_sopn /=.
+case: eqP => [?|//]; subst ws => -[???]; subst lvs op es.
+rewrite /sem_sopn /= he /= /exec_sopn /=.
 have [w [ws' [w' [htw hv hv']]]] := truncate_val_typeE htr.
 subst v v'.
-change arch_decl.xreg_size with U256 in htw.
 rewrite /= /to_word htw /= /sopn_sem_ /= /write_lvals /=.
 by rewrite hw.
 Qed.
@@ -324,36 +319,31 @@ Lemma lower_PvarP ws gv lv v v' s0 s1 lvs op es :
   write_lval true (p_globs p) lv v' s0 = ok s1 ->
   sem_sopn (p_globs p) (Oasm op) s0 (lvs ++ [:: lv]) es = ok s1.
 Proof.
-move=> hlow he htr hw.
+move=> + he htr hw.
 have hge : get_gvar true (p_globs p) (evm s0) gv = ok v := he.
-rewrite /lower_Pvar in hlow.
-case: eqP hlow => [?|_].
+rewrite /lower_Pvar.
+case: eqP => [?|_].
 - subst ws.
-  case: ifP => h_mem [???]; subst lvs op es.
-  + rewrite cat0s /sem_sopn /= /exec_sopn /= hge /=.
+  case: ifP => _ [???]; subst lvs op es.
+  + rewrite /sem_sopn /= /exec_sopn /= hge /=.
     have [w [ws' [w' [htw hv hv']]]] := truncate_val_typeE htr.
     subst v v'.
-    change arch_decl.reg_size with U32 in htw.
     rewrite /= /to_word htw /= /sopn_sem_ /= /write_lvals /=.
     by rewrite hw.
-  + rewrite cat0s /sem_sopn /= /exec_sopn /= hge /=.
+  + rewrite /sem_sopn /= /exec_sopn /= hge /=.
     have [w [ws' [w' [htw hv hv']]]] := truncate_val_typeE htr.
     subst v v'.
-    change arch_decl.reg_size with U32 in htw.
-    rewrite /= /to_word htw /= /sopn_sem_ /= /write_lvals /=.
-    by rewrite hw.
-case: eqP => [?|//]; subst ws.
-case: ifP => h_mem [???]; subst lvs op es.
-+ rewrite cat0s /sem_sopn /= /exec_sopn /= hge /=.
+    by rewrite /= /to_word htw /= /sopn_sem_ /= /write_lvals /= hw.
+case: eqP => [?|_]; last by case: ifP.
+subst ws; case: ifP => _ [???]; subst lvs op es.
++ rewrite /sem_sopn /= /exec_sopn /= hge /=.
   have [w [ws' [w' [htw hv hv']]]] := truncate_val_typeE htr.
   subst v v'.
-  change arch_decl.xreg_size with U256 in htw.
   rewrite /= /to_word htw /= /sopn_sem_ /= /write_lvals /=.
   by rewrite hw.
-rewrite cat0s /sem_sopn /= /exec_sopn /= hge /=.
+rewrite /sem_sopn /= /exec_sopn /= hge /=.
 have [w [ws' [w' [htw hv hv']]]] := truncate_val_typeE htr.
 subst v v'.
-change arch_decl.xreg_size with U256 in htw.
 rewrite /= /to_word htw /= /sopn_sem_ /= /write_lvals /=.
 by rewrite hw.
 Qed.
@@ -368,29 +358,24 @@ Lemma lower_loadP ii ws e lv v v' s0 s1 lvs op es :
   write_lval true (p_globs p) lv v' s0 = ok s1 ->
   sem_sopn (p_globs p) (Oasm op) s0 (lvs ++ [:: lv]) es = ok s1.
 Proof.
-move=> hlow he htr hw.
-rewrite /lower_load in hlow.
-case: ifP hlow => h_le hlow.
-- move: hlow; apply: rbindP => [[]] /assertP /eqP h_ws.
-  apply: rbindP => [[]] _.
-  move=> /ok_inj /Some_inj [<- <- <-].
-  subst ws.
-  rewrite cat0s /sem_sopn /= he /= /exec_sopn /=.
+move=> + he htr hw.
+rewrite /lower_load.
+case: eqP => [?|_].
+- subst ws.
+  t_xrbindP=> -[] // _ _ [<-] [???]; subst lvs op es.
+  rewrite /sem_sopn /= he /= /exec_sopn /=.
   have [w [ws' [w' [htw hv hv']]]] := truncate_val_typeE htr.
   subst v v'.
-  change arch_decl.reg_size with U32 in htw.
   rewrite /= /to_word htw /= /sopn_sem_ /= /write_lvals /=.
   by rewrite hw.
-- move: hlow; apply: rbindP => [[]] /assertP /eqP h_ws.
-  apply: rbindP => [[]] _.
-  move=> /ok_inj /Some_inj [<- <- <-].
-  subst ws.
-  rewrite cat0s /sem_sopn /= he /= /exec_sopn /=.
-  have [w [ws' [w' [htw hv hv']]]] := truncate_val_typeE htr.
-  subst v v'.
-  change arch_decl.xreg_size with U256 in htw.
-  rewrite /= /to_word htw /= /sopn_sem_ /= /write_lvals /=.
-  by rewrite hw.
+case: eqP => [?|//]; subst ws.
+t_xrbindP=> -[] // _ _ [<-] [???]; subst lvs op es.
+rewrite /sem_sopn /= he /= /exec_sopn /=.
+have [w [ws' [w' [htw hv hv']]]] := truncate_val_typeE htr.
+subst v v'.
+change arch_decl.xreg_size with U256 in htw.
+rewrite /= /to_word htw /= /sopn_sem_ /= /write_lvals /=.
+by rewrite hw.
 Qed.
 
 (* [Oword_of_int] (ws <= reg_size) -> [RV32 LI] (immediate;
@@ -402,13 +387,37 @@ Lemma lower_Papp1P ii ws op1 e1 lv v v' s0 s1 lvs op es :
   truncate_val (cword ws) v = ok v' ->
   write_lval true (p_globs p) lv v' s0 = ok s1 ->
   sem_sopn (p_globs p) (Oasm op) s0 (lvs ++ [:: lv]) es = ok s1.
-Admitted.
+Proof.
+move=> + he htr hw.
+rewrite /lower_Papp1.
+case: op1 he => //= ws'; t_xrbindP=> v0.
+- case: eqP => [?|//]; subst ws.
+  move=> he ht [???]; subst lvs op es.
+  rewrite /sem_sopn /= he /= /exec_sopn /= ht.
+  have [w_r [ws'' [w' [htw hv hv']]]] := truncate_val_typeE htr.
+  subst v v'.
+  rewrite /= /to_word htw /= /sopn_sem_ /= /write_lvals /=.
+  by rewrite hw.
+case: eqP => [?|//]; subst ws.
+move=> ++ [???]; subst lvs op es.
+have [w_r [ws_v [w' [htw hv hv']]]] := truncate_val_typeE htr.
+subst v v'.
+rewrite /sem_sop1 /=.
+t_xrbindP=> hwe1 we1 heq ?; subst ws_v.
+move=> [?]; subst w'.
+rewrite /sem_sopn /= hwe1 /exec_sopn /= /sopn_sem /sopn_sem_ /=.
+move: we1 htr htw hwe1 heq; case: ws' => //= we1 htr htw hwe1 heq.
+have h_wr : w_r = wnot we1.
+- by have [_ ->] := truncate_wordP htw; apply: zero_extend_u.
+subst w_r.
+by rewrite heq /= /semi_to_atype /= /write_lvals /= /write_none /= hw.
+Qed.
 
-(* [ws <= reg_size]: RV32 small case -- shifts [Olsl/Olsr/Oasr] via
+(* [ws == reg_size]: RV32 small case -- shifts [Olsl/Olsr/Oasr] via
    [check_shift_amount] + [Hassgn_op2_shift]; arithmetic via [is_wconst] +
    [Hassgn_op2] (register [ADD/SUB/AND/OR/XOR] or immediate
    [ADDI/.../XORI], with [Osub] materialized as [ADDI (- w)]); [lvs = [::]].
-   Wide case: [BN_ADDI/BN_SUBI FG0] (immediate) or [BN_ADD/BN_SUB FG0]
+   [ws == xreg_size] case: [BN_ADDI/BN_SUBI FG0] (immediate) or [BN_ADD/BN_SUB FG0]
    ([lvs = lnone_cmlz]) / [BN_AND/BN_OR/BN_XOR FG0] ([lvs = lnone_mlz]);
    reuse the [with_cmlz] / [with_mlz] result projection + [write_none] from
    [lower_carry_opP] ([waddsubcarry_cmlzP] is available if a flag value is
@@ -420,6 +429,11 @@ Lemma lower_Papp2P ii ws op2 a b lv v v' s0 s1 lvs op es :
   truncate_val (cword ws) v = ok v' ->
   write_lval true (p_globs p) lv v' s0 = ok s1 ->
   sem_sopn (p_globs p) (Oasm op) s0 (lvs ++ [:: lv]) es = ok s1.
+Proof.
+rewrite /lower_Papp2.
+case: eqP => [?|_].
+- subst ws. admit.
+case: eqP => [?|//]; subst.
 Admitted.
 
 (* [BN_SEL FG0], [es = [:: e0; e1; econd]], [lvs = [::]], [ws = xreg_size].
