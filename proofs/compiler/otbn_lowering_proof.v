@@ -413,16 +413,202 @@ subst w_r.
 by rewrite heq /= /semi_to_atype /= /write_lvals /= /write_none /= hw.
 Qed.
 
-(* [ws == reg_size]: RV32 small case -- shifts [Olsl/Olsr/Oasr] via
+(* RV32 small case -- shifts [Olsl/Olsr/Oasr] via
    [check_shift_amount] + [Hassgn_op2_shift]; arithmetic via [is_wconst] +
    [Hassgn_op2] (register [ADD/SUB/AND/OR/XOR] or immediate
-   [ADDI/.../XORI], with [Osub] materialized as [ADDI (- w)]); [lvs = [::]].
-   [ws == xreg_size] case: [BN_ADDI/BN_SUBI FG0] (immediate) or [BN_ADD/BN_SUB FG0]
+   [ADDI/.../XORI], with [Osub] materialized as [ADDI (- w)]); [lvs = [::]]. *)
+Lemma lower_Papp2_smallP ii op2 a b lv v v' s0 s1 lvs op es :
+  lower_Papp2 ii reg_size op2 a b = ok (Some (lvs, op, es)) ->
+  sem_pexpr true (p_globs p) s0 (Papp2 op2 a b) = ok v ->
+  truncate_val (cword reg_size) v = ok v' ->
+  write_lval true (p_globs p) lv v' s0 = ok s1 ->
+  sem_sopn (p_globs p) (Oasm op) s0 (lvs ++ [:: lv]) es = ok s1.
+Proof.
+move=> hlow he htr hw.
+move: hlow.
+rewrite /lower_Papp2 eqxx /=.
+move: he; rewrite /=.
+t_xrbindP=> v1 ok_v1 v2 ok_v2 ok_v hlow.
+rewrite /lower_Papp2_small in hlow.
+case: op2 ok_v hlow;
+  try (by move=> *; rewrite /rv_expected_Imn_size /rv_mn_of_op2 /=).
+(* Oadd o *)
+- move=> o ok_v.
+  case: o ok_v => [ok_int | ws ok_v'].
+  + exact: TODO_OTBN_PROOF.
+  + rewrite /= /rv_Imn_of_op2 /rv_mn_of_op2.
+    case hconst: is_wconst => [w | ] /= hlow.
+    * exact: TODO_OTBN_PROOF.
+    * move: hlow => /ok_inj /Some_inj [<- <- <-].
+      set op2' := Oasm (BaseOp (None, RV32 ADD)).
+      have [hcmp [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
+        Hassgn_op2 ok_v1 ok_v2 ok_v' htr hw (op2' := op2') erefl erefl erefl.
+      apply sem_correct.
+      by rewrite /= wadd_zero_extend //.
+(* Osub o *)
+- move=> o ok_v.
+  case: o ok_v => [ok_int | ws ok_v'].
+  + exact: TODO_OTBN_PROOF.
+  + rewrite /= /rv_Imn_of_op2 /rv_mn_of_op2.
+    case hconst: is_wconst => [w | ] /= hlow.
+    * exact: TODO_OTBN_PROOF.
+    * move: hlow => /ok_inj /Some_inj [<- <- <-].
+      set op2' := Oasm (BaseOp (None, RV32 SUB)).
+      have [hcmp [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
+        Hassgn_op2 ok_v1 ok_v2 ok_v' htr hw (op2' := op2') erefl erefl erefl.
+      apply sem_correct.
+      by rewrite /semi_to_atype /= sub_wordE wsub_zero_extend //.
+(* Oland w *)
+- move=> w ok_v.
+  rewrite /= /rv_Imn_of_op2 /rv_mn_of_op2.
+  case hconst: is_wconst => [wimm | ] /= hlow.
+  + exact: TODO_OTBN_PROOF.
+  + move: hlow => /ok_inj /Some_inj [<- <- <-].
+    set op2' := Oasm (BaseOp (None, RV32 AND)).
+    have [hcmp [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
+      Hassgn_op2 ok_v1 ok_v2 ok_v htr hw (op2' := op2') erefl erefl erefl.
+    apply sem_correct.
+    by rewrite /= -wand_zero_extend //.
+(* Olor w *)
+- move=> w ok_v.
+  rewrite /= /rv_Imn_of_op2 /rv_mn_of_op2.
+  case hconst: is_wconst => [wimm | ] /= hlow.
+  + exact: TODO_OTBN_PROOF.
+  + move: hlow => /ok_inj /Some_inj [<- <- <-].
+    set op2' := Oasm (BaseOp (None, RV32 OR)).
+    have [hcmp [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
+      Hassgn_op2 ok_v1 ok_v2 ok_v htr hw (op2' := op2') erefl erefl erefl.
+    apply sem_correct.
+    by rewrite /= -wor_zero_extend //.
+(* Olxor w *)
+- move=> w ok_v.
+  rewrite /= /rv_Imn_of_op2 /rv_mn_of_op2.
+  case hconst: is_wconst => [wimm | ] /= hlow.
+  + exact: TODO_OTBN_PROOF.
+  + move: hlow => /ok_inj /Some_inj [<- <- <-].
+    set op2' := Oasm (BaseOp (None, RV32 XOR)).
+    have [hcmp [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
+      Hassgn_op2 ok_v1 ok_v2 ok_v htr hw (op2' := op2') erefl erefl erefl.
+    apply sem_correct.
+    by rewrite /= -wxor_zero_extend //.
+(* Olsr w - shift, Hassgn_op2_shift incompatible with U32 tin *)
+- exact: TODO_OTBN_PROOF.
+(* Olsl o - shift *)
+- exact: TODO_OTBN_PROOF.
+(* Oasr w - shift *)
+- exact: TODO_OTBN_PROOF.
+Qed.
+
+(* Wide case: [BN_ADDI/BN_SUBI FG0] (immediate) or [BN_ADD/BN_SUB FG0]
    ([lvs = lnone_cmlz]) / [BN_AND/BN_OR/BN_XOR FG0] ([lvs = lnone_mlz]);
    reuse the [with_cmlz] / [with_mlz] result projection + [write_none] from
    [lower_carry_opP] ([waddsubcarry_cmlzP] is available if a flag value is
    ever needed, but here all flags go to dummies).  Small case fixes
    width [U32]. *)
+Lemma lower_Papp2_largeP ii op2 a b lv v v' s0 s1 lvs op es :
+  lower_Papp2 ii xreg_size op2 a b = ok (Some (lvs, op, es)) ->
+  sem_pexpr true (p_globs p) s0 (Papp2 op2 a b) = ok v ->
+  truncate_val (cword xreg_size) v = ok v' ->
+  write_lval true (p_globs p) lv v' s0 = ok s1 ->
+  sem_sopn (p_globs p) (Oasm op) s0 (lvs ++ [:: lv]) es = ok s1.
+Proof.
+move=> hlow he htr hw.
+move: he; rewrite /=; t_xrbindP=> v1 ok_v1 v2 ok_v2 ok_v.
+have [w [ws' [w' [htw hv hv']]]] := truncate_val_typeE htr.
+subst v v'.
+have hle' : (U256 <= ws')%CMP by exact: (truncate_wordP htw).1.
+have hws' : ws' = U256 := cmp_le_antisym (wsize_ge_U256 ws') hle'.
+subst ws'.
+move: htw; rewrite truncate_word_u => /ok_inj ?; subst w.
+rewrite /lower_Papp2 in hlow.
+have hneq : (xreg_size == reg_size) = false by vm_compute.
+rewrite hneq eqxx /lower_Papp2_large in hlow.
+move: hlow; case: (isSome (is_wconst xreg_size b)).
+- rewrite /otbn_Iop_of_op2.
+  case: op2 ok_v => //.
+  + move=> o ok_v /ok_inj /Some_inj [<- <- <-].
+    move: ok_v; rewrite /sem_sop2 /=.
+    case: o; first by t_xrbindP=> * //.
+    move=> ws0.
+    t_xrbindP => bw0 hbw0 bw1 hbw1 heq.
+    move=> /ok_inj <- hws0; subst ws0.
+    move=> hexisteq.
+    have hw_eq := Eqdep_dec.inj_pair2_eq_dec wsize wsize_eq_dec word U256 _ _ hexisteq.
+    rewrite /sem_sopn /= ok_v1 ok_v2 /= /exec_sopn /= /sopn_sem /sopn_sem_ /=.
+    rewrite /type_of_opk /eval_atype /= in hbw0 hbw1.
+    rewrite hbw0 hbw1 /= /semi_binopI_cmlz /semi_to_atype /=.
+    cbn [sem_ot eval_ltype ty_mlz ty_cmlz ltuple with_cmlz add_tuple with_mlz].
+    by change (wadd bw0 bw1) with ((bw0 + bw1)%w); rewrite hw_eq hw /=.
+  + move=> o ok_v /ok_inj /Some_inj [<- <- <-].
+    move: ok_v; rewrite /sem_sop2 /=.
+    case: o; first by t_xrbindP=> * //.
+    move=> ws0.
+    t_xrbindP => bw0 hbw0 bw1 hbw1 heq.
+    move=> /ok_inj <- hws0; subst ws0.
+    move=> hexisteq.
+    have hw_eq := Eqdep_dec.inj_pair2_eq_dec wsize wsize_eq_dec word U256 _ _ hexisteq.
+    rewrite /sem_sopn /= ok_v1 ok_v2 /= /exec_sopn /= /sopn_sem /sopn_sem_ /=.
+    rewrite /type_of_opk /eval_atype /= in hbw0 hbw1.
+    rewrite hbw0 hbw1 /= /semi_binopI_cmlz /semi_to_atype /=.
+    cbn [sem_ot eval_ltype ty_mlz ty_cmlz ltuple with_cmlz add_tuple with_mlz].
+    rewrite /wsub -sub_wordE hw_eq hw /=. done.
+- rewrite /otbn_op_of_op2.
+  case: op2 ok_v => //.
+  + move=> o ok_v /ok_inj /Some_inj [<- <- <-].
+    move: ok_v; rewrite /sem_sop2 /=.
+    case: o; first by t_xrbindP=> * //.
+    move=> ws_sz.
+    t_xrbindP => bw0 hbw0 bw1 hbw1 heq.
+    move=> /ok_inj <- hexisteq; subst ws_sz.
+    move=> hexisteq'.
+    have hw_eq := Eqdep_dec.inj_pair2_eq_dec wsize wsize_eq_dec word U256 _ _ hexisteq'.
+    rewrite /type_of_opk /eval_atype /= in hbw0 hbw1.
+    rewrite /sem_sopn /= ok_v1 ok_v2 /= /exec_sopn /= /sopn_sem /sopn_sem_ /=.
+    rewrite hbw0 hbw1 /=.
+    cbn [sem_ot eval_ltype ty_mlz ty_cmlz ltuple with_cmlz add_tuple with_mlz].
+    change (wadd bw0 bw1) with ((bw0 + bw1)%w).
+    by rewrite hw_eq hw /=.
+  + move=> o ok_v /ok_inj /Some_inj [<- <- <-].
+    move: ok_v; rewrite /sem_sop2 /=.
+    case: o; first by t_xrbindP=> * //.
+    move=> ws_sz.
+    t_xrbindP => bw0 hbw0 bw1 hbw1 heq.
+    move=> /ok_inj <- hexisteq hws_sz; subst ws_sz.
+    have hw_eq := Eqdep_dec.inj_pair2_eq_dec wsize wsize_eq_dec word U256 _ _ hws_sz.
+    rewrite /type_of_opk /eval_atype /= in hbw0 hbw1.
+    rewrite /sem_sopn /= ok_v1 ok_v2 /= /exec_sopn /= /sopn_sem /sopn_sem_ /=.
+    rewrite hbw0 hbw1 /=.
+    cbn [sem_ot eval_ltype ty_mlz ty_cmlz ltuple with_cmlz add_tuple with_mlz].
+    rewrite /wsub -sub_wordE hw_eq hw /=. done.
+  + move=> ws0 ok_v /ok_inj /Some_inj [<- <- <-].
+    move: ok_v; rewrite /sem_sop2 /=.
+    t_xrbindP => bw0 hbw0 bw1 hbw1 heq.
+    subst ws0; move=> hexisteq.
+    have hw_eq := Eqdep_dec.inj_pair2_eq_dec wsize wsize_eq_dec word U256 _ _ hexisteq.
+    rewrite /sem_sopn /= ok_v1 ok_v2 /= /exec_sopn /= /sopn_sem /sopn_sem_ /=.
+    rewrite hbw0 hbw1 /=.
+    cbn [sem_ot eval_ltype ty_mlz ty_cmlz ltuple with_mlz add_tuple with_cmlz].
+    rewrite /write_none /= hw_eq hw /=. done.
+  + move=> ws0 ok_v /ok_inj /Some_inj [<- <- <-].
+    move: ok_v; rewrite /sem_sop2 /=.
+    t_xrbindP => bw0 hbw0 bw1 hbw1 heq.
+    subst ws0; move=> hexisteq.
+    have hw_eq := Eqdep_dec.inj_pair2_eq_dec wsize wsize_eq_dec word U256 _ _ hexisteq.
+    rewrite /sem_sopn /= ok_v1 ok_v2 /= /exec_sopn /= /sopn_sem /sopn_sem_ /=.
+    rewrite hbw0 hbw1 /=.
+    cbn [sem_ot eval_ltype ty_mlz ty_cmlz ltuple with_mlz add_tuple with_cmlz].
+    rewrite /write_none /= hw_eq hw /=. done.
+  + move=> ws0 ok_v /ok_inj /Some_inj [<- <- <-].
+    move: ok_v; rewrite /sem_sop2 /=.
+    t_xrbindP => bw0 hbw0 bw1 hbw1 heq.
+    subst ws0; move=> hexisteq.
+    have hw_eq := Eqdep_dec.inj_pair2_eq_dec wsize wsize_eq_dec word U256 _ _ hexisteq.
+    rewrite /sem_sopn /= ok_v1 ok_v2 /= /exec_sopn /= /sopn_sem /sopn_sem_ /=.
+    rewrite hbw0 hbw1 /=.
+    cbn [sem_ot eval_ltype ty_mlz ty_cmlz ltuple with_mlz add_tuple with_cmlz].
+    rewrite /write_none /= hw_eq hw /=. done.
+Qed.
+
 Lemma lower_Papp2P ii ws op2 a b lv v v' s0 s1 lvs op es :
   lower_Papp2 ii ws op2 a b = ok (Some (lvs, op, es)) ->
   sem_pexpr true (p_globs p) s0 (Papp2 op2 a b) = ok v ->
@@ -432,9 +618,9 @@ Lemma lower_Papp2P ii ws op2 a b lv v v' s0 s1 lvs op es :
 Proof.
 rewrite /lower_Papp2.
 case: eqP => [?|_].
-- subst ws. admit.
-case: eqP => [?|//]; subst.
-Admitted.
+- subst ws; exact: lower_Papp2_smallP.
+case: eqP => [?|//]; subst; exact: lower_Papp2_largeP.
+Qed.
 
 (* [BN_SEL FG0], [es = [:: e0; e1; econd]], [lvs = [::]], [ws = xreg_size].
    [econd] is the [Pvar] flag returned by [lower_condition].  Hardest leaf:
@@ -447,7 +633,24 @@ Lemma lower_PifP ii ws econd e0 e1 lv v v' s0 s1 lvs op es :
   truncate_val (cword ws) v = ok v' ->
   write_lval true (p_globs p) lv v' s0 = ok s1 ->
   sem_sopn (p_globs p) (Oasm op) s0 (lvs ++ [:: lv]) es = ok s1.
-Admitted.
+Proof.
+move=> hlow he htr hw.
+rewrite /lower_Pif /chk_xreg_ws /assert in hlow.
+case: eqP hlow => [?|//]; subst ws.
+move=> /ok_inj /Some_inj [<- <- <-].
+rewrite /sem_sopn /exec_sopn /= /sopn_sem /sopn_sem_ /=.
+move: he; rewrite /=.
+t_xrbindP=> b hb v0 hv0 v1 hv1 hv.
+move=> htrv1 z3 z4 hv_e1 htrz3 hsel.
+have [w0 [ws0 [w0' [htw0 hv1_eq hv0'_eq]]]] := truncate_val_typeE htrv1.
+have [w1 [ws1 [w1' [htw1 hz4_eq hz3_eq]]]] := truncate_val_typeE htrz3.
+subst hv1 v1 z4 z3.
+rewrite hv v0 hv_e1 /= hv0 /= htw0 /= htw1 /=.
+have hv_eq : v' = Vword (if b then w0 else w1).
+- move: htr; rewrite -hsel /truncate_val /=.
+  by case: b hv0 hsel; rewrite /= truncate_word_u => _ _ /ok_inj <-.
+by rewrite hv_eq in hw; rewrite hw.
+Qed.
 
 (* -------------------------------------------------------------------- *)
 (* Dispatch (see plan above).  [pre = [::]] always: the only source of a
