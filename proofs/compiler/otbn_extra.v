@@ -183,6 +183,9 @@ Let uncons_LLvar := arm_extra.uncons_LLvar ii.
 Let uncons_rvar := arm_extra.uncons_rvar ii.
 Let uncons_wconst := arm_extra.uncons_wconst ii.
 
+(* [MOV x x] is removed by dead code elimination already with [is_move_op], and
+   we need to produce at least one instruction for the proof, so we should not
+   use [smart_mov]. *)
 Definition assemble_MOV
   (les : seq lexpr)
   (res : seq rexpr) :
@@ -191,7 +194,7 @@ Definition assemble_MOV
   Let: (y, _) := uncons_rvar res in
   Let _ := assert (convertible x.(vtype) (aword U32))
                   (E.internal_error "mov: bad register type" ii) in
-  ok (asm_args_of_opn_args (OTBNFopn_core.smart_mov x y)).
+  ok (asm_args_of_opn_args [:: OTBNFopn_core.mov x y ]).
 
 Definition assemble_SUBI
   (les : seq lexpr)

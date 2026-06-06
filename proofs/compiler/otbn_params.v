@@ -307,7 +307,6 @@ Section SZPARAMS.
 
 End SZPARAMS.
 
-(* TODO_OTBN could be smarter, include ADDI SUBI ... and LW SW *)
 Definition is_move_op (o : asm_op_t) : bool :=
   match o with
   | BaseOp (None, BN_MOV) | ExtOp MOV => true

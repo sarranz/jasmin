@@ -892,35 +892,38 @@ t_xrbindP=> -[y res]; case: args => // -[] // -[] // b _ /= [<- ->] {y}.
 t_xrbindP; case: aty => // _ /eqP [->].
 set a := {| vname := aid; |}.
 set ai := {| v_var := a |}.
+move=> hops_eq.
 case: ys hexec => // v ys.
-t_xrbindP=> ++ _ vm0 hvm0 <- + v1 + vs + ?; subst xs.
+t_xrbindP=> + _ vm0 hvm0 <- + v1 + vs + ?; subst xs.
 rewrite /exec_sopn /sopn_sem /sopn_sem_ /=.
 t_xrbindP; case: vs => // _ v0 hv0 [<-] ??; subst v ys.
 change U32 with Uptr in v0.
-case: les => //= + [?]; subst m'.
+case: les => //= -[?]; subst m'.
 case: res => //=; last by t_xrbindP.
-move=> hops hv1 _.
+move=> hv1 _.
 have hc : convertible ai.(v_var).(vtype) (aword reg_size) by [].
 have hget : get_var true (evm m) b >>= to_word Uptr = ok v0.
 - by rewrite hv1 /= hv0.
-have [vm' [hsem heq_vm hgetx]] :=
-  OTBNFopn_coreP.smart_mov_sem_fopns_args hc hget.
+set vm' := (evm m).[v_var ai <- Vword v0].
+have hsem := OTBNFopn_coreP.mov_sem_fopn_args hc hget.
+have hops_form : ops =
+    asm_args_of_opn_args [:: otbn_params_core.OTBNFopn_core.mov ai b]
+  by rewrite -hops_eq.
 have hsopns : sem_sopns m ops = ok (with_vm m vm').
-- by rewrite -hops otbn_sem_sopns_asm_args -otbn_sem_fopns_equiv; apply: hsem.
+- rewrite hops_form otbn_sem_sopns_asm_args
+    -otbn_sem_fopns_equiv /OTBNFopn_coreP.sem_fopns_args.
+  cbn [foldM].
+  by rewrite hsem.
 have hall : all (fun '(op, _, _) =>
   match op.1 with | Some _ => false | None => true end) ops.
-- by rewrite -hops all_map; apply/allT => -[[]].
+- by rewrite hops_form all_map; apply/allT => -[[]].
 have [s' hfold hlom'] :=
   assemble_opsP otbn_eval_assemble_cond hmap hall hsopns hlom.
 exists s' => //.
 apply: (lom_eqv_ext _ hlom') => z /=.
 move/set_varP : hvm0 => [_ _ ->].
 rewrite Vm.setP (convertible_eval_atype hc).
-case: eqP => [<- | hne]; last first.
-- by apply: heq_vm; rewrite Sv.singleton_spec; exact: not_eq_sym hne.
-have hvxi := get_var_to_word hc hgetx.
-move/get_varP: hvxi => [h1 h2 h3].
-by rewrite -h1.
+done.
 Qed.
 
 (* Proof plan (SUBI) -- uses the common assemble_opsP bridge above.
