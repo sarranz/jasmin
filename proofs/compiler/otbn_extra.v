@@ -191,8 +191,6 @@ Definition assemble_MOV
   Let: (y, _) := uncons_rvar res in
   Let _ := assert (convertible x.(vtype) (aword U32))
                   (E.internal_error "mov: bad register type" ii) in
-  Let _ := assert (v_var x != v_var y)
-                  (E.internal_error "mov: same src and dst" ii) in
   ok (asm_args_of_opn_args (OTBNFopn_core.smart_mov x y)).
 
 Definition assemble_SUBI

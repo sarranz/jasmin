@@ -883,58 +883,44 @@ Qed.
 Lemma otbn_assemble_MOV_correct :
   assemble_extra_correct (ap_agp otbn_params) MOV.
 Proof.
-  move=> rip ii lvs args m xs ys m' s ops ops'.
-  move=> hrex hexec hwle hops hmap hlom.
-  move: hops; rewrite /to_asm /= /assemble_extra /assemble_MOV.
-  move: hrex hwle.
-  case: lvs => // -[] // [[xt xn] xii] [] //.
-  case: args => // -[] // [] // y [] //=.
-  (* --- Goal 1: main case --- *)
-  move=> hrex hwle; t_xrbindP => hc hneq hops_eq.
-  set xi := {| v_var := {| vtype := xt; vname := xn |}; v_info := xii |}.
-  move: hrex hexec hwle hmap hlom.
-  t_xrbindP => vy hvy <-.
-  rewrite /exec_sopn /sopn_sem /sopn_sem_ /=.
-  change (to_word U32) with (to_word Uptr).
-  case hwy: (to_word Uptr vy) => [wy |] /= // [<-].
-  case heq: (set_var true (evm m) {| vtype := xt; vname := xn |} (Vword wy))
-    => [vm1 |] /= // [<-] hmap hlom.
-  have hc' : convertible xi.(vtype) (aword otbn_reg_size) := hc.
-  have hget : get_var true (evm m) y >>= to_word Uptr = ok wy
-    by rewrite hvy /= hwy.
-  have [vm' [hsem heq_vm hgetx]] :=
-    OTBNFopn_coreP.smart_mov_sem_fopns_args hc' hget.
-  have hsopns : sem_sopns m ops = ok (with_vm m vm')
-    by rewrite -hops_eq otbn_sem_sopns_asm_args -otbn_sem_fopns_equiv; exact: hsem.
-  have hall : all (fun '(op, _, _) =>
-    match op.1 with | Some _ => false | None => true end) ops
-    by rewrite -hops_eq all_map; apply/allT => -[[]].
-  have [s' hfold hlom'] :=
-    assemble_opsP otbn_eval_assemble_cond hmap hall hsopns hlom.
-  exists s' => //.
-  apply: (lom_eqv_ext _ hlom') => z /=.
-  move/set_varP: heq => [_ _ ->].
-  rewrite Vm.setP (convertible_eval_atype hc).
-  case: eqP => [<- | hne];
-    last by apply: heq_vm; rewrite Sv.singleton_spec; exact: not_eq_sym hne.
-  have hvxi := get_var_to_word hc' hgetx.
-  move/get_varP: hvxi => [h1 h2 h3].
-  by rewrite -h1.
-  (* --- Goal 2: extra args --- *)
-  move=> a l hrex _ _.
-  move: hrex hexec.
-  t_xrbindP => y0 hy0 ys0 y1 hy1 ys0' hys0' <- <- hexec.
-  rewrite /exec_sopn /sopn_sem /sopn_sem_ /= in hexec.
-  case: (to_word U32 y0) hexec => //= w hexec.
-  (* --- Goal 3: extra dests --- *)
-  move=> a l hrex hwle _.
-  case: ys hexec hwle => [| b [| b0 lb]] hexec hwle.
-  - move: hexec hrex; rewrite /exec_sopn /sopn_sem /sopn_sem_ /=.
-    by case: xs => [| v [| v' vs]] /=; try case: (to_word U32 v).
-  - move: hwle; rewrite /write_lexprs /=.
-    by case: (set_var true (evm m) {| vtype := xt; vname := xn |} b).
-  - move: hexec hrex; rewrite /exec_sopn /sopn_sem /sopn_sem_ /=.
-    by case: xs => [| v [| v' vs]] /=; try case: (to_word U32 v).
+move=> rip ii lvs args m xs ys m' s ops ops'.
+move=> hrex hexec hwle hops hmap hlom.
+move: hops hwle hrex; rewrite /to_asm /= /assemble_extra /assemble_MOV.
+t_xrbindP=> -[x les] /=.
+case: lvs => // -[] // [[aty aid] aii] _ /= [<- ->] {x}.
+t_xrbindP=> -[y res]; case: args => // -[] // -[] // b _ /= [<- ->] {y}.
+t_xrbindP; case: aty => // _ /eqP [->].
+set a := {| vname := aid; |}.
+set ai := {| v_var := a |}.
+case: ys hexec => // v ys.
+t_xrbindP=> ++ _ vm0 hvm0 <- + v1 + vs + ?; subst xs.
+rewrite /exec_sopn /sopn_sem /sopn_sem_ /=.
+t_xrbindP; case: vs => // _ v0 hv0 [<-] ??; subst v ys.
+change U32 with Uptr in v0.
+case: les => //= + [?]; subst m'.
+case: res => //=; last by t_xrbindP.
+move=> hops hv1 _.
+have hc : convertible ai.(v_var).(vtype) (aword reg_size) by [].
+have hget : get_var true (evm m) b >>= to_word Uptr = ok v0.
+- by rewrite hv1 /= hv0.
+have [vm' [hsem heq_vm hgetx]] :=
+  OTBNFopn_coreP.smart_mov_sem_fopns_args hc hget.
+have hsopns : sem_sopns m ops = ok (with_vm m vm').
+- by rewrite -hops otbn_sem_sopns_asm_args -otbn_sem_fopns_equiv; apply: hsem.
+have hall : all (fun '(op, _, _) =>
+  match op.1 with | Some _ => false | None => true end) ops.
+- by rewrite -hops all_map; apply/allT => -[[]].
+have [s' hfold hlom'] :=
+  assemble_opsP otbn_eval_assemble_cond hmap hall hsopns hlom.
+exists s' => //.
+apply: (lom_eqv_ext _ hlom') => z /=.
+move/set_varP : hvm0 => [_ _ ->].
+rewrite Vm.setP (convertible_eval_atype hc).
+case: eqP => [<- | hne]; last first.
+- by apply: heq_vm; rewrite Sv.singleton_spec; exact: not_eq_sym hne.
+have hvxi := get_var_to_word hc hgetx.
+move/get_varP: hvxi => [h1 h2 h3].
+by rewrite -h1.
 Qed.
 
 (* Proof plan (SUBI) -- uses the common assemble_opsP bridge above.

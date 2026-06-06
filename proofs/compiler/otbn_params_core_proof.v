@@ -64,7 +64,11 @@ Lemma add_sem_fopn_args {s} {xi:var_i} {y} {wy : word Uptr} {z} {wz : word Uptr}
   let: wx' := Vword (s:=reg_size) ((wy + wz : word reg_size)) in
   let: vm' := (evm s).[xi <- wx'] in
   sem_fopn_args (OTBNFopn_core.add xi y z) s = ok (with_vm s vm').
-Proof. Admitted.
+Proof.
+  move=> hc.
+  rewrite /=; t_xrbindP => *; t_otbn_op.
+  by rewrite /= set_var_truncate // (convertible_eval_atype hc).
+Qed.
 
 (* [R[x] := R[y] + imm % 2^32]. *)
 Lemma addi_sem_fopn_args {s} {xi:var_i} {y imm wy} :
@@ -73,7 +77,11 @@ Lemma addi_sem_fopn_args {s} {xi:var_i} {y imm wy} :
   let: wx' := Vword (s:=reg_size) ((wy + wrepr reg_size imm : word reg_size)) in
   let: vm' := (evm s).[xi <- wx'] in
   sem_fopn_args (OTBNFopn_core.addi xi y imm) s = ok (with_vm s vm').
-Proof. Admitted.
+Proof.
+  move=> hc.
+  rewrite /=; t_xrbindP => *; t_otbn_op.
+  by rewrite /= set_var_truncate // (convertible_eval_atype hc).
+Qed.
 
 (* [R[x] := R[y] - R[z]]. *)
 Lemma sub_sem_fopn_args {s} {xi:var_i} {y} {wy : word Uptr} {z} {wz : word Uptr} :
@@ -83,7 +91,11 @@ Lemma sub_sem_fopn_args {s} {xi:var_i} {y} {wy : word Uptr} {z} {wz : word Uptr}
   let: wx' := Vword (s:=reg_size) ((wy - wz : word reg_size)) in
   let: vm' := (evm s).[xi <- wx'] in
   sem_fopn_args (OTBNFopn_core.sub xi y z) s = ok (with_vm s vm').
-Proof. Admitted.
+Proof.
+  move=> hc.
+  rewrite /=; t_xrbindP => *; t_otbn_op.
+  by rewrite /= set_var_truncate // (convertible_eval_atype hc).
+Qed.
 
 (* [R[x] := R[y] - imm % 2^32]. *)
 Lemma subi_sem_fopn_args {s} {xi:var_i} {y imm wy} :
@@ -92,7 +104,12 @@ Lemma subi_sem_fopn_args {s} {xi:var_i} {y imm wy} :
   let: wx' := Vword (s:=reg_size) ((wy - wrepr reg_size imm : word reg_size)) in
   let: vm' := (evm s).[xi <- wx'] in
   sem_fopn_args (OTBNFopn_core.subi xi y imm) s = ok (with_vm s vm').
-Proof. Admitted.
+Proof.
+  move=> hc.
+  rewrite /=; t_xrbindP => *; t_otbn_op.
+  rewrite wrepr_opp.
+  by rewrite /= set_var_truncate // (convertible_eval_atype hc).
+Qed.
 
 (* [R[x] := R[y]] (implemented as [addi x y 0]). *)
 Lemma mov_sem_fopn_args {s} {xi:var_i} {y} {wy : word Uptr} :
@@ -100,14 +117,24 @@ Lemma mov_sem_fopn_args {s} {xi:var_i} {y} {wy : word Uptr} :
   get_var true (evm s) (v_var y) >>= to_word Uptr = ok wy ->
   let: vm' := (evm s).[xi <- Vword wy] in
   sem_fopn_args (OTBNFopn_core.mov xi y) s = ok (with_vm s vm').
-Proof. Admitted.
+Proof.
+  move=> hc.
+  rewrite /=; t_xrbindP => *; t_otbn_op.
+  (* mov = addi x y 0; need wadd wy (wrepr 0) = wy *)
+  by rewrite /= /wadd wrepr0 GRing.addr0
+       set_var_truncate // (convertible_eval_atype hc).
+Qed.
 
 (* [R[x] := imm] (loaded with the single [LI] instruction). *)
 Lemma movi_sem_fopn_args {s imm} {xi:var_i} :
   convertible xi.(vtype) (aword otbn_reg_size) ->
   let: vm' := (evm s).[xi <- Vword (wrepr U32 imm)] in
   sem_fopn_args (OTBNFopn_core.li xi imm) s = ok (with_vm s vm').
-Proof. Admitted.
+Proof.
+  move=> hc.
+  t_otbn_op.
+  by rewrite set_var_truncate // (convertible_eval_atype hc).
+Qed.
 
 Opaque OTBNFopn_core.add.
 Opaque OTBNFopn_core.addi.
@@ -181,7 +208,41 @@ Lemma gen_smart_opi_sem_fopn_args
     [/\ sem_fopns_args s lc = ok (with_vm s vm')
       , vm' =[\ Sv.add xi (Sv.singleton tmp) ] evm s
       & get_var true vm' xi = ok (Vword (op w (wrepr reg_size imm))) ].
-Proof. Admitted.
+Proof.
+  move=> hc1 hc2 hlc hgety.
+  rewrite /OTBNFopn_core.gen_smart_opi /OTBNFopn_core.gen_unsafe_smart_opi in hlc.
+  case hmov : (OTBNFopn_core.is_mov neutral imm).
+  - move: hlc; rewrite hmov /= => [[<-]].
+    have hop : op w (wrepr reg_size imm) = w.
+    { move: neutral_ok; case: neutral hmov => [n |] //= /ZeqbP ->; exact. }
+    have [vm [-> hvm hgetx]] := smart_mov_sem_fopns_args hc2 hgety.
+    eexists; split; first reflexivity.
+    + by apply: eq_exI hvm; clear; SvD.fsetdec.
+    rewrite hop; by apply get_var_to_word.
+  - move: hlc; rewrite hmov /=.
+    case hsmall : (is_small imm) => /=.
+    + move=> [<-].
+      rewrite /sem_fopns_args /= (opi_sem_fopn_args _ _ _ _ _ hc2 hgety) /=.
+      eexists; split; first reflexivity;
+        last by t_get_var; rewrite (convertible_eval_atype hc2).
+      by move=> z hin; rewrite Vm.setP_neq //; apply/eqP; clear -hin; SvD.fsetdec.
+    case hyne : (v_var y != v_var tmp) => /=.
+    + move=> [<-].
+      rewrite /sem_fopns_args /= movi_sem_fopn_args //=.
+      have hne : v_var tmp <> v_var y
+        by move: hyne => /negPf; rewrite eq_sym => /eqP.
+      rewrite -(@get_var_neq _ _ tmp _ _ (Vword (wrepr U32 imm))) // in hgety.
+      rewrite
+        (op_sem_fopn_args (with_vm _ _) _ _ _ _ (wrepr reg_size imm) hc2 hgety)
+        /with_vm /=;
+        last by rewrite get_var_eq /= (convertible_eval_atype hc1) //= truncate_word_u.
+      eexists; split; first reflexivity;
+        last by t_get_var; rewrite (convertible_eval_atype hc2).
+      move=> z hin.
+      rewrite Vm.setP_neq; last by apply/eqP; SvD.fsetdec.
+      by rewrite Vm.setP_neq; last by apply/eqP; SvD.fsetdec.
+    + by [].
+Qed.
 
 End Section.
 
