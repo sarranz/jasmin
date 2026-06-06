@@ -1,3 +1,4 @@
+Set Uniform Inductive Parameters.
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
@@ -889,7 +890,7 @@ Proof.
   case: lvs => // -[] // [[xt xn] xii] [] //.
   case: args => // -[] // [] // y [] //=.
   (* --- Goal 1: main case --- *)
-  move=> hrex hwle; t_xrbindP => hc hops_eq.
+  move=> hrex hwle; t_xrbindP => hc hneq hops_eq.
   set xi := {| v_var := {| vtype := xt; vname := xn |}; v_info := xii |}.
   move: hrex hexec hwle hmap hlom.
   t_xrbindP => vy hvy <-.
@@ -988,7 +989,7 @@ Proof.
   case: s0 => //= ws.
   case: f0 => //= imm.
   (* peel the assemble premise: [hc] (the dest type assert), [args0], etc. *)
-  move=> hrex hwle; t_xrbindP => hc args0 hsmart hops_eq.
+  move=> hrex hwle; t_xrbindP => hc htrivial args0 hsmart hops_eq.
   set xi := {| v_var := {| vtype := xt; vname := xn |}; v_info := xii |}.
   move: hrex hexec hwle hmap hlom.
   (* peel [sem_rexprs]; note the scrambled binder order from the nested Lets *)
@@ -1064,44 +1065,157 @@ Qed.
    les = [LLvar x; LLvar y] uses (RV32 XOR), asserts ws = reg_size, no flag
    dests (fl = [::]); les = [fM; fL; fZ; LLvar x; LLvar y] uses
    (BN_basic BN_XOR FG1), asserts ws = xreg_size, fl = [fM; fL; fZ]. In both
-   cases ops are the standard three XORs
+   cases the ops are the standard three XORs
      x := wxor z w ; y := wxor x w (= z) ; x := wxor x y (= w)
    each writing [fl ++ [dest]]. Asserts also force x <> w, y <> x and all
    four operands convertible to (aword ws).
 
-   Extra op semantics: small ws uses Oswap_instr, (z,w) |-> (w,z); wide ws
-   uses desc_swap_large, (z,w) |-> (MF_of_word w, LF_of_word w, ZF_of_word w,
-   w, z) -- the swapped values plus the M/L/Z flags of w.
+   SMALL case (ws = reg_size = U32): DONE, verbatim from
+   riscv_params_proof.v assemble_swap_correct. fl = [::]; the extra op is
+   Oswap_instr with semi (z,w) |-> (w,z).
 
-   Steps:
-   1. Apply assemble_opsP otbn_eval_assemble_cond; all-None side condition is
-      refl.
-   2. Build the explicit post-state m1 by threading the three writes
-      (Vm.setP / set_var_truncate / get_var_eq / get_var_neq, reading z and w
-      from the sem_rexprs hypothesis) and prove sem_sopns m [3 xors] = ok m1.
-      Simplify intermediate operands with the XOR algebra:
-      wxor (wxor z w) w = z and wxor (wxor z w) z = w, via wxorA, wxor_xx,
-      wxor0 (and wxorC). For the wide case each BN_XOR also writes FG1 =
-      M/L/Z of its result; only the last (x := w) survives, giving M/L/Z of w.
-   3. assemble_opsP gives s' with lom_eqv m1 s'. Conclude lom_eqv m' s' with
-      lom_eqv_ext, reconciling m1 (which carries the overwritten intermediate
-      x := wxor z w) with the extra-op result m' (x = w, y = z, and for the
-      wide case the flags = M/L/Z of w). The per-variable reconciliation is
-      the same wxorA / wxor_xx / wxor0 algebra.
+   LARGE case (ws = xreg_size = U256): the SAME assemble_opsP + explicit-m1 +
+   lom_eqv_ext skeleton, extended to thread the three M/L/Z flag dests. The
+   extra op is desc_swap_large, semi (z,w) |-> (MF/LF/ZF_of_word w, w, z); its
+   write_lexprs writes fM,fL,fZ then x then y, so m' ends with x = w, y = z and
+   the flags = M/L/Z of w. Each XOR uses BN_basic BN_XOR FG1, whose exec_sopn
+   emits [MF/LF/ZF_of_word res, res] over les [fM;fL;fZ;LLvar d]. The file
+   prefix (case ws =P U256; case lvs; the exec_sopn / write_lexprs t_xrbindP --
+   the leftover /swap_semi rewrite is a harmless no-op here) leaves
+   fM,fL,fZ : lexpr ABSTRACT, x,y : var_i, and m' = with_vm (with_vm z2 z4) z6
+   built by write_lexpr fM (msb ww) / fL (lsb ww) / fZ (ww==0) and set_var x
+   (Vword ww) / y (Vword wz).
 
-   Key lemmas: assemble_opsP, otbn_eval_assemble_cond, lom_eqv_ext, wxorA,
-     wxor_xx, wxor0, wxorC; set_var_truncate, get_var_eq, get_var_neq,
-     convertible_eval_atype. Uses the otbn semantics of RV32 XOR and
+   Steps (large case), continuing after the file's trailing [t_xrbindP]:
+   1. Reduce the abstract flag dests to LLvar. lexpr = Store | LLvar only, and
+      a Store of a Vbool fails (to_word of a bool errors), so the success of
+      each flag write forces LLvar:
+        move=> z0 hM z1 hL z2 hZ z3 z4 hsx ? z5 z6 hsy ? ?; subst z3 z5 m'.
+        move: hM hL hZ.
+        case: fM => [al sz ae|fm] /=; first by t_xrbindP.
+        case: fL => [al sz ae|fl] /=; first by move=> _; t_xrbindP.
+        case: fZ => [al sz ae|fz] /=; first by move=> _ _; t_xrbindP.
+        move=> hsetM hsetL hsetZ.
+        move=> hxw hyx /and5P [hxt hyt hzt hwt _] <- hmap hlom.
+   2. Flag/word var distinctness (NOT a hypothesis -- it comes from the types).
+      set_varP + vm_truncate_valE on hsetM/L/Z give eval_atype (vtype fm/fl/fz)
+      = cbool; convertible_eval_atype on hxt/hyt/hwt give cword U256; cbool <>
+      cword, so derive (as Prop, directly usable by get_var_neq) v_var fm/fl/fz
+      <> v_var w/x/y, e.g.
+        move: (hsetM) => /=; t_xrbindP =>
+          ? /set_varP [_ /vm_truncate_valE /= [hfmty _] _] _.
+        have hfmw : v_var fm <> v_var w
+          by move=> he; move: hfmty; rewrite he (convertible_eval_atype hwt).
+      (Flags need NOT be mutually distinct: both m1 and m' apply the same
+      ordered flag writes, so aliasing among fm/fl/fz is harmless.)
+   3. assemble_opsP otbn_eval_assemble_cond hmap erefl _ hlom yields
+        h : forall e, sem_sopns m ops = ok e -> exists2 s', .. & lom_eqv e s'.
+      set m1 to the explicit twelve-write state: with r1 := wxor wz ww,
+      r2 := wxor r1 ww, r3 := wxor r1 r2, append for each XOR
+      (d,ri = (x,r1),(y,r2),(x,r3))
+        .[fm <- msb ri].[fl <- lsb ri].[fz <- (ri==0)].[d <- Vword ri].
+      case: (h m1) splits into (a) the sem_sopns goal and (b) the conclusion.
+   4. (a) sem_sopns m ops = ok m1: extend the small-case computation. Read z,w
+      with hz,hw; each dest is the last write of its XOR (get_var_eq with the
+      convertible_eval_atype truncatability); reading w (XOR2) and x (XOR3)
+      uses get_var_neq through the four prior writes (the dest via hxw/hyx, the
+      three flags via step 2). Thread the flag writes with set_var_truncate
+      (truncatable from the cbool type). Collapse operands with wxorA, wxor_xx,
+      wxor0 (and wxorC): r2 = wz, r3 = ww.
+   5. (b) exists s' => //; apply: lom_eqv_ext. move=> i; rewrite !Vm.setP and
+      case on i: i in {fm,fl,fz} -> both sides give M/L/Z of w (m1's XOR3 block
+      coincides with m''s flag writes); i = x -> both ww; i = y -> both wz
+      (skip m1's XOR3 flag block using step 2); else unchanged. Same wxorA /
+      wxor_xx / wxor0 / wxorC algebra as the small case.
+
+   Key lemmas: assemble_opsP, otbn_eval_assemble_cond, lom_eqv_ext; set_varP,
+     vm_truncate_valE, convertible_eval_atype (flag = cbool vs word = cword,
+     hence distinct); set_var_truncate, get_var_eq, get_var_neq; wxorA,
+     wxor_xx, wxor0, wxorC. Uses the otbn semantics of RV32 XOR and
      BN_basic BN_XOR FG1.
-   Pitfalls: x is written twice, so lom_eqv_ext is needed to absorb the
-     intermediate value. Split small (ws = reg_size, no flags, essentially
-     identical to riscv) from wide (ws = xreg_size, fl = [fM; fL; fZ], whose
-     flag outputs must match M/L/Z of w). The ws assertions pin the branch.
+   Pitfalls: the flag dests fM/fL/fZ arrive as ABSTRACT lexprs -- derive LLvar
+     from the bool-write success (Store impossible). Their distinctness from
+     the word vars w/x/y is NOT a hypothesis; it follows from the type mismatch
+     (cbool vs cword) and is needed both to read w/x through the flag writes
+     and to step over m1's XOR3 flag block when reading y. x is written twice,
+     so lom_eqv_ext absorbs the intermediate value, as in the small case. The
+     ws =P U32 / U256 splits pin the branch.
    cf. riscv_params_proof.v assemble_swap_correct (the small case is
    essentially identical). *)
 Lemma otbn_assemble_swap_correct ws :
   assemble_extra_correct (ap_agp otbn_params) (SWAP ws).
-Proof. Admitted.
+Proof.
+  move=> rip ii lvs args m xs ys m' s ops ops' /= h ++ h'.
+  move: h h'.
+  case: args => // -[] // [] // z [] // [] // [] // w [] //=.
+  rewrite /assemble_swap /=.
+  t_xrbindP => vz hz _ vw hw <- <-.
+  case: (ws =P U32) => [?|_].
+  - subst ws; case: lvs => // -[] // x [] // [] // y [] //.
+    move=> -[[[_ _] _] _] [<- <- <- <-] + hex hwr.
+    move: hex hwr.
+    rewrite /exec_sopn /= /sopn_sem /sopn_sem_ /= /swap_semi.
+    t_xrbindP => /= _ wz hvz ww hvw <- <- /=.
+    t_xrbindP => _ vm1 /set_varP [_ htrx ->] <- _ vm2 /set_varP [_ htry ->] <- <- /eqP hxw /eqP hyx /and4P [hxt hyt hzt hwt] <-.
+    move=> hmap hlom.
+    have h := (assemble_opsP otbn_eval_assemble_cond hmap erefl _ hlom).
+    set m1 := (with_vm m (((evm m).[x <- Vword (wxor wz ww)]).[y <- Vword (wxor (wxor wz ww) ww)])
+                                .[x <- Vword (wxor (wxor wz ww) (wxor (wxor wz ww) ww))]).
+    case: (h m1) => {h}.
+    + rewrite /= hz /= hw /= /exec_sopn /= hvz hvw /=.
+      rewrite set_var_truncate //= !get_var_eq //= (convertible_eval_atype hxt) /=.
+      rewrite get_var_neq // hw /= truncate_word_u /= hvw /=.
+      rewrite set_var_truncate //= !get_var_eq //= (convertible_eval_atype hyt) /=.
+      rewrite get_var_neq // get_var_eq //= (convertible_eval_atype hxt) /= !truncate_word_u /=.
+      by rewrite set_var_truncate //= !with_vm_idem.
+    move=> s' hfold hlom'; exists s' => //; apply: lom_eqv_ext hlom'.
+    move=> i /=; rewrite !Vm.setP; case: eqP => [<- | ?].
+    + by move/eqP/negbTE: hyx => -> /=; rewrite (convertible_eval_atype hxt) /= wxorA wxor_xx wxor0.
+    by case: eqP => // _; rewrite -wxorA wxor_xx wxorC wxor0.
+  case: (ws =P U256) => [?|//].
+  subst ws.
+  case: lvs => // fM [] // fL [] // fZ [] // [] // x [] // [] // y [] //.
+  move=> -[[[_ _] _] _] [<- <- <- <-] + hex hwr.
+  move: hex hwr.
+  rewrite /exec_sopn /= /sopn_sem /sopn_sem_ /= /swap_semi.
+  t_xrbindP=> /= _ wz hvz ww hvw <- <- /=; t_xrbindP.
+  move=> z0 hM z1 hL z2 hZ z3 z4 hsx ? z5 z6 hsy ? ?; subst z3 z5 m'.
+  move: hM hL hZ.
+  case: fM => [al sz ae|fm] /=; first by t_xrbindP.
+  case: fL => [al sz ae|fl] /=; first by move=> _; t_xrbindP.
+  case: fZ => [al sz ae|fz] /=; first by move=> _ _; t_xrbindP.
+  move=> hsetM hsetL hsetZ.
+  move=> hxw hyx /and5P [hxt hyt hzt hwt _] <- hmap hlom.
+  (* Step 2: extract set_var results for fm, fl, fz from extra-op writes. *)
+  move: hsetM => /=; t_xrbindP => vm0 hvm0 ?; subst z0.
+  move: hsetL => /=; t_xrbindP => vm1 hvm1 ?; subst z1.
+  move: hsetZ => /=; t_xrbindP => vm2 hvm2 ?; subst z2.
+  (* Step 3: derive cbool types for flag variables. *)
+  have hfmty : eval_atype (vtype fm) = cbool
+    by have /set_varP [_ h _] := hvm0; case: (eval_atype (vtype fm)) h.
+  have hflty : eval_atype (vtype fl) = cbool
+    by have /set_varP [_ h _] := hvm1; case: (eval_atype (vtype fl)) h.
+  have hfzty : eval_atype (vtype fz) = cbool
+    by have /set_varP [_ h _] := hvm2; case: (eval_atype (vtype fz)) h.
+  (* Step 4: assemble_opsP bridge. *)
+  have h := assemble_opsP otbn_eval_assemble_cond hmap erefl _ hlom.
+  (* Step 5: define m1 as the 12-write state produced by the 3 BN_XOR ops.
+     r1 = wxor wz ww (XOR1), r2 = wxor r1 ww = wz (XOR2),
+     r3 = wxor r1 r2 = ww (XOR3). *)
+  set r1 := wxor wz ww.
+  set r2 := wxor r1 ww.
+  set r3 := wxor r1 r2.
+  set m1 := with_vm m
+    m.(evm)
+    .[fm <- msb r1].[fl <- lsb r1].[fz <- (r1 == 0%R)]
+    .[x  <- Vword r1]
+    .[fm <- msb r2].[fl <- lsb r2].[fz <- (r2 == 0%R)]
+    .[y  <- Vword r2]
+    .[fm <- msb r3].[fl <- lsb r3].[fz <- (r3 == 0%R)]
+    .[x  <- Vword r3].
+  (* Split into sem_sopns goal (goal 1) and lom_eqv goal (goal 2). *)
+  case: (h m1) => {h}.
+Admitted.
 
 Lemma otbn_assemble_extra_op op :
   assemble_extra_correct (ap_agp otbn_params) op.

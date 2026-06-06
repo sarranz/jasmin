@@ -42,7 +42,14 @@ Module E.
   Definition bad_swap_rexprs := internal_error "bad swap: invalid sources".
   Definition bad_swap_size (ws : wsize) (ii : instr_info) : pp_error_loc :=
     internal_error_pp
-      (pp_box [:: pp_s "bad swap: expected size"; pp_s (string_of_wsize ws) ]) ii.
+      (pp_box
+         [:: pp_s "bad swap: expected size"
+          ; pp_s (string_of_wsize reg_size)
+          ; pp_s "or"
+          ; pp_s (string_of_wsize xreg_size)
+          ; pp_s "but got"
+          ; pp_s (string_of_wsize ws) ])
+      ii.
   Definition bad_swap_dst_arg :=
     internal_error
       "bad swap arguments: first destination should be different from last argument".
@@ -184,6 +191,8 @@ Definition assemble_MOV
   Let: (y, _) := uncons_rvar res in
   Let _ := assert (convertible x.(vtype) (aword U32))
                   (E.internal_error "mov: bad register type" ii) in
+  Let _ := assert (v_var x != v_var y)
+                  (E.internal_error "mov: same src and dst" ii) in
   ok (asm_args_of_opn_args (OTBNFopn_core.smart_mov x y)).
 
 Definition assemble_SUBI
@@ -195,6 +204,8 @@ Definition assemble_SUBI
   Let: (imm, _) := uncons_wconst res in
   Let _ := assert (convertible x.(vtype) (aword U32))
                   (E.internal_error "subi: bad register type" ii) in
+  Let _ := assert (negb ((imm =? 0)%Z && (v_var x == v_var y)))
+                  (E.internal_error "subi: trivial no-op" ii) in
   Let args := o2r (E.invalid_args ii) (OTBNFopn_core.smart_subi x y imm) in
   ok (asm_args_of_opn_args args).
 
@@ -216,19 +227,14 @@ Definition assemble_swap
     else Error (E.bad_swap_rexprs ii)
   in
   Let: (op, fl, x, y) :=
-    match les with
-    | [:: LLvar x; LLvar y ] =>
-        Let _ :=
-          assert (ws == reg_size)%CMP (E.bad_swap_size reg_size ii)
-        in
-        ok (RV32 XOR, [::], x, y)
-    | [:: fM; fL; fZ; LLvar x; LLvar y ] =>
-        Let _ :=
-          assert (ws == xreg_size)%CMP (E.bad_swap_size xreg_size ii)
-        in
+    if (ws == reg_size)%CMP then
+      if les is [:: LLvar x; LLvar y ] then ok (RV32 XOR, [::], x, y)
+      else Error (E.bad_swap_lexprs ii)
+    else if (ws == xreg_size)%CMP then
+      if les is [:: fM; fL; fZ; LLvar x; LLvar y ] then
         ok (BN_basic BN_XOR FG1, [:: fM; fL; fZ ], x, y)
-    | _ => Error (E.bad_swap_lexprs ii)
-    end
+      else Error (E.bad_swap_lexprs ii)
+    else Error (E.bad_swap_size ws ii)
   in
   Let _ := assert (v_var x != v_var w) (E.bad_swap_dst_arg ii) in
   Let _ := assert (v_var y != v_var x) (E.bad_swap_dsts ii) in
