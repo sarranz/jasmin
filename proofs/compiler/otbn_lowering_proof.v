@@ -435,10 +435,10 @@ case: op2 ok_v hlow;
 (* Oadd o *)
 - move=> o ok_v.
   case: o ok_v => [ok_int | ws ok_v'].
-  + exact: TODO_OTBN_PROOF.
+  + exact: OTBN_ADMIT_PROOF.
   + rewrite /= /rv_Imn_of_op2 /rv_mn_of_op2.
     case hconst: is_wconst => [w | ] /= hlow.
-    * exact: TODO_OTBN_PROOF.
+    * exact: OTBN_ADMIT_PROOF.
     * move: hlow => /ok_inj /Some_inj [<- <- <-].
       set op2' := Oasm (BaseOp (None, RV32 ADD)).
       have [hcmp [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
@@ -448,10 +448,10 @@ case: op2 ok_v hlow;
 (* Osub o *)
 - move=> o ok_v.
   case: o ok_v => [ok_int | ws ok_v'].
-  + exact: TODO_OTBN_PROOF.
+  + exact: OTBN_ADMIT_PROOF.
   + rewrite /= /rv_Imn_of_op2 /rv_mn_of_op2.
     case hconst: is_wconst => [w | ] /= hlow.
-    * exact: TODO_OTBN_PROOF.
+    * exact: OTBN_ADMIT_PROOF.
     * move: hlow => /ok_inj /Some_inj [<- <- <-].
       set op2' := Oasm (BaseOp (None, RV32 SUB)).
       have [hcmp [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
@@ -462,7 +462,7 @@ case: op2 ok_v hlow;
 - move=> w ok_v.
   rewrite /= /rv_Imn_of_op2 /rv_mn_of_op2.
   case hconst: is_wconst => [wimm | ] /= hlow.
-  + exact: TODO_OTBN_PROOF.
+  + exact: OTBN_ADMIT_PROOF.
   + move: hlow => /ok_inj /Some_inj [<- <- <-].
     set op2' := Oasm (BaseOp (None, RV32 AND)).
     have [hcmp [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
@@ -473,7 +473,7 @@ case: op2 ok_v hlow;
 - move=> w ok_v.
   rewrite /= /rv_Imn_of_op2 /rv_mn_of_op2.
   case hconst: is_wconst => [wimm | ] /= hlow.
-  + exact: TODO_OTBN_PROOF.
+  + exact: OTBN_ADMIT_PROOF.
   + move: hlow => /ok_inj /Some_inj [<- <- <-].
     set op2' := Oasm (BaseOp (None, RV32 OR)).
     have [hcmp [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
@@ -484,7 +484,7 @@ case: op2 ok_v hlow;
 - move=> w ok_v.
   rewrite /= /rv_Imn_of_op2 /rv_mn_of_op2.
   case hconst: is_wconst => [wimm | ] /= hlow.
-  + exact: TODO_OTBN_PROOF.
+  + exact: OTBN_ADMIT_PROOF.
   + move: hlow => /ok_inj /Some_inj [<- <- <-].
     set op2' := Oasm (BaseOp (None, RV32 XOR)).
     have [hcmp [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
@@ -492,11 +492,11 @@ case: op2 ok_v hlow;
     apply sem_correct.
     by rewrite /= -wxor_zero_extend //.
 (* Olsr w - shift, Hassgn_op2_shift incompatible with U32 tin *)
-- exact: TODO_OTBN_PROOF.
+- exact: OTBN_ADMIT_PROOF.
 (* Olsl o - shift *)
-- exact: TODO_OTBN_PROOF.
+- exact: OTBN_ADMIT_PROOF.
 (* Oasr w - shift *)
-- exact: TODO_OTBN_PROOF.
+- exact: OTBN_ADMIT_PROOF.
 Qed.
 
 (* Wide case: [BN_ADDI/BN_SUBI FG0] (immediate) or [BN_ADD/BN_SUB FG0]

@@ -18,8 +18,8 @@ Require Import
 
 Require riscv_decl.
 
-Axiom TODO_OTBN : forall {A}, string -> A.
-Definition TODO_OTBN_PROOF {A : Prop} : A := TODO_OTBN "proof".
+Axiom OTBN_ADMIT : forall {A}, string -> A.
+Definition OTBN_ADMIT_PROOF {A : Prop} : A := OTBN_ADMIT "proof".
 
 Definition otbn_reg_size : wsize := U32.
 Definition otbn_xreg_size : wsize := U256.
@@ -243,7 +243,7 @@ Canonical condition_eqType := @ceqT_eqType _ eqTC_condition.
 (* TODO_OTBN these don't seem to apply? *)
 Definition fc_of_cfc (cfc : combine_flags_core) : flag_combination :=
   match cfc with
-  | _ => TODO_OTBN "not implemented"
+  | _ => OTBN_ADMIT "not implemented"
   end.
 
 #[global]
