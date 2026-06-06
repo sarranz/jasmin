@@ -423,14 +423,11 @@ Section LOWER_ASSIGN.
 
   (* Shifts are special cases *)
   Definition rv_Imn_of_op2
-    (op : sop2)
-    (ws : wsize)
-    (w : word ws) :
-    lresult (rv_mnemonic * word ws) :=
+    (op : sop2) (ws : wsize) (w : word ws) : lresult (rv_mnemonic * word ws) :=
     let mk mn := issue (mn, w) in
     match op with
-    | Oadd _ => mk ADDI
-    | Osub _ => issue (ADDI, (- w)%R)
+    | Oadd (Op_w _) => mk ADDI
+    | Osub (Op_w _) => issue (ADDI, (- w)%R)
     | Oland _ => mk ANDI
     | Olor _ => mk ORI
     | Olxor _ => mk XORI
@@ -442,8 +439,8 @@ Section LOWER_ASSIGN.
     (op : sop2) (e : pexpr) : lresult (rv_mnemonic * pexpr) :=
     let mk mn := issue (mn, e) in
     match op with
-    | Oadd _ => mk ADD
-    | Osub _ => mk SUB
+    | Oadd (Op_w _) => mk ADD
+    | Osub (Op_w _) => mk SUB
     | Oland _ => mk AND
     | Olor _ => mk OR
     | Olxor _ => mk XOR
@@ -490,8 +487,8 @@ Section LOWER_ASSIGN.
   Definition otbn_Iop_of_op2
     (op : sop2) (fg : bn_flag_group) : lresult (seq lval * otbn_op) :=
     match op with
-    | Oadd _ => issue (lnone_cmlz, BN_ADDI fg)
-    | Osub _ => issue (lnone_cmlz, BN_SUBI fg)
+    | Oadd (Op_w _) => issue (lnone_cmlz, BN_ADDI fg)
+    | Osub (Op_w _) => issue (lnone_cmlz, BN_SUBI fg)
     | _ => skip
     end.
 
@@ -499,8 +496,8 @@ Section LOWER_ASSIGN.
     (op : sop2) (fg : bn_flag_group) : lresult (seq lval * otbn_op) :=
     let mk mn := BN_basic mn fg in
     match op with
-    | Oadd _ => issue (lnone_cmlz, mk BN_ADD)
-    | Osub _ => issue (lnone_cmlz, mk BN_SUB)
+    | Oadd (Op_w _) => issue (lnone_cmlz, mk BN_ADD)
+    | Osub (Op_w _) => issue (lnone_cmlz, mk BN_SUB)
     | Oland _ => issue (lnone_mlz, mk BN_AND)
     | Olor _ => issue (lnone_mlz, mk BN_OR)
     | Olxor _ => issue (lnone_mlz, mk BN_XOR)

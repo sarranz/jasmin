@@ -525,88 +525,65 @@ have hneq : (xreg_size == reg_size) = false by vm_compute.
 rewrite hneq eqxx /lower_Papp2_large in hlow.
 move: hlow; case: (isSome (is_wconst xreg_size b)).
 - rewrite /otbn_Iop_of_op2.
-  case: op2 ok_v => //.
-  + move=> o ok_v /ok_inj /Some_inj [<- <- <-].
+  case: op2 ok_v => // -[] // ws.
+  + move=> ok_v [???]; subst lvs op es.
     move: ok_v; rewrite /sem_sop2 /=.
-    case: o; first by t_xrbindP=> * //.
-    move=> ws0.
-    t_xrbindP => bw0 hbw0 bw1 hbw1 heq.
-    move=> /ok_inj <- hws0; subst ws0.
-    move=> hexisteq.
-    have hw_eq := Eqdep_dec.inj_pair2_eq_dec wsize wsize_eq_dec word U256 _ _ hexisteq.
+    t_xrbindP=> bw0 hbw0 bw1 hbw1 ?; subst ws.
+    move=> [?]; subst w'.
     rewrite /sem_sopn /= ok_v1 ok_v2 /= /exec_sopn /= /sopn_sem /sopn_sem_ /=.
     rewrite /type_of_opk /eval_atype /= in hbw0 hbw1.
     rewrite hbw0 hbw1 /= /semi_binopI_cmlz /semi_to_atype /=.
     cbn [sem_ot eval_ltype ty_mlz ty_cmlz ltuple with_cmlz add_tuple with_mlz].
-    by change (wadd bw0 bw1) with ((bw0 + bw1)%w); rewrite hw_eq hw /=.
-  + move=> o ok_v /ok_inj /Some_inj [<- <- <-].
+    by change (wadd bw0 bw1) with ((bw0 + bw1)%w); rewrite hw.
+  + move=> ok_v [???]; subst lvs op es.
     move: ok_v; rewrite /sem_sop2 /=.
-    case: o; first by t_xrbindP=> * //.
-    move=> ws0.
-    t_xrbindP => bw0 hbw0 bw1 hbw1 heq.
-    move=> /ok_inj <- hws0; subst ws0.
-    move=> hexisteq.
-    have hw_eq := Eqdep_dec.inj_pair2_eq_dec wsize wsize_eq_dec word U256 _ _ hexisteq.
+    t_xrbindP=> bw0 hbw0 bw1 hbw1 ?; subst ws.
+    move=> [?]; subst w'.
     rewrite /sem_sopn /= ok_v1 ok_v2 /= /exec_sopn /= /sopn_sem /sopn_sem_ /=.
     rewrite /type_of_opk /eval_atype /= in hbw0 hbw1.
     rewrite hbw0 hbw1 /= /semi_binopI_cmlz /semi_to_atype /=.
     cbn [sem_ot eval_ltype ty_mlz ty_cmlz ltuple with_cmlz add_tuple with_mlz].
-    rewrite /wsub -sub_wordE hw_eq hw /=. done.
+    by rewrite /wsub -sub_wordE hw /=.
 - rewrite /otbn_op_of_op2.
   case: op2 ok_v => //.
-  + move=> o ok_v /ok_inj /Some_inj [<- <- <-].
-    move: ok_v; rewrite /sem_sop2 /=.
-    case: o; first by t_xrbindP=> * //.
-    move=> ws_sz.
-    t_xrbindP => bw0 hbw0 bw1 hbw1 heq.
-    move=> /ok_inj <- hexisteq; subst ws_sz.
-    move=> hexisteq'.
-    have hw_eq := Eqdep_dec.inj_pair2_eq_dec wsize wsize_eq_dec word U256 _ _ hexisteq'.
+  + move=> [] // ws + [<- <- <-]; rewrite /sem_sop2 /=.
+    t_xrbindP=> bw0 hbw0 bw1 hbw1 ?; subst ws.
+    move=> [?]; subst w'.
     rewrite /type_of_opk /eval_atype /= in hbw0 hbw1.
     rewrite /sem_sopn /= ok_v1 ok_v2 /= /exec_sopn /= /sopn_sem /sopn_sem_ /=.
     rewrite hbw0 hbw1 /=.
     cbn [sem_ot eval_ltype ty_mlz ty_cmlz ltuple with_cmlz add_tuple with_mlz].
     change (wadd bw0 bw1) with ((bw0 + bw1)%w).
-    by rewrite hw_eq hw /=.
-  + move=> o ok_v /ok_inj /Some_inj [<- <- <-].
-    move: ok_v; rewrite /sem_sop2 /=.
-    case: o; first by t_xrbindP=> * //.
-    move=> ws_sz.
-    t_xrbindP => bw0 hbw0 bw1 hbw1 heq.
-    move=> /ok_inj <- hexisteq hws_sz; subst ws_sz.
-    have hw_eq := Eqdep_dec.inj_pair2_eq_dec wsize wsize_eq_dec word U256 _ _ hws_sz.
+    by rewrite hw /=.
+  + move=> [] // ws + [<- <- <-]; rewrite /sem_sop2 /=.
+    t_xrbindP => bw0 hbw0 bw1 hbw1 ?; subst ws.
+    move=> [?]; subst w'.
     rewrite /type_of_opk /eval_atype /= in hbw0 hbw1.
     rewrite /sem_sopn /= ok_v1 ok_v2 /= /exec_sopn /= /sopn_sem /sopn_sem_ /=.
     rewrite hbw0 hbw1 /=.
     cbn [sem_ot eval_ltype ty_mlz ty_cmlz ltuple with_cmlz add_tuple with_mlz].
-    rewrite /wsub -sub_wordE hw_eq hw /=. done.
-  + move=> ws0 ok_v /ok_inj /Some_inj [<- <- <-].
-    move: ok_v; rewrite /sem_sop2 /=.
-    t_xrbindP => bw0 hbw0 bw1 hbw1 heq.
-    subst ws0; move=> hexisteq.
-    have hw_eq := Eqdep_dec.inj_pair2_eq_dec wsize wsize_eq_dec word U256 _ _ hexisteq.
+    by rewrite /wsub -sub_wordE hw /=.
+  + move=> ws + [<- <- <-]; rewrite /sem_sop2 /=.
+    t_xrbindP => bw0 hbw0 bw1 hbw1 ?; subst ws.
+    move=> [?]; subst w'.
     rewrite /sem_sopn /= ok_v1 ok_v2 /= /exec_sopn /= /sopn_sem /sopn_sem_ /=.
     rewrite hbw0 hbw1 /=.
     cbn [sem_ot eval_ltype ty_mlz ty_cmlz ltuple with_mlz add_tuple with_cmlz].
-    rewrite /write_none /= hw_eq hw /=. done.
-  + move=> ws0 ok_v /ok_inj /Some_inj [<- <- <-].
-    move: ok_v; rewrite /sem_sop2 /=.
-    t_xrbindP => bw0 hbw0 bw1 hbw1 heq.
-    subst ws0; move=> hexisteq.
-    have hw_eq := Eqdep_dec.inj_pair2_eq_dec wsize wsize_eq_dec word U256 _ _ hexisteq.
+    by rewrite /write_none /= hw /=.
+  + move=> ws + [<- <- <-]; rewrite /sem_sop2 /=.
+    t_xrbindP => bw0 hbw0 bw1 hbw1 ?; subst ws.
+    move=> [?]; subst w'.
     rewrite /sem_sopn /= ok_v1 ok_v2 /= /exec_sopn /= /sopn_sem /sopn_sem_ /=.
     rewrite hbw0 hbw1 /=.
     cbn [sem_ot eval_ltype ty_mlz ty_cmlz ltuple with_mlz add_tuple with_cmlz].
-    rewrite /write_none /= hw_eq hw /=. done.
-  + move=> ws0 ok_v /ok_inj /Some_inj [<- <- <-].
-    move: ok_v; rewrite /sem_sop2 /=.
-    t_xrbindP => bw0 hbw0 bw1 hbw1 heq.
-    subst ws0; move=> hexisteq.
-    have hw_eq := Eqdep_dec.inj_pair2_eq_dec wsize wsize_eq_dec word U256 _ _ hexisteq.
+    by rewrite /write_none /= hw /=.
+  + move=> ws + [<- <- <-]; rewrite /sem_sop2 /=.
+    t_xrbindP => bw0 hbw0 bw1 hbw1 ?; subst ws.
+    move=> [?]; subst w'.
     rewrite /sem_sopn /= ok_v1 ok_v2 /= /exec_sopn /= /sopn_sem /sopn_sem_ /=.
     rewrite hbw0 hbw1 /=.
     cbn [sem_ot eval_ltype ty_mlz ty_cmlz ltuple with_mlz add_tuple with_cmlz].
-    rewrite /write_none /= hw_eq hw /=. done.
+    by rewrite /write_none /= hw /=.
 Qed.
 
 Lemma lower_Papp2P ii ws op2 a b lv v v' s0 s1 lvs op es :
