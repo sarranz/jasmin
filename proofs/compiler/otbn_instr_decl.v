@@ -578,11 +578,11 @@ Let desc_rv_unop := _desc_rv_unop (Ea 1) (Ea 0).
 (* All instructions raise errors when using [x1] if the call stack is empty,
    but this is impossible with our model.
    They have no other unsafe behavior. *)
-Definition desc_rv_binop
-  (semi : word ws -> word ws -> word ws) : instr_desc_t :=
+Definition desc_rv_binop {wsa : wsize}
+  (semi : word ws -> word wsa -> word ws) : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
-    id_tin := [:: lword ws; lword ws ];
+    id_tin := [:: lword ws; lword wsa ];
     id_in := [:: Ea 1; Ea 2 ];
     id_tout := [:: lword ws ];
     id_out := [:: Ea 0 ];
@@ -621,6 +621,11 @@ Definition desc_nop :=
     id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
   |}.
 
+Definition mk_shifted_sem
+  (f : forall ws, word ws -> Z -> word ws)
+  (w : word ws) (sham : u8) :
+  word ws :=
+  f _ w (Z.land (wunsigned sham) 31).
 
 (* TODO_OTBN the reference defines the semantics in terms of integer arithmetic
    and masks rather than modular arithmetic, perhaps it we should use that? *)
@@ -631,9 +636,9 @@ Definition _desc_rv_mnemonic : instr_desc_t :=
   | AND | ANDI => desc_rv_binop wand
   | OR | ORI => desc_rv_binop wor
   | XOR | XORI => desc_rv_binop wxor
-  | SLL | SLLI => desc_rv_binop (fun x y => wshl x (Z.land (wunsigned y) 31))
-  | SRL | SRLI => desc_rv_binop (fun x y => wshr x (Z.land (wunsigned y) 31))
-  | SRA | SRAI => desc_rv_binop (fun x y => wsar x (Z.land (wunsigned y) 31))
+  | SLL | SLLI => desc_rv_binop (mk_shifted_sem wshl)
+  | SRL | SRLI => desc_rv_binop (mk_shifted_sem wshr)
+  | SRA | SRAI => desc_rv_binop (mk_shifted_sem wsar)
   | LUI => desc_rv_unop (fun x => wshl x 12)
   (* TODO_OTBN: LW/SW must check addr = (grs1 + offset) mod 2^32 is a valid
      4-byte aligned DMEM address; otherwise raise BAD_DATA_ADDR. *)

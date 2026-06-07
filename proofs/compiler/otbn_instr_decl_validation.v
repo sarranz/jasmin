@@ -124,33 +124,33 @@ Section VALIDATION_SEM.
     (wrepr U256 0) (wrepr U256 0) (wrepr U256 100) (wrepr U256 0).
   Proof. by []. Qed.
 
-  Goal test2 (RV32 SLL) (wrepr U32 1) (wrepr U32 32) (wrepr U32 1).
+  Goal test2 (RV32 SLL) (wrepr U32 1) (wrepr U8 32) (wrepr U32 1).
   Proof. by []. Qed.
 
-  Goal test2 (RV32 SLL) (wrepr U32 1) (wrepr U32 33) (wrepr U32 2).
-  Proof. by []. Qed.
-
-  Goal test2 (RV32 SRL)
-    (wrepr U32 4294967295) (wrepr U32 36) (wrepr U32 268435455).
+  Goal test2 (RV32 SLL) (wrepr U32 1) (wrepr U8 33) (wrepr U32 2).
   Proof. by []. Qed.
 
   Goal test2 (RV32 SRL)
-    (wrepr U32 2147483648) (wrepr U32 32) (wrepr U32 2147483648).
+    (wrepr U32 4294967295) (wrepr U8 36) (wrepr U32 268435455).
+  Proof. by []. Qed.
+
+  Goal test2 (RV32 SRL)
+    (wrepr U32 2147483648) (wrepr U8 32) (wrepr U32 2147483648).
   Proof. by []. Qed.
 
   Goal test2 (RV32 SRA)
-    (wrepr U32 2147483648) (wrepr U32 32) (wrepr U32 2147483648).
+    (wrepr U32 2147483648) (wrepr U8 32) (wrepr U32 2147483648).
   Proof. by []. Qed.
 
   Goal test2 (RV32 SRA)
-    (wrepr U32 2147483648) (wrepr U32 33) (wrepr U32 3221225472).
+    (wrepr U32 2147483648) (wrepr U8 33) (wrepr U32 3221225472).
   Proof. by []. Qed.
 
-  Goal test2 (RV32 SLLI) (wrepr U32 1) (wrepr U32 4) (wrepr U32 16).
+  Goal test2 (RV32 SLLI) (wrepr U32 1) (wrepr U8 4) (wrepr U32 16).
   Proof. by []. Qed.
 
   Goal test2 (RV32 SRAI)
-    (wrepr U32 2147483648) (wrepr U32 1) (wrepr U32 3221225472).
+    (wrepr U32 2147483648) (wrepr U8 1) (wrepr U32 3221225472).
   Proof. by []. Qed.
 
   Notation test_so fg wb mf lf zf r x ix y iy acc sham mf' lf' zf' wrd_e acc_e :=
@@ -344,34 +344,34 @@ Section VALIDATION_SEM.
   (* Large RV32 shift amounts. The shift register is masked to its low 5 bits
      ([Z.land _ 31], mirroring [insn.py]'s [& 0x1f]), so a shift of 64 acts as
      0, 100 as 4, and 0xffffffff as 31. These make the masking visible. *)
-  Goal test2 (RV32 SLL) (wrepr U32 0xdeadbeef) (wrepr U32 64)
+  Goal test2 (RV32 SLL) (wrepr U32 0xdeadbeef) (wrepr U8 64)
     (wrepr U32 0xdeadbeef).
   Proof. by []. Qed.
 
-  Goal test2 (RV32 SLL) (wrepr U32 1) (wrepr U32 0xffffffff)
+  Goal test2 (RV32 SLL) (wrepr U32 1) (wrepr U8 0xffffffff)
     (wrepr U32 0x80000000).
   Proof. by []. Qed.
 
-  Goal test2 (RV32 SLL) (wrepr U32 3) (wrepr U32 100) (wrepr U32 0x30).
+  Goal test2 (RV32 SLL) (wrepr U32 3) (wrepr U8 100) (wrepr U32 0x30).
   Proof. by []. Qed.
 
-  Goal test2 (RV32 SRL) (wrepr U32 0xffffffff) (wrepr U32 64)
+  Goal test2 (RV32 SRL) (wrepr U32 0xffffffff) (wrepr U8 64)
     (wrepr U32 0xffffffff).
   Proof. by []. Qed.
 
-  Goal test2 (RV32 SRL) (wrepr U32 0x80000000) (wrepr U32 0xffffffff)
+  Goal test2 (RV32 SRL) (wrepr U32 0x80000000) (wrepr U8 0xffffffff)
     (wrepr U32 1).
   Proof. by []. Qed.
 
-  Goal test2 (RV32 SRA) (wrepr U32 0x80000000) (wrepr U32 64)
+  Goal test2 (RV32 SRA) (wrepr U32 0x80000000) (wrepr U8 64)
     (wrepr U32 0x80000000).
   Proof. by []. Qed.
 
-  Goal test2 (RV32 SRA) (wrepr U32 0x80000000) (wrepr U32 0xffffffff)
+  Goal test2 (RV32 SRA) (wrepr U32 0x80000000) (wrepr U8 0xffffffff)
     (wrepr U32 0xffffffff).
   Proof. by []. Qed.
 
-  Goal test2 (RV32 SRA) (wrepr U32 0x40000000) (wrepr U32 100)
+  Goal test2 (RV32 SRA) (wrepr U32 0x40000000) (wrepr U8 100)
     (wrepr U32 0x4000000).
   Proof. by []. Qed.
 

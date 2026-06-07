@@ -484,9 +484,9 @@ Section LOWER_ASSIGN.
   Definition lower_Papp2_small
     (ws : wsize) (op : sop2) (e0 e1 : pexpr) : low_instr :=
     match op with
-    | Olsl _ => lower_shift SLLI SLL e0 e1
-    | Olsr _ => lower_shift SRLI SRL e0 e1
-    | Oasr _ => lower_shift SRAI SRA e0 e1
+    | Olsl (Op_w _) => lower_shift SLLI SLL e0 e1
+    | Olsr U32 => lower_shift SRLI SRL e0 e1
+    | Oasr (Op_w U32) => lower_shift SRAI SRA e0 e1
     | _ =>
         let%lr (op, e1') :=
           if rv_expected_Imn_size op is Some ws then

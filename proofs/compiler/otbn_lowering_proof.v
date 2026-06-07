@@ -23,8 +23,6 @@ Require Import
   otbn_instr_decl
   otbn_lowering.
 
-Require Import otbn_admit.
-
 Set Uniform Inductive Parameters.
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -87,97 +85,6 @@ Lemma lower_prog_funcs lp :
   map_cfprog (lower_fd (fun _ _ _ => lower_i) options warning fv) (p_funcs p)
   = ok (p_funcs lp).
 Proof. by rewrite /lower_prog; t_xrbindP=> fns hfns <-. Qed.
-
-(* ==================================================================== *)
-(* Correctness of assignment lowering: [Hassgn_esem].
-
-   [Hassgn_esem] states that the code [lower_i] emits for [Cassgn]
-   reproduces [sem_assgn].  It is built in the same case-lemma-dispatch
-   style already used for [Copn] in this file ([lower_copnP] / [Hopn_esem])
-   and is the OTBN analog of [Hassgn_esem] in [riscv_lowering_proof.v]
-   (which proves the same fact as one monolithic case analysis; here it is
-   split into one leaf lemma per source construct).
-
-   Structure (top down):
-     [Hassgn_esem]              top-level, ties everything together
-       |-- [Hassgn_id]          the two identity branches (PROVED below)
-       \-- [lower_cassgn_wordP] dispatch on [lower_cassgn_word]
-              |-- [lower_storeP]   store to memory
-              |-- [lower_PvarP]    variable / register move / stack load
-              |-- [lower_loadP]    array / pointer load
-              |-- [lower_Papp1P]   unary op (LI, BN.NOT)
-              |-- [lower_Papp2P]   binary op (RV32 small / BN wide)
-              \-- [lower_PifP]     conditional select (BN.SEL)
-   plus shared helpers [check_shift_amountP], [Hassgn_op2_generic] for
-   the [Papp2] RV32 case ([Hassgn_op2]/[Hassgn_op2_shift] in [lowering.v]).
-   Every leaf is [Admitted]; the plumbing below is the (machine-checked)
-   glue.
-
-   --- [lower_i] on [Cassgn lv tag ty e] (recall):
-       if [is_word_type ty] is [Some ws] then
-         [Let oargs := lower_cassgn_word ii lv ws e in
-          ok (oapp (c_of_low_cmd ii tag) [:: i] oargs)]
-       else [ok [:: i]].
-   So there are exactly three outcomes:
-     (a) [ty] not a word type        -> [lc = [:: i]];
-     (b) [lower_cassgn_word = None]   -> [lc = [:: i]];
-     (c) [lower_cassgn_word = Some (pre, lvs, op, es)]
-           -> [lc = map (i_of_low_instr ii tag) (rcons pre (lvs, op, es))].
-
-   --- [Hassgn_esem] reduction (machine-checked):
-   Intro the source hyp [hsem], then [rewrite /lower_i -/lower_i] and
-   [case: is_word_type].
-     * Branches (a),(b): [lc] reduces to [[:: MkI ii (Cassgn lv tag ty e)]]
-       (for (b), first reduce [oapp _ _ None]); close with [Hassgn_id].
-     * Branch (c): [lower_cassgn_wordP] gives [pre = [::]] and the [sem_sopn]
-       equation.  With [pre = [::]], [rewrite /=] turns the goal into
-       [Let acc := sem_sopn (p_globs p') (Oasm op) s0 lvs es in ok acc
-          = ok s1]
-       (because [i_of_low_instr ii tag (lvs, op, es) =
-        MkI ii (Copn lvs tag (Oasm op) es)] and [esem_i] of [Copn] is
-       [sem_sopn]); close with [hglob] and that equation.
-   Decompose [hsem] with [rewrite /sem_assgn; t_xrbindP] into
-   [he : sem_pexpr true (p_globs p) s0 e = ok v],
-   [htr : truncate_val (eval_atype ty) v = ok v'],
-   [hw : write_lval true (p_globs p) lv v' s0 = ok s1]; under
-   [is_word_typeP] ([ty = aword ws]) [eval_atype ty] is [cword ws].
-
-   --- [lower_cassgn_wordP] (dispatch): unfold [lower_cassgn_word] and
-   [case: is_lval_in_memory lv].
-     * in memory: peel the [chk_lower_store] assert (semantics-irrelevant),
-       [no_pre (lower_store ws e)] fixes [pre = [::]]; apply [lower_storeP].
-     * not in memory: [lower_pexpr ws e].  If [e] is
-       [Pif (aword ws') econd e0 e1]: the [ws == ws'] assert, then
-       [lower_condition] (returns [pre = [::]] and [econd' = econd], and
-       only accepts a [Pvar]); apply [lower_PifP].  Otherwise
-       [no_pre (lower_pexpr_aux ws e)] and [case: e]: [Pvar]->[lower_PvarP],
-       [Pget]/[Pload]->[lower_loadP], [Papp1]->[lower_Papp1P],
-       [Papp2]->[lower_Papp2P]; any other shape gives [None] and
-       contradicts the [Some] hypothesis.
-   In every branch the emitted lvals are [sub_lvs ++ [:: lv]]; the case
-   lemmas conclude [sem_sopn] over exactly that list, so [pre = [::]] and
-   the [sem_sopn] equation follow directly.
-
-   --- Case lemmas (shared shape): each takes the sub-function result
-   [= ok (Some (lvs, op, es))] and the decomposed [sem_assgn] parts, and
-   concludes [sem_sopn (p_globs p) (Oasm op) s0 (lvs ++ [:: lv]) es = ok s1]
-   (interface mirrors [lower_carry_opP]).  Recurring moves: unfold
-   [sem_sopn] / [exec_sopn] / [sopn_sem(_)]; use [truncate_val_typeE] on
-   [htr] (the [cword ws] case yields [v = Vword w'], [v' = Vword w],
-   [truncate_word ws w' = ok w]); the flag-dummy outputs [lnone_mlz] (3) /
-   [lnone_cmlz] (4) are no-ops via [write_none]; the result output is the
-   final [lv] write, discharged by [hw].  Per-construct content and the
-   emitted op(s) are noted at each lemma below. *)
-
-(* -------------------------------------------------------------------- *)
-(* Shared helpers for the [Papp2] RV32 (small) case.  [Hassgn_op2_generic]
-   is the engine: under the [type_of_op2] / instruction-description type
-   equalities ([eq1]/[eq2]/[eq3]) it exposes [to_word] of both operands
-   and, given that the lowered [semi] equals the [ecast] of
-   [sem_sop2_typed], reduces [sem_sopn] of the RV32 op to the source
-   [write_lval].  Note: the small case fixes the result width at
-   [reg_size] = [U32].  [Hassgn_op2] and [Hassgn_op2_shift] live in
-   [lowering.v]. *)
 
 (* [check_shift_amount e = Some sa]: [sa] evaluates (to [U8]) to the shift
    amount, and shifting by [w] equals shifting by [wand n (wrepr U8 31)].
@@ -540,13 +447,47 @@ case: op2 ok_v hlow => //.
       Hassgn_op2 ok_v1 ok_v2 ok_v htr hw (op2' := op2') erefl erefl erefl.
     apply sem_correct.
     by rewrite /= -wxor_zero_extend //.
-(* Olsr w - shift, Hassgn_op2_shift incompatible with U32 tin *)
-- admit.
-(* Olsl o - shift *)
-- admit.
-(* Oasr w - shift *)
-- admit.
-Admitted.
+(* Olsr w *)
+- move=> w ok_v.
+  case: w ok_v => // ok_v.
+  rewrite /lower_shift.
+  case good_shift: (check_shift_amount b) => [ sa | ] //.
+  move=> [<- <- <-].
+  rewrite !fun_if if_same.
+  set op2' := Oasm _.
+  have [_ [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
+    Hassgn_op2_shift ok_v1 ok_v2 ok_v htr hw (op2' := op2') erefl erefl erefl.
+  have [_ [wa ok_wa eq_shift]] := check_shift_amountP good_shift ok_v2 ok_w2.
+  rewrite (sem_correct _ _ ok_wa) //= !zero_extend_u /sem_shr eq_shift.
+  by rewrite /sem_shift /semi_to_atype /= (wand_modulo wa 5) -Z.land_ones.
+(* Olsl o *)
+- move=> [|w] ok_v //.
+  rewrite /lower_shift.
+  case good_shift: (check_shift_amount b) => [ sa | ] //.
+  move=> [<- <- <-].
+  rewrite !fun_if if_same.
+  set op2' := Oasm _.
+  have [hcmp [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
+    Hassgn_op2_shift ok_v1 ok_v2 ok_v htr hw (op2' := op2') erefl erefl erefl.
+  have [_ [wa ok_wa eq_shift]] := check_shift_amountP good_shift ok_v2 ok_w2.
+  rewrite (sem_correct _ _ ok_wa) //=.
+  rewrite /sem_shl /= zero_extend_wshl //;
+    last by have [? _] := wunsigned_range w2.
+  by rewrite -/(sem_shift _ _ _) eq_shift /sem_shift /semi_to_atype /=
+       (wand_modulo wa 5) -Z.land_ones.
+(* Oasr o *)
+- move=> [|[]] // ok_v.
+  rewrite /lower_shift.
+  case good_shift: (check_shift_amount b) => [ sa | ] //.
+  move=> [<- <- <-].
+  rewrite !fun_if if_same.
+  set op2' := Oasm _.
+  have [_ [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
+    Hassgn_op2_shift ok_v1 ok_v2 ok_v htr hw (op2' := op2') erefl erefl erefl.
+  have [_ [wa ok_wa eq_shift]] := check_shift_amountP good_shift ok_v2 ok_w2.
+  rewrite (sem_correct _ _ ok_wa) //= !zero_extend_u /sem_sar eq_shift.
+  by rewrite /sem_shift /semi_to_atype /= (wand_modulo wa 5) -Z.land_ones.
+Qed.
 
 (* Wide case: [BN_ADDI/BN_SUBI FG0] (immediate) or [BN_ADD/BN_SUB FG0]
    ([lvs = lnone_cmlz]) / [BN_AND/BN_OR/BN_XOR FG0] ([lvs = lnone_mlz]);
