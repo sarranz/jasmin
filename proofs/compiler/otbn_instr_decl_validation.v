@@ -569,4 +569,27 @@ Section VALIDATION_SEM.
     (wrepr U256 0) (wrepr U256 0).
   Proof. by []. Qed.
 
+  (* [BN_LID]: loads a 256-bit word from memory into the wide register whose
+     index matches the first argument. *)
+
+  (* Success: first arg equals the instruction's register index. *)
+  Goal is_ok (id_semi (desc_otbn_op (BN_LID 5)) (wrepr U32 5) (wrepr U256 42)).
+  Proof. by []. Qed.
+
+  Goal is_ok (id_semi (desc_otbn_op (BN_LID 0)) (wrepr U32 0) (wrepr U256 0)).
+  Proof. by []. Qed.
+
+  Goal is_ok (id_semi (desc_otbn_op (BN_LID 31)) (wrepr U32 31) (wrepr U256 0xdeadbeef)).
+  Proof. by []. Qed.
+
+  (* Failure: first arg does not match the instruction's register index. *)
+  Goal ~is_ok (id_semi (desc_otbn_op (BN_LID 5)) (wrepr U32 6) (wrepr U256 42)).
+  Proof. by []. Qed.
+
+  Goal ~is_ok (id_semi (desc_otbn_op (BN_LID 0)) (wrepr U32 1) (wrepr U256 0)).
+  Proof. by []. Qed.
+
+  Goal ~is_ok (id_semi (desc_otbn_op (BN_LID 31)) (wrepr U32 0) (wrepr U256 0)).
+  Proof. by []. Qed.
+
 End VALIDATION_SEM.

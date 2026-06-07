@@ -1,0 +1,49 @@
+/* The suffix _wXX must match the value of the grd register: this is a safety
+   condition that ensures the Jasmin semantics matches the hardware behaviour.
+   BN.LID loads from memory into WDR[grd]; Jasmin models this as BN_LID_wXX
+   where XX is the compile-time-known index, and grd must hold that value at
+   runtime. */
+
+export
+fn bn_lid(reg u32 addr) -> reg u256 {
+    reg u256 x0 x1 x2 x3 x4 x5 x6 x7 x8 x9;
+    reg u256 x10 x11 x12 x13 x14 x15 x16 x17 x18 x19;
+    reg u256 x20 x21 x22 x23 x24 x25 x26 x27 x28 x29;
+    reg u256 x30 x31;
+    reg u32 grd;
+
+    grd = 0;  x0  = #BN_LID_w00(grd, [#aligned :u256 addr]);
+    grd = 1;  x1  = #BN_LID_w01(grd, [#aligned :u256 addr]);
+    grd = 2;  x2  = #BN_LID_w02(grd, [#aligned :u256 addr]);
+    grd = 3;  x3  = #BN_LID_w03(grd, [#aligned :u256 addr]);
+    grd = 4;  x4  = #BN_LID_w04(grd, [#aligned :u256 addr]);
+    grd = 5;  x5  = #BN_LID_w05(grd, [#aligned :u256 addr]);
+    grd = 6;  x6  = #BN_LID_w06(grd, [#aligned :u256 addr]);
+    grd = 7;  x7  = #BN_LID_w07(grd, [#aligned :u256 addr]);
+    grd = 8;  x8  = #BN_LID_w08(grd, [#aligned :u256 addr]);
+    grd = 9;  x9  = #BN_LID_w09(grd, [#aligned :u256 addr]);
+    grd = 10; x10 = #BN_LID_w10(grd, [#aligned :u256 addr]);
+    grd = 11; x11 = #BN_LID_w11(grd, [#aligned :u256 addr]);
+    grd = 12; x12 = #BN_LID_w12(grd, [#aligned :u256 addr]);
+    grd = 13; x13 = #BN_LID_w13(grd, [#aligned :u256 addr]);
+    grd = 14; x14 = #BN_LID_w14(grd, [#aligned :u256 addr]);
+    grd = 15; x15 = #BN_LID_w15(grd, [#aligned :u256 addr]);
+    grd = 16; x16 = #BN_LID_w16(grd, [#aligned :u256 addr]);
+    grd = 17; x17 = #BN_LID_w17(grd, [#aligned :u256 addr]);
+    grd = 18; x18 = #BN_LID_w18(grd, [#aligned :u256 addr]);
+    grd = 19; x19 = #BN_LID_w19(grd, [#aligned :u256 addr]);
+    grd = 20; x20 = #BN_LID_w20(grd, [#aligned :u256 addr]);
+    grd = 21; x21 = #BN_LID_w21(grd, [#aligned :u256 addr]);
+    grd = 22; x22 = #BN_LID_w22(grd, [#aligned :u256 addr]);
+    grd = 23; x23 = #BN_LID_w23(grd, [#aligned :u256 addr]);
+    grd = 24; x24 = #BN_LID_w24(grd, [#aligned :u256 addr]);
+    grd = 25; x25 = #BN_LID_w25(grd, [#aligned :u256 addr]);
+    grd = 26; x26 = #BN_LID_w26(grd, [#aligned :u256 addr]);
+    grd = 27; x27 = #BN_LID_w27(grd, [#aligned :u256 addr]);
+    grd = 28; x28 = #BN_LID_w28(grd, [#aligned :u256 addr]);
+    grd = 29; x29 = #BN_LID_w29(grd, [#aligned :u256 addr]);
+    grd = 30; x30 = #BN_LID_w30(grd, [#aligned :u256 addr]);
+    grd = 31; x31 = #BN_LID_w31(grd, [#aligned :u256 addr]);
+
+    return x0;
+}

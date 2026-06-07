@@ -1,6 +1,6 @@
 (* ** Imports and settings *)
 From HB Require Import structures.
-From mathcomp Require Import ssreflect ssrfun ssrbool seq eqtype ssralg.
+From mathcomp Require Import ssreflect ssrfun ssrbool seq eqtype ssralg fintype.
 
 Require Import
   otbn_options
@@ -91,12 +91,13 @@ Variant prim_x86_suffix :=
   | PVvv of velem & wsize & velem & wsize
 .
 
-Record prim_otbn_suffix :=
-  {
-    otbn_suff_ws : option wsize;
-    otbn_suff_fg : option bn_flag_group;
-    otbn_suff_wb : option bn_halfword_writeback;
-  }.
+Variant prim_otbn_suffix :=
+| PrimOTBNnone
+| PrimOTBNws of wsize
+| PrimOTBNfg of bn_flag_group
+| PrimOTBNwb of option bn_flag_group & bn_halfword_writeback
+| PrimOTBNwreg of 'I_32
+.
 
 Variant prim_constructor (asm_op:Type) :=
   | PrimX86 of seq prim_x86_suffix & (prim_x86_suffix -> option asm_op)
