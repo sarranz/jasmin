@@ -1,0 +1,20 @@
+export
+fn set0_u32() -> reg u32 {
+    reg u32 x;
+    x = #set0_32();
+    return x;
+}
+
+export
+fn set0_default() -> reg u32 {
+    reg u32 x;
+    x = #set0();
+    return x;
+}
+
+export
+fn set0_u256() -> reg u256 {
+    reg u256 x;
+    ?{}, x = #set0_256();
+    return x;
+}
