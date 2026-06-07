@@ -268,16 +268,16 @@ checker has to run after instruction selection. More specifically, using the
 selection”](../compiler/passes/inst_select) compilation pass (or any further
 pass specified by the `--after` argument).
 
-For instance, the following program is accepted by the type-checker, but rejected in “doit” mode,
-as the rotation instructions (on x86_64) are not listed as DOIT.
+For instance, the following program is accepted by the type-checker, but
+rejected in “doit” mode, as the “Count the Number of Leading Zero Bits”
+instructions (on `x86_64`) are not listed as DOIT.
 
 ~~~
 #[ct="secret → secret"]
 export
-fn rotate(reg u32 x) -> reg u32 {
-  x = x;
-  x >>r= 1;
-  return x;
+fn lzcnt (reg u64 x) -> reg u64 {
+   ?{}, x = #LZCNT(x);
+   return x;
 }
 ~~~
 
@@ -452,7 +452,7 @@ fn gimli(reg ptr u32[12] state) -> reg ptr u32[12] {
 This program is safe, as long as the `state` argument points to a valid memory region of at least 48 bytes, aligned for 32-bit accesses.
 This is automatically proved by the safety checker, called as follows:
 
-    jasminc -checksafety gimli.jazz
+    jasmin-checksafety gimli.jazz
 
 The EasyCrypt model for constant-time verification can be obtained by calling `jasmin2ec` as follows:
 

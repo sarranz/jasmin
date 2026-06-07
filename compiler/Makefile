@@ -36,7 +36,7 @@ OBELISK ?= obelisk
 .PHONY: clean install uninstall dist
 
 all:
-	$(RM) jasminc jasmin2tex jasmin-ct jasmin2ec
+	$(RM) jasminc jasmin2tex jasmin-ct jasmin2ec jasmin-checksafety
 	dune build @check @install
 	for p in _build/install/default/bin/*; do ln -sf $$p $$(basename $$p); done
 
@@ -46,11 +46,10 @@ CIL:
 	cp ../proofs/lang/ocaml/*.ml  src/CIL/
 	cp ../proofs/lang/ocaml/*.mli src/CIL/
 
-check: all
-	$(CHECK) --report=report.log $(CHECKCATS)
+check: all check-ci
 
 check-ci:
-	$(CHECK) --report=- $(CHECKCATS)
+	$(CHECK) --report=report.log $(CHECKCATS)
 
 check-ec:
 	$(MAKE) -C examples/gimli/proofs
@@ -61,7 +60,7 @@ check-all: check
 
 clean:
 	dune clean
-	$(RM) jasminc jasmin2tex jasmin-ct jasmin2ec
+	$(RM) jasminc jasmin2tex jasmin-ct jasmin2ec jasmin-checksafety
 
 install:
 	dune install $(DUNE_OPTS)

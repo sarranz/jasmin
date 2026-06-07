@@ -72,8 +72,19 @@ Definition wsize_size_minus_1 (s: wsize) : nat :=
 Coercion nat_of_wsize (sz : wsize) :=
   (wsize_size_minus_1 sz).+1.
 
-Definition wsize_bits (s:wsize) : Z :=
-  Zpos (Pos.of_succ_nat (wsize_size_minus_1 s)).
+Definition wsize_bits (sz: wsize) : Z :=
+  Zpos match sz return positive with
+  | U8   => 8
+  | U16  => 16
+  | U32  => 32
+  | U64  => 64
+  | U128 => 128
+  | U256 => 256
+  end.
+
+Lemma wsize_bitsE s :
+  wsize_bits s = Zpos (Pos.of_succ_nat (wsize_size_minus_1 s)).
+Proof. by case: s. Qed.
 
 Definition wsize_log2 sz : nat :=
   match sz with
@@ -108,7 +119,7 @@ Lemma wsize_size_is_pow2 sz :
   wsize_size sz = 2 ^ Z.of_nat (wsize_log2 sz).
 Proof. by case: sz. Qed.
 
-Lemma wsize_sizeE sz : wsize_size sz =  wsize_bits sz / 8.
+Lemma wsize_sizeE sz : 8 * wsize_size sz =  wsize_bits sz.
 Proof. by case: sz. Qed.
 
 Lemma wsize_bits_wbase sz : 2 ^ wsize_bits sz = wbase sz.
@@ -119,7 +130,7 @@ Lemma log2_wsize_bits sz x :
   Z.log2 x < wsize_bits sz.
 Proof.
   case => /Z.le_lteq[]; last by move => <-; clear; case: sz.
-  by move => h0; rewrite -Z.log2_lt_pow2 // -wbaseE.
+  by move => h0; rewrite -Z.log2_lt_pow2 // wsize_bitsE -wbaseE.
 Qed.
 
 Lemma wsize_size_pos sz :
@@ -474,7 +485,7 @@ Definition high_bits sz (n : Z) : word sz :=
 
 Lemma high_bits_wbase sz n :
   high_bits sz n = wrepr sz (n / wbase sz).
-Proof. by rewrite /high_bits Z.shiftr_div_pow2 // -wbaseE. Qed.
+Proof. by rewrite /high_bits Z.shiftr_div_pow2 // wsize_bitsE -wbaseE. Qed.
 
 Definition wmulhu sz (x y: word sz) : word sz :=
   high_bits sz (wunsigned x * wunsigned y).
@@ -843,12 +854,30 @@ Definition wbit sz (w i: word sz) : bool :=
   wbit_n w (Z.to_nat (wunsigned i mod wsize_bits sz)).
 
 Definition wror sz (w:word sz) (z:Z) :=
-  let i := z mod wsize_bits sz in
-  wor (wshr w i) (wshl w (wsize_bits sz - i)).
+  let i := zmod_pow2 z (wsize_log2 sz).+3 in
+  wor (wshr_naive w i) (wshl_naive w (wsize_bits sz - i)).
 
-Definition wrol sz (w:word sz) (z:Z) :=
+Lemma wrorE sz (w: word sz) z : wror w z =
+   let i := z mod wsize_bits sz in
+   wor (wshr w i) (wshl w (wsize_bits sz - i)).
+Proof.
+  rewrite /wror -wshr_alt -wshl_alt zmod_pow2E.
+  rewrite !Nat2Z.inj_succ !Z.pow_succ_r; only 2-4: by lia.
+  by rewrite -wsize_size_is_pow2 !Z.mul_assoc wsize_sizeE.
+Qed.
+
+Definition wrol sz (w: word sz) (z: Z) :=
+  let i := zmod_pow2 z (wsize_log2 sz).+3 in
+  wor (wshl_naive w i) (wshr_naive w (wsize_bits sz - i)).
+
+Lemma wrolE sz (w: word sz) (z: Z) : wrol w z =
   let i := z mod wsize_bits sz in
   wor (wshl w i) (wshr w (wsize_bits sz - i)).
+Proof.
+  rewrite /wrol -wshr_alt -wshl_alt zmod_pow2E.
+  rewrite !Nat2Z.inj_succ !Z.pow_succ_r; only 2-4: by lia.
+  by rewrite -wsize_size_is_pow2 !Z.mul_assoc wsize_sizeE.
+Qed.
 
 (* -------------------------------------------------------------------*)
 Lemma wsignedE sz (w: word sz) :
@@ -906,7 +935,7 @@ Proof. by rewrite /wshr Z.shiftr_0_r ureprK. Qed.
 Lemma wshr_full sz (w : word sz) : wshr w (wsize_bits sz) = 0%R.
 Proof.
   apply/eqP; rewrite word_eqE; apply/eqP.
-  rewrite /wsize_bits Zpos_P_of_succ_nat -Nat2Z.inj_succ.
+  rewrite wsize_bitsE Zpos_P_of_succ_nat -Nat2Z.inj_succ.
   rewrite -!/(wunsigned _) wunsigned_wshr wunsigned0.
   rewrite -two_power_nat_equiv.
   exact: Z.div_small (wunsigned_range w).
@@ -920,7 +949,7 @@ Proof.
   apply/eqP/eq_from_wbit_n.
   move=> i.
   rewrite wshlE; last by [].
-  rewrite /wsize_bits /=.
+  rewrite wsize_bitsE /=.
   rewrite SuccNat2Pos.id_succ.
   case hi: (_ <= _ <= _)%N; last by rewrite w0E.
   by move: hi => /andP [] /ltn_geF ->.
@@ -1135,19 +1164,13 @@ Proof. by rewrite wrepr_mul !wrepr_unsigned. Qed.
 
 Lemma wror0 sz (w : word sz) : wror w 0 = w.
 Proof.
-  rewrite /wror.
-  rewrite wshr0.
-  rewrite Zmod_0_l Z.sub_0_r.
-  rewrite wshl_full.
+  rewrite wrorE /= wshr0 wshl_full.
   by rewrite worC wor0.
 Qed.
 
 Lemma wrol0 sz (w : word sz) : wrol w 0 = w.
 Proof.
-  rewrite /wrol.
-  rewrite wshl0.
-  rewrite Zmod_0_l Z.sub_0_r.
-  rewrite wshr_full.
+  rewrite wrolE /= wshl0 wshr_full.
   by rewrite worC wor0.
 Qed.
 
@@ -2038,14 +2061,14 @@ Qed.
 Lemma wror_opp sz (x: word sz) c :
   wror x (wsize_bits sz - c) = wrol x c.
 Proof.
-  rewrite /wror /wrol.
+  rewrite wrorE wrolE.
   have : 0 < wsize_bits sz by [].
   move: (wsize_bits _) (wshr_full x) (wshl_full x) => n R L n_pos.
   have nnz : n ≠ 0 by lia.
   rewrite Zminus_mod Z_mod_same_full Z.sub_0_l.
   have : c mod n = 0 ∨ 0 < c mod n < n.
   - move: (Z.mod_pos_bound c n n_pos); lia.
-  case => c_mod_n.
+  case => c_mod_n /=.
   - by rewrite c_mod_n Z.sub_0_r Zmod_0_l wshr0 wshl0 R L.
   rewrite !Z.mod_opp_l_nz // Zmod_mod; last lia.
   rewrite worC; do 2 f_equal.
@@ -2055,7 +2078,7 @@ Qed.
 Lemma wror_m sz (x: word sz) y y' :
   y mod wsize_bits sz = y' mod wsize_bits sz →
   wror x y = wror x y'.
-Proof. by rewrite /wror => ->. Qed.
+Proof. by rewrite !wrorE => ->. Qed.
 
 (* ------------------------------------------------------------------------- *)
 

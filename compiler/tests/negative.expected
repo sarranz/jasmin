@@ -1469,6 +1469,20 @@ fail/x86-64/bug_1366.jazz:
 
 "fail/x86-64/bug_1366.jazz", line 2 (2-21): invalid number of lvalues, 1 provided instead of 2
 
+fail/x86-64/invalid_load_align.jazz:
+
+"fail/x86-64/invalid_load_align.jazz", line 2 (2-39):
+compilation error in function load_vmovdqa:
+asmgen: invalid rexpr for oprd [:u128 RDI]
+        invalid Load alignment constraint
+
+fail/x86-64/invalid_store_align.jazz:
+
+"fail/x86-64/invalid_store_align.jazz", line 2 (2-30):
+compilation error in function store_vmovdqa:
+asmgen: invalid rexpr for oprd [:u128 RDI]
+        invalid Store alignment constraint
+
 fail/x86-64/mmx_conflicts.jazz:
 
 compilation error:
@@ -1571,4 +1585,4 @@ Statistics:
 	Pretyping:  50
 	Parsing:     4
 	Typing:      1
-	Compile:   194
+	Compile:   196
