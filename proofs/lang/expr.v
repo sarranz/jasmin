@@ -291,6 +291,7 @@ Definition eand e1 e2 : pexpr := Papp2 Oand e1 e2.
 Definition eeq e1 e2 : pexpr := Papp2 Obeq e1 e2.
 Definition eneq e1 e2 : pexpr := enot (eeq e1 e2).
 Definition eaddw w e1 e2 : pexpr := Papp2 (Oadd (Op_w w)) e1 e2.
+Definition enegw w e : pexpr := Papp1 (Oneg (Op_w w)) e.
 
 Definition cf_of_condition (op : sop2) : option (combine_flags * wsize) :=
   match op with
@@ -862,6 +863,13 @@ Definition is_wconst_of_size sz (e: pexpr) : option Z :=
   | Papp1 (Oword_of_int sz') (Pconst z) =>
     if sz' == sz then Some z else None
   | _ => None end.
+
+Definition insert_minus (e1 : pexpr) : option pexpr :=
+  match e1 with
+  | Papp1 (Oword_of_int sz) (Pconst n) =>
+      Some (Papp1 (Oword_of_int sz) (Pconst (- n)))
+  | _ => None
+  end.
 
 (* ** Compute written variables
  * -------------------------------------------------------------------- *)

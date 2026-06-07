@@ -22,6 +22,8 @@ Require Import
   otbn_instr_decl
   otbn_lowering.
 
+Require Import otbn_admit.
+
 Set Uniform Inductive Parameters.
 Set Implicit Arguments.
 Unset Strict Implicit.

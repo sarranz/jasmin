@@ -232,18 +232,6 @@ Proof.
   by move=> [<- <-].
 Qed.
 
-Lemma minus_insertP e1 e2 s0 ws w :
-insert_minus e1 = Some e2 ->
-Let x := sem_pexpr true (p_globs p) s0 e1 in to_word ws x = ok (w)%R ->
-Let x := sem_pexpr true (p_globs p) s0 e2 in to_word ws x = ok (- w)%R.
-Proof.
-  case : e1 => // -[] // sz [] // n /= [<-] /=.
-  move => /truncate_wordP [hcmp ->].
-  rewrite truncate_word_le //.
-  rewrite wrepr_opp.
-  by rewrite wopp_zero_extend.
-Qed.
-
 #[local] Lemma Hassgn_esem ii lv tag ty e s0 s1 :
   let i := MkI ii (Cassgn lv tag ty e) in
   sem_assgn p lv tag ty e s0 = ok s1 ->

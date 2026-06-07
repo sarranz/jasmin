@@ -4,6 +4,7 @@ From elpi.apps Require Import derive.std.
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype fintype ssralg.
 From mathcomp Require Import word word_ssrZ.
 
+Require Import otbn_admit.
 Require Import
   expr
   flag_combination
@@ -17,9 +18,6 @@ Require Import
   arch_utils.
 
 Require riscv_decl.
-
-Axiom OTBN_ADMIT : forall {A}, string -> A.
-Definition OTBN_ADMIT_PROOF {A : Prop} : A := OTBN_ADMIT "proof".
 
 Definition otbn_reg_size : wsize := U32.
 Definition otbn_xreg_size : wsize := U256.

@@ -18,7 +18,8 @@ Require Import
 Require Import
   otbn_decl
   otbn_extra
-  otbn_instr_decl.
+  otbn_instr_decl
+  otbn_params_core.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -110,6 +111,9 @@ Definition lresult (A : Type) : Type := cexec (option A).
 Definition issue {A : Type} (a : A) : lresult A := ok (Some a).
 
 Definition skip {A : Type} : lresult A := ok None.
+
+Definition lassert (b : bool) (e : pp_error_loc) : lresult unit :=
+  Let _ := assert b e in issue tt.
 
 Notation "'let%lr' x ':=' m 'in' body" :=
   (Let o := m in if o is Some x then body else skip)
@@ -423,11 +427,22 @@ Section LOWER_ASSIGN.
 
   (* Shifts are special cases *)
   Definition rv_Imn_of_op2
-    (op : sop2) (ws : wsize) (w : word ws) : lresult (rv_mnemonic * word ws) :=
-    let mk mn := issue (mn, w) in
+    (op : sop2) (ws : wsize) (w : word ws) (e : pexpr) :
+    lresult (rv_mnemonic * pexpr) :=
+    let mk mn :=
+      let%lr _ :=
+        lassert (is_arith_small (wsigned w)) (E.imm_out_of_range ii w)
+      in
+      issue (mn, e)
+    in
     match op with
     | Oadd (Op_w _) => mk ADDI
-    | Osub (Op_w _) => issue (ADDI, (- w)%R)
+    | Osub (Op_w _) =>
+        let%lr _ :=
+          lassert (is_arith_small (wsigned (- w))) (E.imm_out_of_range ii w)
+        in
+        if insert_minus e is Some e' then issue (ADDI, e')
+        else Error (E.invalid_expr ii) (* TODO_OTBN: better internal error *)
     | Oland _ => mk ANDI
     | Olor _ => mk ORI
     | Olxor _ => mk XORI
@@ -475,9 +490,7 @@ Section LOWER_ASSIGN.
     | _ =>
         let%lr (op, e1') :=
           if rv_expected_Imn_size op is Some ws then
-            if is_wconst ws e1 is Some w then
-              let%lr (mn, wimm) := rv_Imn_of_op2 op w in
-              issue (mn, wconst wimm)
+            if is_wconst ws e1 is Some w then rv_Imn_of_op2 op w e1
             else rv_mn_of_op2 op e1
           else rv_mn_of_op2 op e1
         in

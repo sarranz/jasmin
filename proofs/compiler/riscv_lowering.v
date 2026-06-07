@@ -70,13 +70,6 @@ Definition decide_op_reg_imm
   | _ => Some(op_reg_reg, [::e0; e1])
   end.
 
-Definition insert_minus  (e1: pexpr) : option pexpr :=
-match e1 with  
-  | Papp1 (Oword_of_int sz) (Pconst n) => 
-    Some(Papp1 (Oword_of_int sz) (Pconst (- n)))
-  | _ => None
-end.
-
 (* RISC-V only handles immediates lower than 2ˆ12 for I type instructions *)
 Definition decide_op_reg_imm_neg
   (ws : wsize) (e0 e1: pexpr) (op_reg_reg op_reg_imm : riscv_extended_op) : 
