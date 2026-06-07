@@ -430,16 +430,16 @@ rewrite /lower_Papp2 eqxx /=.
 move: he; rewrite /=.
 t_xrbindP=> v1 ok_v1 v2 ok_v2 ok_v hlow.
 rewrite /lower_Papp2_small in hlow.
-case: op2 ok_v hlow;
-  try (by move=> *; rewrite /rv_expected_Imn_size /rv_mn_of_op2 /=).
+case: op2 ok_v hlow => //.
 (* Oadd o *)
 - move=> o ok_v.
   case: o ok_v => [ok_int | ws ok_v'].
-  + exact: OTBN_ADMIT_PROOF.
+  + by move=> hlow; rewrite /rv_expected_Imn_size /rv_Imn_of_op2 /rv_mn_of_op2 /= in hlow;
+       case: (is_wconst U32 b) hlow.
   + rewrite /= /rv_Imn_of_op2 /rv_mn_of_op2.
     case hconst: is_wconst => [w | ] /= hlow.
     * exact: OTBN_ADMIT_PROOF.
-    * move: hlow => /ok_inj /Some_inj [<- <- <-].
+    * move: hlow => [] <- <- <-.
       set op2' := Oasm (BaseOp (None, RV32 ADD)).
       have [hcmp [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
         Hassgn_op2 ok_v1 ok_v2 ok_v' htr hw (op2' := op2') erefl erefl erefl.
@@ -448,11 +448,12 @@ case: op2 ok_v hlow;
 (* Osub o *)
 - move=> o ok_v.
   case: o ok_v => [ok_int | ws ok_v'].
-  + exact: OTBN_ADMIT_PROOF.
+  + by move=> hlow; rewrite /rv_expected_Imn_size /rv_Imn_of_op2 /rv_mn_of_op2 /= in hlow;
+       case: (is_wconst U32 b) hlow.
   + rewrite /= /rv_Imn_of_op2 /rv_mn_of_op2.
     case hconst: is_wconst => [w | ] /= hlow.
     * exact: OTBN_ADMIT_PROOF.
-    * move: hlow => /ok_inj /Some_inj [<- <- <-].
+    * move: hlow => [] <- <- <-.
       set op2' := Oasm (BaseOp (None, RV32 SUB)).
       have [hcmp [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
         Hassgn_op2 ok_v1 ok_v2 ok_v' htr hw (op2' := op2') erefl erefl erefl.
@@ -463,7 +464,7 @@ case: op2 ok_v hlow;
   rewrite /= /rv_Imn_of_op2 /rv_mn_of_op2.
   case hconst: is_wconst => [wimm | ] /= hlow.
   + exact: OTBN_ADMIT_PROOF.
-  + move: hlow => /ok_inj /Some_inj [<- <- <-].
+  + move: hlow => [] <- <- <-.
     set op2' := Oasm (BaseOp (None, RV32 AND)).
     have [hcmp [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
       Hassgn_op2 ok_v1 ok_v2 ok_v htr hw (op2' := op2') erefl erefl erefl.
@@ -474,7 +475,7 @@ case: op2 ok_v hlow;
   rewrite /= /rv_Imn_of_op2 /rv_mn_of_op2.
   case hconst: is_wconst => [wimm | ] /= hlow.
   + exact: OTBN_ADMIT_PROOF.
-  + move: hlow => /ok_inj /Some_inj [<- <- <-].
+  + move: hlow => [] <- <- <-.
     set op2' := Oasm (BaseOp (None, RV32 OR)).
     have [hcmp [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
       Hassgn_op2 ok_v1 ok_v2 ok_v htr hw (op2' := op2') erefl erefl erefl.
@@ -485,7 +486,7 @@ case: op2 ok_v hlow;
   rewrite /= /rv_Imn_of_op2 /rv_mn_of_op2.
   case hconst: is_wconst => [wimm | ] /= hlow.
   + exact: OTBN_ADMIT_PROOF.
-  + move: hlow => /ok_inj /Some_inj [<- <- <-].
+  + move: hlow => [] <- <- <-.
     set op2' := Oasm (BaseOp (None, RV32 XOR)).
     have [hcmp [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
       Hassgn_op2 ok_v1 ok_v2 ok_v htr hw (op2' := op2') erefl erefl erefl.
@@ -519,7 +520,7 @@ subst v v'.
 have hle' : (U256 <= ws')%CMP by exact: (truncate_wordP htw).1.
 have hws' : ws' = U256 := cmp_le_antisym (wsize_ge_U256 ws') hle'.
 subst ws'.
-move: htw; rewrite truncate_word_u => /ok_inj ?; subst w.
+move: htw; rewrite truncate_word_u => heq_tw; injection heq_tw as <-.
 rewrite /lower_Papp2 in hlow.
 have hneq : (xreg_size == reg_size) = false by vm_compute.
 rewrite hneq eqxx /lower_Papp2_large in hlow.
@@ -614,7 +615,7 @@ Proof.
 move=> hlow he htr hw.
 rewrite /lower_Pif /chk_xreg_ws /assert in hlow.
 case: eqP hlow => [?|//]; subst ws.
-move=> /ok_inj /Some_inj [<- <- <-].
+move=> [] <- <- <-.
 rewrite /sem_sopn /exec_sopn /= /sopn_sem /sopn_sem_ /=.
 move: he; rewrite /=.
 t_xrbindP=> b hb v0 hv0 v1 hv1 hv.
@@ -625,7 +626,7 @@ subst hv1 v1 z4 z3.
 rewrite hv v0 hv_e1 /= hv0 /= htw0 /= htw1 /=.
 have hv_eq : v' = Vword (if b then w0 else w1).
 - move: htr; rewrite -hsel /truncate_val /=.
-  by case: b hv0 hsel; rewrite /= truncate_word_u => _ _ /ok_inj <-.
+  by case: b hv0 hsel; rewrite /= truncate_word_u => _ _ [[<-]].
 by rewrite hv_eq in hw; rewrite hw.
 Qed.
 
@@ -646,7 +647,7 @@ Proof.
     case: (chk_lower_store ii ws lv) => [[] | ] //= in hlow.
     rewrite /no_pre /= in hlow.
     case h_store: (lower_store ii ws e) => [ [[[lvs_i op_i] es_i] | ] | ] //= in hlow.
-    move: hlow => /ok_inj /Some_inj [<- hlvs <- <-].
+    move: hlow => [] <- hlvs <- <-.
     split; first by [].
     rewrite -hlvs.
     exact: lower_storeP h_store he htr hw.
@@ -656,31 +657,31 @@ Proof.
     + move=> gv he hlow.
       rewrite /= in hlow.
       case h_pvar: (lower_Pvar ws gv) => [ [[[lvs_i op_i] es_i] | ] | ] //= in hlow.
-      move: hlow => /ok_inj /Some_inj [<- hlvs <- <-].
+      move: hlow => [] <- hlvs <- <-.
       split; first by [].
       rewrite -hlvs; exact: lower_PvarP h_pvar he htr hw.
     + move=> a a0 w g p0 he hlow.
       rewrite /= in hlow.
       case h_load: (lower_load ii ws (Pget a a0 w g p0)) => [ [[[lvs_i op_i] es_i] | ] | ] //= in hlow.
-      move: hlow => /ok_inj /Some_inj [<- hlvs <- <-].
+      move: hlow => [] <- hlvs <- <-.
       split; first by [].
       rewrite -hlvs; exact: lower_loadP h_load he htr hw.
     + move=> a wl p0 he hlow.
       rewrite /= in hlow.
       case h_load: (lower_load ii ws (Pload a wl p0)) => [ [[[lvs_i op_i] es_i] | ] | ] //= in hlow.
-      move: hlow => /ok_inj /Some_inj [<- hlvs <- <-].
+      move: hlow => [] <- hlvs <- <-.
       split; first by [].
       rewrite -hlvs; exact: lower_loadP h_load he htr hw.
     + move=> op1 e1 he hlow.
       rewrite /= in hlow.
       case h_app1: (lower_Papp1 ii ws op1 e1) => [ [[[lvs_i op_i] es_i] | ] | ] //= in hlow.
-      move: hlow => /ok_inj /Some_inj [<- hlvs <- <-].
+      move: hlow => [] <- hlvs <- <-.
       split; first by [].
       rewrite -hlvs; exact: lower_Papp1P h_app1 he htr hw.
     + move=> op2 a b he hlow.
       rewrite /= in hlow.
       case h_app2: (lower_Papp2 ii ws op2 a b) => [ [[[lvs_i op_i] es_i] | ] | ] //= in hlow.
-      move: hlow => /ok_inj /Some_inj [<- hlvs <- <-].
+      move: hlow => [] <- hlvs <- <-.
       split; first by [].
       rewrite -hlvs; exact: lower_Papp2P h_app2 he htr hw.
     + move=> ty econd e0 e1 he hlow.
@@ -690,8 +691,8 @@ Proof.
       case h_cond: (lower_condition ii econd) => [[pre_c econd'] | ] //= in hlow.
       case h_pif: (lower_Pif ii ws econd' e0 e1) => [ [[[lvs_i op_i] es_i] | ] | ] //= in hlow.
       case: econd he hlow h_cond => //= [f] he hlow h_cond.
-      move: hlow => /ok_inj /Some_inj [<- hlvs <- <-].
-      move: h_cond => /ok_inj [<- heq_cond].
+      move: hlow => [] <- hlvs <- <-.
+      move: h_cond => [] <- heq_cond.
       rewrite -heq_cond in h_pif.
       split; first by [].
       rewrite -hlvs; apply: lower_PifP h_pif _ htr hw.
@@ -783,14 +784,14 @@ case: e3 hshift hsem => // z hshift hsem /=.
 move: hshift; t_xrbindP => o hrso.
 case: o hrso => [sh0 |] hrso //=.
 move=> hbn; move: hbn; apply: rbindP => _ _.
-move=> /ok_inj /Some_inj [<- <- <-].
+move=> [] <- <- <-.
 move: hrso; rewrite /reg_shift_of_sop2 /chk_xreg_ws /assert.
 case: ifP => // /eqP -> hmatcho.
 move: hmatcho => /= hmatcho.
 case: op hmatcho hsem => //=.
 - move=> ws0' hmatcho hsem.
   case: ws0' hmatcho hsem => //= hmatcho hsem.
-  move: hmatcho => /ok_inj /Some_inj <-.
+  move: hmatcho => [] <-.
   move: hsem; apply: rbindP => v1 hv1 hsop.
   move: hsop; rewrite /sem_sop2 /=; t_xrbindP => wb hwb wa hwa hres.
   rewrite -hres.
@@ -804,7 +805,7 @@ case: op hmatcho hsem => //=.
 - move=> op1 hmatcho hsem.
   case: op1 hmatcho hsem => //= ws0' hmatcho hsem.
   case: ws0' hmatcho hsem => //= hmatcho hsem.
-  move: hmatcho => /ok_inj /Some_inj <-.
+  move: hmatcho => [] <-.
   move: hsem; apply: rbindP => v1 hv1 hsop.
   move: hsop; rewrite /sem_sop2 /=; t_xrbindP => wb hwb wa hwa hres.
   rewrite -hres.
@@ -846,9 +847,9 @@ move=> <-.
 rewrite /arch_utils.arch_mk_semi1_shifted /=.
 rewrite truncate_word_u /= truncate_word_u /=.
 have heq : hwx = word_shift_of_reg_shift sh wb (wunsigned wa)
-  by move: htw; rewrite hshift => /ok_inj.
+  by move: htw; rewrite hshift => [[<-]].
 rewrite heq in hmatch.
-move: hmatch; rewrite /semi_to_atype /= => /ok_inj <-.
+move: hmatch; rewrite /semi_to_atype /= => [[<-]].
 by rewrite /with_mlz /=.
 Qed.
 
@@ -870,9 +871,9 @@ all: (move: hexec; t_xrbindP => hwx hx hwy hy;
       move=> hwy_eq; case: vs => [| a vs'] //= hsemi <-).
 all: rewrite hwy !truncate_word_u !letok.
 all: have hwy_val : word_shift_of_reg_shift sh wb (wunsigned wa) = hy
-       by move: hshift; rewrite hwy_eq => /ok_inj <-.
+       by move: hshift; rewrite hwy_eq => [[<-]].
 all: rewrite /semi_to_atype /= in hsemi.
-1-6: (rewrite hwy_val; move/ok_inj: hsemi => hsemi; rewrite hsemi //).
+1-6: (rewrite hwy_val; move: hsemi => [hsemi]; rewrite hsemi //).
 (* BN_CMPB: vs' is abstract, extract vs'=[] from hsemi *)
 case: vs' hsemi => [| ?? ] //= hsemi.
 2: by case: (to_bool a) hsemi.
@@ -898,8 +899,8 @@ all: (move: hexec; t_xrbindP => hwx hx hwy hy hwy_eq hcf hcf_eq;
       case: vs => [| a vs'] //= hsemi <-).
 all: rewrite hwy !truncate_word_u hcf_eq !letok.
 all: have hwy_val : word_shift_of_reg_shift sh wb (wunsigned wa) = hy
-       by move: hshift; rewrite hwy_eq => /ok_inj <-.
-all: (rewrite hwy_val; move/ok_inj: hsemi => hsemi; rewrite hsemi //).
+       by move: hshift; rewrite hwy_eq => [[<-]].
+all: (rewrite hwy_val; move: hsemi => [hsemi]; rewrite hsemi //).
 Qed.
 
 Lemma lower_basic_shift_notP ii fg lvs es sh es'' s0 s1 :
@@ -912,13 +913,13 @@ Proof.
 move=> hshift hsrc.
 rewrite /lower_basic_shift in hshift.
 move: hshift; t_xrbindP.
-move=> z [x0 rest0] hrsnoc /ok_inj <- hget.
+move=> z [x0 rest0] hrsnoc [[<-]] hget.
 apply: rbindP hget => o hgas.
 case: o hgas => [[[ebase sh0] esham] | ] hgas; last by [].
-rewrite /issue cat0s => /ok_inj /Some_inj [<- <-].
+rewrite /issue cat0s => heq_issue; injection heq_issue as <- <-.
 move: hgas.
 case: es hrsnoc hsrc => [| a bs] hrsnoc hsrc //=.
-move/ok_inj: hrsnoc => [<- <-].
+move: hrsnoc => [] <- <-.
 move=> hgas.
 rewrite /sem_sopn in hsrc |- *.
 move: hsrc; t_xrbindP => vs hvs r hexec hw.
@@ -940,13 +941,13 @@ Proof.
 move=> hshift hsrc.
 rewrite /lower_basic_shift in hshift.
 move: hshift; t_xrbindP.
-move=> z [[[x_e y_e] cf_e] rest] hrsnoc /ok_inj <- hget.
+move=> z [[[x_e y_e] cf_e] rest] hrsnoc [[<-]] hget.
 apply: rbindP hget => o hgas.
 case: o hgas => [[[ebase sh0] esham] | ] hgas; last by [].
-rewrite /issue => /ok_inj /Some_inj [<- <-].
+rewrite /issue => heq_issue; injection heq_issue as <- <-.
 move: hgas.
 case: es hrsnoc hsrc => [| e1 [| e2 [| e3 es3]]] hrsnoc hsrc //=.
-move/ok_inj: hrsnoc => [<- <- <- <-].
+move: hrsnoc => [] <- <- <- <-.
 move=> hgas.
 rewrite /sem_sopn in hsrc |- *.
 move: hsrc; t_xrbindP => vs hvs r hexec hw.
@@ -954,16 +955,16 @@ move: hexec.
 move: r; rewrite /sem_pexprs /=.
 apply: rbindP => x_v hx.
 apply: rbindP => ys_x hys_x.
-move/ok_inj => <-.
+move=> [[<-]].
 move=> hexec.
 move: hys_x.
 apply: rbindP => y_v hy.
 apply: rbindP => ys_y hys_y.
-move/ok_inj => heq_x; subst ys_x.
+move=> [heq_x]; subst ys_x.
 move: hys_y.
 apply: rbindP => cf_v hcf.
 apply: rbindP => vrest hvrest.
-move/ok_inj => heq_y; subst ys_y.
+move=> [heq_y]; subst ys_y.
 have [wb [wa [h_ebase h_esham h_shift]]] := get_arg_shiftP hgas hy.
 have hexec' := bn_shifted_teropP h_shift hexec ltac:(by vm_compute).
 rewrite hx /= h_ebase /= hcf /= mapM_cat hvrest /= h_esham /= hexec' /= hw //.
@@ -979,13 +980,13 @@ Proof.
 move=> hshift hsrc.
 rewrite /lower_basic_shift in hshift.
 move: hshift; t_xrbindP.
-move=> z [[[x_e y_e] cf_e] rest] hrsnoc /ok_inj <- hget.
+move=> z [[[x_e y_e] cf_e] rest] hrsnoc [[<-]] hget.
 apply: rbindP hget => o hgas.
 case: o hgas => [[[ebase sh0] esham] | ] hgas; last by [].
-rewrite /issue => /ok_inj /Some_inj [<- <-].
+rewrite /issue => heq_issue; injection heq_issue as <- <-.
 move: hgas.
 case: es hrsnoc hsrc => [| e1 [| e2 [| e3 es3]]] hrsnoc hsrc //=.
-move/ok_inj: hrsnoc => [<- <- <- <-].
+move: hrsnoc => [] <- <- <- <-.
 move=> hgas.
 rewrite /sem_sopn in hsrc |- *.
 move: hsrc; t_xrbindP => vs hvs r hexec hw.
@@ -993,16 +994,16 @@ move: hexec.
 move: r; rewrite /sem_pexprs /=.
 apply: rbindP => x_v hx.
 apply: rbindP => ys_x hys_x.
-move/ok_inj => <-.
+move=> [[<-]].
 move=> hexec.
 move: hys_x.
 apply: rbindP => y_v hy.
 apply: rbindP => ys_y hys_y.
-move/ok_inj => heq_x; subst ys_x.
+move=> [heq_x]; subst ys_x.
 move: hys_y.
 apply: rbindP => cf_v hcf.
 apply: rbindP => vrest hvrest.
-move/ok_inj => heq_y; subst ys_y.
+move=> [heq_y]; subst ys_y.
 have [wb [wa [h_ebase h_esham h_shift]]] := get_arg_shiftP hgas hy.
 have hexec' := bn_shifted_teropP h_shift hexec ltac:(by vm_compute).
 rewrite hx /= h_ebase /= hcf /= mapM_cat hvrest /= h_esham /= hexec' /= hw //.
@@ -1040,13 +1041,13 @@ Proof.
   move=> hmn hshift.
   move: hshift hmn; case: mn => /= hshift hmn //;
     (rewrite /lower_basic_shift in hshift;
-     move: hshift; t_xrbindP=> z [[x_e y_e] rest] hrsnoc /ok_inj <- hget;
+     move: hshift; t_xrbindP=> z [[x_e y_e] rest] hrsnoc [[<-]] hget;
      apply: rbindP hget => o hgas;
      case: o hgas => [[[ebase sh0] esham] | ] hgas; last by [];
-     rewrite /issue => /ok_inj /Some_inj [<- <-];
+     rewrite /issue => heq_issue; injection heq_issue as <- <-;
      move: hgas;
      case: es hrsnoc => [| e1 [| e2 es2]] hrsnoc //=;
-     move/ok_inj: hrsnoc => [<- <- <-];
+     move: hrsnoc => [] <- <- <-;
      move=> hgas;
      by exists e1, e2, es2, ebase, esham).
 Qed.
@@ -1071,12 +1072,12 @@ Proof.
   move: r; rewrite /sem_pexprs /=.
   apply: rbindP => x_v hx.
   apply: rbindP => ys hys.
-  move/ok_inj => <-.
+  move=> [[<-]].
   move=> hexec.
   move: hys.
   apply: rbindP => y_v hy.
   apply: rbindP => vrest hvrest.
-  move/ok_inj => heq; subst ys.
+  move=> [heq]; subst ys.
   have [wb [wa [h_ebase h_esham h_shift]]] := get_arg_shiftP hgas hy.
   have hexec' := hcomm _ _ _ _ _ _ h_shift hexec.
   rewrite hx /= h_ebase /= mapM_cat hvrest /= h_esham /= hexec' /= hw //.
@@ -1239,11 +1240,11 @@ Proof.
   t_xrbindP=> /eqP ? hlvs hc es0 hes0 hli; subst sz.
   move: hc; rewrite /get_carry_lvals /rsnoc2 /rsnoc.
   case: lvs => [//|cf [//|r lvs_rest]] /= hcr.
-  have ? := ok_inj hcr; subst hlvs.
+  move: hcr => [?]; subst hlvs.
   move: hes0; rewrite /get_carry_pexprs /rsnoc3 /rsnoc2 /rsnoc /=.
   case: es => [//|e0 [//|e1 [//|ecf es_rest]]] /=.
   case: ecf => //= [b | g]; first case: b => //=.
-  all: move=> /ok_inj /esym ?; subst es0.
+  all: move=> [] /esym ?; subst es0.
   all: move: hli; rewrite /li_issue /= => [[<- <- <-]].
   case: is_add => /=.
   3: case: is_add => /=.
@@ -1256,10 +1257,10 @@ Proof.
     move: hexec2; rewrite /exec_sopn /= /sopn_sem /sopn_sem_ /=.
     t_xrbindP=> r1 w0 hw0 w1 hw1.
     case: z5 hz5 => [hz5 | a l hz5] /=.
-    + move=> /ok_inj <- hres; rewrite -hres in hwrite2.
+    + move=> [[<-]] hres; rewrite -hres in hwrite2.
       move: hwrite2 => /=.
       t_xrbindP=> s_cf hcf s_r hr hlr.
-      case: lvs_rest hlr => [/ok_inj <- | ? ? //].
+      case: lvs_rest hlr => [[[<-]] | ? ? //].
       rewrite hw0 hw1.
       have hinner : (Let v := ok w0 in Let v2 := ok w1 in
         @semi_to_atype [:: lword256; lword256] (ty_cmlz ++ [:: lword256])
@@ -1286,10 +1287,10 @@ Proof.
     t_xrbindP=> r1 w0 hw0 w1 hw1.
     case: z5 hz5 => [hz5 | a l hz5] /=.
     2: by [].
-    move=> /ok_inj <- hres; rewrite -hres in hwrite2.
+    move=> [[<-]] hres; rewrite -hres in hwrite2.
     move: hwrite2 => /=.
     t_xrbindP=> s_cf hcf s_r hr hlr.
-    case: lvs_rest hlr => [/ok_inj <- | ? ? //].
+    case: lvs_rest hlr => [[[<-]] | ? ? //].
     rewrite hw0 hw1.
     have hinner : (Let v := ok w0 in Let v2 := ok w1 in
       @semi_to_atype [:: lword256; lword256] (ty_cmlz ++ [:: lword256])
@@ -1318,10 +1319,10 @@ Proof.
     t_xrbindP=> r1 w0 hw0 w1 hw1 b_carry hbcarry.
     case: z6 hz6 => [hz6 | a l hz6] /=.
     2: by move=> //.
-    move=> /ok_inj <- hres; rewrite -hres in hwrite2.
+    move=> [[<-]] hres; rewrite -hres in hwrite2.
     move: hwrite2 => /=.
     t_xrbindP=> s_cf hcf s_r hr hlr.
-    case: lvs_rest hlr => [/ok_inj <- | ? ? //].
+    case: lvs_rest hlr => [[[<-]] | ? ? //].
     rewrite hw0 hw1 hbcarry.
     have hinner : (Let v := ok w0 in Let v2 := ok w1 in Let v3 := ok b_carry in
       @semi_to_atype [:: lword256; lword256; lbool] (ty_cmlz ++ [:: lword256])
@@ -1348,10 +1349,10 @@ Proof.
     t_xrbindP=> r1 w0 hw0 w1 hw1 b_carry hbcarry.
     case: z6 hz6 => [hz6 | a l hz6] /=.
     2: by move=> //.
-    move=> /ok_inj <- hres; rewrite -hres in hwrite2.
+    move=> [[<-]] hres; rewrite -hres in hwrite2.
     move: hwrite2 => /=.
     t_xrbindP=> s_cf hcf s_r hr hlr.
-    case: lvs_rest hlr => [/ok_inj <- | ? ? //].
+    case: lvs_rest hlr => [[[<-]] | ? ? //].
     rewrite hw0 hw1 hbcarry.
     have hinner : (Let v := ok w0 in Let v2 := ok w1 in Let v3 := ok b_carry in
       @semi_to_atype [:: lword256; lword256; lbool] (ty_cmlz ++ [:: lword256])
