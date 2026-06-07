@@ -626,7 +626,7 @@ subst hv1 v1 z4 z3.
 rewrite hv v0 hv_e1 /= hv0 /= htw0 /= htw1 /=.
 have hv_eq : v' = Vword (if b then w0 else w1).
 - move: htr; rewrite -hsel /truncate_val /=.
-  by case: b hv0 hsel; rewrite /= truncate_word_u => _ _ [[<-]].
+  by case: b hv0 hsel; rewrite /= truncate_word_u => _ _ [<-].
 by rewrite hv_eq in hw; rewrite hw.
 Qed.
 
@@ -913,7 +913,7 @@ Proof.
 move=> hshift hsrc.
 rewrite /lower_basic_shift in hshift.
 move: hshift; t_xrbindP.
-move=> z [x0 rest0] hrsnoc [[<-]] hget.
+move=> z [x0 rest0] hrsnoc [<-] hget.
 apply: rbindP hget => o hgas.
 case: o hgas => [[[ebase sh0] esham] | ] hgas; last by [].
 rewrite /issue cat0s => heq_issue; injection heq_issue as <- <-.
@@ -941,7 +941,7 @@ Proof.
 move=> hshift hsrc.
 rewrite /lower_basic_shift in hshift.
 move: hshift; t_xrbindP.
-move=> z [[[x_e y_e] cf_e] rest] hrsnoc [[<-]] hget.
+move=> z [[[x_e y_e] cf_e] rest] hrsnoc [<-] hget.
 apply: rbindP hget => o hgas.
 case: o hgas => [[[ebase sh0] esham] | ] hgas; last by [].
 rewrite /issue => heq_issue; injection heq_issue as <- <-.
@@ -955,7 +955,7 @@ move: hexec.
 move: r; rewrite /sem_pexprs /=.
 apply: rbindP => x_v hx.
 apply: rbindP => ys_x hys_x.
-move=> [[<-]].
+move=> [<-].
 move=> hexec.
 move: hys_x.
 apply: rbindP => y_v hy.
@@ -980,7 +980,7 @@ Proof.
 move=> hshift hsrc.
 rewrite /lower_basic_shift in hshift.
 move: hshift; t_xrbindP.
-move=> z [[[x_e y_e] cf_e] rest] hrsnoc [[<-]] hget.
+move=> z [[[x_e y_e] cf_e] rest] hrsnoc [<-] hget.
 apply: rbindP hget => o hgas.
 case: o hgas => [[[ebase sh0] esham] | ] hgas; last by [].
 rewrite /issue => heq_issue; injection heq_issue as <- <-.
@@ -994,7 +994,7 @@ move: hexec.
 move: r; rewrite /sem_pexprs /=.
 apply: rbindP => x_v hx.
 apply: rbindP => ys_x hys_x.
-move=> [[<-]].
+move=> [<-].
 move=> hexec.
 move: hys_x.
 apply: rbindP => y_v hy.
@@ -1041,7 +1041,7 @@ Proof.
   move=> hmn hshift.
   move: hshift hmn; case: mn => /= hshift hmn //;
     (rewrite /lower_basic_shift in hshift;
-     move: hshift; t_xrbindP=> z [[x_e y_e] rest] hrsnoc [[<-]] hget;
+     move: hshift; t_xrbindP=> z [[x_e y_e] rest] hrsnoc [<-] hget;
      apply: rbindP hget => o hgas;
      case: o hgas => [[[ebase sh0] esham] | ] hgas; last by [];
      rewrite /issue => heq_issue; injection heq_issue as <- <-;
@@ -1072,7 +1072,7 @@ Proof.
   move: r; rewrite /sem_pexprs /=.
   apply: rbindP => x_v hx.
   apply: rbindP => ys hys.
-  move=> [[<-]].
+  move=> [<-].
   move=> hexec.
   move: hys.
   apply: rbindP => y_v hy.
@@ -1257,10 +1257,10 @@ Proof.
     move: hexec2; rewrite /exec_sopn /= /sopn_sem /sopn_sem_ /=.
     t_xrbindP=> r1 w0 hw0 w1 hw1.
     case: z5 hz5 => [hz5 | a l hz5] /=.
-    + move=> [[<-]] hres; rewrite -hres in hwrite2.
+    + move=> [<-] hres; rewrite -hres in hwrite2.
       move: hwrite2 => /=.
       t_xrbindP=> s_cf hcf s_r hr hlr.
-      case: lvs_rest hlr => [[[<-]] | ? ? //].
+      case: lvs_rest hlr => [[<-] | ? ? //].
       rewrite hw0 hw1.
       have hinner : (Let v := ok w0 in Let v2 := ok w1 in
         @semi_to_atype [:: lword256; lword256] (ty_cmlz ++ [:: lword256])
@@ -1287,10 +1287,10 @@ Proof.
     t_xrbindP=> r1 w0 hw0 w1 hw1.
     case: z5 hz5 => [hz5 | a l hz5] /=.
     2: by [].
-    move=> [[<-]] hres; rewrite -hres in hwrite2.
+    move=> [<-] hres; rewrite -hres in hwrite2.
     move: hwrite2 => /=.
     t_xrbindP=> s_cf hcf s_r hr hlr.
-    case: lvs_rest hlr => [[[<-]] | ? ? //].
+    case: lvs_rest hlr => [[<-] | ? ? //].
     rewrite hw0 hw1.
     have hinner : (Let v := ok w0 in Let v2 := ok w1 in
       @semi_to_atype [:: lword256; lword256] (ty_cmlz ++ [:: lword256])
@@ -1319,10 +1319,10 @@ Proof.
     t_xrbindP=> r1 w0 hw0 w1 hw1 b_carry hbcarry.
     case: z6 hz6 => [hz6 | a l hz6] /=.
     2: by move=> //.
-    move=> [[<-]] hres; rewrite -hres in hwrite2.
+    move=> [<-] hres; rewrite -hres in hwrite2.
     move: hwrite2 => /=.
     t_xrbindP=> s_cf hcf s_r hr hlr.
-    case: lvs_rest hlr => [[[<-]] | ? ? //].
+    case: lvs_rest hlr => [[<-] | ? ? //].
     rewrite hw0 hw1 hbcarry.
     have hinner : (Let v := ok w0 in Let v2 := ok w1 in Let v3 := ok b_carry in
       @semi_to_atype [:: lword256; lword256; lbool] (ty_cmlz ++ [:: lword256])
@@ -1349,10 +1349,10 @@ Proof.
     t_xrbindP=> r1 w0 hw0 w1 hw1 b_carry hbcarry.
     case: z6 hz6 => [hz6 | a l hz6] /=.
     2: by move=> //.
-    move=> [[<-]] hres; rewrite -hres in hwrite2.
+    move=> [<-] hres; rewrite -hres in hwrite2.
     move: hwrite2 => /=.
     t_xrbindP=> s_cf hcf s_r hr hlr.
-    case: lvs_rest hlr => [[[<-]] | ? ? //].
+    case: lvs_rest hlr => [[<-] | ? ? //].
     rewrite hw0 hw1 hbcarry.
     have hinner : (Let v := ok w0 in Let v2 := ok w1 in Let v3 := ok b_carry in
       @semi_to_atype [:: lword256; lword256; lbool] (ty_cmlz ++ [:: lword256])
