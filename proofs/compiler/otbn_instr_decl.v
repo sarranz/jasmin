@@ -381,6 +381,9 @@ Variant otbn_op : Type :=
 
 (* Indirect load indexed by a wide register; index is 0..31. *)
 | BN_LID of nat
+
+(* Indirect store indexed by a wide register; index is 0..31. *)
+| BN_SID of nat
 .
 
 #[export]
@@ -421,6 +424,7 @@ Definition otbn_op_to_string (op : otbn_op) : string :=
   | BN_LD => "BN.LD"
   | BN_SD => "BN.SD"
   | BN_LID _ => "BN.LID"
+  | BN_SID _ => "BN.SID"
   end.
 
 (* -------------------------------------------------------------------------- *)
@@ -488,7 +492,7 @@ Section PP_ASM_OP.
     {|
       pp_aop_name := name;
       pp_aop_ext := PP_name;
-      pp_aop_args := map (fun a => (reg_size, a)) args;
+      pp_aop_args := [seq (reg_size, a) | a <- args];
     |}.
 
   Let wsr_code_MOD : asm_arg := Imm (wrepr U8 0x0).
@@ -504,6 +508,7 @@ Section PP_ASM_OP.
        so the assembly mnemonic only carries the element size. *)
     | BN_SHV vs _ => mk ("BN.SHV" ++ vec_size_to_string vs)%string args
     | BN_LID _ => mk "BN.LID" args
+    | BN_SID _ => mk "BN.SID" args
     | _ => mk (otbn_op_to_string op) args
     end.
 
@@ -1576,11 +1581,9 @@ Lemma BN_LID_semi_safe i :
     [:: UGe U32 (Z.of_nat i) 0; ULt U32 0 ((Z.of_nat i) + 1) ]
     (BN_LID_semi i).
 Proof.
-move=> w x.
-move=> /List_Forall_inv [] /= /(_ w) + /List_Forall_inv [] /= /(_ w) + _.
-rewrite truncate_word_u => /(_ erefl) hge /(_ erefl) hlt.
-exists x.
-rewrite /BN_LID_semi.
+move=> w x /List_Forall_inv [] /(_ w) + /List_Forall_inv [] /= /(_ w) + _.
+rewrite /= !truncate_word_u => /(_ erefl) hge /(_ erefl) hlt.
+exists x; rewrite /BN_LID_semi.
 suff -> : wunsigned w = Z.of_nat i by rewrite eqxx.
 by move: hge hlt; t_lia.
 Qed.
@@ -1606,6 +1609,50 @@ Definition desc_BN_LID (i : nat) : instr_desc_t :=
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => @BN_LID_semi_errty i;
     id_semi_safe := fun _ => @BN_LID_semi_safe i;
+  |}.
+
+Definition BN_SID_semi (i : nat) (x : u256) (w : u32) : exec u256 :=
+  Let _ := assert (wunsigned w == Z.of_nat i) ErrSemUndef in
+  ok x.
+
+Lemma BN_SID_semi_errty i :
+  sem_lforall (fun r => r <> Error ErrType) [:: lword256; lword U32 ]
+    (BN_SID_semi i).
+Proof. by move=> x w; rewrite /BN_SID_semi; case: eqP. Qed.
+
+Lemma BN_SID_semi_safe i :
+  interp_safe_cond_lty [:: lword256; lword U32 ]
+    [:: UGe U32 (Z.of_nat i) 1; ULt U32 1 ((Z.of_nat i) + 1) ]
+    (BN_SID_semi i).
+Proof.
+move=> x w /List_Forall_inv [] /(_ w) + /List_Forall_inv [] /(_ w) + _.
+rewrite /= !truncate_word_u => /(_ erefl) hge /(_ erefl) hlt.
+exists x; rewrite /BN_SID_semi.
+suff -> : wunsigned w = Z.of_nat i by rewrite eqxx.
+by move: hge hlt; t_lia.
+Qed.
+
+Definition desc_BN_SID (i : nat) : instr_desc_t :=
+  let wi := index_to_wreg i in
+  let str := ("BN_SID_w" ++ wide_reg_index_string i)%string in
+  {|
+    id_valid := Z.of_nat i <? 32;
+    id_msb_flag := MSB_MERGE;
+    id_tin := [:: lword256; lword U32 ];
+    id_in := [:: ADExplicit (AK_mem Aligned) 0 (ACR_vector wi); Ea 1 ];
+    id_tout := [:: lword256 ];
+    id_out := [:: Ea 2 ];
+    id_semi := BN_SID_semi i;
+    id_args_kinds := ak_xreg_reg_mem;
+    id_nargs := 3;
+    id_str_jas := fun _ => str;
+    id_pp_asm := pp_otbn_op (BN_SID i);
+    id_safe := [:: UGe U32 (Z.of_nat i) 1; ULt U32 1 ((Z.of_nat i) + 1) ];
+    id_eq_size := refl_equal;
+    id_check_dest := check_dest_unop_lword;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => @BN_SID_semi_errty i;
+    id_semi_safe := fun _ => @BN_SID_semi_safe i;
   |}.
 
 Definition desc_otbn_op (op : otbn_op) : instr_desc_t :=
@@ -1637,6 +1684,7 @@ Definition desc_otbn_op (op : otbn_op) : instr_desc_t :=
   | BN_LD => desc_BN_LD
   | BN_SD => desc_BN_SD
   | BN_LID i => desc_BN_LID i
+  | BN_SID i => desc_BN_SID i
   end.
 
 Section PRIM_STRING.
@@ -1647,14 +1695,14 @@ Section PRIM_STRING.
     (to_prim : (A -> prim_constructor otbn_op))
     (s : seq A)
     : seq (string * prim_constructor otbn_op) :=
-    map (fun a => (to_string a, to_prim a)) s.
+    [seq (to_string a, to_prim a) | a <- s].
 
   Let prim_RV32 mn := prim_otbn_none (RV32 mn).
   Let prim_BN_basic mn := prim_otbn_fg (BN_basic mn).
 
   (* [LA] computes an address relative to the PC. *)
   Let rv_prim_string :=
-    let: no_la := filter (fun mn => mn != LA) cenum in
+    let: no_la := [seq x <- rv_mnemonics | x != LA] in
     map_prim_string rv_mnemonic_to_string prim_RV32 no_la.
 
   (* This also covers the versions with shift. *)
@@ -1674,8 +1722,7 @@ Section PRIM_STRING.
       otbn_op_to_string
       prim_otbn_none
       [:: BN_MOV; BN_RSHI; BN_ADDM; BN_SUBM; BN_ACCR; BN_ACCW; BN_MODR; BN_MODW
-        ; BN_LD; BN_SD
-      ].
+        ; BN_LD; BN_SD ].
 
   (* The element size, modular flag and shift direction are all encoded in the
      mnemonic, so these take no suffix. *)
@@ -1684,21 +1731,22 @@ Section PRIM_STRING.
       otbn_op_to_string
       prim_otbn_none
       [:: BN_ADDV V8S false; BN_ADDV V16H false
-        ; BN_ADDV V8S true;  BN_ADDV V16H true
+        ; BN_ADDV V8S true; BN_ADDV V16H true
         ; BN_SUBV V8S false; BN_SUBV V16H false
-        ; BN_SUBV V8S true;  BN_SUBV V16H true
-        ; BN_SHV V8S RS_left;  BN_SHV V8S RS_right
+        ; BN_SUBV V8S true; BN_SUBV V16H true
+        ; BN_SHV V8S RS_left; BN_SHV V8S RS_right
         ; BN_SHV V16H RS_left; BN_SHV V16H RS_right
         ; BN_TRN T16H TRNMeven; BN_TRN T8S TRNMeven
-        ; BN_TRN T4D TRNMeven;  BN_TRN T2Q TRNMeven
-        ; BN_TRN T16H TRNModd;  BN_TRN T8S TRNModd
-        ; BN_TRN T4D TRNModd;   BN_TRN T2Q TRNModd
-      ].
+        ; BN_TRN T4D TRNMeven; BN_TRN T2Q TRNMeven
+        ; BN_TRN T16H TRNModd; BN_TRN T8S TRNModd
+        ; BN_TRN T4D TRNModd; BN_TRN T2Q TRNModd ].
 
   (* BN_LID is indexed by wide register; the _wXX suffix is stripped by the
      parser which produces a PrimOTBNwreg suffix. *)
-  Let bn_lid_prim_string :=
-    [:: ("BN.LID"%string, prim_otbn_wreg BN_LID) ].
+  Let bn_lid_prim_string := [:: ("BN.LID"%string, prim_otbn_wreg BN_LID) ].
+
+  (* BN_SID is indexed by wide register; same suffix convention as BN_LID. *)
+  Let bn_sid_prim_string := [:: ("BN.SID"%string, prim_otbn_wreg BN_SID) ].
 
   (* MULQACC intrinsic string does not change with flag group or writeback. *)
   Let bn_mulqacc_prim_string :=
@@ -1727,7 +1775,8 @@ Section PRIM_STRING.
        ++ bn_no_opt_prim_string
        ++ bn_vec_prim_string
        ++ bn_mulqacc_prim_string
-       ++ bn_lid_prim_string).
+       ++ bn_lid_prim_string
+       ++ bn_sid_prim_string).
 
 End PRIM_STRING.
 

@@ -1,0 +1,74 @@
+/* The suffix _wXX must match the value of the grs register: this is a safety
+   condition that ensures the Jasmin semantics matches the hardware behaviour.
+   BN.SID stores WDR[grs] to memory; Jasmin models this as BN_SID_wXX
+   where XX is the compile-time-known index, and grs must hold that value at
+   runtime. */
+
+export
+fn bn_sid(reg u256 src, reg u32 dst) {
+    reg u32 i;
+    src = src;
+    i = 0;  [#aligned :u256 dst] = #BN_SID_w00(src, i);
+    src = src;
+    i = 1;  [#aligned :u256 dst] = #BN_SID_w01(src, i);
+    src = src;
+    i = 2;  [#aligned :u256 dst] = #BN_SID_w02(src, i);
+    src = src;
+    i = 3;  [#aligned :u256 dst] = #BN_SID_w03(src, i);
+    src = src;
+    i = 4;  [#aligned :u256 dst] = #BN_SID_w04(src, i);
+    src = src;
+    i = 5;  [#aligned :u256 dst] = #BN_SID_w05(src, i);
+    src = src;
+    i = 6;  [#aligned :u256 dst] = #BN_SID_w06(src, i);
+    src = src;
+    i = 7;  [#aligned :u256 dst] = #BN_SID_w07(src, i);
+    src = src;
+    i = 8;  [#aligned :u256 dst] = #BN_SID_w08(src, i);
+    src = src;
+    i = 9;  [#aligned :u256 dst] = #BN_SID_w09(src, i);
+    src = src;
+    i = 10; [#aligned :u256 dst] = #BN_SID_w10(src, i);
+    src = src;
+    i = 11; [#aligned :u256 dst] = #BN_SID_w11(src, i);
+    src = src;
+    i = 12; [#aligned :u256 dst] = #BN_SID_w12(src, i);
+    src = src;
+    i = 13; [#aligned :u256 dst] = #BN_SID_w13(src, i);
+    src = src;
+    i = 14; [#aligned :u256 dst] = #BN_SID_w14(src, i);
+    src = src;
+    i = 15; [#aligned :u256 dst] = #BN_SID_w15(src, i);
+    src = src;
+    i = 16; [#aligned :u256 dst] = #BN_SID_w16(src, i);
+    src = src;
+    i = 17; [#aligned :u256 dst] = #BN_SID_w17(src, i);
+    src = src;
+    i = 18; [#aligned :u256 dst] = #BN_SID_w18(src, i);
+    src = src;
+    i = 19; [#aligned :u256 dst] = #BN_SID_w19(src, i);
+    src = src;
+    i = 20; [#aligned :u256 dst] = #BN_SID_w20(src, i);
+    src = src;
+    i = 21; [#aligned :u256 dst] = #BN_SID_w21(src, i);
+    src = src;
+    i = 22; [#aligned :u256 dst] = #BN_SID_w22(src, i);
+    src = src;
+    i = 23; [#aligned :u256 dst] = #BN_SID_w23(src, i);
+    src = src;
+    i = 24; [#aligned :u256 dst] = #BN_SID_w24(src, i);
+    src = src;
+    i = 25; [#aligned :u256 dst] = #BN_SID_w25(src, i);
+    src = src;
+    i = 26; [#aligned :u256 dst] = #BN_SID_w26(src, i);
+    src = src;
+    i = 27; [#aligned :u256 dst] = #BN_SID_w27(src, i);
+    src = src;
+    i = 28; [#aligned :u256 dst] = #BN_SID_w28(src, i);
+    src = src;
+    i = 29; [#aligned :u256 dst] = #BN_SID_w29(src, i);
+    src = src;
+    i = 30; [#aligned :u256 dst] = #BN_SID_w30(src, i);
+    src = src;
+    i = 31; [#aligned :u256 dst] = #BN_SID_w31(src, i);
+}

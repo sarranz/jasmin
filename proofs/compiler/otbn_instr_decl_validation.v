@@ -592,4 +592,27 @@ Section VALIDATION_SEM.
   Goal ~is_ok (id_semi (desc_otbn_op (BN_LID 31)) (wrepr U32 0) (wrepr U256 0)).
   Proof. by []. Qed.
 
+  (* [BN_SID]: stores a 256-bit wide register to memory; the second argument
+     must equal the instruction's register index at runtime. *)
+
+  (* Success: second arg (grs) equals the instruction's register index. *)
+  Goal is_ok (id_semi (desc_otbn_op (BN_SID 5)) (wrepr U256 42) (wrepr U32 5)).
+  Proof. by []. Qed.
+
+  Goal is_ok (id_semi (desc_otbn_op (BN_SID 0)) (wrepr U256 0) (wrepr U32 0)).
+  Proof. by []. Qed.
+
+  Goal is_ok (id_semi (desc_otbn_op (BN_SID 31)) (wrepr U256 0xdeadbeef) (wrepr U32 31)).
+  Proof. by []. Qed.
+
+  (* Failure: second arg does not match the instruction's register index. *)
+  Goal ~is_ok (id_semi (desc_otbn_op (BN_SID 5)) (wrepr U256 42) (wrepr U32 6)).
+  Proof. by []. Qed.
+
+  Goal ~is_ok (id_semi (desc_otbn_op (BN_SID 0)) (wrepr U256 0) (wrepr U32 1)).
+  Proof. by []. Qed.
+
+  Goal ~is_ok (id_semi (desc_otbn_op (BN_SID 31)) (wrepr U256 0) (wrepr U32 0)).
+  Proof. by []. Qed.
+
 End VALIDATION_SEM.

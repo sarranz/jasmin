@@ -741,6 +741,11 @@ module Regalloc (Arch : Arch_full.Arch)
            | Lvar w -> allocate_one w (Conv.var_of_cvar v) a
            | _ -> assert false
            end
+        | ADExplicit (_, ACR_exact v) ->
+           begin match lv with
+           | Lvar w -> allocate_one w (Conv.var_of_cvar v) a
+           | _ -> ()
+           end
         | ADExplicit _ -> ()) id.i_out lvs;
     let cnf =
       List.fold_left2 (fun cnf ad e ->
