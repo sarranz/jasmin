@@ -1218,7 +1218,41 @@ Qed.
 
 Lemma otbn_assemble_extra_sz ii op lvs args ops :
   to_asm ii op lvs args = ok ops -> ssrnat.leq 1 (size ops).
-Proof. Admitted.
+Proof.
+  rewrite /to_asm /= /assemble_extra /=.
+  case: op.
+  + move=> ws; rewrite /assemble_set0; by case: ifP => _ [<-].
+  + rewrite /assemble_MOV.
+    case: (arm_extra.uncons_LLvar ii lvs) => // -[x ?].
+    case: (arm_extra.uncons_rvar ii args) => // -[y ?].
+    simpl; t_xrbindP => _ <-; done.
+  + rewrite /assemble_SUBI.
+    case: (arm_extra.uncons_LLvar ii lvs) => // -[x ?].
+    case: (arm_extra.uncons_rvar ii args) => // -[y ?].
+    simpl; case: (arm_extra.uncons_wconst ii _) => // -[imm ?].
+    simpl; t_xrbindP => _ hne args0 hargs <-.
+    rewrite /asm_args_of_opn_args size_map.
+    move/o2rP: hargs.
+    rewrite /otbn_params_core.OTBNFopn_core.smart_subi
+            /otbn_params_core.OTBNFopn_core.gen_smart_opi.
+    case: ifP => // _ [<-].
+    rewrite /otbn_params_core.OTBNFopn_core.gen_unsafe_smart_opi
+            /otbn_params_core.OTBNFopn_core.is_mov /=
+            /otbn_params_core.OTBNFopn_core.smart_mov.
+    case: ifP => hmov.
+    - case: ifP => hxy //=.
+      by move: hne; rewrite hmov hxy.
+    - by case: ifP.
+  + move=> ws; rewrite /assemble_swap.
+    case: args => // -[] // [] // z [] // -[] // [] // w [] //.
+    simpl; case: ifP => _.
+    - case: lvs => // -[] // x [] // -[] // y [] //.
+      simpl; t_xrbindP => _ _ _ <-; done.
+    - case: ifP => _.
+      + case: lvs => // ? [] // ? [] // ? [] // -[] // x [] // -[] // y [] //.
+        simpl; t_xrbindP => _ _ _ <-; done.
+      + done.
+Qed.
 
 Definition otbn_hagparams : h_asm_gen_params (ap_agp otbn_params) :=
   {|
