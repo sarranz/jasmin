@@ -714,37 +714,6 @@ Proof.
     rewrite esem1 /= /sem_assgn hglob he /= htr /= hw //.
 Qed.
 
-(* ==================================================================== *)
-(* Correctness of [lower_copn].  Each operation [lower_copn] may emit is
-   handled by one auxiliary "case" lemma below, then assembled in
-   [lower_copnP].  [RV32 mn] is emitted verbatim (identity, discharged
-   inline in [lower_copnP]).  The other three transformations each get a
-   case lemma plus the helper lemmas it relies on, with an implementation
-   plan in a comment.  Every auxiliary/helper lemma is still [Admitted];
-   [lower_copnP] (and hence [Hopn_esem]) is proved modulo them. *)
-
-(* -------------------------------------------------------------------- *)
-(* SHIFT ABSORPTION: [BN_basic mn fg] -> [BN_basic_shift mn fg sh].
-   Model: ARM.  Mirror arm_lowering_proof.v: [get_arg_shiftP] (operand
-   shift evaluation), [with_shift_unop]/[with_shift_binop]/
-   [with_shift_terop] (shifted-instruction exec vs base exec on the
-   shifted operand), and the [arg_shift] branch of [lower_Papp2P] /
-   [lower_base_op].
-
-   Call-site context (lower_copnP, BN_basic branch): the source op is
-   [Oasm (BaseOp (None, BN_basic mn fg))]; [lower_basic_shift] returned
-   [Some (sh, es'')], i.e. the operand it inspected had the form
-   [base << sham] / [base >> sham]; [lvs] is unchanged.
-
-   Key definitions (Print/Search them; no need to open other files):
-   [get_arg_shift], [reg_shift_of_sop2] (Olsl (Op_w U256) -> RS_left,
-   Olsr U256 -> RS_right), [word_shift_of_reg_shift] (RS_left -> wshl,
-   RS_right -> wshr), [desc_bn_basic_shift_mnemonic] (built from the base
-   desc via [arch_mk_semi1_shifted]/[arch_mk_semi2_2_shifted]/
-   [arch_mk_semi3_2_shifted], which apply [word_shift_of_reg_shift] to one
-   operand and append the U8 shift amount as the last input), [exec_sopn],
-   [app_sopn]. *)
-
 (* [get_arg_shiftP]: if [get_arg_shift] accepts [e] then [e] evaluates to
    the shifted base value.  Idea (cf. ARM [get_arg_shiftP]): [e] must be
    [Papp2 op (Pvar x) (Papp1 (Oword_of_int U8) (Pconst z))] with [op] a
