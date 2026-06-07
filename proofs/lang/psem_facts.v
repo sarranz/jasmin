@@ -746,10 +746,10 @@ End DETERMINISM.
 
 (* ------------------------------------------------------------------- *)
 
-Lemma minus_insertP e1 e2 s0 ws w :
+Lemma minus_insertP wdb gd e1 e2 s0 ws w :
   insert_minus e1 = Some e2 ->
-  Let x := sem_pexpr true (p_globs p) s0 e1 in to_word ws x = ok (w)%R ->
-  Let x := sem_pexpr true (p_globs p) s0 e2 in to_word ws x = ok (- w)%R.
+  Let x := sem_pexpr wdb gd s0 e1 in to_word ws x = ok (w)%R ->
+  Let x := sem_pexpr wdb gd s0 e2 in to_word ws x = ok (- w)%R.
 Proof.
 case: e1 => // -[] // sz [] // n /= [<-] /= /truncate_wordP [hcmp ->].
 by rewrite truncate_word_le // wrepr_opp wopp_zero_extend.

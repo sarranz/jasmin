@@ -11,6 +11,7 @@ Require Import
   lowering_lemmas
   pseudo_operator
   psem
+  psem_facts
   utils.
 Require Import
   arch_decl
@@ -440,7 +441,13 @@ case: op2 ok_v hlow => //.
        case: (is_wconst U32 b) hlow.
   + rewrite /= /rv_Imn_of_op2 /rv_mn_of_op2.
     case hconst: is_wconst => [w | ] /= hlow.
-    * exact: OTBN_ADMIT_PROOF.
+    * move: hlow; rewrite /lassert /assert.
+      case: ifP => //= hsmall [<- <- <-].
+      set op2' := Oasm (BaseOp (None, RV32 ADDI)).
+      have [hcmp [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
+        Hassgn_op2 ok_v1 ok_v2 ok_v' htr hw (op2' := op2') erefl erefl erefl.
+      apply sem_correct.
+      by rewrite /= wadd_zero_extend //.
     * move: hlow => [] <- <- <-.
       set op2' := Oasm (BaseOp (None, RV32 ADD)).
       have [hcmp [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
@@ -454,7 +461,18 @@ case: op2 ok_v hlow => //.
        case: (is_wconst U32 b) hlow.
   + rewrite /= /rv_Imn_of_op2 /rv_mn_of_op2.
     case hconst: is_wconst => [w | ] /= hlow.
-    * exact: OTBN_ADMIT_PROOF.
+    * move: hlow; rewrite /lassert /assert.
+      case: ifP => //= hsmall.
+      case h_insert: insert_minus => [e1' | //].
+      move=> [<- <- <-].
+      set op2' := Oasm (BaseOp (None, RV32 ADDI)).
+      have [hcmp [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
+        Hassgn_op2_generic ok_v1 ok_v2 ok_v' htr hw (op2' := op2') erefl erefl erefl.
+      rewrite (sem_correct _ _ w1 (- w2)%R) => //.
+      + by rewrite ok_v1.
+      + apply (minus_insertP h_insert).
+        by rewrite ok_v2.
+      by rewrite /= sub_wordE wadd_zero_extend.
     * move: hlow => [] <- <- <-.
       set op2' := Oasm (BaseOp (None, RV32 SUB)).
       have [hcmp [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
@@ -465,7 +483,13 @@ case: op2 ok_v hlow => //.
 - move=> w ok_v.
   rewrite /= /rv_Imn_of_op2 /rv_mn_of_op2.
   case hconst: is_wconst => [wimm | ] /= hlow.
-  + exact: OTBN_ADMIT_PROOF.
+  + move: hlow; rewrite /lassert /assert.
+    case: ifP => //= hsmall [<- <- <-].
+    set op2' := Oasm (BaseOp (None, RV32 ANDI)).
+    have [hcmp [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
+      Hassgn_op2 ok_v1 ok_v2 ok_v htr hw (op2' := op2') erefl erefl erefl.
+    apply sem_correct.
+    by rewrite /= -wand_zero_extend //.
   + move: hlow => [] <- <- <-.
     set op2' := Oasm (BaseOp (None, RV32 AND)).
     have [hcmp [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
@@ -476,7 +500,13 @@ case: op2 ok_v hlow => //.
 - move=> w ok_v.
   rewrite /= /rv_Imn_of_op2 /rv_mn_of_op2.
   case hconst: is_wconst => [wimm | ] /= hlow.
-  + exact: OTBN_ADMIT_PROOF.
+  + move: hlow; rewrite /lassert /assert.
+    case: ifP => //= hsmall [<- <- <-].
+    set op2' := Oasm (BaseOp (None, RV32 ORI)).
+    have [hcmp [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
+      Hassgn_op2 ok_v1 ok_v2 ok_v htr hw (op2' := op2') erefl erefl erefl.
+    apply sem_correct.
+    by rewrite /= -wor_zero_extend //.
   + move: hlow => [] <- <- <-.
     set op2' := Oasm (BaseOp (None, RV32 OR)).
     have [hcmp [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
@@ -487,7 +517,13 @@ case: op2 ok_v hlow => //.
 - move=> w ok_v.
   rewrite /= /rv_Imn_of_op2 /rv_mn_of_op2.
   case hconst: is_wconst => [wimm | ] /= hlow.
-  + exact: OTBN_ADMIT_PROOF.
+  + move: hlow; rewrite /lassert /assert.
+    case: ifP => //= hsmall [<- <- <-].
+    set op2' := Oasm (BaseOp (None, RV32 XORI)).
+    have [hcmp [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
+      Hassgn_op2 ok_v1 ok_v2 ok_v htr hw (op2' := op2') erefl erefl erefl.
+    apply sem_correct.
+    by rewrite /= -wxor_zero_extend //.
   + move: hlow => [] <- <- <-.
     set op2' := Oasm (BaseOp (None, RV32 XOR)).
     have [hcmp [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
