@@ -108,8 +108,8 @@ Proof. by rewrite /lower_prog; t_xrbindP=> fns hfns <-. Qed.
               |-- [lower_Papp1P]   unary op (LI, BN.NOT)
               |-- [lower_Papp2P]   binary op (RV32 small / BN wide)
               \-- [lower_PifP]     conditional select (BN.SEL)
-   plus shared helpers [check_shift_amountP], [Hassgn_op2] /
-   [Hassgn_op2_generic], [Hassgn_op2_shift] for the [Papp2] RV32 case.
+   plus shared helpers [check_shift_amountP], [Hassgn_op2_generic] for
+   the [Papp2] RV32 case ([Hassgn_op2]/[Hassgn_op2_shift] in [lowering.v]).
    Every leaf is [Admitted]; the plumbing below is the (machine-checked)
    glue.
 
@@ -169,26 +169,15 @@ Proof. by rewrite /lower_prog; t_xrbindP=> fns hfns <-. Qed.
    final [lv] write, discharged by [hw].  Per-construct content and the
    emitted op(s) are noted at each lemma below. *)
 
-(* The two identity branches (a),(b): [lower_i] keeps the [Cassgn]
-   unchanged, so [esem] of the singleton reduces (via [esem1]) to
-   [sem_assgn p'], which equals [sem_assgn p] by [hglob]. *)
-Lemma Hassgn_id (p' : prog) (hglob : p_globs p' = p_globs p)
-  {ii lv tag ty e s0 s1} :
-  sem_assgn p lv tag ty e s0 = ok s1 ->
-  esem p' ev [:: MkI ii (Cassgn lv tag ty e) ] s0 = ok s1.
-Proof. by move=> hsem; rewrite esem1 /= /sem_assgn hglob; exact: hsem. Qed.
-
 (* -------------------------------------------------------------------- *)
-(* Shared helpers for the [Papp2] RV32 (small) case, ported from
-   [riscv_lowering_proof.v].  [Hassgn_op2_generic] is the engine: under the
-   [type_of_op2] / instruction-description type equalities ([eq1]/[eq2]/
-   [eq3]) it exposes [to_word] of both operands and, given that the lowered
-   [semi] equals the [ecast] of [sem_sop2_typed], reduces [sem_sopn] of the
-   RV32 op to the source [write_lval].  [Hassgn_op2] is the equal-width
-   binop wrapper; [Hassgn_op2_shift] the shift wrapper (2nd operand [U8]).
-   They also need a small [to_word_m] helper ([to_word] at a smaller size
-   via [zero_extend]); port it from riscv too.  Note: the small case fixes
-   the result width at [reg_size] = [U32]. *)
+(* Shared helpers for the [Papp2] RV32 (small) case.  [Hassgn_op2_generic]
+   is the engine: under the [type_of_op2] / instruction-description type
+   equalities ([eq1]/[eq2]/[eq3]) it exposes [to_word] of both operands
+   and, given that the lowered [semi] equals the [ecast] of
+   [sem_sop2_typed], reduces [sem_sopn] of the RV32 op to the source
+   [write_lval].  Note: the small case fixes the result width at
+   [reg_size] = [U32].  [Hassgn_op2] and [Hassgn_op2_shift] live in
+   [lowering.v]. *)
 
 (* [check_shift_amount e = Some sa]: [sa] evaluates (to [U8]) to the shift
    amount, and shifting by [w] equals shifting by [wand n (wrepr U8 31)].
@@ -269,57 +258,40 @@ Lemma Hassgn_op2_generic s e1 e2 v1 v2 op2 v ws v' lv s1 (op2' : sopn) :
               (semi (sopn.get_instr_desc op2')))
             (zero_extend ws1' w1') (zero_extend ws2' w2') ->
         sem_sopn (p_globs p) op2' s [::lv] [:: e1'; e2'] = ok s1].
-Admitted.
-
-Lemma Hassgn_op2 s e1 e2 v1 v2 op2 v v' lv s1 (op2' : sopn) :
-  sem_pexpr true (p_globs p) s e1 = ok v1 ->
-  sem_pexpr true (p_globs p) s e2 = ok v2 ->
-  sem_sop2 op2 v1 v2 = ok v ->
-  truncate_val (cword U32) v = ok v' ->
-  write_lval true (p_globs p) lv v' s = ok s1 ->
-  i_valid (sopn.get_instr_desc op2') ->
-  forall ws
-    (eq1 : type_of_op2 op2 = (aword ws, aword ws, aword ws))
-    (eq2 : tin (sopn.get_instr_desc op2') = [::aword U32; aword U32])
-    (eq3 : tout (sopn.get_instr_desc op2') = [:: aword U32]),
-  (U32 <= ws)%CMP
-  /\ exists w1 w2, [/\
-      to_word ws v1 = ok w1,
-      to_word ws v2 = ok w2 &
-      Let w := ecast t (let t := t in _) eq1 (sem_sop2_typed op2) w1 w2 in
-      ok (zero_extend U32 w)
-      = ecast l (sem_prod (map eval_atype l) _) eq2
-          (ecast l (sem_prod _ (exec (sem_tuple (map eval_atype l)))) eq3
-            (semi (sopn.get_instr_desc op2')))
-          (zero_extend U32 w1) (zero_extend U32 w2) ->
-      sem_sopn (p_globs p) op2' s [::lv] [:: e1; e2] = ok s1].
-Admitted.
-
-Lemma Hassgn_op2_shift s e1 e2 v1 v2 op2 v v' lv s1 (op2' : sopn) :
-  sem_pexpr true (p_globs p) s e1 = ok v1 ->
-  sem_pexpr true (p_globs p) s e2 = ok v2 ->
-  sem_sop2 op2 v1 v2 = ok v ->
-  truncate_val (cword U32) v = ok v' ->
-  write_lval true (p_globs p) lv v' s = ok s1 ->
-  i_valid (sopn.get_instr_desc op2') ->
-  forall ws
-    (eq1 : type_of_op2 op2 = (aword ws, aword U8, aword ws))
-    (eq2 : tin (sopn.get_instr_desc op2') = [::aword U32; aword U8])
-    (eq3 : tout (sopn.get_instr_desc op2') = [:: aword U32]),
-  (U32 <= ws)%CMP
-  /\ exists w1 w2, [/\
-      to_word ws v1 = ok w1,
-      to_word U8 v2 = ok w2 &
-      forall e2' w2',
-        sem_pexpr true (p_globs p) s e2' >>= to_word U8 = ok w2' ->
-        Let w := ecast t (let t := t in _) eq1 (sem_sop2_typed op2) w1 w2 in
-        ok (zero_extend U32 w)
-        = ecast l (sem_prod (map eval_atype l) _) eq2
-            (ecast l (sem_prod _ (exec (sem_tuple (map eval_atype l)))) eq3
-              (semi (sopn.get_instr_desc op2')))
-            (zero_extend U32 w1) w2' ->
-        sem_sopn (p_globs p) op2' s [::lv] [:: e1; e2'] = ok s1].
-Admitted.
+Proof.
+  move=> ok_v1 ok_v2 ok_v htrunc hwrite hvalid ws1 ws2 ws3 ws1' ws2' eq1 eq2 eq3.
+  move: ok_v.
+  rewrite /sem_sop2 /=; move: (sem_sop2_typed op2).
+  rewrite -> eq1 => /= sem_sop2_typed ok_v.
+  rewrite /sem_sopn /= /exec_sopn /= /sopn_sem /sopn_sem_ hvalid /=.
+  move: (semi (sopn.get_instr_desc op2')).
+  rewrite -> eq2, -> eq3 => semi.
+  move: ok_v.
+  t_xrbindP=> w1 ok_w1 w2 ok_w2 w ok_w ?; subst.
+  move: htrunc; rewrite /truncate_val /=.
+  t_xrbindP=> _ /truncate_wordP [hcmp3 ->] ?; subst.
+  split=> //.
+  rewrite ok_w1 ok_w2 /=.
+  exists w1, w2; split=> //.
+  t_xrbindP=> e1' e2' w1' w2' hcmp1 hcmp2 v1' ok_v1' ok_w1' v2' ok_v2' ok_w2' eq_sem.
+  rewrite ok_v1' ok_v2' /=.
+  have hw1' : to_word ws1' v1' = ok (zero_extend ws1' w1').
+  { move: ok_w1'; rewrite /to_word.
+    case: v1' ok_v1' => // sz1 ww _ /=.
+    move/truncate_wordP => [hle1 ->].
+    rewrite truncate_word_le; last exact: (cmp_le_trans hcmp1 hle1).
+    by rewrite zero_extend_idem.
+    by move=> h; case: sz1 ww h => // ?. }
+  have hw2' : to_word ws2' v2' = ok (zero_extend ws2' w2').
+  { move: ok_w2'; rewrite /to_word.
+    case: v2' ok_v2' => // sz2 ww _ /=.
+    move/truncate_wordP => [hle2 ->].
+    rewrite truncate_word_le; last exact: (cmp_le_trans hcmp2 hle2).
+    by rewrite zero_extend_idem.
+    by move=> h; case: sz2 ww h => // ?. }
+  rewrite hw1' hw2' /=.
+  by rewrite -eq_sem ok_w /= /write_lvals /= hwrite.
+Qed.
 
 (* -------------------------------------------------------------------- *)
 (* Per-construct case lemmas (interface described in the plan above). *)
