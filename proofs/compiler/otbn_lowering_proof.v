@@ -202,7 +202,45 @@ Lemma check_shift_amountP e sa s z w :
   exists2 n, sem_pexpr true (p_globs p) s sa >>= to_word U8 = ok n
     & forall f (a : word U32),
         sem_shift f a w = sem_shift f a (wand n (wrepr U8 31)).
-Admitted.
+Proof.
+  rewrite /check_shift_amount.
+  case en: is_wconst => [ n | ].
+  - case: eqP; last by [].
+    move => n_in_range /Some_inj <-{sa} ok_z ok_w.
+    have hconst := (is_wconstP true (p_globs p) s en).
+    specialize (hconst _).
+    rewrite ok_z /= in hconst.
+    move: ok_w; rewrite hconst => [[?]]; subst w.
+    split; first by [].
+    exists n; first by rewrite ok_z /= hconst.
+    by move=> f a; rewrite -n_in_range.
+  case: {en} e => // - [] // sz' a b.
+  case en: is_wconst => [ n | ]; last by [].
+  case: eqP; last by [].
+  move => ? /Some_inj ?; subst sa n.
+  apply: rbindP => va ok_va.
+  apply: rbindP => vb ok_vb.
+  rewrite /sem_sop2 /=.
+  t_xrbindP=> wa ok_wa wb ok_wb <-{z} ok_w.
+  have hc := (is_wconstP true (p_globs p) s en).
+  specialize (hc _).
+  have ok_vb_abs : sem_pexpr true (p_globs p) s b = ok vb by exact ok_vb.
+  rewrite ok_vb_abs /= in hc.
+  have ok_va_abs : sem_pexpr true (p_globs p) s a = ok va by exact ok_va.
+  have hwa : to_word U8 va = ok (zero_extend U8 wa)
+    by case/to_wordI': ok_wa => sz0 [wa0 [hsz0 -> ->]];
+       rewrite /to_word /= truncate_word_le ?zero_extend_idem //; exact: wsize_le_U8.
+  split.
+  - clear; rewrite {2}/read_e /= !read_eE; SvD.fsetdec.
+  eexists; first by rewrite ok_va_abs /= hwa.
+  move => f x.
+  have hwb : to_word U8 vb = ok (zero_extend U8 wb)
+    by case/to_wordI': ok_wb => sz0 [wb0 [hsz0 -> ->]];
+       rewrite /to_word /= truncate_word_le ?zero_extend_idem //; exact: wsize_le_U8.
+  move: ok_w; rewrite /to_word /= truncate_word_le; last exact: wsize_le_U8.
+  move=> /ok_inj <-.
+  rewrite hc in hwb; move: hwb => /ok_inj ->; rewrite -wand_zero_extend //; exact: wsize_le_U8.
+Qed.
 
 Lemma Hassgn_op2_generic s e1 e2 v1 v2 op2 v ws v' lv s1 (op2' : sopn) :
   sem_pexpr true (p_globs p) s e1 = ok v1 ->
@@ -531,12 +569,12 @@ case: op2 ok_v hlow => //.
     apply sem_correct.
     by rewrite /= -wxor_zero_extend //.
 (* Olsr w - shift, Hassgn_op2_shift incompatible with U32 tin *)
-- exact: OTBN_ADMIT_PROOF.
+- admit.
 (* Olsl o - shift *)
-- exact: OTBN_ADMIT_PROOF.
+- admit.
 (* Oasr w - shift *)
-- exact: OTBN_ADMIT_PROOF.
-Qed.
+- admit.
+Admitted.
 
 (* Wide case: [BN_ADDI/BN_SUBI FG0] (immediate) or [BN_ADD/BN_SUB FG0]
    ([lvs = lnone_cmlz]) / [BN_AND/BN_OR/BN_XOR FG0] ([lvs = lnone_mlz]);
