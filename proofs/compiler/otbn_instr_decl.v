@@ -699,8 +699,7 @@ Definition with_mlz (res : u256) : sem_ltuple (ty_mlz ++ [:: lword256 ]) :=
   (:: MF_of_word res
     , LF_of_word res
     , ZF_of_word res
-    & res
-  ).
+    & res ).
 
 Definition with_cmlz
   (res : u256) (res_unsigned : Z) : sem_ltuple (ty_cmlz ++ [:: lword256 ]) :=
