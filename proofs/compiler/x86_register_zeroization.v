@@ -38,7 +38,9 @@ Definition x86_zeroize_flags
   (err_flags : pp_error_loc) (ox : option var) : cexec (seq fopn_args) :=
   if ox is Some x then
     let e := rvar (mk_var_i x) in
-    let lflags := [seq LLvar (mk_var_i (to_var f)) | f <- rflags ] in
+    let lflags :=
+      [seq LLvar (mk_var_i (to_var f)) | f <- [::OF; CF; SF; PF; ZF]]
+    in
     ok [:: (lflags, Ox86 (CMP reg_size), [:: e; e ]) ]
   else Error err_flags.
 

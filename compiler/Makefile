@@ -15,7 +15,10 @@ CHECKCATS ?= \
 	arm-m4-stack-zero-loop \
 	arm-m4-stack-zero-unrolled \
 	risc-v \
-	CCT CCT-DOIT SCT
+	CCT CCT-DOIT SCT \
+	x86-64-reg-zero \
+	arm-m4-reg-zero \
+	riscv-reg-zero
 
 # --------------------------------------------------------------------
 DESTDIR  ?=
