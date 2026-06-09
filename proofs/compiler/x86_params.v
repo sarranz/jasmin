@@ -9,6 +9,8 @@ Require Import
 Require Import
   linearization
   lowering
+  register_zeroization
+  register_zeroization_utils
   stack_alloc_params
   stack_zeroization
   slh_lowering.
@@ -21,6 +23,7 @@ Require Import
   x86_extra
   x86_instr_decl
   x86_lowering
+  x86_register_zeroization
   x86_stack_zeroization.
 
 Section Section.
@@ -303,6 +306,7 @@ Definition x86_params : architecture_params lowering_options :=
     ap_lap := {| lap_lower_address := fun _ p => ok p |};
     ap_agp := x86_agparams;
     ap_szp := x86_szparams;
+    ap_rzp := x86_rzparams;
     ap_shp := x86_shparams;
     ap_is_move_op := x86_is_move_op;
   |}.

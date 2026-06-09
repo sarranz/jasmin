@@ -68,6 +68,14 @@ let set_stack_zero_strategy s =
 let stack_zero_size = ref None
 let set_stack_zero_size s = stack_zero_size := Some (Annot.ws_of_string s)
 
+(* Register zeroization *)
+module RZM = Register_zeroization_mode
+
+let rzmodes = List.map (fun m -> (RZM.string_of_rzm m, m)) RZM.rzmode_list
+let register_zeroization = ref None
+let set_register_zeroization s =
+  register_zeroization := Some (List.assoc s rzmodes)
+
 let target_arch = ref X86_64
 
 let set_target_arch a =
@@ -171,6 +179,7 @@ let print_strings = function
   | Compiler.DeadCode_RegAllocation      -> "rallocd"  , "dead code after register allocation"
   | Compiler.Linearization               -> "linear"   , "linearization"
   | Compiler.StackZeroization            -> "stackzero", "stack zeroization"
+  | Compiler.RegisterZeroization         -> "regzero"  , "register zeroization"
   | Compiler.Tunneling                   -> "tunnel"   , "tunneling"
   | Compiler.Assembly                    -> "asm"      , "generation of assembly"
 
@@ -243,6 +252,9 @@ let options = [
     "-stack-zero-size",
       Arg.Symbol (List.map fst Annot.ws_strings, set_stack_zero_size),
       " Select stack zeroization size for export functions";
+    "-register-zeroization",
+      Arg.Symbol (List.map fst rzmodes, set_register_zeroization),
+      " Zeroize registers at the end of export functions";
     "-pliveness", Arg.Set print_liveness, " Print liveness information during register allocation"
   ] @  List.map print_option Compiler.compiler_step_list @ List.map stop_after_option Compiler.compiler_step_list
 

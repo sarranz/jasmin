@@ -334,6 +334,10 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
     (get_annot fn).stack_zero_strategy
   in
 
+  let rzm_of_fn fn =
+    Option.default Register_zeroization_mode.rzm_none (get_annot fn).annot_rzm
+  in
+
   (* This implements an analysis returning the set of variables becoming dead
      after each instruction. It is based on the liveness analysis available
      in Liveness. *)
@@ -422,6 +426,7 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
       Compiler.spill_to_mmx;
       Compiler.slh_info;
       Compiler.stack_zero_info = szs_of_fn;
+      Compiler.cp_rzm_of_fn = rzm_of_fn;
       Compiler.dead_vars_ufd;
       Compiler.dead_vars_sfd;
       Compiler.pp_sr;

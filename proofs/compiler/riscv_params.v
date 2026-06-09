@@ -11,6 +11,8 @@ Require Import
   lea
   linearization
   lowering
+  register_zeroization
+  register_zeroization_utils
   stack_alloc_params
   stack_zeroization
   slh_lowering.
@@ -26,6 +28,7 @@ Require Import
   riscv_lowering
   riscv_params_core
   riscv_params_common
+  riscv_register_zeroization
   riscv_stack_zeroization
   riscv_lower_addressing.
 
@@ -281,6 +284,7 @@ Definition riscv_params : architecture_params lowering_options :=
     ap_agp := riscv_agparams;
     ap_lap := riscv_laparams;
     ap_szp := riscv_szparams;
+    ap_rzp := riscv_rzparams;
     ap_shp := riscv_shparams;
     ap_is_move_op := riscv_is_move_op;
   |}.

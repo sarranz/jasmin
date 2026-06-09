@@ -7,6 +7,7 @@ Require Import
 Require
   linearization
   lowering
+  register_zeroization
   stack_alloc_params
   stack_zeroization
   slh_lowering
@@ -69,6 +70,9 @@ Record architecture_params
 
     (* Stack zeroization parameters. See stack_zeroization.v *)
     ap_szp : stack_zeroization.stack_zeroization_params;
+
+    (* Register zeroization parameters. See register_zeroization.v *)
+    ap_rzp : register_zeroization.register_zeroization_params;
 
     (* ------------------------------------------------------------------------ *)
     (* Shared across multiple passes. *)

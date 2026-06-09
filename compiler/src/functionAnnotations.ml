@@ -78,11 +78,24 @@ let process_f_annot loc funname f_cc annot =
     | Some szs, _ -> Some (szs, size)
   in
 
+  let annot_rzm =
+    let mk_rzm = Annot.filter_string_list None Glob_options.rzmodes in
+    let rzm = Annot.ensure_uniq1 "registerzeroization" mk_rzm annot in
+    if rzm <> None && not (FInfo.is_export f_cc) then
+      hierror
+        ~loc:(Lone loc)
+        ~funname
+        ~kind:"unexpected annotation"
+        "registerzeroization only applies to export functions";
+    if Option.is_none rzm then !Glob_options.register_zeroization else rzm
+  in
+
   { retaddr_kind;
     stack_allocation_size = Annot.ensure_uniq1 "stackallocsize" (Annot.pos_int None) annot;
     stack_size            = Annot.ensure_uniq1 "stacksize"      (Annot.pos_int None) annot;
     stack_align           = Annot.ensure_uniq1 "stackalign"     (Annot.wsize None)   annot;
     max_call_depth        = Annot.ensure_uniq1 "calldepth"      (Annot.pos_int None) annot;
     stack_zero_strategy;
+    annot_rzm;
     f_user_annot          = annot;
   }

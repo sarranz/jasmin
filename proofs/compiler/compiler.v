@@ -31,6 +31,7 @@ Require Import
   makeReferenceArguments
   post_unrolling_check
   propagate_inline
+  register_zeroization
   slh_lowering
   remove_globals
   remove_assert
@@ -121,6 +122,7 @@ Variant compiler_step :=
   | DeadCode_RegAllocation      : compiler_step
   | Linearization               : compiler_step
   | StackZeroization            : compiler_step
+  | RegisterZeroization         : compiler_step
   | Tunneling                   : compiler_step
   | Assembly                    : compiler_step.
 
@@ -158,6 +160,7 @@ Definition compiler_step_list := [::
   ; DeadCode_RegAllocation
   ; Linearization
   ; StackZeroization
+  ; RegisterZeroization
   ; Tunneling
   ; Assembly
 ].
@@ -200,6 +203,7 @@ Record compiler_params
   spill_to_mmx     : var -> bool;
   slh_info         : _uprog → funname → seq slh_t * seq slh_t;
   stack_zero_info  : funname -> option (stack_zero_strategy * option wsize);
+  cp_rzm_of_fn     : funname -> rzmode;
   dead_vars_ufd    : _ufun_decl -> instr_info -> Sv.t;
     (* This analyzes a function body and associates to each instruction,
        identified by its instr_info, the set of variables that become dead after
@@ -480,6 +484,11 @@ Definition compiler_back_end entries (pd: sprog) :=
   in
   Let pl := stack_zeroization_lprog aparams.(ap_szp) szs_of_fn pl in
   let pl := cparams.(print_linear) StackZeroization pl in
+  (* register zeroization               *)
+  Let pl :=
+    register_zeroization_lprog cparams.(cp_rzm_of_fn) aparams.(ap_rzp) pl
+  in
+  let pl := cparams.(print_linear) RegisterZeroization pl in
   (* tunneling                         *)
   Let pl := tunnel_program pl in
   let pl := cparams.(print_linear) Tunneling pl in

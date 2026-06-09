@@ -62,6 +62,7 @@ Separate Extraction
   sem_type
   sopn
   expr
+  register_zeroization_mode
   stack_zero_strategy
   lower_spill.spill_uprog
   psem_defs

@@ -12,6 +12,8 @@ Require Import
   lea
   linearization
   lowering
+  register_zeroization
+  register_zeroization_utils
   stack_alloc_params
   stack_zeroization
   slh_lowering.
@@ -25,6 +27,7 @@ Require Import
   arm_instr_decl
   arm_params_common
   arm_lowering
+  arm_register_zeroization
   arm_stack_zeroization.
 
 Section Section.
@@ -324,6 +327,7 @@ Definition arm_params : architecture_params lowering_options :=
     ap_lap := {| lap_lower_address := fun _ p => ok p |};
     ap_agp := arm_agparams;
     ap_szp := arm_szparams;
+    ap_rzp := arm_rzparams;
     ap_shp := arm_shparams;
     ap_is_move_op := arm_is_move_op;
   |}.
