@@ -140,7 +140,7 @@ let pp_arr_slice fmt slice =
   let pp_expr = Printer.pp_expr ~debug:false in
   let ws = non_default_wsize slice.as_arr slice.as_wsize in
   if Stdlib.Int.equal slice.as_len 1 then
-    pp_arr_access pp_var pp_expr fmt Memory_model.Aligned slice.as_access ws
+    pp_arr_access pp_var pp_expr fmt Memory_model.Unaligned slice.as_access ws
       slice.as_arr slice.as_offset
   else
     pp_arr_slice pp_var pp_expr pp_len fmt slice.as_access ws slice.as_arr
@@ -423,10 +423,17 @@ let safe_opn pd asmOp safe opn es =
          let n = Papp2 (Omod (Unsigned, Op_int), n, Pconst (Z.of_int 32)) in
          [ InRange(Pconst (Conv.z_of_cz lo), Pconst (Conv.z_of_cz hi), n) ]
       | Wsize.AllInit(ws, p, i) ->
-        let e = List.nth es (Conv.int_of_nat i) in
-        let y = match e with Pvar y -> y | _ -> assert false in
-        List.flatten
-          (List.init (Conv.int_of_pos p) (fun i -> init_get y Warray_.AAscale ws (Pconst (Z.of_int i)) 1))
+         let array, aa, offset =
+           match List.nth es (Conv.int_of_nat i) with
+           | Pvar y -> y, Warray_.AAscale, icnst
+           | Psub (Warray_.AAdirect, _ws, _len, y, ofs) ->
+              y, Warray_.AAdirect, (fun i -> Papp2 (Oadd Op_int, ofs, icnst (size_of_ws ws * i)))
+           | Psub (Warray_.AAscale, ws', _len, y, ofs) ->
+              y, Warray_.AAdirect, (fun i -> Papp2 (Oadd Op_int, Papp2 (Omul Op_int, ofs, icnst (size_of_ws ws')), icnst (size_of_ws ws * i)))
+           | _ -> assert false
+         in
+           List.flatten
+             (List.init (Conv.int_of_pos p) (fun i -> init_get array aa ws (offset i) 1))
       | NotZero (sz, n) ->
         [ notZero(sz, List.nth es (Conv.int_of_nat n)) ]
 

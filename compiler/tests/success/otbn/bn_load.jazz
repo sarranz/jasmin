@@ -18,8 +18,8 @@ fn bn_load(reg u32 p) -> reg u256 {
     acc = acc ^256u x;
 
     stack u256[1] t;
-    t[0] = acc;
-    x = t[0];
+    t[#aligned 0] = acc;
+    x = t[#aligned 0];
     acc = acc ^256u x;
 
     return acc;

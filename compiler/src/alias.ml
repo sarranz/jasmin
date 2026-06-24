@@ -8,16 +8,23 @@ let hierror = hierror ~kind:"compilation error" ~sub_kind:"stack allocation"
    by catching the exception and reemiting it with more information. *)
 let hierror_no_loc ?funname = hierror ~loc:Lnone ?funname
 
+type range = int * int
 type sub_slice_kind =
-  | Exact
+  | Exact of range
     (* the range is exact *)
   | Sub of Wsize.wsize
     (* the precise offset is not known, we remember that it is a subpart
        and its alignment *)
 
-type slice = { in_var : var ; scope : E.v_scope ; range : int * int; kind : sub_slice_kind }
+type slice = { in_var : var ; scope : E.v_scope ; kind : sub_slice_kind }
 
 type alias = slice Mv.t
+
+(* --------------------------------------------------- *)
+let is_exact s =
+  match s with
+  | Exact _ -> true
+  | Sub _ -> false
 
 (* --------------------------------------------------- *)
 let pp_var fmt x = pp_var ~debug:!Glob_options.debug fmt x
@@ -30,10 +37,9 @@ let pp_range fmt (lo, hi) =
 
 let pp_slice fmt s =
   match s.kind with
-  | Exact ->
-    Format.fprintf fmt "%a%a[%a[" pp_scope s.scope pp_var s.in_var pp_range s.range
-  | Sub ws ->
-   Format.fprintf fmt "%a%a ⊆ [%a[ (aligned on %a)" pp_scope s.scope pp_var s.in_var pp_range s.range PrintCommon.pp_wsize ws
+  | Exact r ->
+    Format.fprintf fmt "%a%a[%a[" pp_scope s.scope pp_var s.in_var pp_range r
+  | Sub ws -> Format.fprintf fmt "⊆  %a%a (aligned on %a)" pp_scope s.scope pp_var s.in_var PrintCommon.pp_wsize ws
 
 let pp_binding fmt x s =
   Format.fprintf fmt "%a ↦ %a;@ " pp_var x pp_slice s
@@ -56,18 +62,18 @@ let align_of_offset lo =
 
 let wsize_min = Utils0.cmp_min wsize_cmp
 
-let range_in_slice (lo, hi) kind s =
+(* the sub slice of [s] described by [kind] *)
+let range_in_slice kind s =
   match kind, s.kind with
-  | Exact, Exact ->
-      let (u, v) = s.range in
+  | Exact (lo, hi), Exact (u, v) ->
       if u + hi <= v
-      then { s with range = u + lo, u + hi }
+      then { s with kind = Exact (u + lo, u + hi) }
       else
         hierror_no_loc "cannot access the subarray [%a[ of %a, the access overflows, your program is probably unsafe"
           pp_range (lo, hi) pp_slice s
-  | Sub ws, Exact ->
-      { s with kind = Sub (wsize_min ws (align_of_offset (fst s.range))) }
-  | Exact, Sub ws ->
+  | Sub ws, Exact (u, _v) ->
+      { s with kind = Sub (wsize_min ws (align_of_offset u)) }
+  | Exact(lo, _hi), Sub ws ->
       { s with kind = Sub (wsize_min ws (align_of_offset lo)) }
   | Sub ws1, Sub ws2 ->
       { s with kind = Sub (wsize_min ws1 ws2) }
@@ -77,7 +83,7 @@ let range_of_var x =
 
 let slice_of_var ?(scope=E.Slocal) in_var =
   let range = range_of_var in_var in
-  { in_var ; scope ; range; kind = Exact }
+  { in_var ; scope ; kind = Exact range }
 
 let rec normalize_var a x =
   match Mv.find x a with
@@ -86,7 +92,7 @@ let rec normalize_var a x =
 and normalize_slice a s =
   if s.scope = E.Sglob then s
   else
-    range_in_slice s.range s.kind (normalize_var a s.in_var)
+    range_in_slice s.kind (normalize_var a s.in_var)
 
 let normalize_gvar a { gv ; gs } =
   let x = L.unloc gv in
@@ -118,10 +124,10 @@ let incl a1 a2 =
 
 (* Partial order on variables, by scope and size *)
 let compare_gvar params x gx y gy =
-  let check_size kind x1 s1 x2 s2 =
+  let check_size kind1 kind2 x1 s1 x2 s2 =
     if not (s1 <= s2) then
-      hierror_no_loc "cannot merge a %s and a local that is larger (%a of size %i, and %a of size %i)"
-        kind pp_var x2 s2 pp_var x1 s1
+      hierror_no_loc "cannot merge a %s and a %s that is larger (%a of size %i, and %a of size %i)"
+        kind1 kind2 pp_var x2 s2 pp_var x1 s1
   in
 
   if V.equal x y
@@ -130,51 +136,80 @@ let compare_gvar params x gx y gy =
     let sx = size_of x.v_ty in
     let sy = size_of y.v_ty in
     match gx, gy with
-    | E.Sglob, E.Sglob -> 
+    | E.Sglob, E.Sglob ->
       hierror_no_loc "cannot merge two globals (%a and %a)" pp_var x pp_var y
-    | E.Sglob, E.Slocal -> 
+    | E.Sglob, E.Slocal ->
       if (Sv.mem y params) then hierror_no_loc "cannot merge a global and a param (%a and %a)" pp_var x pp_var y;
-      check_size "global" y sy x sx;
+      check_size "global" "local" y sy x sx;
       1
-    | E.Slocal, E.Sglob -> 
+    | E.Slocal, E.Sglob ->
       if (Sv.mem x params) then hierror_no_loc "cannot merge a param and a global (%a and %a)" pp_var x pp_var y;
-      check_size "global" x sx y sy;
+      check_size "global" "local" x sx y sy;
       -1
     | E.Slocal, E.Slocal ->
       match Sv.mem x params, Sv.mem y params with
-      | true, true -> 
+      | true, true ->
         hierror_no_loc "cannot merge two params (%a and %a)" pp_var x pp_var y;
-      | true, false -> check_size "param" y sy x sx; 1
-      | false, true -> check_size "param" x sx y sy; -1
+      | true, false -> check_size "param" "local" y sy x sx; 1
+      | false, true -> check_size "param" "local" x sx y sy; -1
       | false, false ->
-        let c = Stdlib.Int.compare sx sy in
-        if c = 0 then
-          match is_ptr x.v_kind, is_ptr y.v_kind with
-          | true, false -> -1
-          | false, true -> 1
-          | _, _ -> V.compare x y
-        else c
+         match is_ptr x.v_kind, is_ptr y.v_kind with
+         | true, false -> check_size "local" "pointer" x sx y sy; -1
+         | false, true -> check_size "local" "pointer" y sy x sx; 1
+         | _, _ ->
+           let c = Stdlib.Int.compare sx sy in
+           if c = 0 then V.compare x y
+           else c
+
+
+let mk_sub sz1 sz2 ws =
+  if sz1 = sz2 then Exact(0,sz2)
+  else Sub ws
 
 (* Precondition: s1 and s2 are normal forms (aka roots) in a *)
+(* We want to unify the slice of s1 and the slice of s2,
+   Assume that [size_of s1.in_var <= size_of s2.in_var]
+   We need to express the position of the slice
+    [{in_var = s1.in_var; kind : Exact (0, size_of s1.in_var)}]
+    in term of [s2.in_var], in such way that s1 and s2 overlap,
+    i.e. correspond to the same memory part.
+  s1.in_var   =               [......   | s1 | ...]
+  s2.in_var   =   [...........|...| s2 | ... | ......]
+*)
+
 (* x1[e1:n1] = x2[e2:n2] *)
 let merge_slices params a s1 s2 =
   let c = compare_gvar params s1.in_var s1.scope s2.in_var s2.scope in
   if c = 0 then
     (* in particular, s1.in_var and s2.in_var are the same variable *)
-    if s1 = s2 || s1.kind <> Exact || s2.kind <> Exact then
+    if s1 <> s2 && is_exact s1.kind && is_exact s2.kind then
+      hierror_no_loc "cannot merge distinct slices of the same array: %a and %a" pp_slice s1 pp_slice s2
+    else
       (* when s1.kind or s2.kind is Sub _, we cannot be precise, we prefer not to fail, and we don't update a *)
       a
-    else
-      hierror_no_loc "cannot merge distinct slices of the same array: %a and %a" pp_slice s1 pp_slice s2
   else
     let s1, s2 = if c < 0 then s1, s2 else s2, s1 in
-    let x = s1.in_var in
-    let y = s2.in_var in
-    let lo = fst s2.range - fst s1.range in
-    let hi = lo + size_of x.v_ty in
-    if lo < 0 || size_of y.v_ty < hi
-    then hierror_no_loc "merging slices %a and %a may introduce invalid accesses; consider declaring variable %a smaller" pp_slice s1 pp_slice s2 pp_var x;
-    Mv.add x { s2 with range = lo, hi; kind = s1.kind } a
+    let sz1 = size_of s1.in_var.v_ty in
+    let sz2 = size_of s2.in_var.v_ty in
+    (* s1 is expressed as a subpart of s2 *)
+    let kind =
+      match s1.kind, s2.kind with
+      | Exact(lo1, _hi1), Exact(lo2, _hi2) ->
+        let lo = lo2 - lo1 in
+        let hi = lo + size_of s1.in_var.v_ty in
+        if lo < 0 || sz2 < hi
+        then hierror_no_loc "merging slices %a and %a may introduce invalid accesses; consider declaring variable %a smaller" pp_slice s1 pp_slice s2 pp_var s1.in_var;
+        Exact(lo, hi)
+      | Exact(lo1,_hi1), Sub ws2 ->
+        let ws = wsize_min ws2 (align_of_offset lo1) in
+        mk_sub sz1 sz2 ws
+      | Sub ws1, Exact(lo2, _hi2) ->
+        let ws = wsize_min ws1 (align_of_offset lo2) in
+        mk_sub sz1 sz2 ws
+      | Sub ws1, Sub ws2 ->
+        mk_sub sz1 sz2 (wsize_min ws1 ws2)
+    in
+    Mv.add s1.in_var { s2 with kind } a
 
 (* Precondition: both maps are normalized *)
 let merge params a1 a2 =
@@ -184,23 +219,22 @@ let merge params a1 a2 =
       merge_slices params a s1 s2
     ) a1 a2
 
-let range_of_asub aa ws len _gv i =
+let range_of_asub aa ws len i =
   match get_ofs aa ws i with
   | None ->
-      let range = (0, arr_size ws len) in
-      let kind =
+      let ws =
         begin match aa with
-        | AAscale -> Sub ws
-        | AAdirect -> Sub U8
+        | AAscale -> ws
+        | AAdirect -> U8
         end
       in
-      range, kind
-  | Some start -> (start, start + arr_size ws len), Exact
+      Sub ws
+  | Some start -> Exact (start, start + arr_size ws len)
 
 let normalize_asub a aa ws len x i =
   let s = normalize_gvar a x in
-  let range, kind = range_of_asub aa ws len x.gv i in
-  range_in_slice range kind s
+  let kind = range_of_asub aa ws len i in
+  range_in_slice kind s
 
 let slice_of_pexpr a =
   function
@@ -234,11 +268,11 @@ let link_array_return params a xs es cc =
         )
         a xs cc
 
-let opn_cc o = 
+let opn_cc o =
   match o with
   | Sopn.Oslh (SLHprotect_ptr_fail _) -> Some [Some 0]
   | Sopn.Opseudo_op(Pseudo_operator.Oswap _) -> Some [Some 1; Some 0]
-  | _ -> None 
+  | _ -> None
 
 let rec analyze_instr_r params cc a =
   function
@@ -254,10 +288,10 @@ let rec analyze_instr_r params cc a =
   | Ccall (xs, fn, es) -> link_array_return params a xs es (cc fn)
   | Csyscall (xs, o, es) -> link_array_return params a xs es (syscall_cc o)
   | Cassgn (x, _, ty, e) -> if is_ty_arr ty then assign_arr params a x e else a
-  | Copn (xs, _, o, es) -> 
+  | Copn (xs, _, o, es) ->
     (* A special case for operators that can return array *)
-    begin match opn_cc o with 
-    | None -> a 
+    begin match opn_cc o with
+    | None -> a
     | Some l -> link_array_return params a xs es l
     end
   | Cassert _ -> a
@@ -282,9 +316,44 @@ and analyze_instr params cc a { i_loc ; i_desc } =
 and analyze_stmt params cc a s =
   List.fold_left (analyze_instr params cc) a s
 
+let is_stack_direct k = k = Stack Direct
+
+let has_overlay annot =
+  Annot.ensure_uniq1
+    "overlay"
+    (Annot.on_attribute ~on_id:(fun _ _ s -> s) ~on_string:(fun _ _ s -> s)
+       (fun loc id -> Annot. error ~loc "attribute for “%s” should be a string" id))
+    annot
+
+let merge_overlay params fd =
+  let vars = vars_c fd.f_body in
+  let process x m =
+    if is_stack_direct x.v_kind then
+      match has_overlay x.v_annot with
+      | Some s -> Ms.modify_def Sv.empty s (Sv.add x) m
+      | None -> m
+    else m in
+  let m = Sv.fold process vars Ms.empty in
+  let a =
+    Ms.fold (fun s sv a ->
+      match Sv.pop sv with
+      | exception Not_found -> a
+      | (x, sv) ->
+          if Sv.is_empty sv then
+            warning Always (Location.i_loc0 x.v_dloc)
+              "“overlay = %s” is applied only to one variable (“%a”), this will have no effect. Is it a typo?"
+              s pp_var x;
+          Sv.fold (fun y a ->
+              let s1 = normalize_var a x in
+              let s2 = normalize_var a y in
+              merge_slices params a s1 s2) sv a) m Mv.empty in
+   a
+
 let analyze_fd cc fd =
   let params = Sv.of_list fd.f_args in
-  try analyze_stmt params cc Mv.empty fd.f_body |> normalize_map
+  try
+    let a = merge_overlay params fd in
+    analyze_stmt params cc a fd.f_body |> normalize_map
   with (HiError e) -> raise (HiError { e with err_funname = Some fd.f_name.fn_name })
 
 (* --------------------------------------------------- *)

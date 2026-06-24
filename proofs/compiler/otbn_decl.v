@@ -310,7 +310,7 @@ Definition internal_call_conv : internal_calling_convention :=
   {|
     icall_reg :=
       [:: X10; X11; X12; X13; X14; X15; X16; X17; X05; X06; X07; X08; X09; X18
-        ; X19; X20; X21; X22; X23; X24; X25; X26; X27; X28; X29; X30; X31 ]
+        ; X19; X20; X21; X22; X23; X24; X25; X26; X27; X28; X29; X30; X31 ];
    icall_regx := [::];
    icall_xreg := [::];
    icall_rflag := [::];

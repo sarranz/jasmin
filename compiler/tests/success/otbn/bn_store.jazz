@@ -12,7 +12,7 @@ fn bn_store(reg u32 p, reg u256 v) {
     [#aligned :u256 p] = v;
 
     stack u256[1] t;
-    t[0] = v;
-    v = t[0];
+    t[#aligned 0] = v;
+    v = t[#aligned 0];
     [#aligned :u256 p] = v;
 }

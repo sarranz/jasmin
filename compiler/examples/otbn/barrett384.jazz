@@ -270,14 +270,14 @@ fn mock() -> reg u256, reg u256 {
     p = data;
 
     reg u256 alo ahi blo bhi mlo mhi ulo uhi;
-    alo = p[0];
-    ahi = p[1];
-    blo = p[2];
-    bhi = p[3];
-    mlo = p[4];
-    mhi = p[5];
-    ulo = p[6];
-    uhi = p[7];
+    alo = p[#aligned 0];
+    ahi = p[#aligned 1];
+    blo = p[#aligned 2];
+    bhi = p[#aligned 3];
+    mlo = p[#aligned 4];
+    mhi = p[#aligned 5];
+    ulo = p[#aligned 6];
+    uhi = p[#aligned 7];
 
     reg u256 chi clo;
     chi, clo = _main(ahi, alo, bhi, blo, mhi, mlo, uhi, ulo);

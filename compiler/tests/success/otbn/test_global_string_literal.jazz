@@ -8,9 +8,9 @@ fn main() -> reg u32 {
     reg ptr u32[2] p;
     p = test[0:8];
 
-    tmp = p[0];
+    tmp = p[#aligned 0];
     res ^= tmp;
-    tmp = p[1];
+    tmp = p[#aligned 1];
     res ^= tmp;
 
     return res;

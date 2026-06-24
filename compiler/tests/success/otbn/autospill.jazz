@@ -14,8 +14,8 @@ export
 fn xor(reg ptr u32[2] arg) -> reg u32 {
   #[nospill]
   reg u32 x y z;
-  x = arg[0];
-  y = arg[1];
+  x = arg[#aligned 0];
+  y = arg[#aligned 1];
   z = x ^ y;
   return z;
 }

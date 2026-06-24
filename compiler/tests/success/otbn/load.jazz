@@ -23,7 +23,7 @@ fn load(reg u32 arg0) {
     [#aligned x] = x;
 
     stack u32[1] s;
-    s[0] = x;
-    x = s[0];
+    s[#aligned 0] = x;
+    x = s[#aligned 0];
     [#aligned x] = x;
 }

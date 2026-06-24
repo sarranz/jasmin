@@ -4,6 +4,10 @@ fail/annotation/x86-64/calldepth.jazz:
 compilation error in function f:
 stack allocation: the maximum call depth is 1 (expected: 2)
 
+fail/annotation/x86-64/returnaddress.jazz:
+
+"fail/annotation/x86-64/returnaddress.jazz", line 3 (2-15): attribute for “returnaddress” should be one of “stack”, “reg”
+
 fail/annotation/x86-64/stackalign.jazz:
 
 "fail/annotation/x86-64/stackalign.jazz", line 4 (0) to line 14 (1):
@@ -309,7 +313,7 @@ fail/array_expansion/x86-64/default_scale_2.jazz:
 
 "fail/array_expansion/x86-64/default_scale_2.jazz", line 10 (8-9):
 compilation error in function main:
-array expansion: cannot expand variable r (alignement must be enforced)
+array expansion: cannot expand variable r (the default scale must be used)
 
 fail/array_expansion/x86-64/default_scale_lv.jazz:
 
@@ -321,7 +325,7 @@ fail/array_expansion/x86-64/default_scale_lv_2.jazz:
 
 "fail/array_expansion/x86-64/default_scale_lv_2.jazz", line 10 (2-3):
 compilation error in function main:
-array expansion: cannot expand variable r (alignement must be enforced)
+array expansion: cannot expand variable r (the default scale must be used)
 
 fail/array_expansion/x86-64/default_scale_param.jazz:
 
@@ -534,6 +538,24 @@ fail/common/not-unrollable-for-loop.jazz:
 compilation error in function main:
 loop unrolling: for loops remain
 
+fail/common/overlay_live.jazz:
+
+"fail/common/overlay_live.jazz", line 10 (6-8):
+compilation error in function overlay_live:
+stack allocation: the region associated to variable t1 is partial
+
+fail/common/overlay_live.jazz:
+
+"fail/common/overlay_live.jazz", line 10 (6-8):
+compilation error in function overlay_live:
+stack allocation: the region associated to variable t1 is partial
+
+fail/common/overlay_live.jazz:
+
+"fail/common/overlay_live.jazz", line 10 (6-8):
+compilation error in function overlay_live:
+stack allocation: the region associated to variable t1 is partial
+
 fail/common/storage_signature_mismatch.jazz:
 
 "fail/common/storage_signature_mismatch.jazz", line 1 (0) to line 4 (1): In function “sum”, return statement variable “r” has storage type “reg”, which differs from declared return storage type “stack”
@@ -548,15 +570,15 @@ fail/common/storage_signature_mismatch.jazz:
 
 fail/common/typealias_annotation_param.jazz:
 
-"fail/common/typealias_annotation_param.jazz", line 5 (29-30): unknown function: `f'
+"fail/common/typealias_annotation_param.jazz", line 4 (32-41): attribute for “stackzerosize” should be a word size
 
 fail/common/typealias_annotation_param.jazz:
 
-"fail/common/typealias_annotation_param.jazz", line 5 (29-30): unknown function: `f'
+"fail/common/typealias_annotation_param.jazz", line 4 (32-41): attribute for “stackzerosize” should be a word size
 
 fail/common/typealias_annotation_param.jazz:
 
-"fail/common/typealias_annotation_param.jazz", line 5 (29-30): unknown function: `f'
+"fail/common/typealias_annotation_param.jazz", line 4 (32-41): attribute for “stackzerosize” should be a word size
 
 fail/common/typealias_arrayelement.jazz:
 
@@ -776,11 +798,13 @@ fail/register_allocation/arm-m4/force_regalloc_conflict_unknown.jazz:
 
 "fail/register_allocation/arm-m4/force_regalloc_conflict_unknown.jazz", line 2 (28-31):
 compilation error:
-register allocation: unknown register “FOO” in force_regalloc_conflict annotation on variable x.4300
+register allocation: unknown register “FOO” in force_regalloc_conflict annotation on variable x.4426
 
 fail/register_allocation/arm-m4/force_regalloc_dup.jazz:
 
-"fail/register_allocation/arm-m4/force_regalloc_dup.jazz", line 2 (4-18): only one of the attribute force_regalloc, force_regalloc is expectedfail/register_allocation/arm-m4/no_mmx.jazz:
+"fail/register_allocation/arm-m4/force_regalloc_dup.jazz", line 2 (4-18): only one of the attribute force_regalloc, force_regalloc is expected
+
+fail/register_allocation/arm-m4/no_mmx.jazz:
 
 compilation error:
 register allocation: unable to allocate tmp (defined at "fail/register_allocation/arm-m4/no_mmx.jazz", line 6 (2-5)): bank “extra (aka mmx)” is empty on this architecture
@@ -810,7 +834,9 @@ register allocation: too many return values according to the ABI (only 2 availab
 
 fail/register_allocation/risc-v/force_regalloc_dup.jazz:
 
-"fail/register_allocation/risc-v/force_regalloc_dup.jazz", line 2 (4-18): only one of the attribute force_regalloc, force_regalloc is expectedfail/register_allocation/x86-64/already_allocated.jazz:
+"fail/register_allocation/risc-v/force_regalloc_dup.jazz", line 2 (4-18): only one of the attribute force_regalloc, force_regalloc is expected
+
+fail/register_allocation/x86-64/already_allocated.jazz:
 
 "fail/register_allocation/x86-64/already_allocated.jazz", line 10 (0-22):
 compilation error:
@@ -874,14 +900,16 @@ register allocation: conflicting variables “z” and “res” must be merged 
 fail/register_allocation/x86-64/force_regalloc_conflict_vs_arch.jazz:
 
 compilation error:
-register allocation: variable q.5143 (declared at line 8) is allocated to register RAX but the force_regalloc_conflict annotation forbids it
+register allocation: variable q.5269 (declared at line 8) is allocated to register RAX but the force_regalloc_conflict annotation forbids it
 
 fail/register_allocation/x86-64/force_regalloc_dup.jazz:
 
-"fail/register_allocation/x86-64/force_regalloc_dup.jazz", line 2 (4-18): only one of the attribute force_regalloc, force_regalloc is expectedfail/register_allocation/x86-64/force_regalloc_self_contradict.jazz:
+"fail/register_allocation/x86-64/force_regalloc_dup.jazz", line 2 (4-18): only one of the attribute force_regalloc, force_regalloc is expected
+
+fail/register_allocation/x86-64/force_regalloc_self_contradict.jazz:
 
 compilation error:
-register allocation: variable x.5249 (declared at line 5) is allocated to register RAX but the force_regalloc_conflict annotation forbids it
+register allocation: variable x.5369 (declared at line 4) is allocated to register RAX but the force_regalloc_conflict annotation forbids it
 
 fail/register_allocation/x86-64/force_regalloc_vs_arch.jazz:
 
@@ -1025,20 +1053,20 @@ speculative execution lowering: Not able to prove that ! __zf__
 fail/stack_allocation/arm-m4/bug_1384.jazz:
 
 "fail/stack_allocation/arm-m4/bug_1384.jazz", line 3 (14-15):
-compilation error:
-variable allocation: cannot allocate in the stack the variable “x_spill” of type int
+compilation error in function spilled_int:
+stack allocation: cannot allocate in the stack the variable “x_spill” of type int
 
 fail/stack_allocation/arm-m4/bug_1384a.jazz:
 
 "fail/stack_allocation/arm-m4/bug_1384a.jazz", line 2 (12-17):
-compilation error:
-variable allocation: cannot allocate in the stack the variable “x” of type int
+compilation error in function stack_int:
+stack allocation: cannot allocate in the stack the variable “x” of type int
 
 fail/stack_allocation/arm-m4/bug_1384b.jazz:
 
 "fail/stack_allocation/arm-m4/bug_1384b.jazz", line 3 (13-21):
-compilation error:
-variable allocation: cannot allocate in the stack the variable “b” of type bool
+compilation error in function stack_bool:
+stack allocation: cannot allocate in the stack the variable “b” of type bool
 
 fail/stack_allocation/arm-m4/cannot_compute_address.jazz:
 
@@ -1066,15 +1094,17 @@ stack allocation: do not know how to compile this array access into a memory acc
 
 fail/stack_allocation/x86-64/bad_alignment.jazz:
 
-"fail/stack_allocation/x86-64/bad_alignment.jazz", line 5 (2-3):
+"fail/stack_allocation/x86-64/bad_alignment.jazz", line 7 (8-9):
 compilation error in function f:
-variable allocation: bad alignment for var a: 32 (expected: 64)
+stack allocation: the access to array b (aligned on 32) could not be proved to be aligned on 64;
+                  if you know what you are doing or want to perform an unaligned access,
+                  you can use “#unaligned”
 
 fail/stack_allocation/x86-64/bad_range_alignment.jazz:
 
 "fail/stack_allocation/x86-64/bad_range_alignment.jazz", line 5 (2-3):
 compilation error in function f:
-variable allocation: bad range alignment for a[0]: a was allocated in slot b[4; 20[, which conflicts with the required alignment (u64)
+stack allocation: bad range alignment for a[0]: a was allocated in slot b[4; 20[, which conflicts with the required alignment (u64)
 
 fail/stack_allocation/x86-64/bug_54.jazz:
 
@@ -1092,7 +1122,7 @@ fail/stack_allocation/x86-64/local_stack_to_pointer.jazz:
 
 "fail/stack_allocation/x86-64/local_stack_to_pointer.jazz", line 1 (0) to line 6 (1):
 compilation error in function f:
-variable allocation: cannot put a reg ptr argument into the local stack
+stack allocation: cannot put a reg ptr argument into the local stack
 
 fail/stack_allocation/x86-64/merge_global_param.jazz:
 
@@ -1225,7 +1255,7 @@ fail/stack_allocation/x86-64/pointer_to_local_stack.jazz:
 
 "fail/stack_allocation/x86-64/pointer_to_local_stack.jazz", line 1 (0) to line 8 (1):
 compilation error in function bad:
-variable allocation: cannot put a reg ptr argument into the local stack
+stack allocation: cannot put a reg ptr argument into the local stack
 
 fail/stack_allocation/x86-64/protect_ptr_arg.jazz:
 
@@ -1282,19 +1312,19 @@ fail/stack_allocation/x86-64/return_ptr_global.jazz:
 
 "fail/stack_allocation/x86-64/return_ptr_global.jazz", line 5 (9-10):
 compilation error in function main:
-variable allocation: returned variable p points to a region that should not escape the local scope: #g:g[0; 4[
+stack allocation: returned variable p points to a region that should not escape the local scope: #g:g[0; 4[
 
 fail/stack_allocation/x86-64/return_ptr_local.jazz:
 
 "fail/stack_allocation/x86-64/return_ptr_local.jazz", line 5 (9-10):
 compilation error in function main:
-variable allocation: returned variable r points to a region that should not escape the local scope: s[0; 4[
+stack allocation: returned variable r points to a region that should not escape the local scope: s[0; 4[
 
 fail/stack_allocation/x86-64/return_subslice.jazz:
 
 "fail/stack_allocation/x86-64/return_subslice.jazz", line 3 (9-10):
 compilation error in function sub:
-variable allocation: returned variable r points to a strict sub-slice of a parameter: p[0; 1[
+stack allocation: returned variable r points to a strict sub-slice of a parameter: p[0; 1[
 
 fail/stack_allocation/x86-64/stack_ptr_in_expr.jazz:
 
@@ -1306,7 +1336,7 @@ fail/stack_allocation/x86-64/unaligned_sub_offset.jazz:
 
 "fail/stack_allocation/x86-64/unaligned_sub_offset.jazz", line 9 (8-9):
 compilation error in function main:
-stack allocation: the access to array r could not be proved to be aligned;
+stack allocation: the access to array r (aligned on 32) could not be proved to be aligned on 64;
                   if you know what you are doing or want to perform an unaligned access,
                   you can use “#unaligned”
 
@@ -1314,7 +1344,7 @@ fail/stack_allocation/x86-64/unaligned_sub_offset_unscaled.jazz:
 
 "fail/stack_allocation/x86-64/unaligned_sub_offset_unscaled.jazz", line 8 (8-9):
 compilation error in function main:
-stack allocation: the access to array r could not be proved to be aligned;
+stack allocation: the access to array r (aligned on 8) could not be proved to be aligned on 64;
                   if you know what you are doing or want to perform an unaligned access,
                   you can use “#unaligned”
 
@@ -1353,14 +1383,7 @@ fail/subarrays/x86-64/unscaled_access.jazz:
 
 "fail/subarrays/x86-64/unscaled_access.jazz", line 14 (2-4):
 compilation error in function main:
-stack allocation: the assignment to array s2 cannot be turned into a nop
-source
-  { region = { slot = s; align = u32; writable = true };
-    zone = [0:40][1 * (uint) i:20] }
-and destination
-  { region = { slot = s; align = u32; writable = true };
-    zone = [0:20] }
-regions are not equal
+stack allocation: cannot allocate in the stack the variable “s2” to “s” with non constant start index
 
 fail/subarrays/x86-64/write_and_read_fails.jazz:
 
@@ -1593,12 +1616,6 @@ fail/x86-64/swap_type_mismatch.jazz:
 
 "fail/x86-64/swap_type_mismatch.jazz", line 2 (18-19): the expression has type u64 instead of u8[8]
 
-fail/x86-64/unaligned_slice_copy.jazz:
-
-"fail/x86-64/unaligned_slice_copy.jazz", line 6 (3-24):
-compilation error in function main:
-variable allocation: bad range alignment for src[0]: src was allocated in slot s[3; 7[, which conflicts with the required alignment (u32)
-
 fail/x86-64/zxspill.jazz:
 
 "fail/x86-64/zxspill.jazz", line 5 (2-14):
@@ -1608,8 +1625,8 @@ Allowed args are:
   [[reg]; [reg; mem (glob allowed)]]
 
 Statistics:
-	Annots:      3
-	Pretyping:  50
+	Annots:      7
+	Pretyping:  47
 	Parsing:     4
 	Typing:      1
-	Compile:   200
+	Compile:   202

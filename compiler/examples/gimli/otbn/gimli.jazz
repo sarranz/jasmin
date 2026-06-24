@@ -17,10 +17,10 @@ param int ROUND_CONSTANT = 0x9e377900;
 
 inline
 fn swap(reg ptr u32[12] state, inline int i, inline int j) -> reg ptr u32[12] {
-    reg u32 x = state[i];
-    reg u32 y = state[j];
-    state[i] = y;
-    state[j] = x;
+    reg u32 x = state[#aligned i];
+    reg u32 y = state[#aligned j];
+    state[#aligned i] = y;
+    state[#aligned j] = x;
 
     return state;
 }
@@ -42,30 +42,30 @@ fn gimli(reg ptr u32[12] state) -> reg ptr u32[12] {
 
     for round = N_ROUND downto 0 {
         for column = 0 to N_COLUMN {
-            reg u32 x = state[0 + column];
+            reg u32 x = state[#aligned 0 + column];
             x = ror32(x, 24);
-            reg u32 y = state[4 + column];
+            reg u32 y = state[#aligned 4 + column];
             y = ror32(y, 9);
-            reg u32 z = state[8 + column];
+            reg u32 z = state[#aligned 8 + column];
 
             reg u32 tmp = z << 1;
             reg u32 a = x ^ tmp;
             reg u32 b = y & z;
             tmp = b << 2;
             a ^= tmp;
-            state[8 + column] = a;
+            state[#aligned 8 + column] = a;
 
             a = y ^ x;
             b = x | z;
             tmp = b << 1;
             a ^= tmp;
-            state[4 + column] = a;
+            state[#aligned 4 + column] = a;
 
             a = z ^ y;
             b = x & y;
             tmp = b << 3;
             a ^= tmp;
-            state[0 + column] = a;
+            state[#aligned 0 + column] = a;
         }
 
         if (round % 4 == 0) {
@@ -79,10 +79,10 @@ fn gimli(reg ptr u32[12] state) -> reg ptr u32[12] {
         }
 
         if (round % 4 == 0) {
-            reg u32 a = state[0];
+            reg u32 a = state[#aligned 0];
             reg u32 b = rc + round;
             a ^= b;
-            state[0] = a;
+            state[#aligned 0] = a;
         }
     }
     return state;

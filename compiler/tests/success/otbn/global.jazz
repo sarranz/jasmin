@@ -10,7 +10,7 @@ fn fourtytwo() -> reg u32 {
     p = g;
 
     reg u32 x;
-    x = p[0];
+    x = p[#aligned 0];
     return x;
 }
 
@@ -20,8 +20,8 @@ fn two() -> reg u32 {
     p = t;
 
     reg u32 x y;
-    x = p[0];
-    y = p[1];
+    x = p[#aligned 0];
+    y = p[#aligned 1];
     x += y;
     return x;
 }
@@ -32,7 +32,7 @@ fn mod4p1() -> reg u32 {
     t_p = t;
 
     reg u32 x;
-    x = t_p[0];
+    x = t_p[#aligned 0];
 
     // Since RISC-V does not allow offset registers, we need to take the address
     // at the element we want to load.
@@ -40,12 +40,12 @@ fn mod4p1() -> reg u32 {
     p = t[u32 0:1];
 
     reg u32 y;
-    y = p[0];
+    y = p[#aligned 0];
 
     p = t[u32 1:1];
 
     reg u32 z;
-    z = p[0];
+    z = p[#aligned 0];
 
     x += y;
     x += z;

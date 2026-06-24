@@ -67,8 +67,8 @@ fn mock() -> reg u256, reg u256 {
     p = data;
 
     reg u256 x y;
-    x = p[0]; // direct load of x from DMEM
-    y = p[1]; // direct load of y from DMEM
+    x = p[#aligned 0]; // direct load of x from DMEM
+    y = p[#aligned 1]; // direct load of y from DMEM
 
     reg u256 rlo rhi;
     rlo, rhi = _main(x, y);
