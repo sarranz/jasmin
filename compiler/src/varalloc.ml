@@ -9,13 +9,18 @@ let hierror = hierror ~kind:"compilation error" ~sub_kind:"stack allocation"
 
 type liverange = G.graph Mint.t
 
+type wsize_constraint = { get_ws : wsize ; trace : Utils.Siloc.t }
+(** An alignment constraint (a wsize) together with the set of locations that require this alignment *)
+
 (* --------------------------------------------------- *)
 (** Invariant: heuristic is always higher than the strict constraint *)
 type alignment_constraint =
-  { ac_strict: wsize
+  { ac_strict: wsize_constraint
   ; ac_heuristic: wsize }
 
-let no_alignment_constraint = { ac_strict = U8; ac_heuristic = U8 }
+let no_alignment_constraint =
+  { ac_strict = { get_ws = U8; trace = Siloc.empty }
+  ; ac_heuristic = U8 }
 
 type param_info = {
   pi_ptr      : var;
@@ -49,7 +54,7 @@ type glob_alloc_oracle_t =
 
 (* --------------------------------------------------- *)
 let incr_liverange r x d : liverange =
-  let s = size_of x.v_ty in
+  let s = max 0 (size_of x.v_ty) in
   let g = Mint.find_default Mv.empty s r in
   let i =
     match Mv.find x g with
@@ -129,10 +134,16 @@ let check_class f_name f_loc ptr_classes args x s =
     hierror ~loc:(Lone f_loc) ~funname:f_name "cannot put a reg ptr argument into the local stack"
 
 (* --------------------------------------------------- *)
-let max_align al ws ac =
+let max_align ~loc al ws ac =
   let max_align ws' = if wsize_lt ws' ws then ws else ws' in
+  let max_constraint c =
+    match wsize_cmp c.get_ws ws with
+    | Datatypes.Lt -> { get_ws = ws ; trace = loc }
+    | Datatypes.Eq -> { c with trace = Siloc.union loc c.trace }
+    | Datatypes.Gt -> c
+  in
   match al with
-  | Aligned -> { ac_strict = max_align ac.ac_strict; ac_heuristic = max_align ac.ac_heuristic }
+  | Aligned -> { ac_strict = max_constraint ac.ac_strict; ac_heuristic = max_align ac.ac_heuristic }
   | Unaligned -> { ac with ac_heuristic = max_align ac.ac_heuristic }
 
 type alignment = alignment_constraint Hv.t
@@ -141,16 +152,16 @@ let classes_alignment (onfun : funname -> param_info option list) (gtbl: alignme
   let ltbl = Hv.create 117 in
   let calls = ref Sf.empty in
 
-  let set al x scope ws =
+  let set ~loc al x scope ws =
     let tbl = if scope = E.Sglob then gtbl else ltbl in
-    Hv.modify_def no_alignment_constraint x (max_align al ws) tbl in
+    Hv.modify_def no_alignment_constraint x (max_align ~loc al ws) tbl in
 
-  let add_ggvar al x ws i =
+  let add_ggvar ~loc al x ws i =
     let x' = L.unloc x.gv in
     if is_gkvar x then
       begin
         let c = Alias.normalize_var alias x' in
-        set al c.in_var c.scope ws;
+        set ~loc al c.in_var c.scope ws;
         if al == Aligned then
          match c.kind with
          | Exact range ->
@@ -163,30 +174,30 @@ let classes_alignment (onfun : funname -> param_info option list) (gtbl: alignme
              hierror ~loc:(Lone (L.loc x.gv)) "@[the access to array %a (aligned on %a) could not be proved to be aligned on %a;@ if you know what you are doing or want to perform an unaligned access,@ you can use “#unaligned”@]"
                (Printer.pp_var ~debug:false) x' PrintCommon.pp_wsize ws' PrintCommon.pp_wsize ws
       end
-    else set al x' E.Sglob ws in
+    else set ~loc al x' E.Sglob ws in
 
-  let rec add_e = function
+  let rec add_e ~loc = function
     | Pconst _ | Pbool _ | Parr_init _  | Pvar _ -> ()
-    | Pget (al, _, ws, x, e) -> add_ggvar al x ws 0; add_e e
-    | Psub (_,_,_,_,e) | Pload (_, _, e) | Papp1 (_, e) -> add_e e
-    | Papp2 (_, e1,e2) -> add_e e1; add_e e2
-    | PappN (_, es) -> add_es es
-    | Pif (_,e1,e2,e3) -> add_e e1; add_e e2; add_e e3
-  and add_es es = List.iter add_e es in
+    | Pget (al, _, ws, x, e) -> add_ggvar ~loc:(Siloc.singleton loc) al x ws 0; add_e ~loc e
+    | Psub (_,_,_,_,e) | Pload (_, _, e) | Papp1 (_, e) -> add_e ~loc e
+    | Papp2 (_, e1,e2) -> add_es ~loc [e1;  e2]
+    | PappN (_, es) -> add_es ~loc es
+    | Pif (_,e1,e2,e3) -> add_es ~loc [ e1; e2; e3 ]
+  and add_es ~loc es = List.iter (add_e ~loc) es in
 
-  let add_lv = function
+  let add_lv ~loc = function
     | Lnone _ | Lvar _ -> ()
-    | Lmem (_, _, _, e) | Lasub (_,_,_,_,e) -> add_e e
-    | Laset(al, _, ws,x,e) -> add_ggvar al (gkvar x) ws 0; add_e e in
+    | Lmem (_, _, _, e) | Lasub (_,_,_,_,e) -> add_e ~loc e
+    | Laset(al, _, ws,x,e) -> add_ggvar ~loc:(Siloc.singleton loc) al (gkvar x) ws 0; add_e ~loc e in
 
-  let add_lvs = List.iter add_lv in
+  let add_lvs ~loc = List.iter (add_lv ~loc) in
 
-  let add_p opi e =
+  let add_p ~loc opi e =
     match opi, e with
-    | None, _ -> add_e e
+    | None, _ -> add_e ~loc e
     | Some pi, Pvar x ->
-       add_ggvar Aligned x pi.pi_align.ac_strict 0;
-       add_ggvar Unaligned x pi.pi_align.ac_heuristic 0
+       add_ggvar ~loc:(Siloc.add loc pi.pi_align.ac_strict.trace) Aligned x pi.pi_align.ac_strict.get_ws 0;
+       add_ggvar ~loc:(Siloc.singleton loc) Unaligned x pi.pi_align.ac_heuristic 0
     | Some pi, Psub(aa,ws,_, x, e) ->
       let i =
         match get_ofs aa ws e with
@@ -194,23 +205,24 @@ let classes_alignment (onfun : funname -> param_info option list) (gtbl: alignme
           (* this error is probably always caught before by the similar code in alias.ml *)
           hierror ~loc:(Lone (L.loc x.gv)) "Cannot compile sub-array %a that has a non-constant start index" (Printer.pp_var ~debug:true) (L.unloc x.gv)
         | Some i -> i in
-      add_ggvar Aligned x pi.pi_align.ac_strict i;
-      add_ggvar Unaligned x pi.pi_align.ac_heuristic i
+      add_ggvar ~loc:(Siloc.add loc pi.pi_align.ac_strict.trace) Aligned x pi.pi_align.ac_strict.get_ws i;
+      add_ggvar ~loc:(Siloc.singleton loc) Unaligned x pi.pi_align.ac_heuristic i
     | _, _ -> assert false in
 
   iter_instr (fun i ->
+    let loc = i.i_loc in
     try match i.i_desc with
-    | Cassgn(x,_,_,e) -> add_lv x; add_e e
-    | Copn(xs,_,_,es) | Csyscall(xs,_,es) -> add_lvs xs; add_es es
+    | Cassgn(x,_,_,e) -> add_lv ~loc x; add_e ~loc e
+    | Copn(xs,_,_,es) | Csyscall(xs,_,es) -> add_lvs ~loc xs; add_es ~loc es
     | Cassert _ -> assert false (* used after remove_assert *)
-    | Cif(e, _, _) | Cwhile (_, _, e, _, _) -> add_e e
+    | Cif(e, _, _) | Cwhile (_, _, e, _, _) -> add_e ~loc e
     | Cfor (FIrange _, _) -> assert false
-    | Cfor (FIrepeat e, _) -> add_e e
+    | Cfor (FIrepeat e, _) -> add_e ~loc e
     | Ccall(xs, fn, es) ->
-      add_lvs xs;
+      add_lvs ~loc xs;
       calls := Sf.add fn !calls;
-      List.iter2 add_p (onfun fn) es
-    with HiError e -> raise (HiError (add_iloc e i.i_loc))
+      List.iter2 (add_p ~loc) (onfun fn) es
+    with HiError e -> raise (HiError (add_iloc e loc))
     ) c;
 
   ltbl, !calls
@@ -220,7 +232,7 @@ let err_var_not_initialized x =
   hierror ~loc:Lnone "variable “%a” (declared at %a) may not be initialized" (Printer.pp_var ~debug:true) x Location.pp_loc x.v_dloc
 
 let get_slot ?var coloring x =
-  let sz = size_of x.v_ty in
+  let sz = max 0 (size_of x.v_ty) in
   try Mv.find x (Mint.find sz coloring)
   with Not_found -> err_var_not_initialized (Option.default x var)
 
@@ -281,7 +293,7 @@ let init_slots pd stack_pointers alias coloring fv =
   !slots, lalloc
 
 (* --------------------------------------------------- *)
-let all_alignment pd (ctbl: alignment) alias params lalloc : param_info option list * wsize Hv.t =
+let all_alignment ~funname ~contract pd (ctbl: alignment) alias params lalloc : param_info option list * wsize Hv.t =
 
   let get_align c =
     try Hv.find ctbl c.Alias.in_var
@@ -298,6 +310,18 @@ let all_alignment pd (ctbl: alignment) alias params lalloc : param_info option l
         | _ | exception Not_found -> assert false in
       let pi_writable = w = Writable in
       let pi_align = get_align c in
+      let pi_align =
+        (* Check the contract for array arguments and propagate to callers *)
+        match Ms.find x.v_name contract with
+        | exception Not_found -> pi_align
+        | ws ->
+          if wsize_cmp ws pi_align.ac_strict.get_ws == Lt then
+            hierror ~funname ~loc:(Lone x.v_dloc) "argument %a is used with %a-bit alignment at:\n%a"
+              (Printer.pp_var ~debug:false) x
+              PrintCommon.pp_wsize pi_align.ac_strict.get_ws
+              (pp_list "@ " L.pp_iloc) (Siloc.elements pi_align.ac_strict.trace);
+          max_align ~loc:Siloc.empty Aligned ws pi_align
+      in
       Some { pi_ptr; pi_writable; pi_align }
     | _ -> assert false in
   let params = List.map doparam params in
@@ -358,7 +382,7 @@ let alloc_local_stack size slots atbl =
 
   let init_slot (x,ws) =
     let pos = round_ws ws !size in
-    let n = size_of x.v_ty in
+    let n = max 0 (size_of x.v_ty) in
     size := pos + n;
     (x,ws,pos) in
 
@@ -421,7 +445,8 @@ let alloc_stack_fd callstyle pd get_info gtbl fd =
   in
   let sao_return = get_returned_params ~funname:fd.f_name.fn_name alias fd.f_args fd.f_ret in
 
-  let sao_params, atbl = all_alignment pd ctbl alias fd.f_args lalloc in
+  let contract = FunctionAnnotations.get_required_alignment fd in
+  let sao_params, atbl = all_alignment ~funname:fd.f_name.fn_name ~contract pd ctbl alias fd.f_args lalloc in
 
   let ra_on_stack =
     match fd.f_cc with
@@ -470,7 +495,9 @@ let alloc_stack_fd callstyle pd get_info gtbl fd =
   let sao_alloc = List.iter (Hv.remove lalloc) fd.f_args; lalloc in
 
   let sao_modify_rsp =
-    sao_size <> 0 || has_syscall fd.f_body ||
+    (* a slot can have size 0, so the condition on [sao_slots] is not redundant
+       with the condition on [sao_size] *)
+    sao_size <> 0 || List.length sao_slots <> 0 || has_syscall fd.f_body ||
       Sf.exists (fun fn -> (get_info fn).sao_modify_rsp) sao_calls in
   let sao = {
     sao_calls;
@@ -496,11 +523,11 @@ let alloc_mem (gtbl: wsize Hv.t) globs =
       let w = Memory_model.LE.encode ws w in
       List.iteri (fun i w -> t.(ofs + i) <- w) w
 
-    | Global.Garr(p, gt) ->
-      let ip = Conv.int_of_pos p in
-      for i = 0 to ip - 1 do
+    | Global.Garr(n, gt) ->
+      let ni = Conv.int_of_cz n in
+      for i = 0 to ni - 1 do
         let w =
-          match Warray_.WArray.get p Aligned Warray_.AAdirect U8 gt (Conv.cz_of_int i) with
+          match Warray_.WArray.get n Aligned Warray_.AAdirect U8 gt (Conv.cz_of_int i) with
           | Ok w -> w
           | _    -> assert false in
         t.(ofs + i) <- w

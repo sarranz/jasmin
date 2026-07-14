@@ -25,7 +25,7 @@ Definition unpickle (n : nat) :=
   nth None [seq some x | x <- enum] n.
 
 Definition pickleK : pcancel pickle unpickle.
-Proof.
+Proof using A.
 move=> x; have xE: x \in enum by apply/count_memPn; rewrite (A x).
 by rewrite /pickle /unpickle (nth_map x) ?(nth_index, index_mem).
 Qed.
@@ -112,11 +112,6 @@ Proof. by move=> hinj heq; apply: (iffP heq) => [| /hinj ] ->. Qed.
 (* Missing Instance in ssreflect for setoid rewrite                     *)
 
 #[global]
-Instance and3_impl_morphism :
-  Proper (Basics.impl ==> Basics.impl ==> Basics.impl ==> Basics.impl) and3 | 1.
-Proof. by move=> ?? h1 ?? h2 ?? h3 [/h1 ? /h2 ? /h3 ?]. Qed.
-
-#[global]
 Instance and3_iff_morphism :
   Proper (iff ==> iff ==> iff ==> iff) and3.
 Proof. by move=> ?? h1 ?? h2 ?? h3; split => -[] /h1 ? /h2 ? /h3. Qed.
@@ -183,8 +178,8 @@ Delimit Scope result_scope with result.
 Open Scope result_scope.
 
 Notation "m >>= f" := (rbind f m) (at level 58, left associativity) : result_scope.
-Notation "'Let' x ':=' m 'in' body" := (m >>= (fun x => body)) (x name, at level 25) : result_scope.
-Notation "'Let:' x ':=' m 'in' body" := (m >>= (fun x => body)) (x strict pattern, at level 25) : result_scope.
+Notation "'Let' x ':=' m 'in' body" := (m >>= (fun x => body)) (x name, at level 25, right associativity) : result_scope.
+Notation "'Let:' x ':=' m 'in' body" := (m >>= (fun x => body)) (x strict pattern, at level 25, right associativity) : result_scope.
 Notation "m >> n" := (rbind (λ _, n) m) (at level 30, right associativity, n at next level) : result_scope.
 
 Lemma bindA eT aT bT cT (f : aT -> result eT bT) (g: bT -> result eT cT) m:
@@ -347,34 +342,6 @@ Qed.
 
 Local Open Scope Z_scope.
 
-Lemma mapM_onth eT aT bT (f: aT → result eT bT) (xs: seq aT) ys n x :
-  mapM f xs = ok ys →
-  onth xs n = Some x →
-  ∃ y, onth ys n = Some y ∧ f x = ok y.
-Proof.
-move => ok_ys.
-case: (leqP (size xs) n) => hsz; first by rewrite (onth_default hsz).
-elim: xs ys ok_ys n hsz.
-- by move => ys [<-].
-move => y xs ih ys' /=; t_xrbindP => z ok_z ys ok_ys <- [| n ] hsz /= ok_y.
-- by exists z; case: ok_y => <-.
-exact: (ih _ ok_ys n hsz ok_y).
-Qed.
-
-Lemma mapM_onth' eT aT bT (f: aT → result eT bT) (xs: seq aT) ys n y :
-  mapM f xs = ok ys →
-  onth ys n = Some y →
-  ∃ x, onth xs n = Some x ∧ f x = ok y.
-Proof.
-move => ok_ys.
-case: (leqP (size ys) n) => hsz; first by rewrite (onth_default hsz).
-elim: xs ys ok_ys n hsz.
-- by move => ys [<-].
-move => x xs ih ys' /=; t_xrbindP => z ok_z ys ok_ys <- [| n ] hsz /= ok_y.
-- by exists x; case: ok_y => <-.
-exact: (ih _ ok_ys n hsz ok_y).
-Qed.
-
 Lemma mapMP {eT} {aT bT: eqType} (f: aT -> result eT bT) (s: seq aT) (s': seq bT) y:
   mapM f s = ok s' ->
   reflect (exists2 x, x \in s & f x = ok y) (y \in s').
@@ -408,18 +375,6 @@ case.
 + by move=> <-; exists y; split=> //; left.
 + move=> Hl; move: (IH _ Hys Hl)=> [y0 [Hy0 Hy0']].
   by exists y0; split=> //; right.
-Qed.
-
-Lemma mapM_In' {aT bT eT} (f: aT -> result eT bT) (s: seq aT) (s': seq bT) y:
-  mapM f s = ok s' ->
-  List.In y s' -> exists2 x, List.In x s & f x = ok y.
-Proof.
-elim: s s'.
-+ by move => _ [<-].
-move => a s ih s'' /=; t_xrbindP => b ok_b s' rec <- {s''} /=.
-case.
-+ by move=> <-; exists a => //; left.
-by move => h; case: (ih _ rec h) => x hx ok_y; eauto.
 Qed.
 
 Lemma mapM_map {aT bT cT eT} (f: aT → bT) (g: bT → result eT cT) (xs: seq aT) :
@@ -505,9 +460,6 @@ Lemma mapM_ok {eT} {A B:Type} (f: A -> B) (l:list A) :
   mapM (eT:=eT) (fun x => ok (f x)) l = ok (map f l).
 Proof. by elim l => //= ?? ->. Qed.
 
-Definition sndM eT aT bT cT (f : bT -> result eT cT) (ab : aT * bT) : result eT (aT * cT) :=
-  Let c := f ab.2 in ok (ab.1, c).
-
 Section FOLDM.
 
   Context (eT aT bT:Type) (f:aT -> bT -> result eT bT).
@@ -516,12 +468,6 @@ Section FOLDM.
     match l with
     | [::]         => Ok eT acc
     | [:: a & la ] => f a acc >>= fun acc => foldM acc la
-    end.
-
-  Fixpoint foldrM (acc : bT) (l : seq aT) :=
-    match l with
-    | [::]         => Ok eT acc
-    | [:: a & la ] => foldrM acc la >>= f a
     end.
 
   Lemma foldM_cat acc l1 l2 :
@@ -828,38 +774,12 @@ Proof.
 Qed.
 Arguments nth_Forall2 [A B R la lb].
 
-Lemma Forall2_forall A B (R : A -> B -> Prop) la lb :
-  List.Forall2 R la lb ->
-  forall a b, List.In (a, b) (zip la lb) ->
-  R a b.
-Proof.
-  elim {la lb} => // a b la lb h _ ih a0 b0 /=.
-  case.
-  + by move=> [<- <-].
-  by apply ih.
-Qed.
-
 Lemma Forall2_impl A B (R1 R2 : A -> B -> Prop) :
   (forall a b, R1 a b -> R2 a b) ->
   forall la lb,
   List.Forall2 R1 la lb ->
   List.Forall2 R2 la lb.
 Proof. by move=> himpl l1 l2; elim; eauto. Qed.
-
-Lemma Forall2_impl_in A B (R1 R2 : A -> B -> Prop) la lb :
-  (forall a b, List.In a la -> List.In b lb -> R1 a b -> R2 a b) ->
-  List.Forall2 R1 la lb ->
-  List.Forall2 R2 la lb.
-Proof.
-  move=> himpl hforall.
-  elim: {la lb} hforall himpl.
-  + by constructor.
-  move=> a b la lb h _ ih himpl.
-  constructor.
-  + by apply himpl; [left; reflexivity..|].
-  apply ih.
-  by move=> ?????; apply himpl; [right..|].
-Qed.
 
 Lemma Forall2_flip A B (R : A -> B -> Prop) la lb :
   List.Forall2 R la lb ->
@@ -911,16 +831,6 @@ Proof.
 Qed.
 Arguments nth_Forall3 [A B C R la lb lc].
 
-Lemma Forall3_forall A B C (R : A -> B -> C -> Prop) la lb lc :
-  Forall3 R la lb lc ->
-  forall a b c, List.In (a, (b, c)) (zip la (zip lb lc)) -> R a b c.
-Proof.
-  elim {la lb lc} => // a b c la lb lc h _ ih a0 b0 c0 /=.
-  case.
-  + by move=> [<- <- <-].
-  by apply ih.
-Qed.
-
 Lemma Forall3_impl A B C (R1 R2 : A -> B -> C -> Prop) :
   (forall a b c, R1 a b c -> R2 a b c) ->
   forall la lb lc,
@@ -945,13 +855,6 @@ Qed.
 
 (* Inversion lemmas *)
 (* -------------------------------------------------------------- *)
-Lemma seq_eq_injL A (m n: seq A) (h: m = n) :
-  match m with
-  | [::] => if n is [::] then True else False
-  | a :: m' => if n is b :: n' then a = b ∧ m' = n' else False
-  end.
-Proof. by subst n; case: m. Qed.
-
 Lemma List_Forall_inv A (P: A → Prop) m :
   List.Forall P m →
   match m with [::] => True | x :: m' => P x ∧ List.Forall P m' end.
@@ -1109,7 +1012,7 @@ Section SameType.
     Variable Heq : forall (x y:T), reflect (x = y) (eqb x y).
 
     Lemma reflect_all2_eqb l1 l2 : reflect (l1 = l2) (all2 eqb l1 l2).
-    Proof.
+    Proof using Heq.
       elim: l1 l2 => [|e1 l1 Hrec1] [|e2 l2] /=; try by constructor.
       by apply (iffP andP) => -[] /Heq -> /Hrec1 ->.
     Defined.
@@ -1148,13 +1051,6 @@ Section Map3.
     | a :: ma', b :: mb', c :: mc' => f a b c :: map3 ma' mb' mc'
     | _, _, _ => [::]
     end.
-
-  Lemma map3E ma mb mc :
-    map3 ma mb mc = map2 (λ ab, f ab.1 ab.2) (zip ma mb) mc.
-  Proof.
-    elim: ma mb mc; first by case.
-    by move => a ma ih [] // b mb [] // c mc /=; f_equal.
-  Qed.
 
 End Map3.
 
@@ -1232,14 +1128,6 @@ Lemma isSome_omap aT bT (f : aT -> bT) (o : option aT) :
   isSome (Option.map f o) = isSome o.
 Proof. by case: o. Qed.
 
-Fixpoint list_to_rev (ub : nat) :=
-  match ub with
-  | O    => [::]
-  | x.+1 => [:: x & list_to_rev x ]
-  end.
-
-Definition list_to ub := rev (list_to_rev ub).
-
 (* is it not just List.flat_map? *)
 Definition conc_map aT bT (f : aT -> seq bT) (l : seq aT) :=
   flatten (map f l).
@@ -1313,12 +1201,12 @@ Section CMP.
 
   Lemma cmp_trans y x z c:
     cmp x y = c -> cmp y z = c -> cmp x z = c.
-  Proof.
+  Proof using C.
     by move=> H1 H2;apply (@cmp_ctrans _ _ C y);rewrite H1 H2 ctransI.
   Qed.
 
   Lemma cmp_refl x : cmp x x = Eq.
-  Proof. by have := @cmp_sym _ _ C x x;case: (cmp x x). Qed.
+  Proof using C. by have := @cmp_sym _ _ C x x;case: (cmp x x). Qed.
 
   Definition cmp_lt x1 x2 := gcmp x1 x2 == Lt.
 
@@ -1557,6 +1445,7 @@ Proof. move=> /P_ltP ? /P_leP ?;apply /P_ltP; Lia.lia. Qed.
 
 (* TODO: when elpi.derive supports it, register Pos.eqb_spec instead *)
 #[only(eqbOK)] derive positive.
+#[only(eqbOK)] derive Z.
 
 HB.instance Definition _ := hasDecEq.Build positive positive_eqb_OK.
 
@@ -1598,6 +1487,21 @@ Proof.
   by rewrite (Z.odd_pow _ _ hn).
 Qed.
 
+(* Variant of [natlike_ind] with conclusion about all integers, not just non-negative ones.
+   In some places, to apply [natlike_ind], one has to first do a case analysis.
+   This case analysis is factored out in this lemma. *)
+Lemma natlike_ind_full (P : Z -> Prop) :
+  (forall x, x <= 0 -> P x) -> (forall x, 0 <= x -> P x -> P (Z.succ x)) ->
+  forall x, P x.
+Proof.
+  move=> hneg ih x.
+  case: (Z.nonpos_nonneg_cases x); move: x.
+  - apply hneg.
+  - apply natlike_ind.
+    + by apply hneg.
+    by apply ih.
+Qed.
+
 (* ** Some Extra tactics
  * -------------------------------------------------------------------- *)
 
@@ -1629,7 +1533,7 @@ Proof.
 Qed.
 
 Lemma lt_nm_n n m :
-  n + m < n = false.
+  (n + m < n) = false.
 Proof.
   rewrite -{2}(addn0 n).
   rewrite ltn_add2l.
@@ -1713,9 +1617,6 @@ Lemma ziotaE p z :
   ziota p z = [seq p + Z.of_nat i | i <- iota 0 (Z.to_nat z)].
 Proof. exact: ziota_recP. Qed.
 
-Lemma ziota0 p : ziota p 0 = [::].
-Proof. done. Qed.
-
 Lemma ziota_neg p z: z <= 0 -> ziota p z = [::].
 Proof. by case: z. Qed.
 
@@ -1733,28 +1634,15 @@ Proof.
   by move=> hz;rewrite Z2Nat.inj_succ // -addn1 iotaD map_cat /= add0n Z2Nat.id.
 Qed.
 
-Lemma ziota_cat p y z: 0 <= y -> 0 <= z ->
-  ziota p y ++ ziota (p + y) z = ziota p (y + z).
-Proof.
-  move=> ? /Z2Nat.id <-; elim: (Z.to_nat _).
-  + by rewrite Z.add_0_r /= cats0.
-  move=> ? hrw; rewrite Nat2Z.inj_succ Z.add_succ_r !ziotaS_cat; last 2 first.
-  + exact: (Z.add_nonneg_nonneg _ _ _ (Zle_0_nat _)).
-  + exact: Zle_0_nat.
-  by rewrite catA hrw Z.add_assoc.
-Qed.
-
 Lemma in_ziota (p z i:Z) : (i \in ziota p z) = ((p <=? i) && (i <? p + z)).
 Proof.
-  case: (ZleP 0 z) => hz.
-  + move: p; pattern z; apply natlike_ind => [ p | {}z {}hz hrec p| //].
-    + by rewrite ziota0 in_nil; case: andP => // -[/ZleP ? /ZltP ?]; Lia.lia.
-    rewrite ziotaS_cons // in_cons; case: eqP => [-> | ?] /=.
-    + by rewrite Z.leb_refl /=; symmetry; apply /ZltP; Lia.lia.
-    by rewrite hrec; apply Bool.eq_iff_eq_true;split=> /andP [/ZleP ? /ZltP ?];
-      (apply /andP;split;[apply /ZleP| apply /ZltP]); Lia.lia.
-  rewrite ziota_neg;last Lia.lia.
-  rewrite in_nil;symmetry;apply /negP => /andP [/ZleP ? /ZltP ?]; Lia.lia.
+  move: p; pattern z; apply natlike_ind_full => {z} [ z hz p | z hz hrec p ].
+  + rewrite ziota_neg // in_nil; symmetry; apply /negP => /andP [/ZleP ? /ZltP ?].
+    by Lia.lia.
+  rewrite ziotaS_cons // in_cons; case: eqP => [-> | ?] /=.
+  + by rewrite Z.leb_refl /=; symmetry; apply /ZltP; Lia.lia.
+  by rewrite hrec; apply Bool.eq_iff_eq_true;split=> /andP [/ZleP ? /ZltP ?];
+    (apply /andP;split;[apply /ZleP| apply /ZltP]); Lia.lia.
 Qed.
 
 Lemma size_ziota p z: size (ziota p z) = Z.to_nat z.
@@ -2009,35 +1897,13 @@ Ltac t_inj_cases :=
   apply/eqP.
 
 (* ------------------------------------------------------------------------- *)
-
-Module Option.
-
-Variant option_spec X A o xs xn : option A -> X -> Prop :=
-| OptionSpecSome : forall a, o = Some a -> option_spec (Some a) (xs a)
-| OptionSpecNone : o = None -> option_spec None xn.
-
-Lemma oappP R A (f : A -> R) x u : option_spec u f x u (oapp f x u).
-Proof. by case: u; constructor. Qed.
-
-Lemma odfltP T (x : T) u : option_spec u id x u (odflt x u).
-Proof. by case: u; constructor. Qed.
-
-Lemma obindP A R (f : A -> option R) u : option_spec u f None u (obind f u).
-Proof. by case: u; constructor. Qed.
-
-Lemma omapP A R (f : A -> R) u :
-  option_spec u (fun x => Some (f x)) None u (Option.map f u).
-Proof. by case: u; constructor. Qed.
-
-End Option.
-
 Notation "'let%opt' x ':=' ox 'in' body" :=
   (if ox is Some x then body else None)
-  (x strict pattern, at level 25).
+  (x strict pattern, at level 25, right associativity).
 
 Notation "'let%opt '_' ':=' ox 'in' body" :=
   (if ox is Some tt then body else None)
-  (at level 25).
+  (at level 25, right associativity).
 
 Lemma obindP aT bT oa (f : aT -> option bT) a (P : Type) :
   (forall z, oa = Some z -> f z = Some a -> P) ->
@@ -2051,11 +1917,6 @@ Definition oassert (b : bool) : option unit :=
 Lemma oassertP {A b a} {oa : option A} :
   (let%opt _ := oassert b in oa) = Some a ->
   b /\ oa = Some a.
-Proof. by case: b. Qed.
-
-Lemma oassertP_isSome {A b} {oa : option A} :
-  isSome (let%opt _ := oassert b in oa) ->
-  b /\ isSome oa.
 Proof. by case: b. Qed.
 
 Lemma isSomeP {A : Type} {oa : option A} :
@@ -2075,15 +1936,6 @@ Lemma cat_inj {T} (a b c d: seq T) :
 Proof.
   elim: a b c d; first by case.
   by move => x a ih [] // y b c d /= /Nat.succ_inj /ih{}ih [] -> /ih[] -> ->.
-Qed.
-
-Lemma cat_inj_head T (x y z : seq T) : x ++ y = x ++ z -> y = z.
-Proof. by move/cat_inj => /(_ erefl) []. Qed.
-
-Lemma cat_inj_tail T (x y z : seq T) : x ++ z = y ++ z -> x = y.
-Proof.
-  move => h; case: (cat_inj _ h); last by [].
-  by rewrite -(Nat.add_cancel_r _ _ (size z)) plusE -!size_cat h.
 Qed.
 
 Lemma map_const_nseq A B (l : list A) (c : B) : map (fun=> c) l = nseq (size l) c.
@@ -2120,7 +1972,7 @@ Definition transn_spec (l : list A) : Prop :=
   Lemma transn_spec_auxP a0 an l :
     R a0 an ->
     transn_spec_aux a0 an l.
-  Proof.
+  Proof using htrans hstep.
     elim: l an => //= an1 l hrec an h0n hnn1.
     apply: hrec.
     apply: (htrans h0n).
@@ -2128,7 +1980,7 @@ Definition transn_spec (l : list A) : Prop :=
   Qed.
 
   Lemma transn_specP l : transn_spec l.
-  Proof.
+  Proof using htrans hstep hrefl.
     case: l => [// | a0 [// | a1 l ?]].
     apply: transn_spec_auxP.
     exact: hstep.
@@ -2142,14 +1994,14 @@ Lemma transn2 a0 a1 a2 :
   Rstep a0 a1 ->
   Rstep a1 a2 ->
   R a0 a2.
-Proof. exact: (hspec [:: _; _; _ ]). Qed.
+Proof using hspec. exact: (hspec [:: _; _; _ ]). Qed.
 
 Lemma transn3 a0 a1 a2 a3 :
   Rstep a0 a1 ->
   Rstep a1 a2 ->
   Rstep a2 a3 ->
   R a0 a3.
-Proof. exact: (hspec [:: _; _; _; _ ]). Qed.
+Proof using hspec. exact: (hspec [:: _; _; _; _ ]). Qed.
 
 Lemma transn4 a0 a1 a3 a2 a4 :
   Rstep a0 a1 ->
@@ -2157,7 +2009,7 @@ Lemma transn4 a0 a1 a3 a2 a4 :
   Rstep a2 a3 ->
   Rstep a3 a4 ->
   R a0 a4.
-Proof. exact: (hspec [:: _; _; _; _; _ ]). Qed.
+Proof using hspec. exact: (hspec [:: _; _; _; _; _ ]). Qed.
 
 Lemma transn5 a0 a1 a3 a2 a4 a5 :
   Rstep a0 a1 ->
@@ -2166,7 +2018,7 @@ Lemma transn5 a0 a1 a3 a2 a4 a5 :
   Rstep a3 a4 ->
   Rstep a4 a5 ->
   R a0 a5.
-Proof. exact: (hspec [:: _; _; _; _; _; _ ]). Qed.
+Proof using hspec. exact: (hspec [:: _; _; _; _; _; _ ]). Qed.
 
 Lemma transn6 a0 a1 a3 a2 a4 a5 a6 :
   Rstep a0 a1 ->
@@ -2176,7 +2028,7 @@ Lemma transn6 a0 a1 a3 a2 a4 a5 a6 :
   Rstep a4 a5 ->
   Rstep a5 a6 ->
   R a0 a6.
-Proof. exact: (hspec [:: _; _; _; _; _; _; _ ]). Qed.
+Proof using hspec. exact: (hspec [:: _; _; _; _; _; _; _ ]). Qed.
 
 End RT_TRANSN.
 

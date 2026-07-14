@@ -87,10 +87,10 @@ Definition on_arr_var A (v:exec value) (f:forall n, WArray.array n -> exec A) :=
   end.
 
 Notation "'Let' ( n , t ) ':=' wdb ',' s '.[' v ']' 'in' body" :=
-  (@on_arr_var _ (get_var wdb s.(evm) v) (fun n (t:WArray.array n) => body)) (at level 25, s at level 0).
+  (@on_arr_var _ (get_var wdb s.(evm) v) (fun n (t:WArray.array n) => body)) (at level 25, s at level 0, right associativity).
 
 Notation "'Let' ( n , t ) ':=' wdb ',' gd ',' s '.[' v ']' 'in' body" :=
-  (@on_arr_var _ (get_gvar wdb gd s.(evm) v) (fun n (t:WArray.array n) => body)) (at level 25, gd at level 0, s at level 0).
+  (@on_arr_var _ (get_gvar wdb gd s.(evm) v) (fun n (t:WArray.array n) => body)) (at level 25, gd at level 0, s at level 0, right associativity).
 
 Section ESTATE_UTILS.
 
@@ -123,7 +123,7 @@ Fixpoint sem_pexpr (s:estate) (e : pexpr) : exec value :=
   | Pconst z => ok (Vint z)
   | Pbool b  => ok (Vbool b)
   | Parr_init ws n =>
-    let len := Z.to_pos (arr_size ws n) in
+    let len := arr_size ws n in
     ok (Varr (WArray.empty len))
   | Pvar v => get_gvar wdb gd s.(evm) v
   | Pget al aa ws x e =>
@@ -193,7 +193,7 @@ Definition write_lval (l : lval) (v : value) (s : estate) : exec estate :=
   | Lasub aa ws len x i =>
     Let (n,t) := wdb, s.[x] in
     Let i := sem_pexpr s i >>= to_int in
-    Let t' := to_arr (Z.to_pos (arr_size ws len)) v in
+    Let t' := to_arr (arr_size ws len) v in
     Let t := @WArray.set_sub n aa ws len t i t' in
     write_var x (@to_val (carr n) t) s
   end.
@@ -289,8 +289,8 @@ End WSW.
 Definition syscall_sem__ := @syscall_sem.exec_syscall_u.
 
 Notation "'Let' ( n , t ) ':=' wdb ',' s '.[' v ']' 'in' body" :=
-  (@on_arr_var _ (get_var wdb s.(evm) v) (fun n (t:WArray.array n) => body)) (at level 25, s at level 0).
+  (@on_arr_var _ (get_var wdb s.(evm) v) (fun n (t:WArray.array n) => body)) (at level 25, s at level 0, right associativity).
 
 Notation "'Let' ( n , t ) ':=' wdb ',' gd ',' s '.[' v ']' 'in' body" :=
-  (@on_arr_var _ (get_gvar wdb gd s.(evm) v) (fun n (t:WArray.array n) => body)) (at level 25, gd at level 0, s at level 0).
+  (@on_arr_var _ (get_gvar wdb gd s.(evm) v) (fun n (t:WArray.array n) => body)) (at level 25, gd at level 0, s at level 0, right associativity).
 

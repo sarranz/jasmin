@@ -17,7 +17,7 @@ Require Import
 Require Import
   lea_proof
   linearization
-  linearization_proof
+  it_linearization_proof
   lowering
   stack_alloc_params_proof
   stack_zeroization_proof.
@@ -207,7 +207,7 @@ Proof.
     by eexists.
   rewrite /= hget /=; t_arm_op.
   eexists; split; first reflexivity.
-  + by move=> z hz; rewrite Vm.setP_neq //; apply /eqP; SvD.fsetdec.
+  + by move=> z hz; rewrite Vm.setP_neq //; apply /eqP; clear -hz; SvD.fsetdec.
   rewrite !add_wordE.
   by rewrite Vm.setP_eq wsub_wnot1 vm_truncate_val_eq.
 Qed.
@@ -224,7 +224,7 @@ Proof.
     by eexists.
   rewrite /= hget /=; t_arm_op.
   eexists; split; first reflexivity.
-  + by move=> z hz; rewrite Vm.setP_neq //; apply /eqP; SvD.fsetdec.
+  + by move=> z hz; rewrite Vm.setP_neq //; apply /eqP; clear -hz; SvD.fsetdec.
   by rewrite Vm.setP_eq vm_truncate_val_eq.
 Qed.
 
@@ -239,7 +239,7 @@ Proof.
   set vrsp := {|vname := nrsp|}; set rsp := {|v_var := vrsp|}.
   set ts' := align_word _ _.
   have := ARMFopnP.smart_subi_sem_fopn_args vi3 (y:= rsp) _ (to_word_get_var hget).
-  move=> /(_ arm_linux_call_conv ntmp sz) [].
+  move=> /(_ ntmp sz) [].
   + by right => /= -[?]; subst ntmp.
   move=> vm1 [] -> heq1 hget1 /=.
   set s1 := with_vm _ _.
@@ -366,10 +366,7 @@ Proof. exists LR; exact: to_identK. Qed.
 
 Definition arm_hloparams : h_lowering_params (ap_lop arm_params).
 Proof.
-  split.
-  - move=> pT sCP p ev opts warn fv lp heq hfv f scs mem scs' mem' va vr hsem.
-    exact: (lower_callP hfv heq hsem).
-  move=> pT sCP E E0 wE rE p ev opts warn fv lp fn heq hfv.
+  split=> pT sCP E E0 wE rE p ev warning fv lp fn heq hfv.
   exact: (it_lower_callP ev hfv heq).
 Qed.
 
@@ -382,7 +379,6 @@ Proof.
   split=> /=.
   + by move=> _ ? _ [<-].
   + move=> _ ? _ [<-] _ fd ->; by exists fd.
-  + by move=> _ ? _ [<-].
   move=> ???? _ ? _ ?? [<-]; exact: (wiequiv_f_eq (scP := sCP_stack)).
 Qed.
 
@@ -990,7 +986,7 @@ End STACK_ZEROIZATION.
 Definition arm_is_move_opP op vx v :
   ap_is_move_op arm_params op
   -> exec_sopn (Oasm op) [:: vx ] = ok v
-  -> List.Forall2 value_uincl v [:: vx ].
+  -> values_uincl v [:: vx ].
 Proof.
   case: op => // -[[] // [mn opt]] /=.
   case: ifP => // hmn /and3P [/negPf hf /negPf hc /negPf hs].

@@ -422,7 +422,7 @@ let safe_opn pd asmOp safe opn es =
          let n = Papp1 (E.uint_of_word sz, n) in
          let n = Papp2 (Omod (Unsigned, Op_int), n, Pconst (Z.of_int 32)) in
          [ InRange(Pconst (Conv.z_of_cz lo), Pconst (Conv.z_of_cz hi), n) ]
-      | Wsize.AllInit(ws, p, i) ->
+      | Wsize.AllInit(ws, n, i) ->
          let array, aa, offset =
            match List.nth es (Conv.int_of_nat i) with
            | Pvar y -> y, Warray_.AAscale, icnst
@@ -433,7 +433,7 @@ let safe_opn pd asmOp safe opn es =
            | _ -> assert false
          in
            List.flatten
-             (List.init (Conv.int_of_pos p) (fun i -> init_get array aa ws (offset i) 1))
+             (List.init (max 0 (Conv.int_of_cz n)) (fun i -> init_get array aa ws (offset i) 1))
       | NotZero (sz, n) ->
         [ notZero(sz, List.nth es (Conv.int_of_nat n)) ]
 
@@ -1431,12 +1431,12 @@ end = struct
 
   let cells_of_array x ofs n =
     let x = L.unloc x in
-    List.init (Conv.int_of_pos n) (fun i -> SafetyVar.AarraySlice (x, U8, ofs + i))
+    List.init (max 0 (Conv.int_of_cz n)) (fun i -> SafetyVar.AarraySlice (x, U8, ofs + i))
 
   let aeval_syscall state sc lvs _es =
     match sc with
     | Syscall_t.RandomBytes (ws, len) ->
-       let n = BinInt.Z.to_pos (Type.arr_size ws len) in
+       let n = Type.arr_size ws len in
        let cells = match lvs with
          | [ Lnone _ ] -> []
          | [ Lvar x ] -> cells_of_array x 0 n
@@ -1624,9 +1624,10 @@ end = struct
           (* We check that if the loop does not exit, then ni_e decreased by
              at least one, unless the loop is specially annotated *)
           let state_o =
-            if has_annot "no_termination_check" ginstr
-            then add_violations state_o [(InProg prog_pt, Termination false)]
-            else check_ni_dec state_o in
+            if has_annot "no_termination_check" ginstr then
+              warning Deprecated ginstr.i_loc "annotation `no_termination_check` is deprecated";
+            if has_annot "ensure_termination" ginstr then check_ni_dec state_o
+            else state_o in
 
           (* We forget the variable storing the initial value of the
              candidate decreasing quantity. *)
@@ -1766,10 +1767,10 @@ end = struct
           (match AbsExpr.aeval_cst_int state.abs e1,
                 AbsExpr.aeval_cst_int state.abs e2 with
           | Some z1, Some z2 ->
-            if z1 = z2 then state else
+            if z2 <= z1 then state else
               let init_i, final_i, op = match d with
-                | UpTo -> assert (z1 < z2); (z1, z2 - 1, fun x -> x + 1)
-                | DownTo -> assert (z1 < z2); (z2, z1 + 1, fun x -> x - 1) in
+                | UpTo -> (z1, z2 - 1, fun x -> x + 1)
+                | DownTo -> (z2, z1 + 1, fun x -> x - 1) in
 
               let rec mk_range i f op =
                 if i = f then [i] else i :: mk_range (op i) f op in

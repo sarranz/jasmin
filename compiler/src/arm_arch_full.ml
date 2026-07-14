@@ -15,7 +15,6 @@ module Arm_core = struct
   type cond = condt
   type asm_op = Arm_instr_decl.arm_op
   type extra_op = Arm_extra.arm_extra_op
-  type lowering_options = Arm_lowering.lowering_options
 
   let arch = Utils.ARM_M4
 
@@ -80,6 +79,8 @@ module Arm_core = struct
     | ARM_op(STR, _) -> true
     | ARM_op(STRB, _) -> true
     | ARM_op(STRH, _) -> true
+    | ARM_op(SXTB, _) -> true
+    | ARM_op(SXTH, _) -> true
     | ARM_op(SUB, _) -> true
     | ARM_op(TST, _) -> true
     | ARM_op(UBFX, _) -> true
@@ -116,8 +117,6 @@ module Arm (Lowering_params : Arm_input) : Arch_full.Core_arch
 
   (* TODO_ARM: r9 is a platform register. (cf. arch_decl)
      Here we assume it's just a variable register. *)
-
-  let lowering_opt = ()
 
   let not_saved_stack = (Arm_params.arm_liparams atoI).lip_not_saved_stack
 

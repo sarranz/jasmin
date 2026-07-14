@@ -222,12 +222,12 @@ Definition wi2i_fi (fi : for_iteration) : cexec (safety_cond * for_iteration) :=
       ok (sc, FIrepeat e)
   end.
 
-Definition wi2i_lvar (ety : extended_type positive) (x : var_i) : cexec var_i :=
+Definition wi2i_lvar (ety : extended_type Z) (x : var_i) : cexec var_i :=
   Let _ := assert (esubtype (etype_of_var m x) ety)
                   (E.ierror_lv (Lvar x)) in
   wi2i_vari x.
 
-Definition wi2i_lv (ety : extended_type positive) (lv : lval) : cexec (safety_cond * lval) :=
+Definition wi2i_lv (ety : extended_type Z) (lv : lval) : cexec (safety_cond * lval) :=
   let s := sign_of_etype ety in
   match lv with
   | Lnone vi ty =>
@@ -295,7 +295,7 @@ Definition wi2i_a_and (a : assertion) :=
   Let e := wi2i_eassert a.2 in
   ok (a.1, aands (rcons (map Pexpr e.1) e.2)).
 
-Context (sigs : funname -> option (list (extended_type positive) * list (extended_type positive))).
+Context (sigs : funname -> option (list (extended_type Z) * list (extended_type Z))).
 
 Definition get_sig f :=
   match sigs f with

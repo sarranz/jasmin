@@ -23,11 +23,6 @@ Require Import
   otbn_instr_decl
   otbn_lowering.
 
-Set Uniform Inductive Parameters.
-Set Implicit Arguments.
-Unset Strict Implicit.
-Unset Printing Implicit Defensive.
-
 Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then remove the line when requiring MathComp >= 2.6 *)
 
 Section PROOF.
@@ -42,20 +37,17 @@ Context
   {sCP : semCallParams}
   (p : prog)
   (ev : extra_val_t)
-  (options : lowering_options)
   (warning : instr_info -> warning_msg -> instr_info)
   (fv : lowering.fresh_vars).
 
 Notation lower_cmd :=
   (lower_cmd
-     (fun _ _ _ => lower_i)
-     options
+     (fun _ _ => lower_i)
      warning
      fv).
 Notation lower_prog :=
   (lower_prog
-     (fun _ _ _ => lower_i)
-     options
+     (fun _ _ => lower_i)
      warning
      fv).
 
@@ -82,7 +74,7 @@ Proof. by rewrite /lower_prog; t_xrbindP=> ? _ <-. Qed.
 
 Lemma lower_prog_funcs lp :
   lower_prog p = ok lp ->
-  map_cfprog (lower_fd (fun _ _ _ => lower_i) options warning fv) (p_funcs p)
+  map_cfprog (lower_fd (fun _ _ => lower_i) warning fv) (p_funcs p)
   = ok (p_funcs lp).
 Proof. by rewrite /lower_prog; t_xrbindP=> fns hfns <-. Qed.
 
@@ -1416,214 +1408,6 @@ Proof.
 Qed.
 
 (* -------------------------------------------------------------------- *)
-
-Section SEM.
-
-Context (p' : prog) (hp' : lower_prog p = ok p').
-
-Let hglob : p_globs p' = p_globs p := lower_prog_globs hp'.
-
-#[ local ]
-Definition Pi (s0 : estate) (i : instr) (s1 : estate) :=
-  forall lc, lower_i i = ok lc -> sem p' ev s0 lc s1.
-
-#[ local ]
-Definition Pi_r (s0 : estate) (i : instr_r) (s1 : estate) :=
-  forall ii, Pi s0 (MkI ii i) s1.
-
-#[ local ]
-Definition Pc (s0 : estate) (c : cmd) (s1 : estate) :=
-  forall lc, lower_cmd c = ok lc -> sem p' ev s0 lc s1.
-
-#[ local ]
-Definition Pfor
-  (oi : option var_i) (rng : seq Z) (s0 : estate) (c : cmd) (s1 : estate) :=
-  forall lc, lower_cmd c = ok lc -> sem_for p' ev oi rng s0 lc s1.
-
-#[ local ]
-Definition Pfun
-  scs0 (m0 : mem) (fn : funname) (vargs : seq value) scs1 (m1 : mem)
-  (vres : seq value) :=
-  sem_call p' ev scs0 m0 fn vargs scs1 m1 vres.
-
-#[ local ]
-Lemma Hskip : sem_Ind_nil Pc.
-Proof. by move=> s lc /lower_cmd_nil ->; apply: (Eskip p' ev). Qed.
-
-#[ local ]
-Lemma Hcons : sem_Ind_cons p ev Pc Pi.
-Proof.
-  move=> s1 s2 s3 i c _ hpi _ hpc lc /lower_cmd_cons [li [lc' [hli hlc' ->]]].
-  exact: (sem_app (hpi _ hli) (hpc _ hlc')).
-Qed.
-
-#[ local ]
-Lemma HmkI : sem_Ind_mkI p ev Pi_r Pi.
-Proof. by move=> ii i s1 s2 _ hi; apply: hi. Qed.
-
-#[ local ]
-Lemma Hassgn : sem_Ind_assgn p Pi_r.
-Proof.
-  move=> s1 s2 x tag ty e v v' he htr hw ii lc hlc.
-  apply: esem_sem.
-  apply: (Hassgn_esem hglob _ hlc).
-  by rewrite /sem_assgn he /= htr /= hw.
-Qed.
-
-#[ local ]
-Lemma Hopn : sem_Ind_opn p Pi_r.
-Proof.
-  move=> s0 s1 tag op lvs es hsem01 ii lc hlc.
-  apply: esem_sem.
-  exact: (Hopn_esem hglob hsem01 hlc).
-Qed.
-
-#[ local ]
-Lemma Hsyscall : sem_Ind_syscall p Pi_r.
-Proof.
-  move=> s1 scs m s2 o xs es ves vs hes ho hw ii lc [<-].
-  apply: sem_seq_ir.
-  apply: Esyscall.
-  - rewrite hglob; exact: hes.
-  - exact: ho.
-  - rewrite hglob; exact: hw.
-Qed.
-
-#[ local ]
-Lemma Hif_true : sem_Ind_if_true p ev Pc Pi_r.
-Proof.
-  move=> s0 s1 e c0 c1 hseme _ hc ii lc /=.
-  t_xrbindP=> c0' hc0' c1' hc1' <-.
-  apply: sem_seq_ir.
-  apply: Eif_true; first by rewrite hglob; exact: hseme.
-  exact: (hc _ hc0').
-Qed.
-
-#[ local ]
-Lemma Hif_false : sem_Ind_if_false p ev Pc Pi_r.
-Proof.
-  move=> s0 s1 e c0 c1 hseme _ hc ii lc /=.
-  t_xrbindP=> c0' hc0' c1' hc1' <-.
-  apply: sem_seq_ir.
-  apply: Eif_false; first by rewrite hglob; exact: hseme.
-  exact: (hc _ hc1').
-Qed.
-
-#[ local ]
-Lemma Hwhile_true : sem_Ind_while_true p ev Pc Pi_r.
-Proof.
-  move=> s0 s1 s2 s3 al c0 e info c1 _ hc0 hseme _ hc1 _ hwhile ii lc /=.
-  t_xrbindP=> c0' hc0' c1' hc1' ?; subst lc.
-  apply: sem_seq_ir.
-  apply: Ewhile_true.
-  - exact: (hc0 _ hc0').
-  - rewrite hglob; exact: hseme.
-  - exact: (hc1 _ hc1').
-  have hrec :
-    lower_i (MkI ii (Cwhile al c0 e info c1))
-    = ok [:: MkI info (Cwhile al c0' e info c1') ].
-  - by rewrite /= hc0' /= hc1'.
-  have := hwhile ii _ hrec.
-  by move=> /sem_seq1_iff /sem_IE.
-Qed.
-
-#[ local ]
-Lemma Hwhile_false : sem_Ind_while_false p ev Pc Pi_r.
-Proof.
-  move=> s0 s1 al c0 e info c1 _ hc0 hseme ii lc /=.
-  t_xrbindP=> c0' hc0' c1' hc1' <-.
-  apply: sem_seq_ir.
-  apply: Ewhile_false; last by rewrite hglob; exact: hseme.
-  exact: (hc0 _ hc0').
-Qed.
-
-#[ local ]
-Lemma Hfor : sem_Ind_for p ev Pi_r Pfor.
-Proof.
-  move=> s0 s1 fi c rn hfi _ hfor ii lc /=.
-  t_xrbindP=> c' hc' <-.
-  apply: sem_seq_ir.
-  apply: Efor; first by rewrite hglob; exact: hfi.
-  exact: (hfor _ hc').
-Qed.
-
-#[ local ]
-Lemma Hfor_nil : sem_Ind_for_nil Pfor.
-Proof. by move=> s0 oi c lc _; apply: EForDone. Qed.
-
-#[ local ]
-Lemma Hfor_cons : sem_Ind_for_cons p ev Pc Pfor.
-Proof.
-  move=> s0 s1 s2 s3 oi v vs c hwrite _ hc _ hfor lc hlc.
-  apply: EForOne.
-  - exact: hwrite.
-  - exact: (hc _ hlc).
-  exact: (hfor _ hlc).
-Qed.
-
-#[ local ]
-Lemma Hcall : sem_Ind_call p ev Pi_r Pfun.
-Proof.
-  move=> s0 scs0 m0 s1 lvs fn args vargs vs hsemargs _ hfun hwrite ii lc [<-].
-  apply: sem_seq_ir.
-  apply: Ecall.
-  - rewrite hglob; exact: hsemargs.
-  - exact: hfun.
-  - rewrite hglob; exact: hwrite.
-Qed.
-
-#[ local ]
-Lemma Hproc : sem_Ind_proc p ev Pc Pfun.
-Proof.
-  move=> scs0 m0 scs1 m1 fn fd vargs vargs' s0 s1 s2 vres vres'.
-  move=> hget htruncargs hinit hwrite _ hc hres htruncres hscs hfin.
-  rewrite /Pfun.
-  have [fd' hlfd hget'] := get_map_cfprog_gen (lower_prog_funcs hp') hget.
-  move: hlfd; rewrite /lower_fd; t_xrbindP=> body hbody ?; subst fd'.
-  apply: EcallRun.
-  - exact: hget'.
-  - exact: htruncargs.
-  - rewrite (lower_prog_extra hp'); exact: hinit.
-  - exact: hwrite.
-  - exact: (hc _ hbody).
-  - exact: hres.
-  - exact: htruncres.
-  - exact: hscs.
-  exact: hfin.
-Qed.
-
-Lemma lower_callP_total
-  (f : funname) scs mem scs' mem' (va vr : seq value) :
-  sem_call p ev scs mem f va scs' mem' vr
-  -> sem_call p' ev scs mem f va scs' mem' vr.
-Proof.
-  exact:
-    (sem_call_Ind
-       Hskip
-       Hcons
-       HmkI
-       Hassgn
-       Hopn
-       Hsyscall
-       Hif_true
-       Hif_false
-       Hwhile_true
-       Hwhile_false
-       Hfor
-       Hfor_nil
-       Hfor_cons
-       Hcall
-       Hproc).
-Qed.
-
-End SEM.
-
-Lemma lower_callP
-  (f : funname) scs mem scs' mem' (va vr : seq value) lp :
-  lower_prog p = ok lp ->
-  sem_call p ev scs mem f va scs' mem' vr
-  -> sem_call lp ev scs mem f va scs' mem' vr.
-Proof. move=> hlp; exact: (lower_callP_total hlp). Qed.
 
 (* -------------------------------------------------------------------- *)
 

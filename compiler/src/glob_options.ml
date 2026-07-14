@@ -21,11 +21,8 @@ let help_intrinsics = ref false
 type color = | Auto | Always | Never
 let color = ref Auto
 
-let lea = ref false
-let set0 = ref false
 let print_stack_alloc = ref false
 let print_export_info_json = ref false
-let introduce_array_copy = ref true
 let introduce_export_renaming = ref true
 let print_dependencies = ref false
 let lazy_regalloc = ref false
@@ -67,6 +64,14 @@ let set_stack_zero_strategy s =
   stack_zero_strategy := Some (List.assoc s stack_zero_strategies)
 let stack_zero_size = ref None
 let set_stack_zero_size s = stack_zero_size := Some (Annot.ws_of_string s)
+
+let callee_saved_strategy_options =
+  [ "tight", CSS_Tight; "pessimistic", CSS_Pessimistic; "optimistic", CSS_Optimistic ]
+
+let callee_saved_strategy = ref CSS_Tight
+
+let set_callee_saved_strategy s =
+  callee_saved_strategy := List.assoc s callee_saved_strategy_options
 
 let target_arch = ref X86_64
 
@@ -198,10 +203,6 @@ let options = [
     "-debug"   , Arg.Set debug         , " Print debug information";
     "-timings" , Arg.Set timings       , " Print a timestamp and elapsed time after each pass";
     "-I"       , Arg.String set_idirs  , "[ident=path] Bind ident to path for from ident require ...";
-    "-lea"     , Arg.Set lea           , " Use lea as much as possible (default is nolea)";
-    "-nolea"   , Arg.Clear lea         , " Try to use add and mul instead of lea";
-    "-set0"     , Arg.Set set0          , " Use [xor x x] to set x to 0 (default is not)";
-    "-noset0"   , Arg.Clear set0        , " Do not use set0 option";
     "-slice"    , Arg.String set_slice  , "[f] Keep function [f] and everything it needs";
     "-checksafety", Arg.Unit set_checksafety, " Automatically check for safety (deprecated)";
     "-safetyparam", Arg.String set_safetyparam,
@@ -219,7 +220,6 @@ let options = [
     "-winsertarraycopy", Arg.Unit (add_warning IntroduceArrayCopy), " Print warning when array copy is introduced";
     "-wduplicatevar", Arg.Unit (add_warning DuplicateVar), " Print warning when two variables share the same name";
     "-wunusedvar", Arg.Unit (add_warning UnusedVar), " Print warning when a variable is not used";
-    "-noinsertarraycopy", Arg.Clear introduce_array_copy, " Do not automatically insert array copy";
     "-noinsertrenaming", Arg.Clear introduce_export_renaming, " Do not automatically insert renaming assignments at export function boundaries";
     "-wall", Arg.Unit enable_all_warnings, " Enable all warnings";
     "-nowarning", Arg.Unit (nowarning), " Do no print warnings";
@@ -231,6 +231,9 @@ let options = [
     "-print-stack-alloc", Arg.Set print_stack_alloc, " Print the results of the stack allocation OCaml oracle";
     "-print-export-info-json", Arg.Set print_export_info_json, " Print information about exported functions in json";
     "-lazy-regalloc", Arg.Set lazy_regalloc, " Allocate variables to registers in program order";
+    "-callee-saved",
+      Arg.Symbol (List.map fst callee_saved_strategy_options, set_callee_saved_strategy),
+      " Configure how callee-saved registers are spilled in export functions";
     "-pall"    , Arg.Unit set_all_print, " Print program after each compilation steps";
     "-print-dependencies", Arg.Set print_dependencies, " Print dependencies and exit";
     "-intel", Arg.Unit (set_syntax `Intel), " Use intel syntax (default is AT&T)"; 

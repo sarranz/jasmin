@@ -19,7 +19,6 @@ module OTBN_core = struct
   type cond = condition
   type asm_op = Otbn_instr_decl.otbn_op
   type extra_op = Otbn_extra.extra_op
-  type lowering_options = Otbn_lowering.lowering_options
 
   let arch = Utils.OTBN
 
@@ -64,7 +63,6 @@ module OTBN (Input : OTBN_input) :
   include OTBN_core
   include Input
 
-  let lowering_opt = ()
   let not_saved_stack = (Otbn_params.liparams atoI).lip_not_saved_stack
   let pp_asm = Pp_otbn.print_prog
 

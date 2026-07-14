@@ -501,11 +501,6 @@ Definition fetch_and_eval (s: asm_state) :=
     eval_instr i.(asmi_i) s
   else type_error.
 
-Definition asmsem1 (s1 s2: asm_state) : Prop :=
-  fetch_and_eval s1 = ok s2.
-
-Definition asmsem : relation asm_state := clos_refl_trans asm_state asmsem1.
-
 (* ---------------------------------------------------------------- *)
 Record asmsem_invariant (x y: asmmem) : Prop :=
   { asmsem_invariant_rip: asm_rip x = asm_rip y
@@ -599,21 +594,13 @@ Proof.
   by move=> _ [<-].
 Qed.
 
-Lemma asmsem1_invariant (s s': asm_state) :
-  asmsem1 s s' →
+Lemma fetch_and_eval_invariant (s s': asm_state) :
+  fetch_and_eval s = ok s' →
   s ≡ s'.
 Proof.
-  rewrite /asmsem1 /fetch_and_eval.
+  rewrite /fetch_and_eval.
   by case: onth => // i /eval_instr_invariant.
 Qed.
-
-Lemma asmsem_invariantP (s s': asm_state) :
-  asmsem s s' →
-  s ≡ s'.
-Proof.
-  by elim/Operators_Properties.clos_refl_trans_ind_left => {s'} // ? ? _ -> /asmsem1_invariant.
-Qed.
-
 
 (* ITree based Semantics *)
 Section ITREE.
@@ -621,7 +608,7 @@ Section ITREE.
 Context {E E0} {wE : with_Error E E0}.
 
 Definition ifetch_and_eval (s: asm_state) : itree E asm_state :=
-  err_result (fun e => (e, tt)) (fetch_and_eval s).
+  iresult (fetch_and_eval s).
 
 Local Notation continue_loop s := (ret (inl s)).
 Local Notation exit_loop s := (ret (inr s)).
@@ -667,7 +654,7 @@ Lemma asmsem_body_nE endpc n s :
 Proof. by case: n. Qed.
 
 Lemma i_asmsem_body endpc s :
-  iasmsem_body endpc s ≅ err_result (pair^~ tt) (asmsem_body endpc s).
+  iasmsem_body endpc s ≅ iresult (asmsem_body endpc s).
 Proof.
   rewrite /iasmsem_body /ifetch_and_eval /asmsem_body; case: eqP => h /=.
   + reflexivity.
@@ -678,7 +665,7 @@ Qed.
 
 Lemma i_asmsem_body_n endpc n s :
     (iter_n (iasmsem_body endpc) n s) ≈
-    (err_result (pair^~ tt) (asmsem_body_n endpc n s)).
+    (iresult (asmsem_body_n endpc n s)).
 Proof.
   elim: n s => /= [ | n hn] s.
   + rewrite i_asmsem_body; case: asmsem_body => [ ins|] /=; reflexivity.
@@ -694,37 +681,6 @@ End ITREE.
 End PROG.
 
 (* -------------------------------------------------------------------- *)
-
-Definition asmsem_trans P s2 s1 s3 :
-  asmsem P s1 s2 -> asmsem P s2 s3 -> asmsem P s1 s3 :=
-  rt_trans _ _ s1 s2 s3.
-
-Variant asmsem_exportcall
-  (p : asm_prog)
-  (fn : funname)
-  (m m' : asmmem)
-  : Prop :=
-  | Asmsem_exportcall :
-    forall (fd : asm_fundef),
-      get_fundef (asm_funcs p) fn = Some fd
-      -> asm_fd_export fd
-      -> check_call_conv fd
-      -> let s := {| asm_m := m
-                   ; asm_f := fn
-                   ; asm_c := asm_fd_body fd
-                   ; asm_ip := 0
-                  |} in
-         let s' := {| asm_m := m'
-                    ; asm_f := fn
-                    ; asm_c := asm_fd_body fd
-                    ; asm_ip := size (asm_fd_body fd)
-                   |} in
-         asmsem p s s'
-      -> (forall r,
-           r \in callee_saved
-           -> preserved_register r m m')
-      -> asmsem_exportcall.
-
 Section ITREE.
 
 Context {E E0} {wE : with_Error E E0}.
@@ -733,9 +689,9 @@ Import MonadNotation.
 Local Open Scope monad_scope.
 
 Definition iasmsem_exportcall (p : asm_prog) (fn : funname) (m : asmmem) :=
-  fd <- ioget (ErrType, tt) (get_fundef (asm_funcs p) fn);;
-  _ <- err_result (fun e => (e, tt)) (assert (asm_fd_export fd) ErrSemUndef);;
-  _ <- err_result (fun e => (e, tt)) (assert (check_call_conv fd) ErrSemUndef);;
+  fd <- ioget ErrType (get_fundef (asm_funcs p) fn);;
+  _ <- iresult (assert (asm_fd_export fd) ErrSemUndef);;
+  _ <- iresult (assert (check_call_conv fd) ErrSemUndef);;
   let s := {| asm_m := m
                    ; asm_f := fn
                    ; asm_c := asm_fd_body fd
@@ -743,7 +699,7 @@ Definition iasmsem_exportcall (p : asm_prog) (fn : funname) (m : asmmem) :=
                   |} in
   s' <- iasmsem p (fn, size (asm_fd_body fd)) s;;
   let m' := s'.(asm_m) in
-  _ <- err_result (fun e => (e, tt))
+  _ <- iresult
          (assert (all (fun x => preserved_registerb x m m') callee_saved) ErrSemUndef);;
   Ret m'.
 

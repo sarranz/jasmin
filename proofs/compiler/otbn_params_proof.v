@@ -20,7 +20,7 @@ Require Import
   sem_one_varmap.
 Require Import
   linearization
-  linearization_proof
+  it_linearization_proof
   lowering
   stack_alloc_params_proof
   stack_zeroization_proof.
@@ -265,7 +265,7 @@ Lemma otbn_smart_addi_sem_fopns (xi : var_i) y imm s (w : wreg) :
     [/\ sem_fopns_args s (smart_addi_fopn xi y imm) = ok (with_vm s vm')
       , vm' =[\ Sv.singleton xi ] evm s
       & get_var true vm' xi = ok (Vword (w + wrepr reg_size imm)%R) ].
-Proof.
+Proof using atoI call_conv sc_sem syscall_state.
   move=> hc hor hget.
   rewrite /smart_addi_fopn /smart_addi
           /otbn_params_core.OTBNFopn_core.smart_addi
@@ -307,7 +307,7 @@ Arguments otbn_smart_addi_sem_fopns xi y imm s w _ _ _ : clear implicits.
 
 Lemma otbn_spec_lip_allocate_stack_frame :
   allocate_stack_frame_correct (ap_lip otbn_params).
-Proof.
+Proof using atoI call_conv sc_sem syscall_state.
   move=> sp_rsp tmp s ts sz htmp hget /=.
   rewrite /lip_allocate_stack_frame /= /allocate_stack_frame /=.
   case: tmp htmp => [tmp [h1 h2] | _] /=.
@@ -330,7 +330,7 @@ Qed.
 
 Lemma otbn_spec_lip_free_stack_frame :
   free_stack_frame_correct (ap_lip otbn_params).
-Proof.
+Proof using atoI call_conv sc_sem syscall_state.
   move=> sp_rsp tmp s ts sz htmp hget /=.
   rewrite /lip_free_stack_frame /= /free_stack_frame /=.
   case: tmp htmp => [tmp [h1 h2] | _] /=.
@@ -363,7 +363,7 @@ Lemma otbn_smart_subi_sem_fopns (xi : var_i) y imm s (w : wreg) :
     [/\ sem_fopns_args s (smart_subi_fopn xi y imm) = ok (with_vm s vm')
       , vm' =[\ Sv.singleton xi ] evm s
       & get_var true vm' xi = ok (Vword (w - wrepr reg_size imm)%R) ].
-Proof.
+Proof using atoI call_conv sc_sem syscall_state.
   move=> hc hor hget.
   rewrite /smart_subi_fopn /smart_subi
           /otbn_params_core.OTBNFopn_core.smart_subi
@@ -533,21 +533,21 @@ Proof.
 Qed.
 
 Lemma otbn_smart_addi_correct : ladd_imm_correct_aux smart_addi_fopn.
-Proof.
+Proof using atoI call_conv sc_sem syscall_state.
   move=> [[_ xn] xii] x2 s w ofs /= -> hne hget.
   apply: otbn_smart_addi_sem_fopns hget => //.
   by right => h; exact (hne h).
 Qed.
 
 Lemma otbn_lstores_correct : lstores_correct (ap_lip otbn_params).
-Proof.
+Proof using atoI call_conv sc_sem syscall_state.
   apply/lstores_imm_dfl_correct.
   + by apply otbn_lstore_correct.
   apply otbn_smart_addi_correct.
 Qed.
 
 Lemma otbn_lloads_correct : lloads_correct (ap_lip otbn_params).
-Proof.
+Proof using atoI call_conv sc_sem syscall_state.
   apply/lloads_imm_dfl_correct.
   + by apply otbn_lload_correct.
   apply otbn_smart_addi_correct.
@@ -590,9 +590,8 @@ Proof. exists X29; exact: to_identK. Qed.
 
 Definition otbn_hloparams : h_lowering_params (ap_lop otbn_params).
 Proof.
-  split=> *;
-    [ by apply: lower_callP; eassumption
-    | by apply: it_lower_callP; eassumption ].
+  split=> *; exact: it_lower_callP.
+  Unshelve. all: done.
 Qed.
 
 (* -------------------------------------------------------------------------- *)
@@ -603,7 +602,6 @@ Proof.
   split=> /=.
   + exact: lower_addressing_prog_invariants.
   + exact: lower_addressing_fd_invariants.
-  + exact: lower_addressing_progP.
   by move=> > /it_lower_addressing_progP.
 Qed.
 
@@ -962,7 +960,7 @@ Qed.
    cf. riscv_params_proof.v assemble_add_large_imm_correct. *)
 Lemma otbn_assemble_SUBI_correct :
   assemble_extra_correct (ap_agp otbn_params) SUBI.
-Proof.
+Proof using atoI call_conv sc_sem syscall_state.
   move=> rip ii lvs args m xs ys m' s ops ops'.
   move=> hrex hexec hwle hops hmap hlom.
   move: hops; rewrite /to_asm /= /assemble_extra /assemble_SUBI.
@@ -1208,7 +1206,7 @@ Admitted.
 
 Lemma otbn_assemble_extra_op op :
   assemble_extra_correct (ap_agp otbn_params) op.
-Proof.
+Proof using atoI call_conv sc_sem syscall_state.
   case: op.
   + exact: otbn_assemble_set0_correct.
   + exact: otbn_assemble_MOV_correct.

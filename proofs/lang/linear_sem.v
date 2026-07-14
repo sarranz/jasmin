@@ -15,6 +15,7 @@ From Coq Require Import ZArith Utf8.
 Import Relations.
 Require oseq.
 Require Import while it_sems_core psem fexpr_sem compiler_util label one_varmap linear sem_one_varmap mix_to_small_steps.
+Require Import xrutt xrutt_facts.
 
 Import Memory.
 
@@ -117,6 +118,9 @@ Definition sem_fopn_args (p : fopn_args) (s: estate) :=
 
 Definition sem_fopns_args := foldM sem_fopn_args.
 
+Definition fn_is_export (fn : funname) : bool :=
+  if get_fundef P.(lp_funcs) fn is Some fd then fd.(lfd_export) else false.
+
 Definition eval_instr (i : linstr) (s1: lstate) : exec lstate :=
   match li_i i with
   | Lopn xs o es =>
@@ -141,6 +145,7 @@ Definition eval_instr (i : linstr) (s1: lstate) : exec lstate :=
     Let s' := write_lvals true [::] s (to_lvals sig.(scs_vout)) vs in
     ok (lnext_pc (lset_estate' s1 s'))
   | Lcall OnStack d =>
+    Let _ := assert (~~ fn_is_export d.1) ErrSemUndef in
     let vrsp := v_var (vid (lp_rsp P)) in
     Let sp := get_var true s1.(lvm) vrsp >>= to_pointer in
     let nsp := (sp - wrepr Uptr (wsize_size Uptr))%R in
@@ -150,6 +155,7 @@ Definition eval_instr (i : linstr) (s1: lstate) : exec lstate :=
     Let m := write s1.(lmem) Aligned nsp p in
     eval_jump d (lset_mem_vm s1 m vm)
   | Lcall (InReg r) d =>
+    Let _ := assert (~~ fn_is_export d.1) ErrSemUndef in
     Let lbl := get_label_after_pc s1 in
     Let p := rencode_label labels (lfn s1, lbl) in
     Let vm := set_var true s1.(lvm) r (Vword p) in
@@ -188,113 +194,6 @@ Definition step (s: lstate) : exec lstate :=
     eval_instr i s
   else type_error.
 
-Definition lsem1 (s1 s2: lstate) : Prop :=
-  step s1 = ok s2.
-
-Definition lsem : relation lstate := clos_refl_trans lstate lsem1.
-
-Lemma lsem_ind (Q: lstate → lstate → Prop) :
-  (∀ s, Q s s) →
-  (∀ s1 s2 s3, lsem1 s1 s2 → lsem s2 s3 → Q s2 s3 → Q s1 s3) →
-  ∀ s1 s2, lsem s1 s2 → Q s1 s2.
-Proof.
-  move=> R S s1 s2 H; apply clos_rt_rt1n in H.
-  specialize (λ s1 s2 s3 X Y, S s1 s2 s3 X (clos_rt1n_rt _ _ _ _ Y)).
-  by elim: H.
-Qed.
-
-Lemma lsem_step s2 s1 s3 :
-  lsem1 s1 s2 →
-  lsem s2 s3 →
-  lsem s1 s3.
-Proof.
-  by move=> H; apply: rt_trans; apply: rt_step.
-Qed.
-
-Lemma lsem_step_end s2 s1 s3 :
-  lsem s1 s2 →
-  lsem1 s2 s3 →
-  lsem s1 s3.
-Proof.
-  move => h12 h23; apply: rt_trans; first exact: h12.
-  exact: rt_step.
-Qed.
-
-Definition lsem_trans s2 s1 s3 :
-  lsem s1 s2 -> lsem s2 s3 -> lsem s1 s3 :=
-  rt_trans _ _ s1 s2 s3.
-
-Lemma lsem_ind_r (Q: lstate → lstate → Prop) :
-  (∀ s, Q s s) →
-  (∀ s1 s2 s3, lsem s1 s2 → lsem1 s2 s3 → Q s1 s2 → Q s1 s3) →
-  ∀ s1 s2, lsem s1 s2 → Q s1 s2.
-Proof.
-  move=> R S s1 s2 H; apply clos_rt_rtn1 in H.
-  specialize (λ s1 s2 s3 X Y, S s1 s2 s3 (clos_rtn1_rt _ _ _ _ X) Y).
-  by elim: H => // s2' s3' H12 H23 Q12; apply: (S s1 s2' s3' H23 H12 Q12).
-Qed.
-
-Lemma lsem1_fun s1 s2 s3 :
-  lsem1 s1 s2 ->
-  lsem1 s1 s3 ->
-  s2 = s3.
-Proof.
-  by rewrite /lsem1 => ->; t_xrbindP.
-Qed.
-
-Lemma lsem_disj1 s1 s2 s3 :
-  lsem1 s1 s2 ->
-  lsem s1 s3 ->
-  (s1 = s3) \/ lsem s2 s3.
-Proof.
-  move => H12 H13; move: s1 s3 H13 s2 H12.
-  apply: lsem_ind; first by left.
-  move => s1 s2 s3 H12 H23 _ s2' H12'.
-  by right; rewrite (lsem1_fun H12' H12).
-Qed.
-
-Lemma lsem_disj s1 s2 s3 :
-  lsem s1 s2 ->
-  lsem s1 s3 ->
-  lsem s2 s3 \/ lsem s3 s2.
-Proof.
-  move => Hp12; move: s1 s2 Hp12 s3.
-  apply: lsem_ind; first by left.
-  move => s1 s2 s2' H1p12 Hp22' IHdisj s3 Hp13.
-  have:= (lsem_disj1 H1p12 Hp13).
-  case; last by apply: IHdisj.
-  by move => <-; right; apply: (lsem_trans _ Hp22'); apply: rt_step.
-Qed.
-
-Lemma lsem_split_start a z :
-  lsem a z →
-  a = z ∨ exists2 b, lsem1 a b & lsem b z.
-Proof.
-  case/clos_rt_rt1n_iff; first by left.
-  by move => b{}z ab /clos_rt_rt1n_iff bz; right; exists b.
-Qed.
-
-(* Linear execution state is final when it reaches the point after the last instruction. *)
-Definition lsem_final (s: lstate) : Prop :=
-  exists2 fd, get_fundef (lp_funcs P) (lfn s) = Some fd & lpc s = size fd.(lfd_body).
-
-Lemma lsem_final_nostep (s s': lstate) :
-  lsem_final s →
-  ¬ lsem1 s s'.
-Proof.
-  rewrite /lsem1 /step /find_instr => - [] fd -> h.
-  by rewrite oseq.onth_default // -h.
-Qed.
-
-Lemma lsem_final_stutter (s s': lstate) :
-  lsem s s' →
-  lsem_final s →
-  s' = s.
-Proof.
-  elim/lsem_ind; first by [].
-  by clear => s s' ? k _ _ /lsem_final_nostep /(_ k).
-Qed.
-
 Definition ls_export_initial scs m vm fn :=
   {|
     lscs := scs;
@@ -303,23 +202,6 @@ Definition ls_export_initial scs m vm fn :=
     lfn := fn;
     lpc := 0;
   |}.
-
-Definition ls_export_final scs m vm fn fd :=
-  {|
-    lscs := scs;
-    lmem := m;
-    lvm := vm;
-    lfn := fn;
-    lpc := size (lfd_body fd);
-  |}.
-
-Variant lsem_exportcall (scs:syscall_state_t) (m: mem) (fn: funname) (vm: Vm.t) (scs':syscall_state_t) (m': mem) (vm': Vm.t) : Prop :=
-| Lsem_exportcall (fd: lfundef) of
-    get_fundef P.(lp_funcs) fn = Some fd
-  & lfd_export fd
-  & lsem (ls_export_initial scs m vm fn) (ls_export_final scs' m' vm' fn fd)
-  & vm =[ callee_saved ] vm'
-.
 
 (* ----------------------------------------------------------------- *)
 (* ITree based Semantics                                             *)
@@ -354,19 +236,6 @@ Qed.
 
 Definition lsem_n cond (s:lstate) (s':lstate) :=
   exists n, lsem_body_n cond n s = ok (inl s').
-
-Lemma lsem_n_lsem cond s s' :
-  lsem_n cond s s' ->
-  lsem s s'.
-Proof.
-  move=> [n]; elim: n s => /= [ | n ih] s.
-  + by move=> [<-]; apply rt_refl.
-  t_xrbindP => ins.
-  rewrite /lsem_body; case:ifP => _.
-  2: by move=> [<-].
-  t_xrbindP => s1 hstep <- /ih.
-  apply: lsem_step hstep.
-Qed.
 
 Lemma lsem_n_trans s2 s1 s3 cond :
   lsem_n cond s1 s2 -> lsem_n cond s2 s3 -> lsem_n cond s1 s3.
@@ -411,7 +280,7 @@ Section SMALL_STEP.
 Context {E E0} {wE : with_Error E E0}.
 
 Definition istep (s: lstate) : itree E lstate :=
-  iresult (to_estate s) (step s).
+  iresult (step s).
 
 Import MonadNotation.
 Local Open Scope monad_scope.
@@ -421,14 +290,14 @@ Definition ilsem (cond : lstate -> bool) (s:lstate) :=
 
 Definition ilsem_exportcall (fn: funname) (es:estate) :=
   let s := (ls_export_initial (escs es) (emem es) (evm es) fn) in
-  fd <-ioget (ErrType, tt) (get_fundef P.(lp_funcs) fn);;
-  _ <- iresult (to_estate s) (assert (lfd_export fd) ErrSemUndef);;
+  fd <-ioget ErrType (get_fundef P.(lp_funcs) fn);;
+  _ <- iresult (assert (lfd_export fd) ErrSemUndef);;
   s' <- ilsem (endpc fn) s;;
   let vm' := s'.(lvm) in
-  _ <- iresult (to_estate s') (assert (all (fun x => value_eqb (evm es).[x] vm'.[x]) (Sv.elements callee_saved)) ErrSemUndef);;
+  _ <- iresult (assert (all (fun x => value_eqb (evm es).[x] vm'.[x]) (Sv.elements callee_saved)) ErrSemUndef);;
   Ret (to_estate s').
 
-Lemma i_lsem_body cond s : while_body cond istep s ≅ iresult (to_estate s) (lsem_body cond s).
+Lemma i_lsem_body cond s : while_body cond istep s ≅ iresult (lsem_body cond s).
 Proof.
   rewrite /while_body /lsem_body; case: ifP => h /=; last reflexivity.
   rewrite /istep.
@@ -439,7 +308,7 @@ Qed.
 
 Lemma i_lsem_body_n cond n s :
   iter_n (while_body cond istep) n s ≈
-    err_result (pair^~ tt) (lsem_body_n cond n.+1 s).
+    iresult (lsem_body_n cond n.+1 s).
 Proof.
   rewrite /=; elim: n s => /= [ | n hn] s.
   + rewrite i_lsem_body. case: (lsem_body cond s) => [ins | e] /=; last by reflexivity.
@@ -497,10 +366,16 @@ Definition is_call (s : lstate) :=
     else None
   else None.
 
+Definition check_call (s s'' : lstate) :=
+  (lfn s'' == lfn s) && (lpc s'' == (lpc s).+2). (* We jump the call and the label after the call *)
+
 Definition mix_ilstep s :=
   s' <- istep (E:=CallE funname lstate +' E) s;;
   match is_call s with
-  | Some fn => trigger_inl1 (Call fn s')
+  | Some fn =>
+    s'' <- trigger_inl1 (Call fn s');;
+    if check_call s s'' then Ret s''
+    else throw ErrSemUndef
   | None => Ret s'
   end.
 
@@ -510,24 +385,32 @@ Definition mix_ilsteps cond s :=
 Definition in_fn fn s :=
   (fn == s.(lfn)) && endpc fn s.
 
+Definition handle_call_cond fn :=
+  if fn_is_export fn then endpc fn else in_fn fn.
+
 Definition handle_call (T : Type) (c : CallE funname lstate T) :=
   match c in (CallE _ _ T0) return (itree (CallE funname lstate +' E) T0) with
-  | Call fn s => mix_ilsteps (in_fn fn) s
+  | Call fn s => mix_ilsteps (handle_call_cond fn) s
   end.
+
+(* intepreter of recCall events for functions, giving us the recursive
+   semantics of functions *)
+Definition mix_ilsem_fun (fn : funname) (ls : lstate) : itree E lstate :=
+  mrec handle_call (Call fn ls).
 
 Definition mix_ilsem cond s :=
   interp_mrec handle_call (mix_ilsteps cond s).
 
 Definition mix_ilsem_exportcall (fn: funname) (es:estate) :=
   let s := (ls_export_initial (escs es) (emem es) (evm es) fn) in
-  fd <-ioget (ErrType, tt) (get_fundef P.(lp_funcs) fn);;
-  _ <- iresult (to_estate s) (assert (lfd_export fd) ErrSemUndef);;
-  s' <- mix_ilsem (endpc fn) s;;
+  fd <-ioget ErrType (get_fundef P.(lp_funcs) fn);;
+  _ <- iresult (assert (lfd_export fd) ErrSemUndef);;
+  s' <- mix_ilsem_fun fn s;;
   let vm' := s'.(lvm) in
-  _ <- iresult (to_estate s') (assert (all (fun x => value_eqb (evm es).[x] vm'.[x]) (Sv.elements callee_saved)) ErrSemUndef);;
+  _ <- iresult (assert (all (fun x => value_eqb (evm es).[x] vm'.[x]) (Sv.elements callee_saved)) ErrSemUndef);;
   Ret (to_estate s').
 
-Lemma mix_ilsteps_eq cond s : mix_ilsteps cond s ≈ mix_steps istep is_call cond s.
+Lemma mix_ilsteps_eq cond s : mix_ilsteps cond s ≈ mix_steps istep is_call check_call cond s.
 Proof.
   apply eutt_iter' with eq => // {}s _ <-.
   rewrite /while_body; case: ifP => _.
@@ -543,22 +426,71 @@ Proof.
 Qed.
 
 Lemma mix_ilsem_ilsem fn s :
-  mix_ilsem (endpc fn) s ≈ ilsem (endpc fn) s.
+  xrutt.xrutt (core_logics.errcutoff (is_error wE)) core_logics.nocutoff rutt_extras.RPre_eq rutt_extras.RPost_eq
+    eq (mix_ilsem (endpc fn) s) (ilsem (endpc fn) s).
 Proof.
-  have -> : mix_ilsem (endpc fn) s ≈ mix_sem istep in_fn is_call (endpc fn) s.
+  have -> : mix_ilsem (endpc fn) s ≈ mix_sem istep handle_call_cond is_call check_call (endpc fn) s.
   + apply Proper_interp_mrec.
     + by move=> _ [] fn' {}s /=; apply mix_ilsteps_eq.
     by apply mix_ilsteps_eq.
   have -> : ilsem (endpc fn) s ≈ ss_sem istep (endpc fn) s by reflexivity.
-  apply mix_sem_ss_sem.
-  move=> {}s; rewrite /istep; case:step => [s' | e] /=.
-  + apply eqit_Ret; split => //; case: is_call => // ?? /andP [] /eqP ->.
-    by rewrite /endpc eqxx; case: eqP => // ->.
-  apply eqit_Vis => -[].
+  apply: mix_sem_ss_sem => {}s; rewrite /istep.
+  case h: step => [s'|e].
+  - apply eqit_Ret; split => //.
+    case h': is_call => [fn'|//] s''.
+    rewrite /handle_call_cond.
+    suff -> : fn_is_export fn' = false.
+    - by move=> /andP [/eqP ->]; rewrite /endpc eqxx; case: eqP => [->|].
+    move: h' h.
+    rewrite /step /is_call /eval_instr.
+    case: find_instr => [[ii ir] | //] //=; case: ir => //= l r [<-].
+    by case: l => [|r0|] //=; t_xrbindP=> /negPf ->.
+  by apply eqit_Vis => -[].
 Qed.
+
+Lemma unfold_mix_ilsteps cond s :
+  mix_ilsteps cond s ≈
+    (ins <- while_body cond mix_ilstep s;;
+     match ins with
+     | inl s' => mix_ilsteps cond s'
+     | inr s'  => Ret s'
+     end)%itree.
+Proof.
+  rewrite {1}/mix_ilsteps {1}/while unfold_iter.
+  apply eqit_bind; first reflexivity.
+  move=> [] s'; last reflexivity.
+  apply eqit_Tau_l; reflexivity.
+Qed.
+
+Lemma mix_ilsem_exportcall_ilsem_exportcall fn s :
+  xrutt.xrutt
+    (core_logics.errcutoff (is_error wE)) core_logics.nocutoff
+    rutt_extras.RPre_eq rutt_extras.RPost_eq
+    eq
+    (mix_ilsem_exportcall fn s) (ilsem_exportcall fn s).
+Proof.
+rewrite /mix_ilsem_exportcall /ilsem_exportcall.
+apply (xrutt_bind (RR := (fun fd fd' => fd = fd' /\ get_fundef P.(lp_funcs) fn = Some fd))).
+- case: get_fundef => [fd|] /=; first by apply xrutt_Ret.
+  apply: xrutt_Vis => //=; by exists erefl.
+move=> fd ? [<- ok_fn].
+apply: (xrutt_bind (RR := (fun _ _ => lfd_export fd))).
+- case: lfd_export => /=; first by apply xrutt_Ret.
+  apply: xrutt_Vis => //=; by exists erefl.
+move=> [] [] hfn.
+apply: (xrutt_bind (RR := eq)); last first.
+- move=> s' _ <-; apply: (xrutt_bind (RR := eq)).
+  - case: all => /=; first by apply xrutt_Ret.
+    apply: xrutt_Vis => //=; by exists erefl.
+  by move=> [] [] _; apply xrutt_Ret.
+rewrite /mix_ilsem_fun /mrec /= /handle_call_cond /fn_is_export.
+rewrite ok_fn hfn.
+exact: mix_ilsem_ilsem.
+Qed.
+
 
 End MIX_STEP.
 
 End SEM.
 
-Arguments lsem_split_start {_ _ _ _ _ _}.
+(* Arguments lsem_split_start {_ _ _ _ _ _}. *)

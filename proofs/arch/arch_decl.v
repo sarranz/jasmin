@@ -607,7 +607,7 @@ Inductive asm_i_r : Type :=
   | AsmOp  of asm_op_t' & asm_args
   | SysCall of syscall_t
   | Declassify_val of ltype & asm_arg
-  | Declassify_mem of positive & address.
+  | Declassify_mem of Z & address.
 
 Definition asm_i := gen_asm_i asm_i_r.
 
@@ -666,6 +666,7 @@ Definition is_ABReg r :=
 Class calling_convention :=
   { callee_saved   : seq asm_typed_reg
   ; callee_saved_not_bool : all (fun r => ~~is_ABReg r) callee_saved
+  ; callee_saved_has_rsp  : ARReg ad_rsp \in callee_saved
   ; call_reg_args  : seq reg_t
   ; call_xreg_args : seq xreg_t
   ; call_reg_ret   : seq reg_t

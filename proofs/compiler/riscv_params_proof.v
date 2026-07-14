@@ -16,7 +16,7 @@ Require Import
 Require Import
   lea_proof
   linearization
-  linearization_proof
+  it_linearization_proof
   lowering
   stack_alloc_params_proof
   stack_zeroization_proof.
@@ -188,7 +188,7 @@ Proof.
     by eexists.
   rewrite /= hget /=; t_riscv_op.
   eexists; split; first reflexivity.
-  + by move=> z hz; rewrite Vm.setP_neq //; apply /eqP; SvD.fsetdec.
+  + by move=> z hz; rewrite Vm.setP_neq //; apply /eqP; clear -hz; SvD.fsetdec.
   by rewrite Vm.setP_eq /= wrepr_opp.
 Qed.
 
@@ -205,7 +205,7 @@ Proof.
     by eexists.
   rewrite /= hget /=; t_riscv_op.
   eexists; split; first reflexivity.
-  + by move=> z hz; rewrite Vm.setP_neq //; apply /eqP; SvD.fsetdec.
+  + by move=> z hz; rewrite Vm.setP_neq //; apply /eqP; clear -hz; SvD.fsetdec.
   by rewrite Vm.setP_eq vm_truncate_val_eq.
 Qed.
 
@@ -345,9 +345,8 @@ Proof. exists X29; exact: to_identK. Qed.
 
 Definition riscv_hloparams : h_lowering_params (ap_lop riscv_params).
 Proof.
-  split=> *;
-    [ by apply: lower_callP; eassumption
-    | by apply: it_lower_callP; eassumption ].
+  split=> *; exact: it_lower_callP.
+  Unshelve. all: done.
 Qed.
 
 (* ------------------------------------------------------------------------ *)
@@ -358,7 +357,6 @@ Proof.
   split=> /=.
   + exact: (lower_addressing_prog_invariants (pT:=progStack)).
   + exact: (lower_addressing_fd_invariants (pT:=progStack)).
-  + exact: (lower_addressing_progP (pT:=progStack)).
   by move=> > /(it_lower_addressing_progP (pT := progStack)).
 Qed.
 
@@ -626,7 +624,7 @@ End STACK_ZEROIZATION.
 Definition riscv_is_move_opP op vx v :
   ap_is_move_op riscv_params op
   -> exec_sopn (Oasm op) [:: vx ] = ok v
-  -> List.Forall2 value_uincl v [:: vx ].
+  -> values_uincl v [:: vx ].
 Proof.
   case: op => // -[[] // op] /= hop.
   rewrite /exec_sopn /sopn_sem /sopn_sem_ /=.

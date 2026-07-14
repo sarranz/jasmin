@@ -133,9 +133,15 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
        and type rflag = rflag
        and type cond = cond
        and type asm_op = asm_op
-       and type extra_op = extra_op) visit_prog_after_pass prog cprog =
+       and type extra_op = extra_op)
+    visit_prog_after_pass
+    ?(callee_saved_strategy = !Glob_options.callee_saved_strategy)
+    prog cprog =
+  if callee_saved_strategy <> CSS_Tight then
+    warning Experimental L.i_dummy
+      "heuristics for callee-saved registers are experimental";
   let module RA = Regalloc.Regalloc (Arch) in
-  let module StackAlloc = StackAlloc.StackAlloc (Arch) in
+  let module SA = StackAlloc.StackAlloc (Arch) in
   let fdef_of_cufdef fn cfd = Conv.fdef_of_cufdef (fn, cfd) in
   let cufdef_of_fdef fd = snd (Conv.cufdef_of_fdef fd) in
 
@@ -162,10 +168,12 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
   in
 
   let memory_analysis up : Compiler.stack_alloc_oracles =
-    StackAlloc.memory_analysis
+    SA.memory_analysis
       pp_sr
       (Printer.pp_err ~debug:!debug)
-      ~debug:!debug up
+      ~debug:!debug
+      callee_saved_strategy
+      up
   in
 
   let global_regalloc fds =
@@ -192,21 +200,48 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
       ra
     in
 
-    let subst, _killed, fds = RA.alloc_prog return_addresses fds in
-    let subst_sf_return_address : Expr.stk_fun_extra -> Expr.stk_fun_extra =
-      let subst x = x |> Conv.var_of_cvar |> subst |> Conv.cvar_of_var in
-      let osubst = Option.map subst in
-      fun fe ->
-      { fe with
-        Expr.sf_return_address =
-          match fe.Expr.sf_return_address with
-          | RAnone -> RAnone;
-          | RAreg (ret, tmp) -> RAreg (subst ret, osubst tmp)
-          | RAstack (c, r, n, t) -> RAstack (osubst c, osubst r, n, osubst t)
-          | RAhwstack t -> RAhwstack (osubst t)
-      }
+    let callee_saved_error fd n =
+      hierror ~loc:(Lone fd.f_loc) ~funname:fd.f_name.fn_name ~kind:"programming error"
+        "Not enough slots for saving callee-saved registers; annotate the function with “callee_saved = %d”"
+        (n + 1)
     in
-    let fds = List.map (fun (e, fd) -> subst_sf_return_address e, fd) fds in
+
+    let fixup_to_save fd names slots =
+      let rec fixup_to_save n s =
+        match n, s with
+        | [], [] -> []
+        | x :: n, (_, ofs) :: s -> (Conv.cvar_of_var x, ofs) :: fixup_to_save n s
+        | [], _ ->
+           warning CalleeSavedNotTight (L.i_loc0 fd.f_loc) "unused slots: %a"
+             (pp_list ", " (fun fmt (_, ofs) -> Format.fprintf fmt "%a" Z.pp_print (Conv.z_of_cz ofs))) slots;
+           []
+        | _, [] -> callee_saved_error fd (List.length names)
+      in fixup_to_save names slots
+    in
+
+    let subst, killed, fds = RA.alloc_prog return_addresses fds in
+    let subst_sf_return_address fd : Expr.stk_fun_extra -> Expr.stk_fun_extra =
+      let csubst x = x |> Conv.var_of_cvar |> subst |> Conv.cvar_of_var in
+      let osubst = Option.map csubst in
+      fun fe ->
+      match fe.Expr.sf_return_address with
+      | RAreg (ret, tmp) -> { fe with Expr.sf_return_address = RAreg (csubst ret, osubst tmp) }
+      | RAstack (c, r, n, t) -> { fe with Expr.sf_return_address = RAstack (osubst c, osubst r, n, osubst t) }
+      | RAhwstack t -> { fe with Expr.sf_return_address = RAhwstack (osubst t) }
+      | RAnone ->
+         let ro = RA.get_reg_oracle (fun _ -> true) subst killed fd in
+         { fe with
+           Expr.sf_save_stack =
+             (match fe.Expr.sf_save_stack with
+             | (SavedStackNone | SavedStackStk _) as s -> s
+             | SavedStackReg _ ->
+                match ro.ro_rsp with
+                | Some r -> SavedStackReg (Conv.cvar_of_var r)
+                | None -> callee_saved_error fd 0)
+         ; Expr.sf_to_save = fixup_to_save fd ro.ro_to_save fe.Expr.sf_to_save
+         }
+    in
+    let fds = List.map (fun (e, fd) -> subst_sf_return_address fd e, fd) fds in
     let fds = List.map Conv.csfdef_of_fdef fds in
     fds
   in
@@ -270,8 +305,7 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
   in
 
   let warning ii msg =
-    (if not !Glob_options.lea then
-     let loc, _ = ii in
+    (let loc, _ = ii in
      warning UseLea loc "%a" Printer.pp_warning_msg msg);
     ii
   in
@@ -424,7 +458,6 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
           p);
       Compiler.refresh_instr_info;
       Compiler.warning;
-      Compiler.lowering_opt = Arch.lowering_opt;
       Compiler.fresh_var_ident = Conv.fresh_var_ident;
       Compiler.spill_to_mmx;
       Compiler.slh_info;
@@ -432,6 +465,7 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
       Compiler.dead_vars_ufd;
       Compiler.dead_vars_sfd;
       Compiler.pp_sr;
+      Compiler.apply_ret_annot = StackAlloc.apply_ret_annot;
     }
   in
 

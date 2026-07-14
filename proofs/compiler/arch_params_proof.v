@@ -11,7 +11,7 @@ Require Import
   asm_gen_proof
   sem_params_of_arch_extra.
 Require
-  linearization_proof
+  it_linearization_proof
   lowering
   stack_alloc_params_proof
   stack_zeroization_proof
@@ -24,29 +24,9 @@ Require Export arch_params.
 Record h_lowering_params
   {syscall_state : Type} {sc_sem : syscall.syscall_sem syscall_state}
   `{asm_e : asm_extra}
-  (lowering_options : Type)
-  (loparams : lowering_params lowering_options) :=
+  (loparams : lowering_params) :=
   {
     hlop_lower_callP :
-      forall
-        (pT : progT)
-        (sCP : semCallParams)
-        (p : prog)
-        (ev : extra_val_t)
-        (options : lowering_options)
-        (warning : instr_info -> warning_msg -> instr_info)
-        (fv : lowering.fresh_vars)
-        (lp : prog)
-        (_ : lowering.lower_prog (lop_lower_i loparams) options warning fv p
-             = ok lp)
-        (_ : lop_fvars_correct loparams fv (p_funcs p))
-        (f : funname)
-        (scs: syscall_state_t) (mem : low_memory.mem)
-        (scs': syscall_state_t) (mem' : low_memory.mem)
-        (va vr : seq value),
-        sem_call p ev scs mem f va scs' mem' vr
-        -> sem_call lp ev scs mem f va scs' mem' vr;
-    hlop_it_lower_callP :
       forall
         {pT : progT}
         {sCP : semCallParams}
@@ -55,12 +35,11 @@ Record h_lowering_params
         {rE : EventRels E0}
         {p : prog}
         {ev : extra_val_t}
-        (options : lowering_options)
         (warning : instr_info -> warning_msg -> instr_info)
         {fv : lowering.fresh_vars}
         {lp : prog}
         {fn : funname},
-        lowering.lower_prog (lop_lower_i loparams) options warning fv p = ok lp ->
+        lowering.lower_prog (lop_lower_i loparams) warning fv p = ok lp ->
         lop_fvars_correct loparams fv (p_funcs p) ->
         wiequiv_f p lp ev ev pre_eq fn fn post_eq
   }.
@@ -92,13 +71,6 @@ Record h_lower_addressing_params
             fd.(f_extra) = fd'.(f_extra)];
 
     hlap_lower_addressP :
-      forall fresh_reg (p p':_sprog),
-      lap_lower_address laparams fresh_reg p = ok p' ->
-      forall ev scs mem f vs scs' mem' vr,
-      sem_call (pT:=progStack) p ev scs mem f vs scs' mem' vr ->
-      sem_call (pT:=progStack) p' ev scs mem f vs scs' mem' vr;
-
-    hlap_it_lower_addressP :
       forall
         {E E0: Type -> Type}
         {wE : with_Error E E0}
@@ -114,16 +86,15 @@ Record h_lower_addressing_params
 Record h_architecture_params
   {syscall_state : Type} {sc_sem : syscall.syscall_sem syscall_state}
   `{asm_e : asm_extra} {call_conv:calling_convention}
-  (lowering_options : Type)
-  (aparams : architecture_params lowering_options) :=
+  (aparams : architecture_params) :=
   {
     (* Stack alloc hypotheses. See [stack_alloc_params_proof.v]. *)
     hap_hsap :
         stack_alloc_params_proof.h_stack_alloc_params (ap_sap aparams);
 
-    (* Linearization hypotheses. See [linearization_proof.v]. *)
+    (* Linearization hypotheses. See [it_linearization_proof.v]. *)
     hap_hlip :
-      linearization_proof.h_linearization_params
+      it_linearization_proof.h_linearization_params
         (ap_lip aparams);
 
     (* The scratch registers in linearize_params must be a register.
@@ -159,6 +130,6 @@ Record h_architecture_params
       forall op vx v,
         ap_is_move_op aparams op
         -> exec_sopn (Oasm op) [:: vx ] = ok v
-        -> List.Forall2 value_uincl v [:: vx ];
+        -> values_uincl v [:: vx ];
   }.
 

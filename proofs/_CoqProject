@@ -2,6 +2,7 @@
 -arg "-set" -arg "'Implicit Arguments'"
 -arg "-unset" -arg "'Strict Implicit'"
 -arg "-unset" -arg "'Printing Implicit Defensive'"
+-arg "-set" -arg "'Default Proof Using='"
 -arg "-w -notation-overridden"
 -arg "-w -extraction-reserved-identifier"
 -arg "-w -extraction-opaque-accessed"
@@ -13,8 +14,13 @@
 -arg "-w -deprecated-since-mathcomp-2.5.0"
 -arg "-w -deprecated-from-Coq"
 -arg "-w -deprecated-dirpath-Coq"
-# can be solved only with Stdlib >= 9.1
+# the next 2 lines can be solved only with Stdlib >= 9.1
+# this is twice the same warning, its name changed...
 -arg "-w -deprecated-reference-since-9.1"
+-arg "-w -deprecated-reference-since-Stdlib-9.1"
+# the next 2 lines can be handled when requiring Rocq >= 9.2
+-arg "-w -notation-for-abbreviation"
+-arg "-w -implicit-create-rewrite-hint-db"
 # to be handled when requiring Rocq >= 9.3
 -arg "-w -rewrite-rw"
 
@@ -34,6 +40,7 @@ arch/arch_extra.v
 arch/arch_sem.v
 arch/arch_utils.v
 arch/arm_expand_imm.v
+arch/asm_invariant.v
 arch/asm_gen.v
 arch/asm_gen_proof.v
 arch/label.v
@@ -66,8 +73,6 @@ compiler/array_init.v
 compiler/array_init_proof.v
 compiler/compiler_util.v
 compiler/compiler.v
-compiler/compiler_proof.v
-compiler/it_compiler_proof.v
 compiler/constant_prop.v
 compiler/constant_prop_proof.v
 compiler/dead_calls.v
@@ -75,16 +80,20 @@ compiler/dead_calls_proof.v
 compiler/dead_code.v
 compiler/dead_code_proof.v
 compiler/direct_call_proof.v
+compiler/hoare_valid.v
 compiler/inline.v
 compiler/inline_proof.v
 compiler/insert_renaming.v
 compiler/insert_renaming_proof.v
+compiler/it_compiler_proof.v
+compiler/it_linearization_proof.v
+compiler/it_merge_varmaps_proof.v
+compiler/it_tunneling_proof.v
 compiler/jasmin_compiler.v
 compiler/lea.v
 compiler/lea_proof.v
 compiler/linear_util.v
 compiler/linearization.v
-compiler/linearization_proof.v
 compiler/load_constants_in_cond.v
 compiler/load_constants_in_cond_proof.v
 compiler/lowering.v
@@ -93,7 +102,6 @@ compiler/lower_spill_proof.v
 compiler/makeReferenceArguments.v
 compiler/makeReferenceArguments_proof.v
 compiler/merge_varmaps.v
-compiler/merge_varmaps_proof.v
 compiler/otbn.v
 compiler/otbn_decl.v
 compiler/otbn_extra.v
@@ -140,8 +148,6 @@ compiler/stack_alloc_proof_2.v
 compiler/stack_zeroization.v
 compiler/stack_zeroization_proof.v
 compiler/tunneling.v
-compiler/tunneling_proof.v
-compiler/tunneling_proof_2.v
 compiler/unionfind.v
 compiler/unionfind_proof.v
 compiler/unrolling.v
@@ -179,6 +185,7 @@ lang/hoare_logic.v
 lang/ident.v
 lang/it_sems_core.v
 lang/it_sems_core_defs.v
+lang/it_sems_one_varmap.v
 lang/linear.v
 lang/linear_facts.v
 lang/linear_sem.v

@@ -503,7 +503,7 @@ pparam:
 (* -------------------------------------------------------------------- *)
 pgexpr:
 | e=pexpr { GEexpr e }
-| LBRACE es = rtuple1(pexpr) RBRACE { GEarray es }
+| LBRACE es = rtuple(pexpr) RBRACE { GEarray es }
 
 pglobal:
 | pgd_type=ptype pgd_name=ident EQ pgd_val=pgexpr SEMICOLON
@@ -533,8 +533,8 @@ top:
 | x=pglobal  { Syntax.PGlobal x }
 | x=pexec    { Syntax.Pexec   x }
 | x=prequire { Syntax.Prequire x}
-| TYPE name = ident EQ ty = ptype SEMICOLON
-    { Syntax.PTypeAlias (name, ty)}
+| a=annotations TYPE name = ident EQ ty = ptype SEMICOLON
+    { Syntax.PTypeAlias (name, a, ty)}
 | NAMESPACE name = ident LBRACE pfs = loc(top)* RBRACE
     { Syntax.PNamespace (name, pfs) }
 (* -------------------------------------------------------------------- *)

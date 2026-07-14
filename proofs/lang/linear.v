@@ -35,7 +35,7 @@ Inductive linstr_r :=
   | Lrepeat_loop : (var_i + Z) -> seq (gen_linstr linstr_r) -> linstr_r
 .
 
-Definition linstr := gen_linstr linstr_r.
+Notation linstr := (gen_linstr linstr_r).
 
 Definition lcmd := seq linstr.
 
@@ -84,6 +84,7 @@ Record lprog :=
 
 End ASM_OP.
 
+Notation linstr := (gen_linstr linstr_r).
 Notation fopn_args := (lexprs * sopn * rexprs)%type.
 
 Definition li_of_fopn_args

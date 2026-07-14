@@ -333,11 +333,23 @@ fail/array_expansion/x86-64/default_scale_param.jazz:
 compilation error in function main:
 array expansion: cannot expand variable r (the default scale must be used)
 
+fail/array_expansion/x86-64/default_scale_param_2.jazz:
+
+"fail/array_expansion/x86-64/default_scale_param_2.jazz", line 8 (8-9):
+compilation error in function main:
+array expansion: cannot expand variable z (the default scale must be used)
+
 fail/array_expansion/x86-64/default_scale_return.jazz:
 
 "fail/array_expansion/x86-64/default_scale_return.jazz", line 16 (2-3):
 compilation error in function main:
 array expansion: cannot expand variable r (the default scale must be used)
+
+fail/array_expansion/x86-64/default_scale_return_2.jazz:
+
+"fail/array_expansion/x86-64/default_scale_return_2.jazz", line 8 (2-3):
+compilation error in function main:
+array expansion: cannot expand variable k (the default scale must be used)
 
 fail/array_expansion/x86-64/export_param.jazz:
 
@@ -413,11 +425,35 @@ fail/array_expansion/x86-64/sub_array_param_not_reg.jazz:
 compilation error in function main:
 array expansion: cannot expand variable s (not a reg array)
 
+fail/array_expansion/x86-64/sub_array_param_overflow.jazz:
+
+"fail/array_expansion/x86-64/sub_array_param_overflow.jazz", line 8 (8-9):
+compilation error in function main:
+array expansion: cannot expand variable z (the sub-array overflows)
+
+fail/array_expansion/x86-64/sub_array_param_overflow_2.jazz:
+
+"fail/array_expansion/x86-64/sub_array_param_overflow_2.jazz", line 8 (8-9):
+compilation error in function main:
+array expansion: cannot expand variable z (the sub-array overflows)
+
 fail/array_expansion/x86-64/sub_array_return_not_reg.jazz:
 
 "fail/array_expansion/x86-64/sub_array_return_not_reg.jazz", line 16 (2-3):
 compilation error in function main:
 array expansion: cannot expand variable s (not a reg array)
+
+fail/array_expansion/x86-64/sub_array_return_overflow.jazz:
+
+"fail/array_expansion/x86-64/sub_array_return_overflow.jazz", line 8 (2-3):
+compilation error in function main:
+array expansion: cannot expand variable k (the sub-array overflows)
+
+fail/array_expansion/x86-64/sub_array_return_overflow_2.jazz:
+
+"fail/array_expansion/x86-64/sub_array_return_overflow_2.jazz", line 8 (2-3):
+compilation error in function main:
+array expansion: cannot expand variable k (the sub-array overflows)
 
 fail/array_expansion/x86-64/type_mismatch_param.jazz:
 
@@ -483,6 +519,48 @@ fail/asmgen/x86-64/uninit_flag.jazz:
 
 compilation error:
 register allocation: variables { unitialized } remain unallocated
+
+fail/common/alignment.jazz:
+
+"fail/common/alignment.jazz", line 1 (42-43):
+compilation error in function assumes_alignment:
+stack allocation: argument a is used with 32-bit alignment at:
+"fail/common/alignment.jazz", line 2 (2-32)
+
+fail/common/alignment.jazz:
+
+"fail/common/alignment.jazz", line 1 (42-43):
+compilation error in function assumes_alignment:
+stack allocation: argument a is used with 32-bit alignment at:
+"fail/common/alignment.jazz", line 2 (2-32)
+
+fail/common/alignment.jazz:
+
+"fail/common/alignment.jazz", line 1 (42-43):
+compilation error in function assumes_alignment:
+stack allocation: argument a is used with 32-bit alignment at:
+"fail/common/alignment.jazz", line 2 (2-32)
+
+fail/common/alignment_internal.jazz:
+
+"fail/common/alignment_internal.jazz", line 8 (29-30):
+compilation error in function main:
+stack allocation: argument a is used with 32-bit alignment at:
+"fail/common/alignment_internal.jazz", line 10 (2-23)
+
+fail/common/alignment_internal.jazz:
+
+"fail/common/alignment_internal.jazz", line 8 (29-30):
+compilation error in function main:
+stack allocation: argument a is used with 32-bit alignment at:
+"fail/common/alignment_internal.jazz", line 10 (2-23)
+
+fail/common/alignment_internal.jazz:
+
+"fail/common/alignment_internal.jazz", line 8 (29-30):
+compilation error in function main:
+stack allocation: argument a is used with 32-bit alignment at:
+"fail/common/alignment_internal.jazz", line 10 (2-23)
 
 fail/common/bug_1214.jazz:
 
@@ -794,6 +872,7 @@ fail/register_allocation/arm-m4/bug_201.jazz:
 compilation error in function main:
 register allocation: too many large parameters according to the ABI (only 0 available on this architecture)
 
+<<<<<<< HEAD
 fail/register_allocation/arm-m4/force_regalloc_conflict_unknown.jazz:
 
 "fail/register_allocation/arm-m4/force_regalloc_conflict_unknown.jazz", line 2 (28-31):
@@ -803,6 +882,16 @@ register allocation: unknown register “FOO” in force_regalloc_conflict annot
 fail/register_allocation/arm-m4/force_regalloc_dup.jazz:
 
 "fail/register_allocation/arm-m4/force_regalloc_dup.jazz", line 2 (4-18): only one of the attribute force_regalloc, force_regalloc is expected
+=======
+fail/register_allocation/arm-m4/inplace.jazz:
+
+"fail/register_allocation/arm-m4/inplace.jazz", line 4 (19-29):
+compilation error:
+register allocation: conflicting variables “b” and “a” must be merged due to:
+  at "fail/register_allocation/arm-m4/inplace.jazz", line 4 (19-29):
+    #[keep, inplace]
+  a = #EOR(b, a); /* :k */
+>>>>>>> main
 
 fail/register_allocation/arm-m4/no_mmx.jazz:
 
@@ -878,6 +967,12 @@ fail/register_allocation/x86-64/bug_523.jazz:
 "fail/register_allocation/x86-64/bug_523.jazz", line 9 (2-21):
 compilation error:
 register allocation: variable rot2 must be allocated to register RCX due to architectural constraints; this register already holds conflicting variable: rot1
+
+fail/register_allocation/x86-64/callee_saved-too-small.jazz:
+
+"fail/register_allocation/x86-64/callee_saved-too-small.jazz", line 10 (0) to line 19 (1):
+programming error in function main:
+Not enough slots for saving callee-saved registers; annotate the function with “callee_saved = 3”
 
 fail/register_allocation/x86-64/conflicting_register.jazz:
 
@@ -1019,7 +1114,7 @@ speculative constant type checker: instruction assigns msf, which is required to
 
 fail/slh/x86-64/invalid_type.jazz:
 
-"fail/slh/x86-64/invalid_type.jazz", line 2 (4-5): the expression has type u32 instead of u64
+"fail/slh/x86-64/invalid_type.jazz", line 2 (17-18): can not implicitly cast u32 into u64
 
 fail/slh/x86-64/mov_msf.jazz:
 
@@ -1404,6 +1499,10 @@ fail/typing/x86-64/bug_69.jazz:
 
 "fail/typing/x86-64/bug_69.jazz", line 5 (3-28): primitive operator AND_64 returns an output of size 64; it cannot be zero-extended to size 32
 
+fail/typing/x86-64/conditional_not_bool.jazz:
+
+"fail/typing/x86-64/conditional_not_bool.jazz", line 3 (2-16): the expression x has type u64 while bool is expected
+
 fail/typing/x86-64/conditional_op_mismatch.jazz:
 
 "fail/typing/x86-64/conditional_op_mismatch.jazz", line 4 (14-15): the expression has type u64 instead of bool
@@ -1423,6 +1522,14 @@ fail/typing/x86-64/export_stack_res.jazz:
 
 "fail/typing/x86-64/export_stack_res.jazz", line 5 (9-10):
 typing error: x has kind stack, only reg or reg ptr are allowed in result of non inlined function
+
+fail/typing/x86-64/flags_not_bool.jazz:
+
+"fail/typing/x86-64/flags_not_bool.jazz", line 4 (2-22): the expression x has type u64 while bool is expected
+
+fail/typing/x86-64/for_not_int.jazz:
+
+"fail/typing/x86-64/for_not_int.jazz", line 2 (2) to line 3 (3): the expression a has type u32 while int is expected
 
 fail/typing/x86-64/global_in_global_def.jazz:
 
@@ -1446,7 +1553,7 @@ fail/typing/x86-64/init_global.jazz:
 
 fail/typing/x86-64/lval_mismatch.jazz:
 
-"fail/typing/x86-64/lval_mismatch.jazz", line 4 (7-8): the expression has type bool instead of u64
+"fail/typing/x86-64/lval_mismatch.jazz", line 4 (2-26): the left value b has type bool while u64 is expected
 
 fail/typing/x86-64/lval_param.jazz:
 
@@ -1514,6 +1621,12 @@ fail/unroll/x86-64/loop_iterator.jazz:
 internal compilation error:
   unrolling: loop iterator too small
 Please report at https://github.com/jasmin-lang/jasmin/issues
+
+fail/unroll/x86-64/run-time-bound.jazz:
+
+"fail/unroll/x86-64/run-time-bound.jazz", line 5 (2) to line 7 (3):
+compilation error in function count:
+loop unrolling: for loops remain
 
 fail/x86-64/bug_1366.jazz:
 
@@ -1584,6 +1697,12 @@ asmgen: instruction POR is given incompatible args.
 Allowed args are:
   [[regx]; [regx; mem (glob allowed)]]
 
+fail/x86-64/randombytes_length_neg.jazz:
+
+"fail/x86-64/randombytes_length_neg.jazz", line 4 (2-22):
+compilation error in function main:
+stack allocation: randombytes: the requested size is negative
+
 fail/x86-64/shift.jazz:
 
 "fail/x86-64/shift.jazz", line 5 (4-12):
@@ -1625,8 +1744,16 @@ Allowed args are:
   [[reg]; [reg; mem (glob allowed)]]
 
 Statistics:
+<<<<<<< HEAD
 	Annots:      7
 	Pretyping:  47
 	Parsing:     4
 	Typing:      1
 	Compile:   202
+=======
+	Annots:      4
+	Pretyping:  47
+	Parsing:     4
+	Typing:      5
+	Compile:   213
+>>>>>>> main

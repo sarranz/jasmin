@@ -451,6 +451,18 @@ Definition pop_to_save
   map (li_of_fopn_args ii)
       (lip_lloads liparams rspi to_save sp).
 
+Fixpoint check_bool (e:fexpr) :=
+  match e with
+  | Fconst _ => false
+  | Fvar x => vtype x == abool
+  | Fapp1 Onot e1 => check_bool e1
+  | Fapp1 o1 _ => (type_of_op1 o1).2 == abool
+  | Fapp2 Oand e1 e2 => [&& check_bool e1 & check_bool e2]
+  | Fapp2 Oor e1 e2 => [&& check_bool e1 & check_bool e2]
+  | Fapp2 o2 _ _ => (type_of_op2 o2).2 == abool
+  | Fif e0 e1 e2 => [&& check_bool e1 & check_bool e2]
+  end.
+
   Section CHECK_c.
 
     Context (check_i: instr -> cexec unit).
@@ -478,7 +490,9 @@ Definition pop_to_save
     | Cassert _ =>
       Error (E.ii_error ii "assert found in linear")
     | Cif b c1 c2 =>
-      check_fexpr ii b >> check_c check_i c1 >> check_c check_i c2
+      Let _ := assert (if c2 is [::] then check_bool (to_fexpr b) else true)
+        (E.ii_error ii "ill typed condition in linear") in
+      check_fexpr ii b >> (check_c check_i c1 >> check_c check_i c2)
     | Cfor fi c =>
         Let _ := linearize_for ii fi in
         check_c check_i c
@@ -486,7 +500,7 @@ Definition pop_to_save
       match is_bool e with
       | Some false => check_c check_i c
       | Some true => check_c check_i c >> check_c check_i c'
-      | None => check_fexpr ii e >> check_c check_i c >> check_c check_i c'
+      | None => check_fexpr ii e >> (check_c check_i c >> check_c check_i c')
       end
     | Ccall xs fn es =>
       Let _ := assert (fn != this) (E.ii_error ii "call to self") in
@@ -553,6 +567,15 @@ Definition pop_to_save
 
 (* --------------------------------------------------------------------------- *)
 (* Translation                                                                 *)
+
+Fixpoint fnot (e : fexpr) : fexpr :=
+  match e with
+  | Fapp1 Onot e0 => e0
+  | Fapp2 Oand e1 e2 => Fapp2 Oor (fnot e1) (fnot e2)
+  | Fapp2 Oor e1 e2 => Fapp2 Oand (fnot e1) (fnot e2)
+  | Fif e0 e1 e2 => Fif e0 (fnot e1) (fnot e2)
+  | _ => Fapp1 Onot e
+  end.
 
 Notation "c1 ';;' c2" :=  (let: (lbl,lc) := c2 in c1 lbl lc)
    (at level 26, right associativity).
@@ -693,7 +716,7 @@ Fixpoint linear_i (i:instr) (lbl:label) (lc:lcmd) :=
   | Cif e c1 [::] =>
     let L1 := lbl in
     let lbl := next_lbl L1 in
-    MkLI ii (Lcond (to_fexpr (snot e)) L1) >; linear_c linear_i c1 lbl (MkLI ii (Llabel L1) :: lc)
+    MkLI ii (Lcond (fnot (to_fexpr e)) L1) >; linear_c linear_i c1 lbl (MkLI ii (Llabel L1) :: lc)
 
   | Cif e c1 c2 =>
     let L1 := lbl in

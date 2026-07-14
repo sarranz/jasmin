@@ -298,6 +298,7 @@ Definition otbn_call_conv : calling_convention :=
   {|
     callee_saved := map ARReg callee_saved_registers;
     callee_saved_not_bool := refl_equal;
+    callee_saved_has_rsp := refl_equal;
     call_reg_args := [:: X10; X11; X12; X13; X14; X15; X16; X17 ];
     call_xreg_args := [:: W00; W01; W02; W03; W04; W05; W06; W07 ];
     call_reg_ret := [:: X10; X11 ];

@@ -9,15 +9,13 @@ Section LOWERING.
 Definition fresh_vars : Type := string -> atype -> Ident.ident.
 
 Context
-  {asm_op lowering_options : Type}
+  {asm_op : Type}
   {asmop : asmOp asm_op}
   (lower_i0 :
-    lowering_options
-    -> (instr_info -> warning_msg -> instr_info)
+      (instr_info -> warning_msg -> instr_info)
     -> fresh_vars
     -> instr
     -> cexec cmd)
-  (options : lowering_options)
   (warning : instr_info -> warning_msg -> instr_info)
   (fv : fresh_vars)
   {pT : progT}
@@ -39,7 +37,7 @@ Definition is_lval_in_memory (x : lval) : bool :=
   end.
 
 Notation lower_i :=
-  (lower_i0 options warning fv).
+  (lower_i0 warning fv).
 
 Definition lower_cmd (c : cmd) : cexec cmd :=
   conc_mapM lower_i c.

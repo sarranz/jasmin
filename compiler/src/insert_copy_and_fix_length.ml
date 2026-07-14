@@ -38,7 +38,7 @@ let rec fix_length_eassert e =
   | PappN_safety (o, es) ->
     let e = List.hd es in
     let ty = Typing.type_of_expr e in
-    let len = Conv.pos_of_int (size_of ty) in
+    let len = Conv.cz_of_int (size_of ty) in
     let o = match o with Ois_arr_init _ -> Operators.Ois_arr_init len | Ois_barr_init _ -> Ois_barr_init len in
     PappN_safety(o, es)
   | Pis_var_init _ | Pis_mem_init _ -> e
@@ -49,16 +49,14 @@ and iac_instr pd i = { i with i_desc = iac_instr_r pd i.i_loc i.i_desc }
 and iac_instr_r pd loc ir =
   match ir with
   | Cassgn (x, t, _, e) ->
-    if !Glob_options.introduce_array_copy then
-      match is_array_copy x e with
+    begin match is_array_copy x e with
       | None -> ir
       | Some (ws, n) ->
-         Typing.check_length loc n;
           warning IntroduceArrayCopy
             loc "an array copy is introduced";
-          let op = Pseudo_operator.Ocopy(ws, Conv.pos_of_int n) in
+          let op = Pseudo_operator.Ocopy(ws, Conv.cz_of_int n) in
           Copn([x], t, Sopn.Opseudo_op op, [e])
-    else ir
+    end
   | Cif (b, th, el) -> Cif (b, iac_stmt pd th, iac_stmt pd el)
   | Cfor (fi, s) -> Cfor (fi, iac_stmt pd s)
   | Cwhile (a, c1, t, info, c2) -> Cwhile (a, iac_stmt pd c1, t, info, iac_stmt pd c2)
@@ -80,8 +78,7 @@ and iac_instr_r pd loc ir =
           xn wsn
       else
         let len = xn / wsn in
-        Typing.check_length loc len;
-        let op = Pseudo_operator.Ocopy (ws, Conv.pos_of_int len) in
+        let op = Pseudo_operator.Ocopy (ws, Conv.cz_of_int len) in
         Copn(xs,t,Sopn.Opseudo_op op, es)
     | Sopn.Opseudo_op(Ocopy _), _ -> assert false
     | Sopn.Opseudo_op(Pseudo_operator.Oswap _), x::_ ->
@@ -92,8 +89,7 @@ and iac_instr_r pd loc ir =
     | Sopn.Oslh (SLHprotect_ptr _), [Lvar x] ->
       (* Fix the size it is dummy for the moment *)
       let ws, len = array_kind (L.unloc x).v_ty in
-      Typing.check_length loc len;
-      let op = Slh_ops.SLHprotect_ptr (ws, Conv.pos_of_int len) in
+      let op = Slh_ops.SLHprotect_ptr (ws, Conv.cz_of_int len) in
       Copn(xs,t, Sopn.Oslh op, es)
     | Sopn.Oslh (SLHprotect_ptr _), _ -> assert false
     | Sopn.Opseudo_op (Odeclassify _), _ ->
@@ -114,7 +110,7 @@ and iac_instr_r pd loc ir =
         | [x] -> Typing.ty_lval pd loc x
         | _ -> assert false in
       let ws, len = array_kind ty in
-      Csyscall(xs, Syscall_t.RandomBytes (ws, Conv.pos_of_int len), es)
+      Csyscall(xs, Syscall_t.RandomBytes (ws, Conv.cz_of_int len), es)
     end
   | Cassert (msg, e) ->
     Cassert (msg, fix_length_eassert e)
