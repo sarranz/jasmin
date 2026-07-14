@@ -10,6 +10,7 @@ fn main(reg u32 arg) -> reg ui32 {
   return result;
 }
 
+#[required_alignment = { arg = u32 }]
 export
 fn xor(reg ptr u32[2] arg) -> reg u32 {
   #[nospill]

@@ -34,6 +34,10 @@ inline fn ror32(reg u32 in, inline int cnt) -> reg u32 {
     return ret;
 }
 
+/* The state array is accessed with 32-bit (#aligned) loads/stores, so the
+   caller must pass a 32-bit-aligned pointer. Export functions default their
+   pointer arguments to byte alignment, so declare the stronger requirement. */
+#[required_alignment = { state = u32 }]
 export
 fn gimli(reg ptr u32[12] state) -> reg ptr u32[12] {
     inline int round, column;

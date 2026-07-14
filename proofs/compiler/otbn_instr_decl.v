@@ -1766,16 +1766,16 @@ Section PRIM_STRING.
 
   Definition otbn_prim_string : seq (string * prim_constructor otbn_op) :=
     Eval vm_compute in
-    map
-      (fun '(s, p) => (replace_dot s, p))
-      (rv_prim_string
-       ++ bn_basic_prim_string
-       ++ bn_fg_prim_string
-       ++ bn_no_opt_prim_string
-       ++ bn_vec_prim_string
-       ++ bn_mulqacc_prim_string
-       ++ bn_lid_prim_string
-       ++ bn_sid_prim_string).
+    [seq (replace_dot s, p)
+    | '(s, p) <-
+        rv_prim_string
+        ++ bn_basic_prim_string
+        ++ bn_fg_prim_string
+        ++ bn_no_opt_prim_string
+        ++ bn_vec_prim_string
+        ++ bn_mulqacc_prim_string
+        ++ bn_lid_prim_string
+        ++ bn_sid_prim_string ].
 
 End PRIM_STRING.
 

@@ -872,17 +872,16 @@ fail/register_allocation/arm-m4/bug_201.jazz:
 compilation error in function main:
 register allocation: too many large parameters according to the ABI (only 0 available on this architecture)
 
-<<<<<<< HEAD
 fail/register_allocation/arm-m4/force_regalloc_conflict_unknown.jazz:
 
 "fail/register_allocation/arm-m4/force_regalloc_conflict_unknown.jazz", line 2 (28-31):
 compilation error:
-register allocation: unknown register “FOO” in force_regalloc_conflict annotation on variable x.4426
+register allocation: unknown register “FOO” in force_regalloc_conflict annotation on variable x.4954
 
 fail/register_allocation/arm-m4/force_regalloc_dup.jazz:
 
 "fail/register_allocation/arm-m4/force_regalloc_dup.jazz", line 2 (4-18): only one of the attribute force_regalloc, force_regalloc is expected
-=======
+
 fail/register_allocation/arm-m4/inplace.jazz:
 
 "fail/register_allocation/arm-m4/inplace.jazz", line 4 (19-29):
@@ -891,7 +890,6 @@ register allocation: conflicting variables “b” and “a” must be merged du
   at "fail/register_allocation/arm-m4/inplace.jazz", line 4 (19-29):
     #[keep, inplace]
   a = #EOR(b, a); /* :k */
->>>>>>> main
 
 fail/register_allocation/arm-m4/no_mmx.jazz:
 
@@ -995,7 +993,7 @@ register allocation: conflicting variables “z” and “res” must be merged 
 fail/register_allocation/x86-64/force_regalloc_conflict_vs_arch.jazz:
 
 compilation error:
-register allocation: variable q.5269 (declared at line 8) is allocated to register RAX but the force_regalloc_conflict annotation forbids it
+register allocation: variable q.6148 (declared at line 8) is allocated to register RAX but the force_regalloc_conflict annotation forbids it
 
 fail/register_allocation/x86-64/force_regalloc_dup.jazz:
 
@@ -1004,7 +1002,7 @@ fail/register_allocation/x86-64/force_regalloc_dup.jazz:
 fail/register_allocation/x86-64/force_regalloc_self_contradict.jazz:
 
 compilation error:
-register allocation: variable x.5369 (declared at line 4) is allocated to register RAX but the force_regalloc_conflict annotation forbids it
+register allocation: variable x.6248 (declared at line 4) is allocated to register RAX but the force_regalloc_conflict annotation forbids it
 
 fail/register_allocation/x86-64/force_regalloc_vs_arch.jazz:
 
@@ -1744,16 +1742,8 @@ Allowed args are:
   [[reg]; [reg; mem (glob allowed)]]
 
 Statistics:
-<<<<<<< HEAD
 	Annots:      7
-	Pretyping:  47
-	Parsing:     4
-	Typing:      1
-	Compile:   202
-=======
-	Annots:      4
-	Pretyping:  47
+	Pretyping:  46
 	Parsing:     4
 	Typing:      5
-	Compile:   213
->>>>>>> main
+	Compile:   218
