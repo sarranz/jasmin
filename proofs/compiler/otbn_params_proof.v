@@ -1097,6 +1097,9 @@ Proof.
     by have /set_varP [_ h _] := hvm1; case: (eval_atype (vtype fl)) h.
   have hfzty : eval_atype (vtype fz) = cbool
     by have /set_varP [_ h _] := hvm2; case: (eval_atype (vtype fz)) h.
+  have hne : forall (f g : var_i), eval_atype (vtype f) = cbool ->
+      convertible (vtype g) (aword U256) -> v_var f <> v_var g.
+    by move=> f g hf hg he; move: hf; rewrite he (convertible_eval_atype hg).
   have h := assemble_opsP otbn_eval_assemble_cond hmap erefl _ hlom.
   set r1 := wxor wz ww.
   set r2 := wxor r1 ww.
@@ -1112,67 +1115,37 @@ Proof.
   case: (h m1) => {h}.
   rewrite /= hz /= hw /= /exec_sopn /= hvz hvw /=.
   move/eqP in hxw; move/eqP in hyx.
-  have hne : forall (f w : var_i), eval_atype (vtype f) = cbool ->
-      convertible (vtype w) (aword U256) -> v_var f <> v_var w.
-    by move=> f w' hf hw' he; move: hf; rewrite he (convertible_eval_atype hw').
   have hfmw := hne _ _ hfmty hwt.
   have hflw := hne _ _ hflty hwt.
   have hfzw := hne _ _ hfzty hwt.
   have hfmx := hne _ _ hfmty hxt.
   have hflx := hne _ _ hflty hxt.
   have hfzx := hne _ _ hfzty hxt.
-  rewrite !set_var_truncate //=.
-  rewrite set_var_truncate //=.
-  rewrite set_var_truncate //=.
-  rewrite set_var_truncate //=.
-  rewrite get_var_eq //= (convertible_eval_atype hxt) /=.
-  rewrite get_var_neq // get_var_neq // get_var_neq // get_var_neq // hw /=.
-  rewrite truncate_word_u /= hvw /=.
-  rewrite set_var_truncate //=.
-  rewrite set_var_truncate //=.
-  rewrite set_var_truncate //=.
-  rewrite set_var_truncate //=.
-  rewrite get_var_eq //= (convertible_eval_atype hyt) /=.
-  rewrite get_var_neq //.
-  rewrite get_var_neq //.
-  rewrite get_var_neq //.
-  rewrite get_var_neq //.
-  rewrite get_var_eq //= (convertible_eval_atype hxt) /=.
-  rewrite !truncate_word_u /=.
-  rewrite set_var_truncate //=.
-  rewrite set_var_truncate //=.
-  rewrite set_var_truncate //=.
-  rewrite set_var_truncate //=.
-  by rewrite (convertible_eval_atype hxt).
-  by rewrite hfzty.
-  by rewrite hflty.
-  by rewrite hfmty.
+  do !rewrite set_var_truncate //=.
+  t_get_var.
+  rewrite /= (convertible_eval_atype hxt) /= hw /= truncate_word_u /= hvw /=.
+  do !rewrite set_var_truncate //=.
+  t_get_var.
+  rewrite /= (convertible_eval_atype hyt) /= (convertible_eval_atype hxt) /=
+    !truncate_word_u /=.
+  do !rewrite set_var_truncate //=.
   all: try by rewrite ?(convertible_eval_atype hxt)
     ?(convertible_eval_atype hyt) ?hfmty ?hflty ?hfzty.
   move=> s' hfold hlom'; exists s' => //.
-  move/set_varP: hsx => [_ _ ?]; subst z4.
-  move/set_varP: hsy => [_ _ ?]; subst z6.
-  apply: lom_eqv_ext hlom'.
-  move=> i /=; rewrite !Vm.setP.
   move/set_varP: hvm0 => [_ _ ?]; subst vm0.
   move/set_varP: hvm1 => [_ _ ?]; subst vm1.
   move/set_varP: hvm2 => [_ _ ?]; subst vm2.
-  rewrite !Vm.setP.
+  move/set_varP: hsx => [_ _ ?]; subst z4.
+  move/set_varP: hsy => [_ _ ?]; subst z6.
+  apply: lom_eqv_ext hlom'.
   have hr2 : r2 = wz by rewrite /r2 /r1 -wxorA wxor_xx wxorC wxor0.
   have hr3 : r3 = ww by rewrite /r3 /r2 /r1 wxorA wxor_xx wxor0.
-  rewrite hr2 hr3.
-  have hbne : forall (f g : var_i), eval_atype (vtype f) = cbool ->
-      convertible (vtype g) (aword U256) -> (v_var g == v_var f) = false.
-    move=> f g hf hg; apply/eqP => he; move: hf; rewrite -he.
-    by rewrite (convertible_eval_atype hg).
-  have hyfz := hbne _ _ hfzty hyt.
-  have hyfl := hbne _ _ hflty hyt.
-  have hyfm := hbne _ _ hfmty hyt.
-  case: eqP => [<- | _] /=; first by rewrite (negbTE hyx).
-  case: eqP => [<- | _] /=; first by rewrite hyfz.
-  case: eqP => [<- | _] /=; first by rewrite hyfl.
-  case: eqP => [<- | _] /=; first by rewrite hyfm.
-  by [].
+  have hyfz := introN eqP (not_eq_sym (hne _ _ hfzty hyt)).
+  have hyfl := introN eqP (not_eq_sym (hne _ _ hflty hyt)).
+  have hyfm := introN eqP (not_eq_sym (hne _ _ hfmty hyt)).
+  move=> i /=; rewrite !Vm.setP hr2 hr3.
+  by do 4!(case: eqP => [<- | _] /=;
+    first by rewrite ?(negbTE hyx) ?(negbTE hyfz) ?(negbTE hyfl) ?(negbTE hyfm)).
 Qed.
 
 Lemma otbn_assemble_extra_op op :
