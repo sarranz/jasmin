@@ -432,14 +432,14 @@ Definition otbn_op_to_string (op : otbn_op) : string :=
 
 Section I_ARGS_KINDS.
 
-  Definition ak_u2 := CAimm (CAimmC_otbn_nbits Unsigned 2) U8.
-  Definition ak_u8 := CAimm (CAimmC_otbn_nbits Unsigned 8) U8.
-  Definition ak_u10 := CAimm (CAimmC_otbn_nbits Unsigned 10) U32.
-  Definition ak_s12 := CAimm (CAimmC_otbn_nbits Signed 12) U32.
-  Definition ak_bn_shift := CAimm CAimmC_otbn_bn_shift U8.
+  Definition ak_u2 := CAimm (Some (CAimmC_otbn_nbits Unsigned 2)) U8.
+  Definition ak_u8 := CAimm (Some (CAimmC_otbn_nbits Unsigned 8)) U8.
+  Definition ak_u10 := CAimm (Some (CAimmC_otbn_nbits Unsigned 10)) U32.
+  Definition ak_s12 := CAimm (Some (CAimmC_otbn_nbits Signed 12)) U32.
+  Definition ak_bn_shift := CAimm (Some CAimmC_otbn_bn_shift) U8.
 
   Let xreg := [:: CAxmm ].
-  Let imm_u5 := [:: CAimm (CAimmC_otbn_nbits Unsigned 5) U8 ].
+  Let imm_u5 := [:: CAimm (Some (CAimmC_otbn_nbits Unsigned 5)) U8 ].
   Let imm_u8 := [:: ak_u8 ].
   Let imm_u10 := [:: ak_u10 ].
   Let imm_s12 := [:: ak_s12 ].
@@ -447,7 +447,7 @@ Section I_ARGS_KINDS.
   (* Quarter word *)
   Let imm_q := [:: ak_u2 ].
   Let imm_bn_shift := [:: ak_bn_shift ].
-  Let imm_mulqacc_shift := [:: CAimm CAimmC_otbn_mulqacc_shift U8 ].
+  Let imm_mulqacc_shift := [:: CAimm (Some CAimmC_otbn_mulqacc_shift) U8 ].
 
   Definition ak_xreg : i_args_kinds :=
     [:: [:: xreg ] ].
@@ -548,10 +548,10 @@ Definition rv_last_ak : arg_kind :=
   match mn with
   | ADD | SUB | AND | OR | XOR | SLL | SRL | SRA => CAreg
   | ADDI | ANDI | ORI | XORI => ak_s12
-  | SLLI | SRLI | SRAI => CAimm (CAimmC_otbn_nbits Unsigned 5) U8
-  | LUI => CAimm (CAimmC_otbn_nbits Unsigned 20) U32
+  | SLLI | SRLI | SRAI => CAimm (Some (CAimmC_otbn_nbits Unsigned 5)) U8
+  | LUI => CAimm (Some (CAimmC_otbn_nbits Unsigned 20)) U32
   | LW | SW => CAmem false
-  | LI => CAimm (CAimmC_otbn_nbits Signed 32) U32
+  | LI => CAimm (Some (CAimmC_otbn_nbits Signed 32)) U32
   | LA => CAmem true
   | NOP => CAreg (* absurd *)
   end.

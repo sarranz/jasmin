@@ -1,5 +1,6 @@
 (* OpenTitan Big Number architecture. *)
 
+From Stdlib Require Import DecimalString.
 From elpi.apps Require Import derive.std.
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype fintype ssralg.
 From mathcomp Require Import word word_ssrZ.
@@ -17,7 +18,9 @@ Require Import
   arch_decl
   arch_utils.
 
-Require riscv_decl.
+(* TODO move *)
+Definition string_of_Z (z : Z) : string :=
+  NilZero.string_of_int (Z.to_int z).
 
 Definition otbn_reg_size : wsize := U32.
 Definition otbn_xreg_size : wsize := U256.
@@ -250,6 +253,17 @@ Instance otbn_fcp : FlagCombinationParams := { fc_of_cfc := fc_of_cfc; }.
 (* -------------------------------------------------------------------------- *)
 (* Immediate checkers. *)
 
+#[only(eqbOK)] derive
+Variant otbn_caimm_cond :=
+  | CAimmC_otbn_nbits of signedness & positive
+  | CAimmC_otbn_bn_shift
+  | CAimmC_otbn_mulqacc_shift
+.
+
+#[ export ]
+Instance eqTC_otbn_caimm_cond : eqTypeC otbn_caimm_cond :=
+  { ceqP := otbn_caimm_cond_eqb_OK }.
+
 Definition check_nbits
   (s : signedness) (n : positive) (ws : wsize) (w : word ws) : bool :=
   let '(lo, hi) := signedness_bounds s n in
@@ -263,14 +277,21 @@ Definition check_mulqacc_shift (i : Z) : bool :=
   [&& 0 <=? i, i <=? 192 & i mod 64 == 0]%Z.
 
 Definition otbn_check_CAimm
-  (checker : caimm_checker_s) (ws : wsize) (w : word ws) : bool :=
+  (checker : otbn_caimm_cond) (ws : wsize) (w : word ws) : bool :=
   match checker with
-  | CAimmC_none => true
   | CAimmC_otbn_nbits s n => check_nbits s n w
   | CAimmC_otbn_bn_shift => check_bn_shift (wunsigned w)
   | CAimmC_otbn_mulqacc_shift => check_mulqacc_shift (wunsigned w)
-  | _ => false
   end.
+
+Definition otbn_caimm_cond_pp (checker : otbn_caimm_cond) : string :=
+  match checker with
+  | CAimmC_otbn_nbits s n =>
+      let '(lo, hi) := signedness_bounds s n in
+      concat "" [:: "["; string_of_Z lo; ", "; string_of_Z hi; ")"]
+  | CAimmC_otbn_bn_shift => "[0, 248] in steps of 8"
+  | CAimmC_otbn_mulqacc_shift => "[0, 192] in steps of 64"
+  end%string.
 
 (* -------------------------------------------------------------------------- *)
 (* Architecture declaration. *)
@@ -288,6 +309,9 @@ Instance otbn_decl : arch_decl register empty wide_register rflag condition :=
     reg_size_neq_xreg_size := refl_equal;
     ad_rsp := X02;
     ad_fcp := otbn_fcp;
+    caimm_cond := otbn_caimm_cond;
+    caimm_cond_eqC := eqTC_otbn_caimm_cond;
+    caimm_cond_pp := otbn_caimm_cond_pp;
     check_CAimm := otbn_check_CAimm;
   }.
 

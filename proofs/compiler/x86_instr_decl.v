@@ -375,6 +375,7 @@ Notation ex_tpl A := (exec (sem_ltuple A)) (only parsing).
 
 Definition implicit_flags      := map F [::OF; CF; SF; PF; ZF].
 Definition implicit_flags_noCF := map F [::OF; SF; PF; ZF].
+Definition implicit_OF_CF_SF_PF := map F [::OF; CF; SF; PF].
 
 Definition iCF := F CF.
 
@@ -438,8 +439,8 @@ Notation mk_instr_w_b5w name semi ain aout nargs check prc valid pp_asm :=
 Notation mk_instr_w_b4w_00 name semi check prc valid pp_asm := ((fun sz =>
   mk_instr_safe (pp_sz name sz) (w_ty sz) (b4w_ty sz) [:: Eu 0] (implicit_flags_noCF ++ [:: Eu 0]) (reg_msb_flag sz) (semi sz) (check sz) 1 (valid sz) (pp_asm sz)), (name%string,prc))  (only parsing).
 
-Notation mk_instr_w2_b name semi ain aout nargs check prc valid pp_asm := ((fun sz =>
-  mk_instr_safe (pp_sz name sz) (w2_ty sz sz) (b_ty) ain aout (reg_msb_flag sz) (semi sz) (check sz) nargs (valid sz)(pp_asm sz)), (name%string,prc))  (only parsing).
+Notation mk_instr_w2_b4 name semi ain aout nargs check prc valid pp_asm := ((fun sz =>
+  mk_instr_safe (pp_sz name sz) (w2_ty sz sz) (b4_ty) ain aout (reg_msb_flag sz) (semi sz) (check sz) nargs (valid sz) (pp_asm sz)), (name%string,prc))  (only parsing).
 
 Notation mk_instr_w2_b5 name semi ain nargs check prc valid pp_asm := ((fun sz =>
   mk_instr_safe (pp_sz name sz) (w2_ty sz sz) (b5_ty) ain implicit_flags (reg_msb_flag sz) (semi sz) (check sz) nargs (valid sz) (pp_asm sz)), (name%string,prc))  (only parsing).
@@ -453,8 +454,8 @@ Notation mk_instr_w2_b5w_010 name semi check prc valid pp_asm := ((fun sz =>
 Notation mk_instr_w2b_b5w_010 name semi check prc valid pp_asm := ((fun sz =>
   mk_instr_safe (pp_sz name sz) (w2b_ty sz sz) (b5w_ty sz) ([:: Eu 0; Eu 1] ++ [::iCF]) (implicit_flags ++ [:: Eu 0]) (reg_msb_flag sz) (semi sz) (check sz) 2 (valid sz) (pp_asm sz)), (name%string,prc))  (only parsing).
 
-Notation mk_instr_w2_bw name semi check prc valid pp_asm := ((fun sz =>
-  mk_instr_safe (pp_sz name sz) (w2_ty sz sz) (bw_ty sz) [:: Ea 0; Eu 1] [::F CF; Ea 0] MSB_MERGE (semi sz) (check sz) 2 (valid sz) (pp_asm sz)), (name%string,prc))  (only parsing).
+Notation mk_instr_w2_b4w name semi flags check prc valid pp_asm := ((fun sz =>
+  mk_instr_safe (pp_sz name sz) (w2_ty sz sz) (b4w_ty sz) [:: Ea 0; Eu 1] (flags ++ [::Ea 0]) (reg_msb_flag sz) (semi sz) (check sz) 2 (valid sz) (pp_asm sz)), (name%string,prc))  (only parsing).
 
 Notation mk_instr_w2b_bw name semi flag check prc valid pp_asm := ((fun sz =>
   mk_instr_safe (pp_sz name sz) (w2b_ty sz sz) (bw_ty sz) ([:: Ea 0; Eu 1] ++ [::F flag]) ([::F flag; Ea 0]) (reg_msb_flag sz) (semi sz) (check sz) 2 (valid sz) (pp_asm sz)), (name%string,prc))  (only parsing).
@@ -573,12 +574,12 @@ Definition c := [::CAcond].
 Definition r := [:: CAreg].
 Definition rx := [:: CAregx].
 Definition m b := [:: CAmem b].
-Definition i sz := [:: CAimm CAimmC_none sz].
+Definition i sz := [:: CAimm None sz].
 Definition rm b := [:: CAreg; CAmem b].
 Definition rxm b := [:: CAregx; CAmem b].
 
-Definition rmi sz := [:: CAreg; CAmem true; CAimm CAimmC_none sz].
-Definition ri  sz := [:: CAreg; CAimm CAimmC_none sz].
+Definition rmi sz := [:: CAreg; CAmem true; CAimm None sz].
+Definition ri  sz := [:: CAreg; CAimm None sz].
 
 Definition m_r := [:: m false; r].
 Definition r_rm_false := [:: r; rm false].
@@ -589,7 +590,7 @@ Definition m_ri sz := [:: m false; ri sz].
 
 Definition xmm := [:: CAxmm ].
 Definition xmmm b := [:: CAxmm; CAmem b].
-Definition xmmmi sz := [:: CAxmm; CAmem true; CAimm CAimmC_none sz].
+Definition xmmmi sz := [:: CAxmm; CAmem true; CAimm None sz].
 
 Definition xmm_xmmm := [::xmm; xmmm true].
 Definition xmmm_xmm := [::xmmm false; xmm].
@@ -647,7 +648,7 @@ Definition check_padd : i_args_kinds := [:: [:: rx; rxm true ]; [:: xmm; xmmm tr
 Definition Ox86_PADD_instr :=
   let padd := "PADD"%string in
   (λ (ve: velem) (sz: wsize),
-    mk_instr_safe (pp_ve_sz padd ve sz) (w2_ty sz sz) (w_ty sz) [:: Eu 0; Eu 1 ] [:: Eu 0 ] MSB_CLEAR
+    mk_instr_safe (pp_ve_sz padd ve sz) (w2_ty sz sz) (w_ty sz) [:: Eu 0; if (sz ≤ U64)%CMP then Eu 1 else Ea 1 ] [:: Eu 0 ] MSB_CLEAR
       (lift2_vec ve +%w sz) check_padd 2 (size_64_128 sz) (pp_viname "padd" ve sz),
    (padd, primMMX PADD)).
 
@@ -943,10 +944,15 @@ Qed.
 
 Definition Ox86_BSR_instr :=
   (fun sz =>
-     mk_instr (pp_sz "BSR" sz) [:: lword sz ] (b5w_ty sz) [:: Eu 1 ] (implicit_flags ++ [:: Ea 0 ]) MSB_CLEAR
-       (@x86_BSR sz) [:: r_rm ] 2 [:: NotZero sz 0 ] (size_16_64 sz) (pp_iname "bsr" sz)
-       erefl (@x86_BSR_errty sz) (@x86_BSR_safe sz),
-     ("BSR"%string, prim_16_64 BSR)).
+     mk_instr
+       (pp_sz "BSR" sz)
+       [:: lword sz ] (b5w_ty sz) [:: Eu 1 ] (implicit_flags ++ [:: Ea 0 ])
+       (reg_msb_flag sz)
+       (@x86_BSR sz)
+       [:: r_rm ] 2
+       [:: NotZero sz 0 ] (size_16_64 sz)
+       (pp_iname "bsr" sz) erefl (@x86_BSR_errty sz) (@x86_BSR_safe sz)
+  , ("BSR"%string, prim_16_64 BSR)).
 
 Definition check_setcc := [:: [::c; rm false]].
 
@@ -957,11 +963,18 @@ Definition Ox86_SETcc_instr             :=
 
 Definition check_bt (_: wsize) := [:: [:: r; ri U8 ]].
 
-Definition x86_BT sz (x y: word sz) : tpl (b_ty) :=
-  Some (wbit x y).
+(* From Vol. 2A 3-113:
+   The CF flag contains the value of the selected bit.
+   The ZF flag is unaffected.
+   The OF, SF, AF, and PF flags are undefined. *)
+Definition x86_BT sz (x y: word sz) : tpl b4_ty :=
+  (:: None, Some (wbit x y), None & None).
 
-Definition Ox86_BT_instr                :=
-  mk_instr_w2_b "BT" x86_BT [:: Eu 0; Eu 1] [:: F CF] 2 check_bt (prim_16_64 BT) size_16_64 (pp_iname "bt").
+Definition Ox86_BT_instr :=
+  mk_instr_w2_b4
+    "BT" x86_BT
+    [:: Eu 0; Eu 1] implicit_OF_CF_SF_PF 2
+    check_bt (prim_16_64 BT) size_16_64 (pp_iname "bt").
 
 (* -------------------------------------------------------------------- *)
 
@@ -1282,15 +1295,23 @@ Definition x86_POPCNT sz (v: word sz): tpl (b5w_ty sz) :=
 Definition Ox86_POPCNT_instr :=
   mk_instr_w_b5w "POPCNT" x86_POPCNT [:: Eu 1] [:: Eu 0] 2 (fun _ => [::r_rm]) (prim_16_64 POPCNT) size_16_64 (pp_name "popcnt").
 
-Definition x86_BTX op sz (x y: word sz) : tpl (bw_ty sz) :=
+(* From Vol. 2A 3-116 and 3-118:
+   The CF flag contains the value of the selected bit (before the action).
+   The ZF flag is unaffected.
+   The OF, SF, AF, and PF flags are undefined. *)
+Definition x86_BTX op sz (x y: word sz) : tpl (b4w_ty sz) :=
   let bit := (wunsigned y mod wsize_bits sz)%Z in
-  (:: Some (wbit_n x (Z.to_nat bit)) & op sz (wrepr sz (2 ^ bit)) x).
+  (:: None
+    , Some (wbit_n x (Z.to_nat bit))
+    , None
+    , None
+    & op sz (wrepr sz (2 ^ bit)) x).
 
 Definition Ox86_BTR_instr :=
-  mk_instr_w2_bw "BTR" (x86_BTX wandn) check_bt (prim_16_64 BTR) size_16_64 (pp_iname "btr").
+  mk_instr_w2_b4w "BTR" (x86_BTX wandn) implicit_OF_CF_SF_PF check_bt (prim_16_64 BTR) size_16_64 (pp_iname "btr").
 
 Definition Ox86_BTS_instr :=
-  mk_instr_w2_bw "BTS" (x86_BTX (@wor)) check_bt (prim_16_64 BTS) size_16_64 (pp_iname "bts").
+  mk_instr_w2_b4w "BTS" (x86_BTX (@wor)) implicit_OF_CF_SF_PF check_bt (prim_16_64 BTS) size_16_64 (pp_iname "bts").
 
 Definition x86_PEXT sz (v1 v2: word sz): tpl (w_ty sz) :=
   @pextr sz v1 v2.
@@ -1997,7 +2018,7 @@ Definition x86_AESIMC          (v1    : u128)           : tpl (w_ty U128) := wAE
 Definition x86_AESKEYGENASSIST (v1    : u128) (v2 : u8) : tpl (w_ty U128) := wAESKEYGENASSIST v1 v2.
 
 Definition mk_instr_aes2 jname aname (constr:x86_op) x86_sem msb_flag :=
-  mk_instr_pp jname (w2_ty U128 U128) (w_ty U128) [:: Eu 0; Eu 1] [:: Eu 0] msb_flag x86_sem
+  mk_instr_pp jname (w2_ty U128 U128) (w_ty U128) [:: Eu 0; Ea 1] [:: Eu 0] msb_flag x86_sem
          (check_xmm_xmmm U128) 2 (primM constr) (pp_name_ty aname [::U128;U128]).
 
 Definition mk_instr_aes3 jname aname (constr: wsize → x86_op) x86_sem :=
@@ -2034,7 +2055,7 @@ Definition Ox86_VAESENCLAST_instr :=
   mk_instr_aes3 "VAESENCLAST" "vaesenclast" VAESENCLAST wAESENCLAST.
 
 Definition Ox86_AESIMC_instr :=
-  mk_instr_pp "AESIMC" (w_ty U128) (w_ty U128) [:: Eu 1] [:: Eu 0] MSB_MERGE x86_AESIMC
+  mk_instr_pp "AESIMC" (w_ty U128) (w_ty U128) [:: Ea 1] [:: Eu 0] MSB_MERGE x86_AESIMC
          (check_xmm_xmmm U128) 2 (primM AESIMC) (pp_name_ty "aesimc" [::U128;U128]).
 
 Definition Ox86_VAESIMC_instr :=
@@ -2042,7 +2063,7 @@ Definition Ox86_VAESIMC_instr :=
          (check_xmm_xmmm U128) 2 (primM VAESIMC) (pp_name_ty "vaesimc" [::U128;U128]).
 
 Definition Ox86_AESKEYGENASSIST_instr :=
-  mk_instr_pp "AESKEYGENASSIST" (w2_ty U128 U8) (w_ty U128) [:: Eu 1; Eu 2] [:: Eu 0]
+  mk_instr_pp "AESKEYGENASSIST" (w2_ty U128 U8) (w_ty U128) [:: Ea 1; Eu 2] [:: Eu 0]
     MSB_MERGE x86_AESKEYGENASSIST
    (check_xmm_xmmm_imm8 U128) 3 (primM AESKEYGENASSIST)
    (pp_name_ty "aeskeygenassist" [::U128;U128;U8]).

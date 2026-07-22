@@ -43,26 +43,14 @@ Existing Instance _finC.
 
 Definition rtype {t T} `{ToString t T} := t.
 
-(* This type and the field check_CAimm is not very elegant, but
-   it is the only solution I have to keep a decidable equality over the type arg_kind.
-   If new architecture need new checker for immediate then we should add an entry here.
-   But it definition can be done in the architecture itself
-*)
-
-#[only(eqbOK)] derive
-Variant caimm_checker_s :=
-  | CAimmC_none
-  | CAimmC_arm_shift_amout of shift_kind
-  | CAimmC_arm_wencoding   of expected_wencoding
-  | CAimmC_arm_0_8_16_24
-  | CAimmC_riscv_12bits_signed
-  | CAimmC_riscv_5bits_unsigned
-  | CAimmC_otbn_nbits of signedness & positive
-  | CAimmC_otbn_bn_shift
-  | CAimmC_otbn_mulqacc_shift
-.
-
-HB.instance Definition _ := hasDecEq.Build caimm_checker_s caimm_checker_s_eqb_OK.
+(* Immediate-argument conditions.
+   Each architecture declares its own type of validity conditions for
+   immediate operands: the [caimm_cond] field of [arch_decl] below, together
+   with [check_CAimm] to decide whether an immediate word satisfies a
+   condition and [caimm_cond_pp] to render the condition in assembly
+   generation error messages. Architectures with no special immediate
+   conditions (e.g. x86) use [empty]. This keeps each architecture's
+   conditions in its own files. *)
 
 (* -------------------------------------------------------------------- *)
 (* Basic architecture declaration.
@@ -79,11 +67,14 @@ Class arch_decl (reg regx xreg rflag cond : Type) :=
   ; reg_size_neq_xreg_size : reg_size != xreg_size
   ; ad_rsp : reg
   ; ad_fcp : FlagCombinationParams
-  ; check_CAimm : caimm_checker_s -> forall ws, word ws -> bool
+  ; caimm_cond : Type  (* architecture-specific immediate conditions *)
+  ; caimm_cond_eqC : eqTypeC caimm_cond
+  ; caimm_cond_pp : caimm_cond -> string  (* for error messages *)
+  ; check_CAimm : caimm_cond -> forall ws, word ws -> bool
   }.
 
 #[global]
-Existing Instances cond_eqC toS_r toS_rx toS_x toS_f ad_fcp.
+Existing Instances cond_eqC toS_r toS_rx toS_x toS_f ad_fcp caimm_cond_eqC.
 
 #[export]
 Instance arch_pd `{arch_decl} : PointerData := { Uptr := reg_size }.
@@ -314,14 +305,36 @@ Definition check_oreg or ai :=
 (* Argument kinds.
  * Types for arguments of assembly instructions.
  *)
-#[only(eqbOK)] derive
 Variant arg_kind :=
 | CAcond
 | CAreg
 | CAregx
 | CAxmm
 | CAmem of bool (* true if Global is allowed *)
-| CAimm of caimm_checker_s & wsize.
+| CAimm of option caimm_cond & wsize.
+
+(* [caimm_cond] is an abstract type equipped with an [eqTypeC], so the
+   decidable equality is written by hand instead of derived. *)
+Definition arg_kind_eqb (a1 a2 : arg_kind) : bool :=
+  match a1, a2 with
+  | CAcond, CAcond
+  | CAreg, CAreg
+  | CAregx, CAregx
+  | CAxmm, CAxmm => true
+  | CAmem b1, CAmem b2 => b1 == b2
+  | CAimm c1 ws1, CAimm c2 ws2 =>
+      ((c1 : option ceqT_eqType) == c2) && (ws1 == ws2)
+  | _, _ => false
+  end.
+
+Lemma arg_kind_eqb_OK : forall a1 a2, reflect (a1 = a2) (arg_kind_eqb a1 a2).
+Proof.
+  move=> a1 a2; apply: (iffP idP).
+  - case: a1 a2 => [||||b1|c1 ws1] [||||b2|c2 ws2] //=.
+    + by move=> /eqP ->.
+    by move=> /andP [/eqP -> /eqP ->].
+  move=> <-; case: a1 => //= *; by rewrite !eqxx.
+Qed.
 
 HB.instance Definition _ := hasDecEq.Build arg_kind arg_kind_eqb_OK.
 
@@ -351,7 +364,8 @@ Definition i_args_kinds := seq args_kinds.
 Definition check_arg_kind (a:asm_arg) (cond: arg_kind) :=
   match a, cond with
   | Condt _, CAcond => true
-  | Imm sz z, CAimm checker sz' => (sz == sz') && check_CAimm checker z
+  | Imm sz z, CAimm checker sz' =>
+      (sz == sz') && oapp (fun c => check_CAimm c z) true checker
   | Reg _ , CAreg => true
   | Regx _, CAregx => true
   | Addr _, CAmem _ => true
@@ -444,7 +458,12 @@ Existing Instance _eqT.
 
 Definition asm_op_t' {asm_op} {asm_op_d : asm_op_decl asm_op} := asm_op.
 (* We extend [asm_op] in order to deal with msb flags *)
-Definition asm_op_msb_t {asm_op} {asm_op_d : asm_op_decl asm_op} := (option wsize * asm_op)%type.
+
+Definition asm_op_msb_t_gen (asm_op : Type) :=
+  (option wsize * asm_op)%type.
+
+Definition asm_op_msb_t {asm_op} {asm_op_d : asm_op_decl asm_op} :=
+  asm_op_msb_t_gen asm_op.
 
 Context `{asm_op_d : asm_op_decl}.
 
@@ -553,16 +572,26 @@ Proof.
   move=> h v; apply/hrec/h.
 Qed.
 
+Definition can_zeroextend (d:instr_desc_t) :=
+  (d.(id_msb_flag) == MSB_CLEAR).
+
+Lemma and_proj1 (a b : bool) : a && b -> a.
+Proof. by move=> /andP []. Qed.
+
 Definition instr_desc (o:asm_op_msb_t) : instr_desc_t :=
   let (ws, o) := o in
   let d := instr_desc_op o in
   if ws is Some ws then
-    if d.(id_msb_flag) == MSB_CLEAR then
-    {| id_valid      := d.(id_valid);
+    let valid := can_zeroextend d in
+    let tout := map (extend_size ws) d.(id_tout) in
+    {| id_valid      := d.(id_valid) &&
+          (* We reject the operator if the msb flag is not msb_clear
+             or if the cast (the extend_size) has no effect on the output type *)
+          (valid && (tout != d.(id_tout)));
        id_msb_flag   := d.(id_msb_flag);
        id_tin        := d.(id_tin);
        id_in         := d.(id_in);
-       id_tout       := map (extend_size ws) d.(id_tout);
+       id_tout       := tout;
        id_out        := d.(id_out);
        id_semi       := extend_sem ws d.(id_semi);
        id_args_kinds := exclude_mem d.(id_args_kinds) d.(id_out) ;
@@ -573,10 +602,9 @@ Definition instr_desc (o:asm_op_msb_t) : instr_desc_t :=
        id_safe       := d.(id_safe);
        id_pp_asm     := d.(id_pp_asm);
        id_safe_wf    := d.(id_safe_wf);
-       id_semi_errty := fun h => extend_sem_errty ws (d.(id_semi_errty) h);
-       id_semi_safe  := fun h => extend_sem_safe ws (d.(id_semi_safe) h);
- |}
-    else d (* FIXME do the case for MSB_KEEP *)
+       id_semi_errty := fun h => extend_sem_errty ws (d.(id_semi_errty) (and_proj1 h));
+       id_semi_safe  := fun h => extend_sem_safe ws (d.(id_semi_safe) (and_proj1 h));
+    |}
   else
     d.
 

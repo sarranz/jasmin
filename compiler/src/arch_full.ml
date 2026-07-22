@@ -53,6 +53,7 @@ end
 module type Arch = sig
   include Core_arch
 
+  type extended_op_gen = (asm_op, extra_op) Arch_extra.extended_op_gen
   type extended_op = (reg, regx, xreg, rflag, cond, asm_op, extra_op) Arch_extra.extended_op
 
   val reg_size : Wsize.wsize
@@ -60,8 +61,8 @@ module type Arch = sig
   val msf_size : Wsize.wsize
   val rip : var
 
-  val asmOp      : extended_op Sopn.asmOp
-  val asmOp_sopn : extended_op Sopn.sopn Sopn.asmOp
+  val asmOp      : extended_op_gen Sopn.asmOp
+  val asmOp_sopn : extended_op_gen Sopn.sopn Sopn.asmOp
 
   val reg_vars  : var list
   val regx_vars : var list
@@ -82,7 +83,7 @@ module type Arch = sig
 
   val callstyle : var callstyle
 
-  val arch_info : (reg, regx, xreg, rflag, cond, asm_op, extra_op) Pretyping.arch_info
+  val arch_info : extended_op arch_info
 
   val is_ct_sopn : ?doit:bool -> extended_op -> bool
 
@@ -99,6 +100,8 @@ module Arch_from_Core_arch (A : Core_arch) :
      and type asm_op = A.asm_op
      and type extra_op = A.extra_op = struct
   include A
+
+  type extended_op_gen = (asm_op, extra_op) Arch_extra.extended_op_gen
 
   type extended_op = (reg, regx, xreg, rflag, cond, asm_op, extra_op) Arch_extra.extended_op
 
@@ -208,10 +211,19 @@ module Arch_from_Core_arch (A : Core_arch) :
     | OnHWStack -> OnHWStack
     | ByReg { call; return } -> ByReg { call = Option.map var_of_reg call; return }
 
-  let arch_info = Pretyping.{
+  let zero_extend_op (op : extended_op) ws =
+    match op with
+    | Arch_extra.BaseOp(None, op') ->
+        let o = Arch_extra.BaseOp(Some ws, op') in
+        if (asmOp.asm_op_instr o).i_valid then Some o
+        else None
+    | _ -> None
+
+  let arch_info = {
       arch = arch;
       pd = reg_size;
       asmOp = asmOp_sopn;
+      zero_extend_op;
       known_implicits = known_implicits;
       flagnames = List.map fst known_implicits;
     }
