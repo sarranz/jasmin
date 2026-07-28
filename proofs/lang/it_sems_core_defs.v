@@ -16,18 +16,20 @@ Local Open Scope monad_scope.
 (**** Error semantics ******************************************)
 Section Errors.
 
+Context {E : Type -> Type}.
+
 (* error events *)
 Definition ErrEvent : Type -> Type := exceptE error.
 
 (* execT (itree E) R = itree E (execS R) *)
-Definition handle_Err {E} : ErrEvent ~> execT (itree E) :=
+Definition handle_Err : ErrEvent ~> execT (itree E) :=
   fun _ e =>
     match e with
     | Throw e' => Ret (Error e')
     end.
 
 (* ErrEvnt handler *)
-Definition ext_handle_Err {E: Type -> Type} :
+Definition ext_handle_Err :
   ErrEvent +' E ~> execT (itree E) :=
   fun _ e =>
   match e with
@@ -35,23 +37,26 @@ Definition ext_handle_Err {E: Type -> Type} :
   | inr1 e' => Vis e' (pure (fun x => ok x)) end.
 
 (* ErrEvent interpreter *)
-Definition interp_Err {E: Type -> Type} {A}
+Definition interp_Err {A}
   (t: itree (ErrEvent +' E) A) : execT (itree E) A :=
   interp_exec ext_handle_Err t.
 
 (*** auxiliary error functions *)
 
-Definition ioget {E: Type -> Type} `{ErrEvent -< E} {V} (err: error) (o: option V) : itree E V :=
+Definition ioget `{ErrEvent -< E} {V} (err: error) (o: option V) : itree E V :=
   match o with
   | Some v => Ret v
   | None => throw err
   end.
 
-Definition iresult {E: Type -> Type} `{ErrEvent -< E} :
+Definition iresult `{ErrEvent -< E} :
   result error ~> itree E :=
   fun _ t => match t with
              | Ok v => Ret v
              | Error e => throw e end.
+
+Definition iassert `{ErrEvent -< E} (b : bool) (e : error) : itree E unit :=
+  iresult (assert b e).
 
 End Errors.
 
