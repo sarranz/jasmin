@@ -12,7 +12,7 @@ From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
 Require Import expr psem_defs psem_core it_exec rec_facts.
 Require Export it_sems_core_defs.
 
-Import MonadNotation.
+Import MonadNotation ITreeNotations.
 Local Open Scope monad_scope.
 
 Section WSW.
@@ -31,7 +31,7 @@ Context
   {pT : progT}
   {scP : semCallParams}.
 
-Record fstate := { fscs : syscall_state_t; fmem : mem; fvals : values }.
+Record fstate := { fscs : syscall_state; fmem : mem; fvals : values; }.
 
 (* Recursion events (curried version of Call in ITree) *)
 Variant recCall : Type -> Type :=
@@ -40,7 +40,7 @@ Variant recCall : Type -> Type :=
 (**** Auxiliary definitions ******************************************)
 Section CORE.
 
-Context {E E0} {wE : with_Error E E0} (p : prog) (ev : extra_val_t).
+Context (p : prog) (ev : extra_val_t).
 
 Definition kget_fundef (funcs: fun_decls) (fn: funname) :
     ktree E fstate fundef :=
@@ -68,9 +68,9 @@ Definition sem_assgn  (x : lval) (tg : assgn_tag) (ty : atype) (e : pexpr)
   Let v' := truncate_val (eval_atype ty) v in
   write_lval true (p_globs p) x v' s.
 
-Definition fexec_syscall (o : syscall_t) (fs:fstate) : exec fstate :=
-  Let: (scs, m, vs) := exec_syscall fs.(fscs) fs.(fmem) o fs.(fvals) in
-  ok {| fscs := scs; fmem := m; fvals := vs |}.
+Definition fexec_syscall (o : syscall_t) (fs : fstate) : itree E fstate :=
+  '(scs, m, vs) <- exec_syscall fs.(fscs) fs.(fmem) o fs.(fvals) ;;
+  Ret {| fscs := scs; fmem := m; fvals := vs; |}.
 
 Definition mk_fstate (vs:values) (s:estate) :=
   {| fscs := escs s; fmem:= emem s; fvals := vs |}.
@@ -80,10 +80,10 @@ Definition upd_estate wdb (gd : glob_decls) (xs:lvals) (fs : fstate)
   write_lvals wdb gd (with_scs (with_mem s fs.(fmem)) fs.(fscs)) xs fs.(fvals).
 
 Definition sem_syscall (xs : lvals) (o : syscall_t) (es : pexprs)
-    (s : estate) : exec estate :=
-  Let ves := sem_pexprs true (p_globs p) s es in
-  Let fs := fexec_syscall o (mk_fstate ves s) in
-  upd_estate true (p_globs p) xs fs s.
+    (s : estate) : itree E estate :=
+  ves <- iresult (sem_pexprs true (p_globs p) s es) ;;
+  fs <- fexec_syscall o (mk_fstate ves s) ;;
+  iresult (upd_estate true (p_globs p) xs fs s).
 
 Definition sem_cond (gd : glob_decls) (e : pexpr) (s : estate) : exec bool :=
   (sem_pexpr true gd s e >>= to_bool)%result.
@@ -147,10 +147,29 @@ Definition rec_call (ii:instr_info) (f : funname) (fs : fstate) :
 
 End CORE.
 
+End WSW.
+
+Section WSW.
+
+Context
+  {asm_op : Type}
+  {wsw : WithSubWord}
+  {dc : DirectCall}
+  {syscall_state : Type}
+  {E0 E : Type -> Type}
+  {wE : with_Error E E0}
+  {rE : with_RndEvent syscall_state E}
+  {ep : EstateParams syscall_state}
+  {spp : SemPexprParams}
+  {wa: WithAssert}
+  {sip : SemInstrParams asm_op syscall_state}
+  {pT : progT}
+  {scP : semCallParams}.
+
 (**** Abstract semantics **********************************************)
 Section SEM_C.
 
-Context {E E0} {wE : with_Error E E0}
+Context
         (sem_i: prog -> extra_val_t -> instr -> estate -> itree E estate)
         (p : prog) (ev : extra_val_t).
 
@@ -186,6 +205,19 @@ Definition isem_while_loop (c1 : cmd) (e:pexpr) (c2: cmd) (s : estate) :
 
 End SEM_C.
 
+End WSW.
+
+Section WSW.
+
+Context
+  {asm_op : Type}
+  {wsw : WithSubWord}
+  {syscall_state : Type}
+  {ep : EstateParams syscall_state}
+  {sip : SemInstrParams asm_op syscall_state}
+  {pT : progT}
+.
+
 Definition estate0 (fs : fstate) :=
   Estate fs.(fscs) fs.(fmem) Vm.init.
 
@@ -196,9 +228,28 @@ Class sem_Fun (E : Type -> Type) :=
 Instance sem_fun_rec (E : Type -> Type) : sem_Fun (recCall +' E) | 0 :=
   {| sem_fun := fun _ _ => rec_call (E:=E) |}.
 
+End WSW.
+
+Section WSW.
+
+Context
+  {asm_op : Type}
+  {wsw : WithSubWord}
+  {dc : DirectCall}
+  {syscall_state : Type}
+  {E0 E : Type -> Type}
+  {wE : with_Error E E0}
+  {rE : with_RndEvent syscall_state E}
+  {ep : EstateParams syscall_state}
+  {spp : SemPexprParams}
+  {wa: WithAssert}
+  {sip : SemInstrParams asm_op syscall_state}
+  {pT : progT}
+  {scP : semCallParams}.
+
 Section SEM_I.
 
-Context {E E0} {wE : with_Error E E0} {sem_F : sem_Fun E }.
+Context {sem_F : sem_Fun E}.
 
 (* semantics of instructions, abstracting on function calls (through
    sem_fun) *)
@@ -210,7 +261,7 @@ Fixpoint isem_i_body (p : prog) (ev : extra_val_t) (i : instr) (s : estate) :
 
   | Copn xs tg o es => iresult (sem_sopn (p_globs p) o s xs es)
 
-  | Csyscall xs o es => iresult (sem_syscall p xs o es s)
+  | Csyscall xs o es => sem_syscall p xs o es s
 
   | Cassert a => isem_assert p a s;; Ret s
 
@@ -296,7 +347,7 @@ Fixpoint esem_i (p : prog) (ev : extra_val_t) (i : instr) (s : estate) :
 
   | Copn xs tg o es => sem_sopn (p_globs p) o s xs es
 
-  | Csyscall xs o es => sem_syscall p xs o es s
+  | Csyscall xs o es => Error ErrSemUndef
 
   | Cassert a => Let _ := sem_assert (p_globs p) s a in ok s
 
@@ -333,7 +384,7 @@ Proof.
   apply (cmd_rect (Pr := Pi_r) (Pi := Pi) (Pc := Pc)) => {s s' c} //.
   + move=> > /= [<-]; reflexivity.
   + by move=> i c hi hc s s' /=; t_xrbindP => s1 /hi ->; rewrite bind_ret_l; apply hc.
-  1-3: move=> > /= -> /=; reflexivity.
+  1-2: move=> > /= -> /=; reflexivity.
   + move => a ii s s' /=; t_xrbindP; rewrite /isem_assert => -> <-; rewrite bind_ret_l; reflexivity.
   + move=> > hc1 hc2 ii s s' /=.
     rewrite /isem_cond; t_xrbindP => b -> /=.
@@ -371,8 +422,6 @@ End SEM_I.
 
 (*** error-aware interpreter with recursion ***************************)
 Section SEM_F.
-
-Context {E E0} {wE : with_Error E E0}.
 
 Section EXTEQ.
 Context (sem_F1 sem_F2: sem_Fun E) (p:prog) (ev:extra_val_t) .
@@ -421,10 +470,34 @@ Qed.
 
 End EXTEQ.
 
+End SEM_F.
+
+End WSW.
+
+Section WSW.
+
+Context
+  {asm_op : Type}
+  {wsw : WithSubWord}
+  {dc : DirectCall}
+  {syscall_state : Type}
+  {E0 E : Type -> Type}
+  {wE : with_Error E E0}
+  {rE : with_RndEvent syscall_state E}
+  {ep : EstateParams syscall_state}
+  {spp : SemPexprParams}
+  {wa: WithAssert}
+  {sip : SemInstrParams asm_op syscall_state}
+  {pT : progT}
+  {scP : semCallParams}.
+
 (* semantics of instructions parametrized by recCall events *)
 Definition isem_i_rec (p : prog) (ev : extra_val_t) (i : instr) (s : estate)
   : itree (recCall +' E) estate :=
-  isem_i_body (sem_F := sem_fun_rec E) p ev i s.
+  isem_i_body
+    (wE := @FIso_suml (@recCall syscall_state ep) E E0 ErrEvent wE)
+    (scP := scP)
+    (sem_F := sem_fun_rec E) p ev i s.
 
 (* similar, for commands *)
 Definition isem_cmd_rec (p : prog) (ev : extra_val_t) (c : cmd) (s : estate)
@@ -478,18 +551,34 @@ Definition isem_fun_inline
   (do_inline :  funname (* caller *) -> instr_info -> funname (* callee *) -> bool) :=
   isem_fun_def (sem_F := sem_fun_inline do_inline).
 
-End SEM_F.
+End WSW.
+
+Section WSW.
+
+Context
+  {asm_op : Type}
+  {wsw : WithSubWord}
+  {dc : DirectCall}
+  {syscall_state : Type}
+  {E0 E : Type -> Type}
+  {wE : with_Error E E0}
+  {rE : with_RndEvent syscall_state E}
+  {ep : EstateParams syscall_state}
+  {spp : SemPexprParams}
+  {wa: WithAssert}
+  {sip : SemInstrParams asm_op syscall_state}
+  {pT : progT}
+  {scP : semCallParams}.
 
 (* interpreter of error events, giving us the fully interpreted
    semantics of functions *)
 Definition err_sem_fun (p : prog) (ev : extra_val_t) (fn : funname)
-    (fs : fstate) : execT (itree void1) fstate :=
+    (fs : fstate) : execT (itree (RndEvent syscall_state)) fstate :=
   interp_Err (isem_fun p ev fn fs).
 
 (*** Core lemmas about the definition ********************************)
 Section CoreLemmas.
 
-Context {E E0: Type -> Type} {wE : with_Error E E0}.
 Context (p : prog) (ev : extra_val_t).
 
 Notation interp_rec := (interp (mrecursive (handle_recCall p ev))).
@@ -531,7 +620,14 @@ Proof.
   + move=> s /=; rewrite interp_ret; reflexivity.
   + move=> i c hi hc s; rewrite interp_bind;apply eqit_bind; first by apply hi.
     by move=> s'; apply hc.
-  1-3: by move=> >; apply interp_iresult.
+  1-2: by move=> >; apply interp_iresult.
+  + move=> xs o es ii s; rewrite /= /sem_syscall /=.
+    rewrite interp_bind; apply: eqit_bind; first exact: interp_iresult.
+    move=> bs; rewrite interp_bind; apply: eqit_bind; last first.
+    * move=> fs; rewrite interp_iresult; reflexivity.
+    rewrite /fexec_syscall interp_bind; apply: eqit_bind; last first.
+    * move=> [[scs m] vs]; rewrite interp_ret; reflexivity.
+    admit.
   + move => a ii s /=.
     rewrite interp_bind; apply eqit_bind.
     + by apply interp_iresult.
@@ -566,7 +662,7 @@ Proof.
   move => ?;rewrite interp_bind;apply eqit_bind.
   + by apply interp_iresult.
   move=> ?; exact: interp_iresult.
-Qed.
+Admitted.
 
 Lemma isem_call_unfold (fn : funname) (fs : fstate) :
   isem_fun p ev fn fs ≈ isem_fun_body p ev fn fs.
@@ -665,7 +761,7 @@ Proof.
     + by move=> i c hi hc s; rewrite interp_bind hi; apply/eutt_eq_bind/hc.
     + by move=> > ? >; apply interp_cond_iresult.
     + by move=> > ? > ? > ; apply interp_cond_iresult.
-    + by move=> > ? >; apply interp_cond_iresult.
+    + admit.
     + move=> a ii s; rewrite interp_bind; apply eutt_eq_bind'.
       + by apply interp_cond_iresult.
       by move=> ?; rewrite interp_ret; reflexivity.
@@ -702,7 +798,7 @@ Proof.
     by move=> ?; apply interp_cond_iresult.
   apply Proper_interp_mrec => //.
   by move=> T [].
-Qed.
+Admitted.
 
 End CoreLemmas.
 

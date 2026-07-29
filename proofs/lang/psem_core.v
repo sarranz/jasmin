@@ -21,39 +21,44 @@ Open Scope vm_scope.
 Section WSW.
 Context {wsw:WithSubWord}.
 
-Section SCP.
-
-Context
+Class semCallParams
   {syscall_state : Type}
-  {E0 E : Type -> Type}
-  {wE : with_Error E E0}
-  {rE : with_RndEvent syscall_state E}
   {ep : EstateParams syscall_state}
   {pT : progT}
-.
-
-Class semCallParams := SemCallParams
+  := SemCallParams
   {
   init_state : extra_fun_t -> extra_prog_t -> extra_val_t -> estate -> exec estate;
   finalize   : extra_fun_t -> mem -> mem;
   exec_syscall :
-    syscall_state ->
-    mem ->
-    syscall_t ->
-    values ->
-    itree E (syscall_state * mem * values);
-  exec_syscallP: forall scs m o vargs vargs',
+    forall
+      {E0 E : Type -> Type}
+      {wE : with_Error E E0}
+      {rE : with_RndEvent syscall_state E},
+      syscall_state ->
+      mem ->
+      syscall_t ->
+      values ->
+      itree E (syscall_state * mem * values);
+  exec_syscallP:
+    forall
+      {E0 E : Type -> Type}
+      {wE : with_Error E E0}
+      {rE : with_RndEvent syscall_state E}
+      scs m o vargs vargs',
       values_uincl vargs vargs' ->
       lxeutt sc_res_uincl
         (exec_syscall scs m o vargs)
         (exec_syscall scs m o vargs');
-  exec_syscallS: forall scs m o vargs,
+  exec_syscallS:
+    forall
+      {E0 E : Type -> Type}
+      {wE : with_Error E E0}
+      {rE : with_RndEvent syscall_state E}
+      scs m o vargs,
       lutt (fun _ _ => True) (fun _ _ _ => True)
         (fun '(_, m', _) => mem_equiv m m')
         (exec_syscall scs m o vargs);
 }.
-
-End SCP.
 
 (** Switch for the semantics of function calls:
   - when false, arguments and returned values are truncated to the declared type of the called function;
@@ -91,9 +96,9 @@ Context
 Instance sCP_unit : semCallParams (pT := progUnit) :=
   { init_state := fun _ _ _ s => ok s;
     finalize   := fun _ m => m;
-    exec_syscall  := exec_syscall_u;
-    exec_syscallP := exec_syscallPu;
-    exec_syscallS := exec_syscallSu;
+    exec_syscall  := @exec_syscall_u _ _;
+    exec_syscallP := @exec_syscallPu _ _;
+    exec_syscallS := @exec_syscallSu _ _;
 }.
 
 (* ** Semantic with stack
@@ -114,9 +119,9 @@ Definition finalize_stk_mem (sf : stk_fun_extra) (m:mem) :=
 Instance sCP_stack : semCallParams (pT := progStack) :=
   { init_state := init_stk_state;
     finalize   := finalize_stk_mem;
-    exec_syscall  := exec_syscall_s;
-    exec_syscallP := exec_syscallPs;
-    exec_syscallS := exec_syscallSs;
+    exec_syscall  := @exec_syscall_s _ _;
+    exec_syscallP := @exec_syscallPs _ _;
+    exec_syscallS := @exec_syscallSs _ _;
 }.
 
 End SEM_CALL_PARAMS.
