@@ -101,7 +101,7 @@ Definition desc_set0_small : instruction_desc :=
     [::] [::]
     [:: aword U32 ] [:: E 0 ]
     0%R
-    true.
+    true DOIT.
 
 Definition desc_set0_large : instruction_desc :=
   let vf := Some false in
@@ -111,7 +111,7 @@ Definition desc_set0_large : instruction_desc :=
     [::] [::]
     [:: abool; abool; abool; aword U256 ] ([:: F MF0; F LF0; F ZF0; E 0 ])
     (:: vf, vf, vt & 0%R)
-    true.
+    true DOIT.
 
 Definition desc_MOV : instruction_desc :=
   mk_instr_desc_safe
@@ -119,7 +119,7 @@ Definition desc_MOV : instruction_desc :=
     [:: aword U32 ] [:: E 1 ]
     [:: aword U32 ] [:: E 0 ]
     id
-    true.
+    true DOIT.
 
 Definition desc_SUBI : instruction_desc :=
   mk_instr_desc_safe
@@ -127,7 +127,7 @@ Definition desc_SUBI : instruction_desc :=
     [:: aword U32; aword U32 ] [:: E 1; E 2 ]
     [:: aword U32 ] [:: E 0 ]
     (fun x y => x - y)%R
-    true.
+    true DOIT.
 
 Definition desc_swap_large : instruction_desc :=
   mk_instr_desc_safe
@@ -136,7 +136,7 @@ Definition desc_swap_large : instruction_desc :=
     [:: abool; abool; abool; aword U256; aword U256 ]
     [:: F MF1; F LF1; F ZF1; E 0; E 1 ]
     (fun z w => (:: MF_of_word w, LF_of_word w, ZF_of_word w, w & z))
-    true.
+    true DOIT.
 
 Definition get_instr_desc (eo : extra_op) : instruction_desc :=
   match eo with

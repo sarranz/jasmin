@@ -523,6 +523,7 @@ Definition mk_cond (idt : instr_desc_t) : instr_desc_t :=
     id_safe := id_safe idt;
     id_pp_asm := id_pp_asm idt;
     id_valid := id_valid idt;
+    id_doit := id_doit idt;
     id_safe_wf := safe_wf_cat _ (id_safe_wf idt);
     id_semi_errty := fun h => mk_semi_cond_errty (idt.(id_semi_errty) h);
     id_semi_safe := fun h => mk_semi_cond_safe (id_safe_wf idt) (idt.(id_semi_safe) h);
@@ -621,6 +622,7 @@ Definition mk_shifted
     id_safe := id_safe idt;
     id_pp_asm := id_pp_asm idt;
     id_valid := id_valid idt;
+    id_doit := id_doit idt;
     id_safe_wf := safe_wf_cat _ (id_safe_wf idt);
     id_semi_errty := semi_errty';
     id_semi_safe := semi_safe'
@@ -730,6 +732,7 @@ Definition arm_ADD_instr : instr_desc_t :=
       id_safe := [::];
       id_pp_asm := pp_arm_op mn opts;
       id_valid := true;
+      id_doit := DOIT;
       id_safe_wf := refl_equal;
       id_semi_errty := fun _ => sem_lprod_ok_error tin arm_ADD_semi;
       id_semi_safe := fun _ => sem_lprod_ok_safe tin arm_ADD_semi;
@@ -775,6 +778,7 @@ Definition arm_ADC_instr : instr_desc_t :=
       id_safe := [::];
       id_pp_asm := pp_arm_op mn opts;
       id_valid := true;
+      id_doit := DOIT;
       id_safe_wf := refl_equal;
       id_semi_errty := fun _ => sem_lprod_ok_error tin arm_ADC_semi;
       id_semi_safe := fun _ => sem_lprod_ok_safe tin arm_ADC_semi;
@@ -823,6 +827,7 @@ Definition arm_MUL_instr : instr_desc_t :=
       id_safe := [::];
       id_pp_asm := pp_arm_op mn opts;
       id_valid := true;
+      id_doit := DOIT;
       id_safe_wf := refl_equal;
       id_semi_errty := fun _ => sem_lprod_ok_error tin arm_MUL_semi;
       id_semi_safe := fun _ => sem_lprod_ok_safe tin arm_MUL_semi;
@@ -853,6 +858,7 @@ Definition arm_MLA_instr : instr_desc_t :=
       id_safe := [::];
       id_pp_asm := pp_arm_op mn opts;
       id_valid := true;
+      id_doit := DOIT;
       id_safe_wf := refl_equal;
       id_semi_errty := fun _ => sem_lprod_ok_error tin arm_MLA_semi;
       id_semi_safe := fun _ => sem_lprod_ok_safe tin arm_MLA_semi;
@@ -879,6 +885,7 @@ Definition arm_MLS_instr : instr_desc_t :=
       id_safe := [::];
       id_pp_asm := pp_arm_op mn opts;
       id_valid := true;
+      id_doit := DOIT;
       id_safe_wf := refl_equal;
       id_semi_errty := fun _ => sem_lprod_ok_error tin arm_MLS_semi;
       id_semi_safe := fun _ => sem_lprod_ok_safe tin arm_MLS_semi;
@@ -907,6 +914,7 @@ Definition arm_SDIV_instr : instr_desc_t :=
     id_safe := [:: ];
     id_pp_asm := pp_arm_op mn opts;
     id_valid := true;
+    id_doit := NOT_DOIT; (* Not DIT *)
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
     id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -941,6 +949,7 @@ Definition arm_SUB_instr : instr_desc_t :=
       id_safe := [::];
       id_pp_asm := pp_arm_op mn opts;
       id_valid := true;
+      id_doit := DOIT;
       id_safe_wf := refl_equal;
       id_semi_errty := fun _ => sem_lprod_ok_error tin arm_SUB_semi;
       id_semi_safe := fun _ => sem_lprod_ok_safe tin arm_SUB_semi;
@@ -979,6 +988,7 @@ Definition arm_SBC_instr : instr_desc_t :=
       id_safe := [::];
       id_pp_asm := pp_arm_op mn opts;
       id_valid := true;
+      id_doit := DOIT;
       id_safe_wf := refl_equal;
       id_semi_errty := fun _ => sem_lprod_ok_error tin arm_SBC_semi;
       id_semi_safe := fun _ => sem_lprod_ok_safe tin arm_SBC_semi;
@@ -1017,6 +1027,7 @@ Definition arm_RSB_instr : instr_desc_t :=
       id_safe := [::];
       id_pp_asm := pp_arm_op mn opts;
       id_valid := true;
+      id_doit := NOT_DOIT; (* Not DIT *)
       id_safe_wf := refl_equal;
       id_semi_errty := fun _ => sem_lprod_ok_error tin arm_RSB_semi;
       id_semi_safe := fun _ => sem_lprod_ok_safe tin arm_RSB_semi;
@@ -1055,6 +1066,7 @@ Definition arm_UDIV_instr : instr_desc_t :=
     id_safe := [:: ];
     id_pp_asm := pp_arm_op mn opts;
     id_valid := true;
+    id_doit := NOT_DOIT; (* Not DIT *)
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
     id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -1082,6 +1094,7 @@ Definition arm_UMULL_instr : instr_desc_t :=
     id_safe := [::];
     id_pp_asm := pp_arm_op mn opts;
     id_valid := true;
+    id_doit := DOIT;
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => sem_lprod_ok_error tin arm_UMULL_semi;
     id_semi_safe := fun _ => sem_lprod_ok_safe tin arm_UMULL_semi;
@@ -1109,6 +1122,7 @@ Definition arm_UMAAL_instr : instr_desc_t :=
     id_safe := [::];
     id_pp_asm := pp_arm_op mn opts;
     id_valid := true;
+    id_doit := NOT_DOIT; (* Not DIT *)
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => sem_lprod_ok_error tin arm_UMAAL_semi;
     id_semi_safe := fun _ => sem_lprod_ok_safe tin arm_UMAAL_semi;
@@ -1136,6 +1150,7 @@ Definition arm_UMLAL_instr : instr_desc_t :=
     id_safe := [::];
     id_pp_asm := pp_arm_op mn opts;
     id_valid := true;
+    id_doit := DOIT;
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => sem_lprod_ok_error tin arm_UMLAL_semi;
     id_semi_safe := fun _ => sem_lprod_ok_safe tin arm_UMLAL_semi;
@@ -1163,6 +1178,7 @@ Definition arm_SMULL_instr : instr_desc_t :=
     id_safe := [::];
     id_pp_asm := pp_arm_op mn opts;
     id_valid := true;
+    id_doit := DOIT;
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => sem_lprod_ok_error tin arm_SMULL_semi;
     id_semi_safe := fun _ => sem_lprod_ok_safe tin arm_SMULL_semi;
@@ -1190,6 +1206,7 @@ Definition arm_SMLAL_instr : instr_desc_t :=
     id_safe := [::];
     id_pp_asm := pp_arm_op mn opts;
     id_valid := true;
+    id_doit := DOIT;
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => sem_lprod_ok_error tin arm_SMLAL_semi;
     id_semi_safe := fun _ => sem_lprod_ok_safe tin arm_SMLAL_semi;
@@ -1216,6 +1233,7 @@ Definition arm_SMMUL_instr : instr_desc_t :=
     id_safe := [::];
     id_pp_asm := pp_arm_op mn opts;
     id_valid := true;
+    id_doit := NOT_DOIT; (* Not DIT *)
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => sem_lprod_ok_error tin arm_SMMUL_semi;
     id_semi_safe := fun _ => sem_lprod_ok_safe tin arm_SMMUL_semi;
@@ -1242,6 +1260,7 @@ Definition arm_SMMULR_instr : instr_desc_t :=
     id_safe := [::];
     id_pp_asm := pp_arm_op mn opts;
     id_valid := true;
+    id_doit := NOT_DOIT; (* Not DIT *)
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => sem_lprod_ok_error tin arm_SMMULR_semi;
     id_semi_safe := fun _ => sem_lprod_ok_safe tin arm_SMMULR_semi;
@@ -1277,6 +1296,7 @@ Definition arm_smul_hw_instr hwn hwm : instr_desc_t :=
     id_safe := [::];
     id_pp_asm := pp_arm_op mn opts;
     id_valid := true;
+    id_doit := NOT_DOIT; (* Not DIT *)
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
     id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -1308,6 +1328,7 @@ Definition arm_smla_hw_instr hwn hwm : instr_desc_t :=
     id_safe := [::];
     id_pp_asm := pp_arm_op mn opts;
     id_valid := true;
+    id_doit := NOT_DOIT; (* Not DIT *)
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
     id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -1338,6 +1359,7 @@ Definition arm_smulw_hw_instr hw : instr_desc_t :=
     id_safe := [::];
     id_pp_asm := pp_arm_op mn opts;
     id_valid := true;
+    id_doit := NOT_DOIT; (* Not DIT *)
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
     id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -1376,6 +1398,7 @@ Definition arm_AND_instr : instr_desc_t :=
       id_safe := [::];
       id_pp_asm := pp_arm_op mn opts;
       id_valid := true;
+      id_doit := DOIT;
       id_safe_wf := refl_equal;
       id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
       id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -1443,6 +1466,7 @@ Definition arm_BFC_instr : instr_desc_t :=
     id_safe := arm_BFC_semi_sc;
     id_pp_asm := pp_arm_op mn opts;
     id_valid := true;
+    id_doit := DOIT;
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => arm_BFC_semi_errty;
     id_semi_safe := fun _ => arm_BFC_semi_safe;
@@ -1499,6 +1523,7 @@ Definition arm_BFI_instr : instr_desc_t :=
     id_safe := arm_BFI_semi_sc;
     id_pp_asm := pp_arm_op mn opts;
     id_valid := true;
+    id_doit := DOIT;
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => arm_BFI_semi_errty;
     id_semi_safe := fun _ => arm_BFI_semi_safe;
@@ -1524,6 +1549,7 @@ Definition arm_BIC_instr : instr_desc_t :=
       id_safe := [::];
       id_pp_asm := pp_arm_op mn opts;
       id_valid := true;
+      id_doit := DOIT;
       id_safe_wf := refl_equal;
       id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
       id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -1560,6 +1586,7 @@ Definition arm_EOR_instr : instr_desc_t :=
       id_safe := [::];
       id_pp_asm := pp_arm_op mn opts;
       id_valid := true;
+      id_doit := DOIT;
       id_safe_wf := refl_equal;
       id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
       id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -1604,6 +1631,7 @@ Definition arm_MVN_instr : instr_desc_t :=
       id_safe := [::];
       id_pp_asm := pp_arm_op mn opts;
       id_valid := true;
+      id_doit := DOIT;
       id_safe_wf := refl_equal;
       id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
       id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -1640,6 +1668,7 @@ Definition arm_ORR_instr : instr_desc_t :=
       id_safe := [::];
       id_pp_asm := pp_arm_op mn opts;
       id_valid := true;
+      id_doit := DOIT;
       id_safe_wf := refl_equal;
       id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
       id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -1702,6 +1731,7 @@ Definition arm_ASR_instr : instr_desc_t :=
       id_safe := [::];
       id_pp_asm := pp_arm_op mn opts;
       id_valid := true;
+      id_doit := DOIT;
       id_safe_wf := refl_equal;
       id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
       id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -1738,6 +1768,7 @@ Definition arm_LSL_instr : instr_desc_t :=
       id_safe := [::];
       id_pp_asm := pp_arm_op mn opts;
       id_valid := true;
+      id_doit := DOIT;
       id_safe_wf := refl_equal;
       id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
       id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -1774,6 +1805,7 @@ Definition arm_LSR_instr : instr_desc_t :=
       id_safe := [::];
       id_pp_asm := pp_arm_op mn opts;
       id_valid := true;
+      id_doit := DOIT;
       id_safe_wf := refl_equal;
       id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
       id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -1810,6 +1842,7 @@ Definition arm_ROR_instr : instr_desc_t :=
       id_safe := [::];
       id_pp_asm := pp_arm_op mn opts;
       id_valid := true;
+      id_doit := DOIT;
       id_safe_wf := refl_equal;
       id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
       id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -1819,7 +1852,7 @@ Definition arm_ROR_instr : instr_desc_t :=
   then x
   else drop_nzc x.
 
-Definition mk_rev_instr mn semi :=
+Definition mk_rev_instr mn semi doit :=
   let tin := [:: lreg ] in
   {| id_msb_flag := MSB_MERGE
    ; id_tin := tin
@@ -1835,6 +1868,7 @@ Definition mk_rev_instr mn semi :=
    ; id_safe := [::]
    ; id_pp_asm := pp_arm_op mn opts
    ; id_valid := true
+   ; id_doit := doit
    ; id_safe_wf := refl_equal
    ; id_semi_errty := fun _ => sem_lprod_ok_error tin semi
    ; id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -1849,9 +1883,9 @@ Definition arm_REV16_semi (w : ty_r) : ty_r :=
 Definition arm_REVSH_semi (w : ty_r) : ty_r :=
   sign_extend U32 (wbswap (zero_extend U16 w)).
 
-Definition arm_REV_instr   := mk_rev_instr REV   arm_REV_semi.
-Definition arm_REV16_instr := mk_rev_instr REV16 arm_REV16_semi.
-Definition arm_REVSH_instr := mk_rev_instr REVSH arm_REVSH_semi.
+Definition arm_REV_instr   := mk_rev_instr REV   arm_REV_semi   DOIT.
+Definition arm_REV16_instr := mk_rev_instr REV16 arm_REV16_semi DOIT.
+Definition arm_REVSH_instr := mk_rev_instr REVSH arm_REVSH_semi NOT_DOIT. (* Not DIT *)
 
 Definition arm_ADR_semi (wn: ty_r) : ty_r :=
   wn.
@@ -1875,6 +1909,7 @@ Definition arm_ADR_instr : instr_desc_t :=
     id_safe := [::];
     id_pp_asm := pp_arm_op mn opts;
     id_valid := true;
+    id_doit := NOT_DOIT; (* Not DIT *)
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
     id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -1903,6 +1938,7 @@ Definition arm_MOV_instr : instr_desc_t :=
       id_safe := [::];
       id_pp_asm := pp_arm_op mn opts;
       id_valid := true;
+      id_doit := DOIT;
       id_safe_wf := refl_equal;
       id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
       id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -1936,6 +1972,7 @@ Definition arm_MOVT_instr : instr_desc_t :=
     id_safe := [::];
     id_pp_asm := pp_arm_op mn opts;
     id_valid := true;
+    id_doit := DOIT;
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
     id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -1986,6 +2023,7 @@ Definition arm_UBFX_instr : instr_desc_t :=
     id_safe := bit_field_extract_semi_sc;
     id_pp_asm := pp_arm_op mn opts;
     id_valid := true;
+    id_doit := DOIT;
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => @bit_field_extract_semi_errty sh;
     id_semi_safe := fun _ => @bit_field_extract_semi_safe sh;
@@ -2020,6 +2058,7 @@ Definition arm_UXTB_instr : instr_desc_t :=
     id_safe := [::];
     id_pp_asm := pp_arm_op mn opts;
     id_valid := true;
+    id_doit := DOIT;
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
     id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -2045,6 +2084,7 @@ Definition arm_UXTH_instr : instr_desc_t :=
     id_safe := [::];
     id_pp_asm := pp_arm_op mn opts;
     id_valid := true;
+    id_doit := DOIT;
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
     id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -2072,6 +2112,7 @@ Definition arm_SBFX_instr : instr_desc_t :=
     id_safe := bit_field_extract_semi_sc;
     id_pp_asm := pp_arm_op mn opts;
     id_valid := true;
+    id_doit := DOIT;
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => @bit_field_extract_semi_errty sh;
     id_semi_safe := fun _ => @bit_field_extract_semi_safe sh;
@@ -2101,6 +2142,7 @@ Definition arm_SXTB_instr : instr_desc_t :=
     id_safe := [::];
     id_pp_asm := pp_arm_op mn opts;
     id_valid := true;
+    id_doit := DOIT;
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
     id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -2126,6 +2168,7 @@ Definition arm_SXTH_instr : instr_desc_t :=
     id_safe := [::];
     id_pp_asm := pp_arm_op mn opts;
     id_valid := true;
+    id_doit := DOIT;
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
     id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -2158,6 +2201,7 @@ Definition arm_CMP_instr : instr_desc_t :=
       id_safe := [::];
       id_pp_asm := pp_arm_op mn opts;
       id_valid := true;
+      id_doit := DOIT;
       id_safe_wf := refl_equal;
       id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
       id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -2196,6 +2240,7 @@ Definition arm_TST_instr : instr_desc_t :=
       id_safe := [::];
       id_pp_asm := pp_arm_op mn opts;
       id_valid := true;
+      id_doit := DOIT;
       id_safe_wf := refl_equal;
       id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
       id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -2227,6 +2272,7 @@ Definition arm_CMN_instr : instr_desc_t :=
       id_safe := [::];
       id_pp_asm := pp_arm_op mn opts;
       id_valid := true;
+      id_doit := DOIT;
       id_safe_wf := refl_equal;
       id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
       id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -2266,6 +2312,7 @@ Definition arm_load_instr mn : instr_desc_t :=
     id_safe := [::];
     id_pp_asm := pp_arm_op mn opts;
     id_valid := true;
+    id_doit := DOIT;
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
     id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -2296,6 +2343,7 @@ Definition arm_store_instr mn : instr_desc_t :=
     id_safe := [::];
     id_pp_asm := pp_arm_op mn opts;
     id_valid := true;
+    id_doit := DOIT;
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
     id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -2320,6 +2368,7 @@ Definition arm_CLZ_instr :=
     id_safe := [::];
     id_pp_asm := pp_arm_op mn opts;
     id_valid := true;
+    id_doit := DOIT;
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
     id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
