@@ -10,14 +10,18 @@ From ITree Require Import
   ITree
   ITreeFacts
   Basics.HeterogeneousRelations
+  Events.Exception
   Interp.Recursion
   Eq.Paco2
   Eq.Rutt
   Eq.RuttFacts.
 
-From mathcomp Require Import ssreflect ssrfun ssrbool.
+From mathcomp Require Import ssreflect ssrfun ssrbool seq.
 
 Require Import xrutt xrutt_facts rutt_extras it_sems_core_defs.
+Require Import type sem_type values.
+Import MonadNotation ITreeNotations.
+Local Open Scope monad_scope.
 
 Notation prepred E := (forall T, E T -> Prop).
 Notation postpred E := (forall T, E T -> T -> Prop).
@@ -211,6 +215,29 @@ Proof.
   by move=> u _; apply eutt_Ret.
 Qed.
 
+Lemma lutt_throw
+  {Err E T} {H : exceptE Err -< E} PEv PAns (R : T -> Prop) (e : Err) :
+  PEv _ (subevent _ (Throw e)) ->
+  lutt PEv PAns R (throw (H := H) e).
+Proof. by move=> ?; apply: lutt_Vis. Qed.
+
+(* TODO I would like to replace with this direction which works with apply/ *)
+Lemma lutt_Ret' E PEv PAns T R (r : T) :
+  lutt (E := E) PEv PAns R (Ret r) <-> R r.
+Proof. by symmetry; apply lutt_Ret. Qed.
+
+Lemma lutt_iresult
+  T E0 E
+  {wE : with_Error E E0}
+  (PEv : prepred E) (PAns : postpred E) R (r : exec T) :
+  (forall e, r = Error e -> PEv _ (subevent _ (Throw e))) ->
+  (forall x, r = ok x -> R x) ->
+  lutt PEv PAns R (iresult r).
+Proof.
+case: r => [x|e]; last by move=> h _; apply/lutt_throw/h.
+by move=> _ h; apply/lutt_Ret'/h.
+Qed.
+
 Lemma lutt_weaken {E : Type -> Type} (T : Type)
   (PEv PEv' : prepred E) (PAns PAns': postpred E)
   (Q Q': T -> Prop) t :
@@ -339,6 +366,75 @@ Qed.
 
 End SAFE_XRUTT_RUTT.
 
+Definition lxrutt
+  {E0l E0r El Er} {wEl : with_Error El E0l} {wEr : with_Error Er E0r} {R1 R2} :
+  (forall A B, El A -> Er B -> Prop) ->
+  (forall A B, El A -> A -> Er B -> B -> Prop) ->
+  (R1 -> R2 -> Prop) -> itree El R1 -> itree Er R2 -> Prop :=
+  xrutt (errcutoff (is_error wEl)) nocutoff.
+
+(* TODO is this somewhere?? *)
+Lemma is_error_Throw {E0 E} {wE : with_Error E E0} e :
+  IsCut_ (errcutoff (is_error wE)) void (subevent void (Throw e)).
+Proof. by rewrite /errcutoff /is_error mid12. Qed.
+
+Section EQ.
+  Context {E0 E} {wE : with_Error E E0}.
+
+  Definition lxeutt
+    {R1 R2} (RR : R1 -> R2 -> Prop) : itree E R1 -> itree E R2 -> Prop :=
+    lxrutt RPre_eq RPost_eq RR.
+
+  Lemma eutt_lxeutt {R1 R2} (RR : R1 -> R2 -> Prop) t1 t2 :
+    eutt RR t1 t2 -> lxeutt RR t1 t2.
+  Proof.
+  move=> h; rewrite /lxeutt /lxrutt; apply: rutt_xrutt.
+  apply: gen_eutt_rutt h => [u e|u e a b]; [exact: RPre_eq_refl | exact: Rpost_eqI].
+  Qed.
+
+End EQ.
+
+Section XRUTT.
+
+  Context
+    {E0l E0r El Er} {wEl : with_Error El E0l} {wEr : with_Error Er E0r}
+    {R1 R2 : Type}
+    (REv : forall A B, El A -> Er B -> Prop)
+    (RAns : forall A B, El A -> A -> Er B -> B -> Prop)
+    (RR : R1 -> R2 -> Prop)
+  .
+
+  (* TODO: lcutoff_wE doesn't seem to work for the following theorems because of
+     the D1 D2 *)
+  Lemma lxrutt_throw e t : lxrutt REv RAns RR (throw e) t.
+  Proof. exact/xrutt_CutL/is_error_Throw. Qed.
+
+  Lemma lxrutt_iresult (x1 : exec R1) (x2 : exec R2) :
+    (forall v1, x1 = ok v1 -> exists2 v2, x2 = ok v2 & RR v1 v2) ->
+    lxrutt REv RAns RR (iresult x1) (iresult x2).
+  Proof.
+  case: x1 => [v1 | ??]; last exact: lxrutt_throw.
+  by move=> /(_ _ erefl) [v2 ->]; apply: xrutt_Ret.
+  Qed.
+
+  Lemma lxrutt_iresult_Ret (x1 : exec R1) (v2 : R2) :
+    (forall v1, x1 = ok v1 -> RR v1 v2) ->
+    lxrutt REv RAns RR (iresult x1) (Ret v2).
+  Proof.
+  case: x1 => [v1 | ??]; last exact: lxrutt_throw.
+  by move=> /(_ _ erefl); apply: xrutt_Ret.
+  Qed.
+
+  Lemma lxrutt_bind_iresult T (x1 : exec T) F1 F2 :
+    (forall v1, x1 = ok v1 -> lxrutt REv RAns RR (F1 v1) F2) ->
+    lxrutt REv RAns RR (v1 <- iresult x1 ;; F1 v1) F2.
+  Proof.
+  case: x1 => [v1 | ??]; last by rewrite bind_throw; apply: lxrutt_throw.
+  by rewrite bind_ret_l => /(_ _ erefl).
+  Qed.
+
+End XRUTT.
+
 Section WITH_ERROR.
 
 Context {E E0: Type -> Type} {wE : with_Error E E0}.
@@ -395,6 +491,52 @@ Proof.
 Qed.  
 
 End WITH_ERROR.
+
+Section ItAppSopnLogic.
+
+Context {E0 E : Type -> Type} {wE : with_Error E E0}.
+
+Lemma vuincl_it_app_sopn T ts (op : it_sem_prod ts T) vs vs' :
+  all is_not_carr ts ->
+  values_uincl vs vs' ->
+  lxeutt eq (it_app_sopn ts op vs) (it_app_sopn ts op vs').
+Proof.
+elim: ts op vs vs' => /= [|t ts ih] op [|v vs] [|v' vs'] + /List_Forall2_inv //.
+- move=> _ _; apply: xrutt_refl; first by move=> ?? _ _; apply: RPre_eq_refl.
+  by move=> ???? _ _; apply: Rpost_eqI.
+- by move=> _ _; apply: lxrutt_throw.
+- by move=> _ _; apply: lxrutt_throw.
+move=> /andP [] ht hts [/value_uinclE hv hvs].
+apply: lxrutt_bind_iresult.
+case: t op ht => [|| // | sz] op _ v1 /of_val_typeE.
+- by move=> ?; subst; subst; rewrite bind_ret_l; apply: ih hts hvs.
+- by move=> ?; subst; subst; rewrite bind_ret_l; apply: ih hts hvs.
+move=> /= [? [? [? /word_uincl_truncate h]]]; subst.
+move: hv => [? [? [? /h]]]; subst=> /= ->.
+by rewrite bind_ret_l; apply: ih hts hvs.
+Qed.
+
+Section MkForallIt.
+
+Context (T : Type) (P : T -> Prop).
+
+Definition mk_forall_it (l : seq ctype) : sem_prod l (itree E T) -> Prop :=
+  sem_forall (lutt (fun _ _ => True) (fun _ _ _ => True) P) l.
+
+Lemma mk_forall_itP l (f : sem_prod l (itree E T)) vargs :
+  mk_forall_it f ->
+  lutt (fun _ _ => True) (fun _ _ _ => True) P (it_app_sopn l f vargs).
+Proof.
+elim: l vargs f => [|t l ih] [|v vs] //= f hall.
+- exact: lutt_throw.
+- exact: lutt_throw.
+apply: lutt_bind; first exact: lutt_true.
+by move=> x _; apply: ih.
+Qed.
+
+End MkForallIt.
+
+End ItAppSopnLogic.
 
 Section LUTT_RUTT_LUTT.
 

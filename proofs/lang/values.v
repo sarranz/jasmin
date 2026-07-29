@@ -394,6 +394,18 @@ Proof.
   exact: word_uincl_truncate.
 Qed.
 
+Lemma value_uincl_to_arr_err va va' len e :
+  value_uincl va va' ->
+  to_arr len va = Error e ->
+  to_arr len va' = Error e.
+Proof.
+move=> /value_uinclE.
+case: va => [? -> | ? -> | n a | ?? [? [? [-> _]]] |] //.
+- by move=> [a' ->]; rewrite /= /WArray.cast; case: ifP.
+by move=> [||//|ws] ?; case: va'.
+Qed.
+
+
 (* ----------------------------------------------------------------------- *)
 
 Definition to_val t : sem_t t -> value :=

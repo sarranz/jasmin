@@ -2,8 +2,11 @@
 
 (* ** Imports and settings *)
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssralg.
+From ITree Require Import Basics ITree ITreeFacts Exception.
+
 Require Import xseq.
 Require Export type expr gen_map warray_ sem_type sem_op_typed values varmap expr_facts low_memory syscall_sem psem_defs.
+Require Import it_sems_core_defs core_logics.
 Require Export
   flag_combination
   sem_params.
@@ -18,24 +21,39 @@ Open Scope vm_scope.
 Section WSW.
 Context {wsw:WithSubWord}.
 
-Class semCallParams
+Section SCP.
+
+Context
   {syscall_state : Type}
+  {E0 E : Type -> Type}
+  {wE : with_Error E E0}
+  {rE : with_RndEvent syscall_state E}
   {ep : EstateParams syscall_state}
-  {scs : syscall_sem syscall_state}
   {pT : progT}
-  := SemCallParams
+.
+
+Class semCallParams := SemCallParams
   {
   init_state : extra_fun_t -> extra_prog_t -> extra_val_t -> estate -> exec estate;
   finalize   : extra_fun_t -> mem -> mem;
-  exec_syscall : syscall_state_t -> mem -> syscall_t -> values -> exec (syscall_state_t * mem * values);
-  exec_syscallP: forall scs m o vargs vargs' rscs rm vres,
-     exec_syscall scs m o vargs = ok (rscs, rm, vres) ->
-     values_uincl vargs vargs' ->
-     exists2 vres', exec_syscall scs m o vargs' = ok (rscs, rm, vres') & values_uincl vres vres';
-  exec_syscallS: forall scs m o vargs rscs rm vres,
-     exec_syscall scs m o vargs = ok (rscs, rm, vres) ->
-     mem_equiv m rm;
+  exec_syscall :
+    syscall_state ->
+    mem ->
+    syscall_t ->
+    values ->
+    itree E (syscall_state * mem * values);
+  exec_syscallP: forall scs m o vargs vargs',
+      values_uincl vargs vargs' ->
+      lxeutt sc_res_uincl
+        (exec_syscall scs m o vargs)
+        (exec_syscall scs m o vargs');
+  exec_syscallS: forall scs m o vargs,
+      lutt (fun _ _ => True) (fun _ _ _ => True)
+        (fun '(_, m', _) => mem_equiv m m')
+        (exec_syscall scs m o vargs);
 }.
+
+End SCP.
 
 (** Switch for the semantics of function calls:
   - when false, arguments and returned values are truncated to the declared type of the called function;
@@ -59,7 +77,10 @@ Definition dc_truncate_val {dc:DirectCall} t v :=
 Section SEM_CALL_PARAMS.
 
 Context
+  {E0 E : Type -> Type}
   {asm_op syscall_state : Type}
+  {wE : with_Error E E0}
+  {rE : with_RndEvent syscall_state E}
   {ep : EstateParams syscall_state}
   {sip : SemInstrParams asm_op syscall_state}.
 
