@@ -7,9 +7,9 @@ From ITree Require Import
      MonadState.
 Import Basics.Monads.
 
-From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
+From mathcomp Require Import ssreflect ssrfun ssrbool eqtype seq.
 
-Require Import utils it_exec.
+Require Import utils type sem_type values it_exec.
 Import MonadNotation.
 Local Open Scope monad_scope.
 
@@ -138,3 +138,30 @@ Proof.
   rewrite /Exception.throw /= bind_vis.
   apply eqit_Vis; case.
 Qed.
+
+(* TODO is this somewhere? *)
+Lemma eqit_throw
+  {Err E R1 R2} {H : exceptE Err -< E} (RR : R1 -> R2 -> Prop) b1 b2 (e : Err) :
+  eqit RR b1 b2 (throw (H := H) e) (throw e).
+Proof. exact: eqit_Vis. Qed.
+
+Section ItAppSopn.
+
+Context {E : Type -> Type} `{ErrEvent -< E}.
+
+Definition it_sem_prod (ts : seq ctype) (T : Type) := sem_prod ts (itree E T).
+
+Fixpoint it_app_sopn A (ts : seq ctype) : it_sem_prod ts A -> values -> itree E A :=
+  match ts return it_sem_prod ts A -> values -> itree E A with
+  | [::] => fun (o : itree E A) vs =>
+      if vs is [::] then o else throw ErrType
+  | t :: ts => fun (o : sem_t t -> it_sem_prod ts A) vs =>
+      if vs is v :: vs then
+        v' <- iresult (of_val t v) ;;
+        it_app_sopn (o v') vs
+      else throw ErrType
+  end.
+
+#[global] Arguments it_app_sopn {A} ts _ _.
+
+End ItAppSopn.

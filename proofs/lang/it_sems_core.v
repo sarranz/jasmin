@@ -21,6 +21,9 @@ Context
   {wsw: WithSubWord}
   {dc: DirectCall}
   {syscall_state : Type}
+  {E0 E : Type -> Type}
+  {wE : with_Error E E0}
+  {rE : with_RndEvent syscall_state E}
   {ep : EstateParams syscall_state}
   {spp : SemPexprParams}
   {wa: WithAssert}
