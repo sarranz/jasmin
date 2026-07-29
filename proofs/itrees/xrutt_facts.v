@@ -714,6 +714,18 @@ Proof.
   intros. eapply xrutt_weaken in H4; eauto.
 Qed.
 
+Lemma xrutt_weaken_v3
+  {E1 E2 : Type -> Type} {O1 O2 : Type}
+  (EE1 : forall X, E1 X -> bool)
+  (EE2 : forall X, E2 X -> bool)
+  (REv : forall A B, E1 A -> E2 B -> Prop)
+  (RAns : forall A B, E1 A -> A -> E2 B -> B -> Prop)
+  (RR RR' : O1 -> O2 -> Prop) t1 t2 :
+  (forall o1 o2, RR o1 o2 -> RR' o1 o2) ->
+  xrutt EE1 EE2 REv RAns RR t1 t2 ->
+  xrutt EE1 EE2 REv RAns RR' t1 t2.
+Proof. intros; eapply xrutt_weaken_v2; eauto. Qed.
+
 
 (** Transitivity *)
 
