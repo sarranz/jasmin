@@ -19,10 +19,9 @@ Section SourceSysCall.
 Context
   {pd: PointerData}
   {syscall_state : Type}
-  {E0 E : Type -> Type}
-  {wE : with_Error E E0}
-  {rE : with_RndEvent syscall_state E}
 .
+
+Notation E := (ErrEvent +' RndEvent syscall_state).
 
 Implicit Types
   (scs : syscall_state)
@@ -98,10 +97,9 @@ Section StackSyscall.
 Context
   {pd : PointerData}
   {syscall_state : Type}
-  {E0 E : Type -> Type}
-  {wE : with_Error E E0}
-  {rE : with_RndEvent syscall_state E}
 .
+
+Notation E := (ErrEvent +' RndEvent syscall_state).
 
 Implicit Types
   (o : syscall_t)
