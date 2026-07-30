@@ -494,10 +494,7 @@ Context
 (* semantics of instructions parametrized by recCall events *)
 Definition isem_i_rec (p : prog) (ev : extra_val_t) (i : instr) (s : estate)
   : itree (recCall +' E) estate :=
-  isem_i_body
-    (wE := @FIso_suml (@recCall syscall_state ep) E E0 ErrEvent wE)
-    (scP := scP)
-    (sem_F := sem_fun_rec E) p ev i s.
+  isem_i_body (sem_F := sem_fun_rec E) p ev i s.
 
 (* similar, for commands *)
 Definition isem_cmd_rec (p : prog) (ev : extra_val_t) (c : cmd) (s : estate)
@@ -602,6 +599,18 @@ Proof.
   apply interp_throw.
  Qed.
 
+Lemma interp_exec_syscall (F : E ~> itree E) scs m o vs :
+  (forall T (e : (ErrEvent +' RndEvent syscall_state) T),
+      eutt eq (F T (subevent T e)) (trigger e)) ->
+  eutt eq
+    (interp F (exec_syscall scs m o vs))
+    (exec_syscall scs m o vs).
+Proof.
+move=> h. rewrite /exec_syscall interp_translate translate_to_interp /=.
+apply: eutt_interp; last reflexivity.
+exact: h.
+Qed.
+
 Lemma interp_isem_cmd c s :
   eutt (E:=E) eq (interp_rec (isem_foldr isem_i_rec p ev c s))
          (isem_foldr isem_i_body p ev c s).
@@ -627,7 +636,9 @@ Proof.
     * move=> fs; rewrite interp_iresult; reflexivity.
     rewrite /fexec_syscall interp_bind; apply: eqit_bind; last first.
     * move=> [[scs m] vs]; rewrite interp_ret; reflexivity.
-    admit.
+    rewrite /exec_syscall interp_translate translate_to_interp /=.
+    apply: eutt_interp; last reflexivity.
+    move=> T [e|e] /=; reflexivity.
   + move => a ii s /=.
     rewrite interp_bind; apply eqit_bind.
     + by apply interp_iresult.
@@ -662,7 +673,7 @@ Proof.
   move => ?;rewrite interp_bind;apply eqit_bind.
   + by apply interp_iresult.
   move=> ?; exact: interp_iresult.
-Admitted.
+Qed.
 
 Lemma isem_call_unfold (fn : funname) (fs : fstate) :
   isem_fun p ev fn fs ≈ isem_fun_body p ev fn fs.
@@ -761,7 +772,16 @@ Proof.
     + by move=> i c hi hc s; rewrite interp_bind hi; apply/eutt_eq_bind/hc.
     + by move=> > ? >; apply interp_cond_iresult.
     + by move=> > ? > ? > ; apply interp_cond_iresult.
-    + admit.
+    + move=> xs o es _ s.
+      rewrite /sem_syscall interp_bind.
+      apply: eutt_eq_bind'; first exact: interp_cond_iresult.
+      move=> vs; rewrite interp_bind; apply: eutt_eq_bind'; last first.
+      + by move=> ?; apply: interp_cond_iresult.
+      rewrite /fexec_syscall interp_bind; apply: eutt_eq_bind'; last first.
+      + move=> [[scs m] vs']; rewrite interp_ret; reflexivity.
+      rewrite /exec_syscall interp_translate translate_to_interp.
+      apply: eutt_interp; last reflexivity.
+      move=> T [e|e] /=; reflexivity.
     + move=> a ii s; rewrite interp_bind; apply eutt_eq_bind'.
       + by apply interp_cond_iresult.
       by move=> ?; rewrite interp_ret; reflexivity.
@@ -798,7 +818,7 @@ Proof.
     by move=> ?; apply interp_cond_iresult.
   apply Proper_interp_mrec => //.
   by move=> T [].
-Admitted.
+Qed.
 
 End CoreLemmas.
 
