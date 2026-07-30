@@ -7,6 +7,7 @@ From ITree Require Import Basics ITree ITreeFacts Exception.
 Require Import xseq.
 Require Export type expr gen_map warray_ sem_type sem_op_typed values varmap expr_facts low_memory syscall_sem psem_defs.
 Require Import it_sems_core_defs core_logics.
+Require Import xrutt xrutt_facts rutt_extras.
 Require Export
   flag_combination
   sem_params.
@@ -21,44 +22,80 @@ Open Scope vm_scope.
 Section WSW.
 Context {wsw:WithSubWord}.
 
-Class semCallParams
+Section SCP.
+
+Context
   {syscall_state : Type}
   {ep : EstateParams syscall_state}
   {pT : progT}
-  := SemCallParams
+.
+
+(* The core versions are defined exactly on [ErrEvent +' RndEvent] so that when
+   they are instantiated for different [E] (e.g., when interpreting recursive
+   calls we instantiate once with [E := E] and once with [E := Call +' E] we can
+   prove that [exec_syscall] behaves the same by construction. *)
+
+Class semCallParams := SemCallParams
   {
   init_state : extra_fun_t -> extra_prog_t -> extra_val_t -> estate -> exec estate;
   finalize   : extra_fun_t -> mem -> mem;
-  exec_syscall :
-    forall
-      {E0 E : Type -> Type}
-      {wE : with_Error E E0}
-      {rE : with_RndEvent syscall_state E},
+  exec_syscall_core :
       syscall_state ->
       mem ->
       syscall_t ->
       values ->
-      itree E (syscall_state * mem * values);
-  exec_syscallP:
-    forall
-      {E0 E : Type -> Type}
-      {wE : with_Error E E0}
-      {rE : with_RndEvent syscall_state E}
-      scs m o vargs vargs',
+      itree (ErrEvent +' RndEvent syscall_state) (syscall_state * mem * values);
+  exec_syscall_coreP : forall scs m o vargs vargs',
       values_uincl vargs vargs' ->
       lxeutt sc_res_uincl
-        (exec_syscall scs m o vargs)
-        (exec_syscall scs m o vargs');
-  exec_syscallS:
-    forall
-      {E0 E : Type -> Type}
-      {wE : with_Error E E0}
-      {rE : with_RndEvent syscall_state E}
-      scs m o vargs,
+        (exec_syscall_core scs m o vargs)
+        (exec_syscall_core scs m o vargs');
+  exec_syscall_coreS : forall scs m o vargs,
       lutt (fun _ _ => True) (fun _ _ _ => True)
         (fun '(_, m', _) => mem_equiv m m')
-        (exec_syscall scs m o vargs);
+        (exec_syscall_core scs m o vargs);
 }.
+
+Context
+  {sCP : semCallParams}
+  {E0 E : Type -> Type}
+  {wE : with_Error E E0}
+  {rE : with_RndEvent syscall_state E}
+.
+
+Definition exec_syscall
+  (scs : syscall_state) (m : mem) (o : syscall_t) (vs : values) :
+  itree E (syscall_state * mem * values) :=
+  translate subevent (exec_syscall_core scs m o vs).
+
+Lemma exec_syscallP scs m o vargs vargs' :
+  values_uincl vargs vargs' ->
+  lxeutt sc_res_uincl
+    (exec_syscall scs m o vargs)
+    (exec_syscall scs m o vargs').
+Proof.
+  move=> /exec_syscall_coreP; rewrite /lxeutt /lxrutt /exec_syscall.
+  move=> h; apply: xrutt_translate (h scs m o).
+  + by move=> X [e|e] //= _; rewrite /errcutoff /is_error /= mid12.
+  + done.
+  + move=> A B e1 e2 [heq heqe]; move: e2 heqe.
+    case: B / heq => e2 /= ->; exact: RPre_eq_refl.
+  by move=> A B e1 a e2 b _ hpost; exact: hpost.
+Qed.
+
+Lemma exec_syscallS scs m o vargs :
+  lutt (fun _ _ => True) (fun _ _ _ => True)
+    (fun '(_, m', _) => mem_equiv m m')
+    (exec_syscall scs m o vargs).
+Proof.
+  have [t' /rutt_eq_trans_refl h] := exec_syscall_coreS scs m o vargs.
+  eexists; apply/eutt_rutt/eutt_translate_gen/gen_rutt_eutt.
+  apply: rutt_weaken h => //.
+  by move=> T1 T2 e1 e2 [].
+Qed.
+
+End SCP.
+
 
 (** Switch for the semantics of function calls:
   - when false, arguments and returned values are truncated to the declared type of the called function;
@@ -96,9 +133,9 @@ Context
 Instance sCP_unit : semCallParams (pT := progUnit) :=
   { init_state := fun _ _ _ s => ok s;
     finalize   := fun _ m => m;
-    exec_syscall  := @exec_syscall_u _ _;
-    exec_syscallP := @exec_syscallPu _ _;
-    exec_syscallS := @exec_syscallSu _ _;
+    exec_syscall_core  := @exec_syscall_u _ _;
+    exec_syscall_coreP := @exec_syscallPu _ _;
+    exec_syscall_coreS := @exec_syscallSu _ _;
 }.
 
 (* ** Semantic with stack
@@ -119,9 +156,9 @@ Definition finalize_stk_mem (sf : stk_fun_extra) (m:mem) :=
 Instance sCP_stack : semCallParams (pT := progStack) :=
   { init_state := init_stk_state;
     finalize   := finalize_stk_mem;
-    exec_syscall  := @exec_syscall_s _ _;
-    exec_syscallP := @exec_syscallPs _ _;
-    exec_syscallS := @exec_syscallSs _ _;
+    exec_syscall_core  := @exec_syscall_s _ _;
+    exec_syscall_coreP := @exec_syscallPs _ _;
+    exec_syscall_coreS := @exec_syscallSs _ _;
 }.
 
 End SEM_CALL_PARAMS.
