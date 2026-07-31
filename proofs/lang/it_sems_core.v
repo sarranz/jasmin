@@ -15,6 +15,57 @@ Require Export it_sems_core_defs.
 Import MonadNotation ITreeNotations.
 Local Open Scope monad_scope.
 
+Section MOVE.
+
+Definition preservesE
+  E1 E2 E3 {S12 : E1 -< E2} {S23 : E1 -< E3} (F : Handler E2 E3) :=
+  forall T (e : E1 T),
+    eutt eq (F T (subevent T e)) (trigger e).
+
+#[global] Arguments preservesE _ {_ _ _ _} _.
+
+Context
+  {asm_op : Type}
+  {wsw : WithSubWord}
+  {dc : DirectCall}
+  {syscall_state : Type}
+  {E0 E E' : Type -> Type}
+  {wE : with_Error E E0}
+  {wE' : with_Error E' E0}
+  {rE : with_RndEvent syscall_state E0}
+  {ep : EstateParams syscall_state}
+  {pT : progT}
+  {scP : semCallParams}
+.
+
+Lemma interp_preserves_throw (F : Handler E E') T e :
+  preservesE ErrEvent F ->
+  eutt eq (interp F (throw (X := T) e)) (throw e).
+Proof. by move=> h; rewrite interp_vis h bind_vis; apply: eqit_Vis. Qed.
+
+Lemma interp_preserves_iresult (F : Handler E E') T (r : exec T) :
+  preservesE ErrEvent F ->
+  eutt eq (interp F (iresult r)) (iresult r).
+Proof.
+move=> h; case: r => [r|e]; first by rewrite interp_ret; reflexivity.
+rewrite (interp_preserves_throw _ _ h); reflexivity.
+Qed.
+
+Lemma interp_preserves_exec_syscall (F : Handler E E') scs m o vs :
+  preservesE ErrEvent F ->
+  preservesE (RndEvent syscall_state) F ->
+  eutt eq
+    (interp F (exec_syscall scs m o vs))
+    (exec_syscall scs m o vs).
+Proof.
+move=> err rnd; rewrite /exec_syscall interp_translate translate_to_interp /=.
+apply: eutt_interp; last reflexivity.
+move=> T [e|r]; first exact: err.
+exact: rnd.
+Qed.
+
+End MOVE.
+
 Section WSW.
 Context
   {asm_op: Type}
@@ -598,18 +649,6 @@ Proof.
   + rewrite interp_ret; reflexivity.
   apply interp_throw.
  Qed.
-
-Lemma interp_exec_syscall (F : E ~> itree E) scs m o vs :
-  (forall T (e : (ErrEvent +' RndEvent syscall_state) T),
-      eutt eq (F T (subevent T e)) (trigger e)) ->
-  eutt eq
-    (interp F (exec_syscall scs m o vs))
-    (exec_syscall scs m o vs).
-Proof.
-move=> h. rewrite /exec_syscall interp_translate translate_to_interp /=.
-apply: eutt_interp; last reflexivity.
-exact: h.
-Qed.
 
 Lemma interp_isem_cmd c s :
   eutt (E:=E) eq (interp_rec (isem_foldr isem_i_rec p ev c s))
