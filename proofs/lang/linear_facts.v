@@ -21,7 +21,9 @@ Require Import
   psem_facts
   sem_one_varmap
   hoare_logic
+  relational_logic
 .
+Require Import xrutt xrutt_facts.
 
 Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then remove the line when requiring MathComp >= 2.6 *)
 
@@ -179,12 +181,7 @@ Opaque eval_jump.
     split.
     + exact: write_lexprs_stack_stable hw.
     exact: write_lexprs_validw hw.
-    + t_xrbindP=> ?? _ [[??]?] /(exec_syscallSs (rscs := _)) heq1.
-    t_xrbindP=> ? hw <- /=.
-    apply (mem_equiv_trans heq1).
-    split.
-    + exact: write_lvals_stack_stable hw.
-    exact: write_lvals_validw hw.
+  + by [].
   + move=> [p|].
     + by t_xrbindP=> _ _ _ _ _ _ _ _ /eval_jump_mem_eq /= <-.
     t_xrbindP=> ??? _ _ _ _ _ w _ ? hw /eval_jump_mem_eq /= <-.
@@ -267,7 +264,40 @@ Qed.
 
 Section ITREE.
 
-Context {E E0: Type -> Type} {wE: with_Error E E0}.
+Context
+  {E E0: Type -> Type}
+  {wE: with_Error E E0}
+  {rE : with_RndEvent syscall_state E0}.
+
+Lemma lexec_syscall_mem_equiv m o :
+  khoare (iE0 := trivial_invEvent E0) (iEr := invErrT)
+    (fun s => mem_equiv m (lmem s))
+    (lexec_syscall o)
+    (fun s => mem_equiv m (lmem s)).
+Proof.
+  move=> s hmem; rewrite /lexec_syscall /=.
+  apply core_logics.lutt_bind with PredT.
+  + apply: core_logics.lutt_iresult => // e _; exact: preInv_trivial.
+  move=> ves _.
+  apply core_logics.lutt_bind with (fun fs' => mem_equiv m (fmem fs')).
+  { rewrite /fexec_syscall.
+    apply core_logics.lutt_bind with (fun '(_, m', _) => mem_equiv m m').
+    + apply: core_logics.lutt_weaken (exec_syscallS s.(lscs) s.(lmem) o ves).
+      - by move=> *; exact: preInv_trivial.
+      - done.
+      by move=> [[scs' m'] vs'] /=; exact: mem_equiv_trans hmem.
+    by move=> [[scs' m'] vs] /= hm; apply core_logics.lutt_Ret. }
+  move=> fs' hfs'.
+  apply core_logics.lutt_bind with (fun s' : lstate => mem_equiv m (lmem s'));
+    last by move=> *; apply core_logics.lutt_Ret.
+  rewrite /lset_fstate /upd_estate.
+  apply: core_logics.lutt_iresult; first by move=> e _; exact: preInv_trivial.
+  move=> s' /=; t_xrbindP => e' heq <-.
+  apply: mem_equiv_trans hfs' _.
+  split.
+  + exact: write_lvals_stack_stable heq.
+  exact: write_lvals_validw heq.
+Qed.
 
 Lemma ilsem_mem_equiv lp cond m :
   khoare (iE0 := trivial_invEvent E0) (iEr := invErrT)
@@ -279,7 +309,9 @@ Proof.
   rewrite /while_body => s hmem /=.
   case: ifP => _; last by apply core_logics.lutt_Ret.
   apply core_logics.lutt_bind with (fun s => mem_equiv m (lmem s)); last by move=> *; apply core_logics.lutt_Ret.
-  rewrite /istep; case heq: step => [s' | e] /=.
+  rewrite /istep; case: next_is_Lsyscall => [o|].
+  + exact: lexec_syscall_mem_equiv hmem.
+  case heq: step => [s' | e] /=.
   + apply core_logics.lutt_Ret.
     by apply: mem_equiv_trans (lsem1_mem_equiv heq).
   apply core_logics.lutt_Vis => //=.
@@ -289,6 +321,39 @@ Qed.
 End ITREE.
 
 End MEM_EQUIV.
+
+Section EQ_LSYSCALL.
+
+Context
+  {E E0: Type -> Type}
+  {wE: with_Error E E0}
+  {rE : with_RndEvent syscall_state E0}
+  {rE0 : EventRels E0}
+  {rndE : RndRels2 (rE_l := rE) (rE_r := rE) (rE0 := rE0)}.
+
+(* TODO this would work with uincl but currently we only need eq. *)
+Lemma eq_lsyscall o :
+  wkequiv_io
+    eq
+    (lexec_syscall o) (lexec_syscall o)
+    (fun s1 _ s1' s2' =>
+       [/\ s1' = s2', lfn s1' = lfn s1 & lpc s1' = (lpc s1).+1 ]).
+Proof using rndE.
+  move=> ls _ <-; rewrite /lexec_syscall.
+  apply xrutt_bind with eq.
+  + apply: xrutt_iresult => v1 ->; by exists v1.
+  move=> ves _ <-.
+  apply xrutt_bind with eq.
+  + exact: fs_eq_syscall _ _ erefl.
+  move=> fs' _ <-.
+  apply xrutt_bind with (fun s1' s2' => [/\ s1' = s2', lfn s1' = lfn ls & lpc s1' = lpc ls]).
+  + apply: xrutt_iresult => v1 h; exists v1 => //.
+    move: h; rewrite /lset_fstate; t_xrbindP => e' _ <- /=.
+    by [].
+  move=> s1' s2' [<- <- <-]; apply xrutt_Ret; split => //.
+Qed.
+
+End EQ_LSYSCALL.
 
 Lemma sem_fopns_args_cat s lc1 lc2 :
   sem_fopns_args s (lc1 ++ lc2) =
@@ -336,7 +401,10 @@ Qed.
 (* ----------------------------------------------------------------------- *)
 (* Some properties about the compilation scheme and mix_ilstep             *)
 
-Context {E E0: Type -> Type} {wE: with_Error E E0}.
+Context
+  {E E0: Type -> Type}
+  {wE: with_Error E E0}
+  {rE : with_RndEvent syscall_state E0}.
 Context (lp : lprog).
 
 Lemma mix_ilsteps_0 p1 cond ls : ~~cond ls -> mix_ilsteps p1 cond ls ≅ Ret ls.
@@ -386,28 +454,49 @@ Qed.
 Notation Lilabel := (linear.Llabel InternalLabel).
 Definition dummy_linstr := MkLI dummy_instr_info Lalign.
 
+Lemma is_Lsyscall_rP i o : reflect (i = Lsyscall o) (is_Lsyscall_r i == Some o).
+Proof.
+case: i => >; try by constructor. by apply: (iffP idP) => [|-> //] /eqP [->].
+Qed.
+
+Lemma is_Lsyscall_rE i o : (i = Lsyscall o) <-> (is_Lsyscall_r i = Some o).
+Proof.
+split; first by move=> /is_Lsyscall_rP /eqP.
+by move=> /eqP /is_Lsyscall_rP.
+Qed.
+
 Lemma step_mix_ilsteps_eq_itree fn P Q pcs pce ls  :
+  let: li := li_i (nth dummy_linstr Q 0) in
   is_linear_of lp fn (P ++ Q) ->
   lfn ls = fn -> lpc ls = size P ->
   pcs <= size P < pce ->
   0 < size Q ->
   mix_ilsteps lp (pc_between fn pcs pce) ls ≅
-  match eval_instr lp (nth dummy_linstr Q 0) ls with
-  | Ok ls2 =>
-    if is_Lcall (li_i (nth dummy_linstr Q 0)) is Some fn' then
-       ITree.bind (trigger_inl1 (mix_to_small_steps.Call fn' ls2))
-        (λ ls3, if check_call ls ls3 then Tau (mix_ilsteps lp (pc_between fn pcs pce) ls3)
-                else Exception.throw ErrSemUndef)
-    else Tau (mix_ilsteps lp (pc_between fn pcs pce) ls2)
-  | Error e => Exception.throw e
-  end.
+    if is_Lsyscall_r li is Some o then
+      ITree.bind
+        (lexec_syscall o ls)
+        (fun ls2 => Tau (mix_ilsteps lp (pc_between fn pcs pce) ls2))
+    else
+      match eval_instr lp (nth dummy_linstr Q 0) ls with
+      | Ok ls2 =>
+        if is_Lcall li is Some fn' then
+          ITree.bind (trigger_inl1 (mix_to_small_steps.Call fn' ls2))
+            (λ ls3, if check_call ls ls3 then Tau (mix_ilsteps lp (pc_between fn pcs pce) ls3)
+                    else Exception.throw ErrSemUndef)
+        else Tau (mix_ilsteps lp (pc_between fn pcs pce) ls2)
+      | Error e => Exception.throw e
+      end.
 Proof.
   rewrite {1}/mix_ilsteps while.unfold_while => C hfn hpc hsz h0Q.
   have -> : pc_between fn pcs pce ls.
   + by rewrite /pc_between hfn eqxx hpc.
-  rewrite {1}/mix_ilstep /istep /is_call /step.
+  rewrite {1}/mix_ilstep /istep /is_call /step /next_is_Lsyscall.
   rewrite (find_instr_skip0 C) => //.
-  rewrite (onth_nth_size dummy_linstr) //.
+  rewrite (onth_nth_size dummy_linstr) // /is_Lsyscall.
+  case h: is_Lsyscall_r => [o|].
+  - move: h => /is_Lsyscall_rE ->.
+    rewrite bind_bind; apply: eqit_bind; first reflexivity.
+    move=> ls'; rewrite bind_ret_l; reflexivity.
   case: eval_instr => [ls2 | e] /=; last by rewrite !bind_throw; reflexivity.
   rewrite bind_ret_l; case: li_i => /= *;
    try by rewrite bind_ret_l; reflexivity.
@@ -418,14 +507,20 @@ Proof.
 Qed.
 
 Lemma step_mix_ilsteps fn P Q pcs pce ls  :
+  let: li := li_i (nth dummy_linstr Q 0) in
   is_linear_of lp fn (P ++ Q) ->
   lfn ls = fn -> lpc ls = size P ->
   pcs <= size P < pce ->
   0 < size Q ->
   mix_ilsteps lp (pc_between fn pcs pce) ls ≈
+    if is_Lsyscall_r li is Some o then
+      ITree.bind
+        (lexec_syscall o ls)
+        (fun ls2 => Tau (mix_ilsteps lp (pc_between fn pcs pce) ls2))
+    else
   match eval_instr lp (nth dummy_linstr Q 0) ls with
   | Ok ls2 =>
-    if is_Lcall (li_i (nth dummy_linstr Q 0)) is Some fn' then
+    if is_Lcall li is Some fn' then
        ITree.bind (trigger_inl1 (mix_to_small_steps.Call fn' ls2))
         (λ ls3, if check_call ls ls3 then mix_ilsteps lp (pc_between fn pcs pce) ls3
                 else Exception.throw ErrSemUndef)
@@ -434,6 +529,7 @@ Lemma step_mix_ilsteps fn P Q pcs pce ls  :
   end.
 Proof.
   move=> C hfn hpc hsz h0Q; rewrite (step_mix_ilsteps_eq_itree C) //.
+  case: is_Lsyscall_r => [o|]; first reflexivity.
   case: eval_instr => [ls' | ?]; last reflexivity.
   case: is_Lcall; last by apply eqit_Tau_l; reflexivity.
   move=> fn'; apply eqit_bind; first reflexivity.
@@ -459,7 +555,7 @@ Proof.
     + rewrite of_estate_to_estate; reflexivity.
     rewrite /pc_between /= eqxx; simpl_size; lia.
   rewrite /sem_fopn_args => C hpc.
-  rewrite (step_mix_ilsteps C) //; last by simpl_size; lia.
+  rewrite (step_mix_ilsteps C) /= //; last by simpl_size; lia.
   rewrite /eval_instr /=.
   rewrite -2!Let_Let.
   have -> : Let a := Let x := fexpr_sem.sem_rexprs (to_estate ls) es in exec_sopn o x in
