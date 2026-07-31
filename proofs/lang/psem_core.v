@@ -19,6 +19,15 @@ Local Open Scope Z_scope.
 Local Open Scope seq_scope.
 Open Scope vm_scope.
 
+(* TODO where does this go? *)
+#[global] Instance with_RndEventE
+  {scs : Type}
+  {E E0 : Type -> Type}
+  {wE : with_Error E E0}
+  {rE : with_RndEvent scs E0}
+  : with_RndEvent scs E :=
+  fun T e => mfun2 (inr1 (rE T e)).
+
 Section WSW.
 Context {wsw:WithSubWord}.
 
@@ -60,7 +69,7 @@ Context
   {sCP : semCallParams}
   {E0 E : Type -> Type}
   {wE : with_Error E E0}
-  {rE : with_RndEvent syscall_state E}
+  {rE : with_RndEvent syscall_state E0}
 .
 
 Definition exec_syscall
@@ -122,7 +131,7 @@ Context
   {E0 E : Type -> Type}
   {asm_op syscall_state : Type}
   {wE : with_Error E E0}
-  {rE : with_RndEvent syscall_state E}
+  {rE : with_RndEvent syscall_state E0}
   {ep : EstateParams syscall_state}
   {sip : SemInstrParams asm_op syscall_state}.
 
