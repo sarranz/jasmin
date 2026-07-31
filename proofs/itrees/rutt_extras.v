@@ -218,7 +218,7 @@ Definition RPost_eq {E : Type -> Type} T1 T2 (e1 : E T1) (t1 : T1) (e2 : E T2) (
 Lemma RPre_eq_refl {E : Type -> Type} T (e : E T) : RPre_eq e e.
 Proof. by exists erefl. Qed.
 
-Lemma Rpost_eqI {E : Type -> Type} T (e : E T) t1 t2 :
+Lemma RPost_eqI {E : Type -> Type} T (e : E T) t1 t2 :
   RPost_eq e t1 e t2 ->
   t1 = t2.
 Proof. by move=> /(_ erefl) ->. Qed.

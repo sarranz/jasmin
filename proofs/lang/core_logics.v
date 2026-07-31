@@ -389,7 +389,7 @@ Section EQ.
     eutt RR t1 t2 -> lxeutt RR t1 t2.
   Proof.
   move=> h; rewrite /lxeutt /lxrutt; apply: rutt_xrutt.
-  apply: gen_eutt_rutt h => [u e|u e a b]; [exact: RPre_eq_refl | exact: Rpost_eqI].
+  apply: gen_eutt_rutt h => [u e|u e a b]; [exact: RPre_eq_refl | exact: RPost_eqI].
   Qed.
 
 End EQ.
@@ -503,7 +503,7 @@ Lemma vuincl_it_app_sopn T ts (op : it_sem_prod ts T) vs vs' :
 Proof.
 elim: ts op vs vs' => /= [|t ts ih] op [|v vs] [|v' vs'] + /List_Forall2_inv //.
 - move=> _ _; apply: xrutt_refl; first by move=> ?? _ _; apply: RPre_eq_refl.
-  by move=> ???? _ _; apply: Rpost_eqI.
+  by move=> ???? _ _; apply: RPost_eqI.
 - by move=> _ _; apply: lxrutt_throw.
 - by move=> _ _; apply: lxrutt_throw.
 move=> /andP [] ht hts [/value_uinclE hv hvs].

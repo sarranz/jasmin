@@ -2387,7 +2387,7 @@ Context
 .
 
 (* TODO where does this go? *)
-Lemma xrutt_exec_syscall_core {R1 R2} (RR : R1 -> R2 -> Prop)
+Lemma lxeutt_lrutt_RndRels2 {R1 R2} (RR : R1 -> R2 -> Prop)
   (t1 : itree (ErrEvent +' RndEvent syscall_state) R1)
   (t2 : itree (ErrEvent +' RndEvent syscall_state) R2) :
   lxeutt RR t1 t2 ->
@@ -2416,7 +2416,7 @@ Proof using rndE.
 move=> fs1 fs2 [hscs hmem hu]; rewrite /fexec_syscall hscs hmem.
 apply xrutt_bind with sc_res_uincl.
 - rewrite /exec_syscall.
-  exact/xrutt_exec_syscall_core/exec_syscall_coreP/hu.
+  exact/lxeutt_lrutt_RndRels2/exec_syscall_coreP/hu.
 by move=> [[scs m] vs] [[scs' m'] vs'] [/= h1 h2 h3]; apply: xrutt_Ret.
 Qed.
 
@@ -2425,9 +2425,9 @@ Lemma fs_eq_syscall o :
 Proof using rndE.
 move=> fs _ <-; rewrite /fexec_syscall.
 apply xrutt_bind with eq; last by move=> [[scs m] vs] _ <-; apply: xrutt_Ret.
-rewrite /exec_syscall; apply/xrutt_exec_syscall_core/xrutt_refl.
+rewrite /exec_syscall; apply/lxeutt_lrutt_RndRels2/xrutt_refl.
 - by move=> T ev _ _; apply: RPre_eq_refl.
-by move=> T ev t1 t2 _ _ h; apply/Rpost_eqI/h.
+by move=> T ev t1 t2 _ _ h; apply/RPost_eqI/h.
 Qed.
 
 Context {sem_F1 sem_F2 : sem_Fun E}.
@@ -2476,7 +2476,7 @@ Instance RndRels2_EqRels : RndRels2 (rE_l := rE) (rE_r := rE) (rE0 := EqRels).
 Proof.
 constructor.
 - by move=> T e; exact: RPre_eq_refl.
-by move=> T e t1 t2 h; apply/(Rpost_eqI (e := e))/h.
+by move=> T e t1 t2 h; apply/(RPost_eqI (e := e))/h.
 Qed.
 
 Context
