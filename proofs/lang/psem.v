@@ -55,13 +55,6 @@ Definition sem_Ind_opn : Prop :=
     sem_sopn gd o s1 xs es = ok s2 →
     Pi_r s1 (Copn xs t o es) s2.
 
-Definition sem_Ind_syscall : Prop :=
-  forall  s1 scs m s2 o xs es ves vs,
-    sem_pexprs true gd s1 es = ok ves →
-    exec_syscall s1.(escs) s1.(emem) o ves = ok (scs, m, vs) →
-    write_lvals true gd (with_scs (with_mem s1 m) scs) xs vs = ok s2 →
-    Pi_r s1 (Csyscall xs o es) s2.
-
 End SEM.
 
 Section WITH_PARAMS.
