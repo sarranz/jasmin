@@ -60,6 +60,46 @@ Definition iassert `{ErrEvent -< E} (b : bool) (e : error) : itree E unit :=
 
 End Errors.
 
+Definition preservesE
+  E1 E2 E3 {S12 : E1 -< E2} {S23 : E1 -< E3} (F : Handler E2 E3) :=
+  forall T (e : E1 T),
+    eutt eq (F T (subevent T e)) (trigger e).
+
+#[global] Arguments preservesE _ {_ _ _ _} _.
+
+Section Preserves.
+
+Context
+  {E E' : Type -> Type}
+  {SErr : ErrEvent -< E}
+.
+
+Lemma translate_inr_iresult T (r : exec T) :
+  eutt eq
+    (translate inr1 (iresult (E := E) r))
+    (iresult (E := E' +' E) r).
+Proof.
+case: r => [r|e]; first by rewrite translate_ret; reflexivity.
+by rewrite translate_vis; apply: eqit_Vis => -[].
+Qed.
+
+Context {SErr' : ErrEvent -< E'}.
+
+Lemma interp_preserves_throw (F : Handler E E') T e :
+  preservesE ErrEvent F ->
+  eutt eq (interp F (throw (X := T) e)) (throw e).
+Proof. by move=> h; rewrite interp_vis h bind_vis; apply: eqit_Vis. Qed.
+
+Lemma interp_preserves_iresult (F : Handler E E') T (r : exec T) :
+  preservesE ErrEvent F ->
+  eutt eq (interp F (iresult r)) (iresult r).
+Proof.
+move=> h; case: r => [r|e]; first by rewrite interp_ret; reflexivity.
+rewrite (interp_preserves_throw _ _ h); reflexivity.
+Qed.
+
+End Preserves.
+
 (** Type function isomorphism class *)
 Class FIso (E1 E2: Type -> Type) : Type := FI {
     mfun1 : E1 -< E2 ;

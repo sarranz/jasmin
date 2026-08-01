@@ -174,13 +174,13 @@ Definition writefun_RA (p:sprog) (fn: funname) :=
 
 Definition sem_syscall (p : prog) (o : syscall_t) (s : estate) : itree E estate :=
   let sig := syscall_sig o in
-  let tin := sig.(scs_vin) in
-  let tout := sig.(scs_vout) in
+  let vin := sig.(scs_vin) in
   let vm := s.(evm) in
-  let s' := with_vm s (vm_after_syscall vm) in
-  ves <- iresult (get_vars true vm tin) ;;
+  ves <- iresult (get_vars true vm vin) ;;
   fs <- fexec_syscall (scP := sCP_stack) o (mk_fstate ves s) ;;
-  iresult (upd_estate true p.(p_globs) (to_lvals tout) fs s').
+  let vout := sig.(scs_vout) in
+  let s' := with_vm s (vm_after_syscall vm) in
+  iresult (upd_estate true p.(p_globs) (to_lvals vout) fs s').
 
 Fixpoint isem_i(p : sprog) (i : instr) (s : estate) :
     itree E (Sv.t * estate) :=
@@ -247,24 +247,6 @@ End SEM_I.
 
 (* semantics of instructions parametrized by recCall events *)
 
-Section MOVE.
-
-Lemma preservesE_case_inr {E1 E2 E1'} (F : Handler E1 (E1' +' E2)) :
-  preservesE E2 (case_ F inr_).
-Proof. move=> T e; apply: eqit_Vis; reflexivity. Qed.
-
-Lemma preservesE_sub
-  {E1 E1' E2 E3}
-  {S12 : E1 -< E2} {S23 : E1 -< E3} {S12' : E1' -< E2} {S23' : E1' -< E3}
-  {S : E1' -< E1}
-  (F : Handler E2 E3) :
-  preservesE E1 F ->
-  preservesE E1' F.
-Proof.
-move=> h T e.
-Admitted.
-End MOVE.
-
 Section REC.
 Context
   {E E0}
@@ -321,7 +303,7 @@ Definition isem_fun_check := isem_fun_def (sem_F := fun _ => sem_funK_rec_check)
     (throw e).
 Proof.
 rewrite interp_preserves_throw; first reflexivity.
-exact/preservesE_sub/preservesE_case_inr/(fromErr (wE := wE)).
+by apply: preservesE_sub; first exact: preservesE_case_inr.
 Qed.
 
 #[local] Lemma F_iresult
@@ -331,7 +313,7 @@ Qed.
     (iresult r).
 Proof.
 rewrite interp_preserves_iresult; first reflexivity.
-exact/preservesE_sub/preservesE_case_inr/(fromErr (wE := wE)).
+by apply: preservesE_sub; first exact: preservesE_case_inr.
 Qed.
 
 #[local] Lemma F_fexec
@@ -343,8 +325,8 @@ Proof.
 rewrite /fexec_syscall interp_bind; apply: eqit_bind; last first.
 - move=> [[??] ?]; rewrite interp_ret; reflexivity.
 rewrite interp_preserves_exec_syscall; first reflexivity.
-- exact/preservesE_sub/preservesE_case_inr/(fromErr (wE := wE)).
-exact/preservesE_sub/preservesE_case_inr/with_RndEventE.
+- by apply: preservesE_sub; first exact: preservesE_case_inr.
+by apply: preservesE_sub; first exact: preservesE_case_inr.
 Qed.
 
 (* Equivalence between the two semantic, it is mostly the proof of rec_facts.CHECK.mrec_check,

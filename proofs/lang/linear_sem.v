@@ -129,7 +129,7 @@ Definition eval_instr (i : linstr) (s1: lstate) : exec lstate :=
     Let res := exec_sopn o args in
     Let s' := write_lexprs xs res s in
     ok (lnext_pc (lset_estate' s1 s'))
-  | Lsyscall o => Error ErrSemUndef
+  | Lsyscall o => Error ErrSemUndef (* triggers event *)
   | Lcall None d =>
     Let _ := assert (~~ fn_is_export d.1) ErrSemUndef in
     let vrsp := v_var (vid (lp_rsp P)) in
@@ -265,11 +265,8 @@ Context
   {wE : with_Error E E0}
   {rE : with_RndEvent syscall_state E0}.
 
-Import MonadNotation.
+Import MonadNotation ITreeNotations.
 Local Open Scope monad_scope.
-
-Definition next_is_Lsyscall (s : lstate) : option syscall_t :=
-  let%opt i := find_instr s in is_Lsyscall i.
 
 Definition lset_fstate (xs : seq var) (s : lstate) (fs : fstate) : exec lstate :=
   Let e := upd_estate true [::] (to_lvals xs) fs (to_estate s) in
@@ -277,12 +274,18 @@ Definition lset_fstate (xs : seq var) (s : lstate) (fs : fstate) : exec lstate :
 
 Definition lexec_syscall (o : syscall_t) (s : lstate) : itree E lstate :=
   let sig := syscall_sig o in
-  ves <- iresult (get_vars true s.(lvm) sig.(scs_vin));;
+  let vin := sig.(scs_vin) in
+  let vm := s.(lvm) in
+  ves <- iresult (get_vars true vm vin) ;;
   let fs := {| fscs := s.(lscs); fmem := s.(lmem); fvals := ves; |} in
-  fs' <- fexec_syscall (scP := sCP_stack) o fs;;
-  let s := lset_vm s (vm_after_syscall s.(lvm)) in
-  s' <- iresult (lset_fstate sig.(scs_vout) s fs');;
-  Ret (lnext_pc s').
+  fs' <- fexec_syscall (scP := sCP_stack) o fs ;;
+  let vout := sig.(scs_vout) in
+  let s' := lset_vm s (vm_after_syscall vm) in
+  s'' <- iresult (lset_fstate vout s' fs') ;;
+  Ret (lnext_pc s'').
+
+Definition next_is_Lsyscall (s : lstate) : option syscall_t :=
+  let%opt i := find_instr s in is_Lsyscall i.
 
 Definition istep (s: lstate) : itree E lstate :=
   if next_is_Lsyscall s is Some o then lexec_syscall o s
@@ -300,39 +303,32 @@ Definition ilsem_exportcall (fn: funname) (es:estate) :=
   _ <- iresult (assert (all (fun x => value_eqb (evm es).[x] vm'.[x]) (Sv.elements callee_saved)) ErrSemUndef);;
   Ret (to_estate s').
 
-Definition cond_not_syscall (cond : pred lstate) : Prop :=
-  forall s, cond s -> ~~ isSome (next_is_Lsyscall s).
-
-Definition and_not_syscall (cond : pred lstate) (s : lstate) : bool :=
-  cond s && ~~ next_is_Lsyscall s.
-
-Lemma and_not_syscall_not_syscall cond :
-  cond_not_syscall (and_not_syscall cond).
-Proof. by move=> ? /andP []. Qed.
-
-Lemma i_lsem_body (cond : pred lstate) s :
-  cond_not_syscall cond ->
-  while_body cond istep s ≅ iresult (lsem_body cond s).
+Lemma step_next_is_Lsyscall s s' :
+  step s = ok s' ->
+  next_is_Lsyscall s = None.
 Proof.
-  move=> h; rewrite /while_body /lsem_body; case: ifP => h'; last reflexivity.
-  rewrite /istep; move: (h _ h'); case: next_is_Lsyscall => // _.
-  case: step => [s' | ] /=.
-  + rewrite bind_ret_l; reflexivity.
-  move=> e; apply bind_throw.
+by rewrite /step /next_is_Lsyscall; case: find_instr => [[? []]|] //.
 Qed.
 
-Lemma i_lsem_body_n (cond : pred lstate) n s :
-  cond_not_syscall cond ->
-  iter_n (while_body cond istep) n s ≈
-    iresult (lsem_body_n cond n.+1 s).
+Lemma i_lsem_body cond s s' :
+  lsem_body cond s = ok s' ->
+  eq_itree eq (while_body cond istep s) (Ret s').
 Proof.
-  move=> h; rewrite /=; elim: n s => /= [ | n hn] s; rewrite i_lsem_body //.
-  + case: (lsem_body cond s) => [ins | e] /=; last by reflexivity.
-    case: ins; reflexivity.
-  case: lsem_body => [ ins| e] /=;
-    last by rewrite bind_throw; reflexivity.
-  rewrite bind_ret_l; case: ins => s' /=; last reflexivity.
-  apply/eqit_Tau_l/hn.
+rewrite /while_body /lsem_body.
+case: ifP => h; last by move=> [<-]; reflexivity.
+t_xrbindP=> s'' /[dup] /step_next_is_Lsyscall hsc h' <-.
+by rewrite /istep hsc h' bind_ret_l; reflexivity.
+Qed.
+
+Lemma i_lsem_body_n cond n s s' :
+  lsem_body_n cond n.+1 s = ok s' ->
+  eutt eq (iter_n (while_body cond istep) n s) (Ret s').
+Proof.
+elim: n s => [|n ih] s /=; t_xrbindP=> r.
+- by case: r => ?; move=> /i_lsem_body -> [<-]; reflexivity.
+move=> /i_lsem_body ->; rewrite bind_ret_l.
+case: r => s''; last by move=> [<-]; reflexivity.
+by rewrite tau_eutt; apply: ih.
 Qed.
 
 Lemma unfold_lsem cond s :
@@ -350,14 +346,12 @@ Proof.
 Qed.
 
 Lemma lsem_n_ilsem s2 s1 cond :
-  cond_not_syscall cond ->
   lsem_n cond s1 s2 ->
   ilsem cond s1 ≈ ilsem cond s2.
 Proof.
-  move=> h [n]; elim: n s1 => [ | n ih] s1 /=; t_xrbindP.
-  + by move=> <-; reflexivity.
-  move=> [ s1' | //] hstep /ih <-.
-  rewrite unfold_lsem i_lsem_body // hstep /= bind_ret_l; reflexivity.
+move=> [n]; elim: n s1 => [|n ih] s1 /=; first by move=> [<-]; reflexivity.
+t_xrbindP=> -[] // s /i_lsem_body.
+by rewrite unfold_lsem => ->; rewrite bind_ret_l; apply: ih.
 Qed.
 
 Lemma eq_ilsem cond1 cond2 s:
@@ -372,7 +366,7 @@ End SMALL_STEP.
 
 Section MIX_STEP.
 
-Import MonadNotation.
+Import MonadNotation ITreeNotations.
 Local Open Scope monad_scope.
 
 Context
@@ -430,40 +424,18 @@ Definition mix_ilsem_exportcall (fn: funname) (es:estate) :=
   _ <- iresult (assert (all (fun x => value_eqb (evm es).[x] vm'.[x]) (Sv.elements callee_saved)) ErrSemUndef);;
   Ret (to_estate s').
 
-Lemma translate_iresult E' T (r : exec T) :
-  eutt eq (translate inr1 (iresult r)) (iresult (E := E' +' E) r).
-Proof.
-  case: r => [v|e] /=.
-  - rewrite translate_ret; reflexivity.
-  by rewrite translate_vis; apply: eqit_Vis => -[].
-Qed.
-
-Lemma translate_fexec_syscall E' o fs :
-  eutt eq
-    (translate inr1 (fexec_syscall (scP := sCP_stack) o fs))
-    (fexec_syscall (E := E' +' E) o fs).
-Proof.
-  rewrite /fexec_syscall translate_bind.
-  apply: (eutt_clo_bind eq (UU := eq)).
-  rewrite /exec_syscall -translate_cmpE.
-  apply: eutt_translate.
-  move=> T [e|e] /=; reflexivity.
-  reflexivity.
-  move=> u1 u2 ->; case: u2 => -[scs m] vs /=; rewrite translate_ret; reflexivity.
-Qed.
-
 Lemma translate_lexec_syscall E' o s :
   eutt eq
     (translate inr1 (lexec_syscall o s))
     (lexec_syscall (E := E' +' E) o s).
 Proof.
-  rewrite /lexec_syscall translate_bind.
-  apply: (eutt_clo_bind eq (UU:=eq)); first exact: translate_iresult.
-  move=> ves _ <-; rewrite translate_bind.
-  apply: (eutt_clo_bind eq (UU:=eq)); first exact: translate_fexec_syscall.
-  move=> fs' _ <-; rewrite translate_bind.
-  apply: (eutt_clo_bind eq (UU:=eq)); first exact: translate_iresult.
-  move=> s' _ <-; rewrite translate_ret; reflexivity.
+rewrite /lexec_syscall translate_bind.
+apply: eutt_eq_bind'; first exact: translate_inr_iresult.
+move=> ves; rewrite translate_bind.
+apply: eutt_eq_bind'; first exact: translate_inr_fexec_syscall.
+move=> fs'; rewrite translate_bind.
+apply: eutt_eq_bind'; first exact: translate_inr_iresult.
+move=> s'; rewrite translate_ret; reflexivity.
 Qed.
 
 Lemma translate_istep E' s :
@@ -471,9 +443,9 @@ Lemma translate_istep E' s :
     (translate inr1 (istep s))
     (istep (E := E' +' E) s).
 Proof.
-  rewrite /istep; case: next_is_Lsyscall => [o|].
-  - exact: translate_lexec_syscall.
-  exact: translate_iresult.
+rewrite /istep; case: next_is_Lsyscall => [o|].
+- exact: translate_lexec_syscall.
+exact: translate_inr_iresult.
 Qed.
 
 Lemma mix_ilsteps_eq cond s : mix_ilsteps cond s ≈ mix_steps istep is_call check_call cond s.
@@ -561,5 +533,3 @@ Qed.
 End MIX_STEP.
 
 End SEM.
-
-(* Arguments lsem_split_start {_ _ _ _ _ _}. *)
