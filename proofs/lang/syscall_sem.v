@@ -14,6 +14,14 @@ Local Open Scope Z_scope.
 Import MonadNotation ITreeNotations.
 Local Open Scope monad_scope.
 
+#[global] Instance with_RndEventE
+  {scs : Type}
+  {E E0 : Type -> Type}
+  {wE : with_Error E E0}
+  {rE : with_RndEvent scs E0}
+  : with_RndEvent scs E :=
+  fun T e => mfun2 (inr1 (rE T e)).
+
 Section SourceSysCall.
 
 Context
@@ -109,64 +117,102 @@ Implicit Types
   (len : pointer)
 .
 
-Definition sc_sig_s_atype_in o :=
+Definition sc_s_atype_in o :=
   [seq eval_atype t | t <- (syscall_sig_s o).(scs_tin)].
-Definition sc_sig_s_atype_out o :=
+Definition sc_s_atype_out o :=
   [seq eval_atype t | t <- (syscall_sig_s o).(scs_tout)].
-Definition sc_sig_s_atype o :=
-  it_sem_prod (E := E)
-    (sc_sig_s_atype_in o)
-    (syscall_state * mem * sem_tuple (sc_sig_s_atype_out o)).
 
-Lemma syscall_sig_s_noarr o : all is_not_carr (sc_sig_s_atype_in o).
+Lemma syscall_sig_s_noarr o : all is_not_carr (sc_s_atype_in o).
 Proof. by case: o. Qed.
 
-Definition exec_getrandom_s_core
-  scs m p len : itree E (syscall_state * mem * pointer) :=
-  let len := wunsigned len in
-  '(scs', bs) <- trigger (Rnd scs len) ;;
-  m' <- iresult (fill_mem m p bs) ;;
-  Ret (scs', m', p).
+(* The semantics of a stack syscall is a three-stage composition: cast the
+   argument values to the semantic input type of the syscall, trigger the
+   [Rnd] event, and store the answer into memory. The cast and the store
+   are deterministic ([exec]); only the trigger is an itree. *)
 
-Definition sem_syscall
-  (o : syscall_t) : syscall_state -> mem -> sc_sig_s_atype o :=
+Definition sem_syscall_cast o (vs : values) :
+  exec (sem_tuple (sc_s_atype_in o)) :=
+  app_sopn _ (sem_prod_ok _ (sem_prod_tuple (sc_s_atype_in o))) vs.
+
+Definition exec_getrandom_s_core
+  scs (args : pointer * pointer) : itree E (syscall_state * seq u8) :=
+  trigger (Rnd scs (wunsigned args.2)).
+
+Definition sc_s_trigger o :=
+  syscall_state -> sem_tuple (sc_s_atype_in o) ->
+    itree E (syscall_state * seq u8).
+
+Definition sem_syscall o : sc_s_trigger o :=
   match o with
   | RandomBytes _ _ => exec_getrandom_s_core
   end.
+Arguments sem_syscall : clear implicits.
+
+Definition exec_getrandom_s_store
+  m (args : pointer * pointer) (ans : syscall_state * seq u8) :
+  exec (syscall_state * mem * pointer) :=
+  Let m' := fill_mem m args.1 ans.2 in
+  ok (ans.1, m', args.1).
+
+Definition sc_s_store o :=
+  mem -> sem_tuple (sc_s_atype_in o) -> syscall_state * seq u8 ->
+    exec (syscall_state * mem * sem_tuple (sc_s_atype_out o)).
+
+Definition sem_syscall_store o : sc_s_store o :=
+  match o with
+  | RandomBytes _ _ => exec_getrandom_s_store
+  end.
+Arguments sem_syscall_store : clear implicits.
 
 Definition exec_syscall_s scs m o vs : itree E (syscall_state * mem * values) :=
-  '(scs', m', t) <- it_app_sopn _ (sem_syscall o scs m) vs ;;
+  args <- iresult (sem_syscall_cast o vs) ;;
+  ans <- sem_syscall o scs args ;;
+  '(scs', m', t) <- iresult (sem_syscall_store o m args ans) ;;
   Ret (scs', m', list_ltuple t).
 
-Lemma exec_getrandom_s_core_stable scs m p len :
-  lutt (fun _ _ => True) (fun _ _ _ => True)
-    (fun '(_, m', _) => stack_stable m m')
-    (exec_getrandom_s_core scs m p len).
+Lemma sem_syscall_castP o vargs vargs' t :
+  values_uincl vargs vargs' ->
+  sem_syscall_cast o vargs = ok t ->
+  sem_syscall_cast o vargs' = ok t.
+Proof. exact: vuincl_sopn (syscall_sig_s_noarr o). Qed.
+
+Lemma sem_syscall_castE ws n vs args :
+  sem_syscall_cast (RandomBytes ws n) vs = ok args ->
+  exists v1 v2,
+    [/\ vs = [:: v1; v2],
+        to_word Uptr v1 = ok args.1 &
+        to_word Uptr v2 = ok args.2].
 Proof.
-apply: lutt_bind; first exact: lutt_true.
-move=> [scs' bs] _; apply: (lutt_bind (R := stack_stable m)).
-- by apply: lutt_iresult => // m' /fill_mem_stack_stable.
-by move=> m' h; apply/lutt_Ret'/h.
+rewrite /sem_syscall_cast.
+case: vs => [|v1 [|v2 [|??]]] /=; t_xrbindP => //.
+by move=> w1 hw1 w2 hw2 <-; exists v1, v2.
 Qed.
 
-Lemma exec_getrandom_s_core_validw scs m p len :
-  lutt (fun _ _ => True) (fun _ _ _ => True)
-    (fun '(_, m', _) => validw m =3 validw m')
-    (exec_getrandom_s_core scs m p len).
+Lemma sem_syscall_storeS o m args ans r :
+  sem_syscall_store o m args ans = ok r ->
+  mem_equiv m r.1.2.
 Proof.
-apply: lutt_bind; first exact: lutt_true.
-move=> [scs' bs] _; apply: (lutt_bind (R := fun m' => validw m =3 validw m')).
-- by apply: lutt_iresult => // m' /fill_mem_validw_eq.
-by move=> m' h; apply/lutt_Ret'/h.
+case: o args r => ws n args r /=.
+rewrite /exec_getrandom_s_store; t_xrbindP => m' hfill <- /=.
+split; first exact: fill_mem_stack_stable hfill.
+exact: fill_mem_validw_eq hfill.
 Qed.
 
 Lemma exec_syscallPs_eq scs m o vargs vargs' :
   values_uincl vargs vargs' ->
   lxeutt eq (exec_syscall_s scs m o vargs) (exec_syscall_s scs m o vargs').
 Proof.
-move=> /(vuincl_it_app_sopn _ (syscall_sig_s_noarr o)) h.
-apply: xrutt_bind; first exact: h.
-by move=> [[scs1 m1] r1] _ <-; apply: xrutt_Ret.
+move=> hu; rewrite /exec_syscall_s.
+apply: (xrutt_bind (RR := eq)).
+- apply: lxrutt_iresult => args h.
+  by exists args => //; exact: sem_syscall_castP hu h.
+move=> args _ <-.
+apply: (xrutt_bind (RR := eq)).
+- exact: eutt_lxeutt (reflexivity _).
+move=> ans _ <-.
+apply: (xrutt_bind (RR := eq)).
+- by apply: lxrutt_iresult => r h; exists r.
+by move=> [[scs1 m1] t] _ <-; apply: xrutt_Ret.
 Qed.
 
 Lemma exec_syscallPs scs m o vargs vargs' :
@@ -180,26 +226,22 @@ apply: xrutt_weaken_v3; last exact: exec_syscallPs_eq u.
 by move=> [[??] ?] _ <-.
 Qed.
 
-Lemma sem_syscall_equiv o scs m :
-  mk_forall_it (fun r => mem_equiv m r.1.2) (sem_syscall o scs m).
-Proof.
-case: o => ws len /= p len'.
-apply: lutt_bind; first exact: lutt_true.
-move=> [scs' bs] _; apply: (lutt_bind (R := mem_equiv m)).
-- apply: lutt_iresult => // m' hf; split; first exact: fill_mem_stack_stable hf.
-  exact: fill_mem_validw_eq hf.
-by move=> m' h; apply/lutt_Ret'/h.
-Qed.
-
 Lemma exec_syscallSs scs m o vargs :
   lutt (fun _ _ => True) (fun _ _ _ => True)
     (fun '(_, m', _) => mem_equiv m m')
     (exec_syscall_s scs m o vargs).
 Proof.
 rewrite /exec_syscall_s.
+apply: lutt_bind; first exact: lutt_true.
+move=> args _.
+apply: lutt_bind; first exact: lutt_true.
+move=> ans _.
 apply: (lutt_bind (R := fun r => mem_equiv m r.1.2)).
-- exact/mk_forall_itP/sem_syscall_equiv.
-by move=> [[scs' m'] t] h; apply/lutt_Ret'/h.
+- by apply: lutt_iresult => // r /sem_syscall_storeS.
+by move=> [[scs1 m1] t] h; apply/lutt_Ret'/h.
 Qed.
 
 End StackSyscall.
+
+Arguments sem_syscall {pd} {syscall_state} o _ _.
+Arguments sem_syscall_store {pd} {syscall_state} o _ _ _.

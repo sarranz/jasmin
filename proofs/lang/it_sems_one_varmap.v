@@ -329,6 +329,17 @@ rewrite interp_preserves_exec_syscall; first reflexivity.
 by apply: preservesE_sub; first exact: preservesE_case_inr.
 Qed.
 
+#[local] Lemma F_sem_syscall
+  {E1} (F : forall T, E1 T -> itree (E1 +' E) T) (p : prog) o s :
+  eutt eq
+    (interp (case_ F inr_) (sem_syscall p o s))
+    (sem_syscall p o s).
+Proof.
+rewrite /sem_syscall !interp_bind; apply: eqit_bind; first exact: F_iresult.
+move=> ves; rewrite interp_bind; apply: eqit_bind; first exact: F_fexec.
+move=> fs; exact: F_iresult.
+Qed.
+
 (* Equivalence between the two semantic, it is mostly the proof of rec_facts.CHECK.mrec_check,
    and some administrative stuff *)
 Lemma isem_fun_isem_fun_check (p:sprog) fn s :
@@ -377,9 +388,7 @@ Proof.
     1-2: by move=> *; apply F_iresult.
     + move=> xs o es s; rewrite interp_bind; apply: eqit_bind; last first.
       * move=> s'; rewrite interp_ret; reflexivity.
-      rewrite /sem_syscall !interp_bind; apply: eqit_bind; first exact: F_iresult.
-      move=> ves; rewrite interp_bind; apply: eqit_bind; first exact: F_fexec.
-      move=> fs; exact: F_iresult.
+      exact: F_sem_syscall.
     + by move=> *; apply F_throw.
     + move=> e c1 c2 hc1 hc2 s; rewrite interp_bind F_iresult; apply eqit_bind; first reflexivity.
       by move=> []; [apply hc1 | apply hc2].
@@ -430,9 +439,7 @@ Proof.
   1-2: by move=> *; apply F_iresult.
   + move=> xs o es s; rewrite interp_bind; apply: eqit_bind; last first.
     * move=> s'; rewrite interp_ret; reflexivity.
-    rewrite /sem_syscall !interp_bind; apply: eqit_bind; first exact: F_iresult.
-    move=> ves; rewrite interp_bind; apply: eqit_bind; first exact: F_fexec.
-    move=> fs; exact: F_iresult.
+    exact: F_sem_syscall.
   + by move=> *; apply F_throw.
   + move=> e c1 c2 hc1 hc2 s; rewrite interp_bind F_iresult; apply eqit_bind; first reflexivity.
     by move=> []; [apply hc1 | apply hc2].
