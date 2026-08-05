@@ -7,6 +7,7 @@ type asm_element =
 | Instr of string * string list
 | Comment of string
 | Bytes of string list
+| ArrAnnot of string
 
 let iwidth = 4
 
@@ -54,9 +55,14 @@ let pp_asm_element fmt asm_element =
     pp_comment fmt content
   | Bytes data ->
     pp_bytes fmt data
+  | ArrAnnot annot -> pp_comment fmt annot
 
-let pp_asm_line fmt =
-  Format.fprintf fmt "%a\n%!" pp_asm_element
+
+let pp_asm_line fmt l =
+  let nl = match l with ArrAnnot _ -> " " | _ -> "\n" in
+  Format.fprintf fmt "%s%a%!" nl pp_asm_element l
 
 let pp_asm fmt asm =
-  List.iter (pp_asm_line fmt) asm
+  List.iter (pp_asm_line fmt) asm;
+  Format.fprintf fmt "\n%!"
+

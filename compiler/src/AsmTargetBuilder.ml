@@ -53,9 +53,17 @@ module Make(Target : AsmTarget) : S
     let asm_debug_info ({Location.base_loc = ii; _}, _) =
         List.map (fun x -> Dwarf x) (DebugInfo.source_positions ii)
 
+    let pp_arr_annot annot =
+      Option.map_default
+        (fun x -> [ArrAnnot (Format.sprintf "%s" x)])
+        []
+        (Annot.has_array_annot annot)
+
     let pp_instr name instr =
         let Arch_decl.({ asmi_i = i; asmi_ii = ii}) = instr in
-        asm_debug_info ii @ Target.pp_instr_r name i
+        asm_debug_info ii
+        @ Target.pp_instr_r name i
+        @ pp_arr_annot (snd ii)
 
     let pp_instrs name instrs = List.concat_map (pp_instr name) instrs
 

@@ -1721,11 +1721,80 @@ Definition alloc_declassify_array rmap es :=
     else Error (stk_ierror_basic xv "register array remains")
   else Error (stk_ierror_no_var "declassify: invalid args").
 
+Definition Sv_unions : seq Sv.t -> Sv.t := foldl Sv.union Sv.empty.
+
+Definition slot_of_ptr_kind (p : ptr_kind) : slot :=
+  match p with
+  | Pdirect s _ _ _ _ | Pregptr s | Pstkptr s _ _ _ _ => s
+  end.
+
+Fixpoint slots_e (e : pexpr) : Sv.t :=
+  let slots_es es := Sv_unions [seq slots_e e | e <- es] in
+  match e with
+  | Pconst _ | Pbool _ | Parr_init _ _ => Sv.empty
+  | Pvar x =>
+      match get_local x.(gv).(v_var) with
+      | Some (Pdirect s _ _ _ _) | Some (Pstkptr s _ _ _ _) => Sv.singleton s
+      | _ => Sv.empty (* ignore assignments to reg ptr *)
+      end
+  | Pget _ _ _ a e =>
+      if get_local a.(gv).(v_var) is Some pk then
+        Sv.add (slot_of_ptr_kind pk) (slots_e e)
+      else slots_e e
+  | Psub _ _ _ _ e | Pload _ _ e | Papp1 _ e => slots_e e
+  | Papp2 _ e1 e2 => slots_es [:: e1; e2]
+  | PappN _ es => slots_es es
+  | Pif _ e1 e2 e3 => slots_es [:: e1; e2; e3]
+  end.
+
+Definition slots_es (es : pexprs) : Sv.t :=
+  Sv_unions [seq slots_e e | e <- es].
+
+Definition slots_lv (lv : lval) : Sv.t :=
+  match lv with
+  | Lnone _ _ => Sv.empty
+  | Lvar x =>
+      match get_local x.(v_var) with
+      | Some (Pdirect s _ _ _ _) | Some (Pstkptr s _ _ _ _) => Sv.singleton s
+      | None | Some (Pregptr _) => Sv.empty (* ignore assignments to reg ptr *)
+      end
+  | Laset _ _ _ a e =>
+      if get_local a.(v_var) is Some pk then
+        Sv.add (slot_of_ptr_kind pk) (slots_e e)
+      else slots_e e
+  | Lasub _ _ _ _ e | Lmem _ _ _ e => slots_e e
+  end.
+
+Definition slots_lvs (lvs : lvals) : Sv.t :=
+  Sv_unions [seq slots_lv lv | lv <- lvs].
+
+Definition add_arr_annot
+  (lvs : lvals) (es : pexprs) (ii : instr_info) : cexec instr_info :=
+  let ss := Sv.elements (Sv.union (slots_lvs lvs) (slots_es es)) in
+  match ss with
+  | [::] => ok ii
+  | [:: x] => ok (ii_add_array_annot x ii)
+  | _ =>
+      Error
+        {|
+          pel_msg :=
+            pp_box [:: pp_s "instruction accesses more than one slot"
+                     ; pp_list (pp_s ",") pp_var ss ];
+          pel_fn := None;
+          pel_fi := None;
+          pel_ii := Some ii;
+          pel_vi := None;
+          pel_pass := Some pass;
+          pel_internal := true;
+        |}
+  end.
+
 Fixpoint alloc_i sao (trmap:table*region_map) (i: instr) : cexec (table * region_map * cmd) :=
   let (table, rmap) := trmap in
   let (ii, ir) := i in
   match ir with
   | Cassgn r t ty e =>
+      Let ii := add_iinfo ii (add_arr_annot [:: r ] [:: e ] ii) in
     if is_aarr ty then
       Let: (table, rmap, ir) := add_iinfo ii (alloc_array_move_init table rmap r t e) in
       let table := remove_binding_lval table r in
@@ -1745,6 +1814,7 @@ Fixpoint alloc_i sao (trmap:table*region_map) (i: instr) : cexec (table * region
       ok (table, r.1, [:: MkI ii (Cassgn r.2 t ty e)])
 
   | Copn rs t o e =>
+    Let ii := add_iinfo ii (add_arr_annot rs e ii) in
     if is_protect_ptr_fail rs o e is Some (r, e, msf) then
        let table := remove_binding_lval table r in
        Let rs := alloc_protect_ptr rmap ii r t e msf in
@@ -1781,6 +1851,7 @@ Fixpoint alloc_i sao (trmap:table*region_map) (i: instr) : cexec (table * region
     ok (table, rs.1, [:: MkI ii (Copn rs.2 t o e)])
 
   | Csyscall rs o es =>
+    Let ii := add_iinfo ii (add_arr_annot rs es ii) in
     let table := remove_binding_lvals table rs in
     Let: (rmap, c) := alloc_syscall ii rmap rs o es in
     ok (table, rmap, c)

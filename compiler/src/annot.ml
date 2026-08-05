@@ -87,6 +87,11 @@ let pos_int dfl ((id, _) as arg) =
       "a positive integer" Z.pp_print dfl;
   i
 
+let str =
+  on_attribute
+    ~on_string:(fun _loc _nid s -> s)
+    (fun loc nid -> error ~loc "attribute for \"%s\" should be a string" nid)
+
 let string_of_ws ws = Annotations.string_of_ws ws
 
 let ws_strings =
@@ -147,3 +152,5 @@ let ensure_uniq1 ?(case_sensitive = true) id f annot =
 
 let consume id annot : A.annotations =
   List.filter (fun (k, _) -> not (String.equal id (L.unloc k))) annot
+
+let has_array_annot = ensure_uniq1 Annotations.array_annot str

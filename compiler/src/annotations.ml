@@ -45,6 +45,25 @@ let add_symbol ~loc s annot =
   else (Location.mk_loc loc s, None) :: annot
 
 (* -------------------------------------------------------------------- *)
+(* Records, on an instruction built by the stack allocation pass out of a
+   memory access, the name of the source-program array it came from. *)
+let array_annot = "Internal::array"
+
+let has_array_annot name annot =
+  List.exists
+    (fun (k, a) ->
+      String.equal (Location.unloc k) array_annot
+      && match a with
+         | Some { Location.pl_desc = Astring s; _ } -> String.equal s name
+         | _ -> false)
+    annot
+
+let add_array_annot ~loc name annot =
+  if has_array_annot name annot
+  then annot
+  else (Location.mk_loc loc array_annot, Some (Location.mk_loc loc (Astring name))) :: annot
+
+(* -------------------------------------------------------------------- *)
 let sint = "Internal::wint::signed"
 let uint = "Internal::wint::unsigned"
 

@@ -52,6 +52,8 @@ val pos_int :
   Annotations.annotation ->
   Z.t
 
+val str : Annotations.annotation -> string
+
 val ws_strings : (string * Wsize.wsize) list
 val ws_of_string : string -> Wsize.wsize
 
@@ -88,3 +90,5 @@ val ensure_uniq1 :
 
 val consume :
   string -> Annotations.annotations -> Annotations.annotations
+
+val has_array_annot : Annotations.annotations -> string option

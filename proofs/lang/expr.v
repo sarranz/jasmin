@@ -357,6 +357,7 @@ Module Type InstrInfoT <: TAG.
   Parameter with_location : t -> t.
   Parameter is_inline : t -> bool.
   Parameter var_info_of_ii : t -> var_info.
+  Parameter add_array_annot : var -> t -> t.
 End InstrInfoT.
 
 Module InstrInfo : InstrInfoT.
@@ -365,6 +366,7 @@ Module InstrInfo : InstrInfoT.
   Definition with_location (ii : t) := ii.
   Definition is_inline (_ : t) : bool := false.
   Definition var_info_of_ii (_ : t) : var_info := dummy_var_info.
+  Definition add_array_annot (_ : var) (ii : t) : t := ii.
 End InstrInfo.
 
 Definition instr_info := InstrInfo.t.
@@ -372,6 +374,8 @@ Definition dummy_instr_info : instr_info := InstrInfo.witness.
 Definition ii_with_location (ii : instr_info) : instr_info :=
   InstrInfo.with_location ii.
 Definition ii_is_inline (ii : instr_info) : bool := InstrInfo.is_inline ii.
+Definition ii_add_array_annot (x : var) (ii : instr_info) : instr_info :=
+  InstrInfo.add_array_annot x ii.
 Definition var_info_of_ii (ii : instr_info) : var_info := InstrInfo.var_info_of_ii ii.
 
 #[only(eqbOK)] derive
