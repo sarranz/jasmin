@@ -26,6 +26,8 @@ Require Import
   label
   arch_decl
   while.
+Require Import core_logics.
+Require Import xrutt xrutt_facts rutt_extras.
 
 Require Export it_sems_core_defs.
 
@@ -90,11 +92,11 @@ Notation rflagmap := RflagMap.map.
 (* -------------------------------------------------------------------- *)
 Section SEM.
 
-Context {syscall_state : Type} {sc_sem : syscall_sem syscall_state} `{asm_d : asm} {call_conv: calling_convention}.
+Context {syscall_state : Type} `{asm_d : asm} {call_conv: calling_convention}.
 
 Record asmmem : Type := AsmMem {
   asm_rip  : pointer;
-  asm_scs : syscall_state_t;
+  asm_scs : syscall_state;
   asm_mem  : mem;
   asm_reg  : regmap;
   asm_regx : regxmap;
@@ -125,24 +127,97 @@ Definition preserved_registerb (r : asm_typed_reg) (m0 m1 : asmmem) :=
   | ABReg r => (asm_flag m0) r == (asm_flag m1) r
   end.
 
-(* FIXME we need to generalize this *)
+(* -------------------------------------------------------------------- *)
+(* Deterministic mirrors, over register value lists, of the typed argument
+   cast and result store that [exec_syscall_s] composes around its [Rnd]
+   trigger; the [asm_syscall_sem] class below is specified with them. *)
+
+Definition exec_getrandom_arg_s (vs : values) : exec Z :=
+  Let len :=
+    match vs with
+    | [:: v1; v2] => to_word Uptr v2
+    | _ => type_error
+    end in
+  ok (wunsigned len).
+
+Definition exec_syscall_arg_s (o : syscall_t) (vs : values) : exec Z :=
+  match o with
+  | RandomBytes _ _ => exec_getrandom_arg_s vs
+  end.
+
+Definition exec_getrandom_store_s
+  (vs : values) (m : mem) (bytes : seq u8) : exec (mem * pointer) :=
+  Let p :=
+    match vs with
+    | [:: v1; v2] => to_word Uptr v1
+    | _ => type_error
+    end in
+  Let m' := fill_mem m p bytes in
+  ok (m', p).
+
+Definition exec_syscall_store_s
+  (o : syscall_t) (scs : syscall_state) (m : mem) (vs : values)
+  (bytes : seq u8) : exec (syscall_state * mem * values) :=
+  match o with
+  | RandomBytes _ _ =>
+    Let mp := exec_getrandom_store_s vs m bytes in
+    ok (scs, mp.1, [:: Vword mp.2])
+  end.
+
+Lemma exec_syscall_argPs o vargs vargs' len :
+  List.Forall2 value_uincl vargs vargs' ->
+  exec_syscall_arg_s o vargs = ok len ->
+  exec_syscall_arg_s o vargs' = ok len.
+Proof.
+case: o => _ len' /=.
+rewrite /exec_getrandom_arg_s.
+case: vargs => // v1 [] // v2 [] // /List_Forall2_inv_l [v1'] [l] [?]
+  [hu1] /List_Forall2_inv_l [v2'] [l'] [? [hu2 /List_Forall2_inv_l ?]].
+subst l l' vargs'.
+t_xrbindP => w /(val_uincl_of_val (ty := cword Uptr) hu2) /=.
+move=> [vt] -> /= /value_uinclE /=.
+by move=> [sz [w']] [] /Vword_inj [h] ?; subst => /= /word_uincl_eq -> ->.
+Qed.
+
+Lemma exec_syscall_storePs o vargs vargs' scs scs' m m' bytes vres :
+  List.Forall2 value_uincl vargs vargs' ->
+  exec_syscall_store_s o scs m vargs bytes = ok (scs', m', vres) ->
+  exec_syscall_store_s o scs m vargs' bytes = ok (scs', m', vres).
+Proof.
+case: o => _ len' /=.
+rewrite /exec_getrandom_store_s.
+case: vargs => // v1 [] // v2 [] // /List_Forall2_inv_l [v1'] [l] [?]
+  [hu1] /List_Forall2_inv_l [v2'] [l'] [? [hu2 /List_Forall2_inv_l ?]].
+subst l l' vargs'.
+t_xrbindP => -[m_ w2] w1 /(val_uincl_of_val (ty := cword Uptr) hu1) /=.
+move=> [vt] -> /= /value_uinclE /=.
+move=> [sz [w']] [] /Vword_inj [h] ?; subst => /= /word_uincl_eq ->.
+by move=> m'' -> [-> ->] -> -> <- /=.
+Qed.
+
 Class asm_syscall_sem := {
-  eval_syscall : syscall_t -> asmmem -> exec asmmem;
-  eval_syscall_spec2 :
-    forall o s1 vargs scs m vres,
-      exec_syscall_s s1.(asm_scs) s1.(asm_mem) o vargs = ok (scs, m, vres) ->
-      exists2 s2, eval_syscall o s1 = ok s2
-                & [/\ s2.(asm_scs) = scs,
-                      s2.(asm_mem) = m &
+  store_syscall_ans :
+    syscall_t -> syscall_state -> seq u8 -> asmmem -> exec asmmem;
+  store_syscall_ans_spec :
+    forall o s1 len scs scs' bytes m' vres,
+      let: sig := syscall_sig_s o in
+      let: vargs := [seq Vword (s1.(asm_reg) r)
+                    | r <- take (size sig.(scs_tin)) call_reg_args] in
+      exec_syscall_arg_s o vargs = ok len ->
+      exec_syscall_store_s o scs s1.(asm_mem) vargs bytes =
+        ok (scs', m', vres) ->
+      exists2 s2, store_syscall_ans o scs bytes s1 = ok s2
+                & [/\ s2.(asm_scs) = scs',
+                      s2.(asm_mem) = m' &
                       vres = [seq Vword (s2.(asm_reg) r)
-                             | r <- take (size (syscall_sig_s o).(scs_tout)) call_reg_ret]];
-  eval_syscall_preserves :
-    forall o s1 s2,
-      eval_syscall o s1 = ok s2 ->
-      [/\ forall r, r \in callee_saved -> preserved_register r s1 s2
-        , s1.(asm_rip) = s2.(asm_rip)
-        & stack_stable s1.(asm_mem) s2.(asm_mem)
-      ];
+                             | r <- take (size sig.(scs_tout))
+                                         call_reg_ret]];
+  store_syscall_ans_preserves :
+    forall o scs bytes s1 s2,
+      store_syscall_ans o scs bytes s1 = ok s2 ->
+      [/\ forall r, r \in callee_saved -> preserved_register r s1 s2,
+          s1.(asm_rip) = s2.(asm_rip) &
+          stack_stable s1.(asm_mem) s2.(asm_mem)];
 }.
 
 Context {asm_scsem : asm_syscall_sem}.
@@ -479,9 +554,7 @@ Definition eval_instr (i : asm_i_r) (s: asm_state) : exec asm_state :=
   | AsmOp o args =>
     Let m := eval_op o args s.(asm_m) in
     ok (st_update_next m s)
-  | SysCall o =>
-    Let m := eval_syscall o s.(asm_m) in
-    ok (st_update_next m s)
+  | SysCall _ => Error ErrSemUndef
   | Declassify_val ty arg =>
    (* Let v := eval_asm_arg (AK_mem Unaligned) s arg ty in *)
     ok (st_update_next (asm_m s) s)
@@ -578,9 +651,7 @@ Proof.
   - rewrite /eval_POP; t_xrbindP => _ ? _ ? _ <-.
     by case: decode_label => // ? /eval_JMP_invariant <-.
   - by rewrite /eval_op /exec_instr_op; t_xrbindP => ? ? ? /mem_write_vals_invariant -> <-.
-  - t_xrbindP => m hm <-.
-    have /= [_ hrip hss] := eval_syscall_preserves hm.
-    by split.
+  - by [].
   - by move=> [<-].
   by move=> _ [<-].
 Qed.
@@ -596,16 +667,122 @@ Qed.
 (* ITree based Semantics *)
 Section ITREE.
 
-Context {E E0} {wE : with_Error E E0}.
-
-Definition ifetch_and_eval (s: asm_state) : itree E asm_state :=
-  iresult (fetch_and_eval s).
-
-Local Notation continue_loop s := (ret (inl s)).
-Local Notation exit_loop s := (ret (inr s)).
+Context
+  {E E0}
+  {wE : with_Error E E0}
+  {rE : with_RndEvent syscall_state E0}
+.
 
 Import MonadNotation.
 Local Open Scope monad_scope.
+
+Definition asm_is_syscall (i : asm_i) : option syscall_t :=
+  if asmi_i i is SysCall o then Some o else None.
+
+Definition asm_next_is_syscall (s : asm_state) : option syscall_t :=
+  let%opt i := oseq.onth s.(asm_c) s.(asm_ip) in asm_is_syscall i.
+
+Definition asm_exec_syscall_core (o : syscall_t) (xm : asmmem) :
+  itree (ErrEvent +' RndEvent syscall_state) asmmem :=
+  let vargs :=
+    [seq Vword (xm.(asm_reg) r)
+    | r <- take (size (syscall_sig_s o).(scs_tin)) call_reg_args] in
+  len <- iresult (exec_syscall_arg_s o vargs) ;;
+  '(scs', bytes) <- trigger (Rnd xm.(asm_scs) len) ;;
+  iresult (store_syscall_ans o scs' bytes xm).
+
+Definition syscall_ans_rel
+  (xm : asmmem) (o : syscall_t)
+  (r : syscall_state * mem * values) (xm' : asmmem) : Prop :=
+  [/\ r.1.1 = xm'.(asm_scs),
+      r.1.2 = xm'.(asm_mem),
+      r.2 = [seq Vword (xm'.(asm_reg) x)
+            | x <- take (size (syscall_sig_s o).(scs_tout)) call_reg_ret],
+      forall x, x \in callee_saved -> preserved_register x xm xm' &
+      xm.(asm_rip) = xm'.(asm_rip)].
+
+Lemma asm_exec_syscall_coreP o (xm : asmmem) ves :
+  values_uincl ves
+    [seq Vword (xm.(asm_reg) r)
+    | r <- take (size (syscall_sig_s o).(scs_tin)) call_reg_args] ->
+  lxeutt (syscall_ans_rel xm o)
+    (exec_syscall_s xm.(asm_scs) xm.(asm_mem) o ves)
+    (asm_exec_syscall_core o xm).
+Proof.
+rewrite /exec_syscall_s /asm_exec_syscall_core.
+case: o => ws len0 hu /=.
+apply: lxrutt_bind_iresult => -[w1 w2] hcast.
+have /sem_syscall_castE /= [v1 [v2 [hva hw1 hw2]]] :=
+  sem_syscall_castP hu hcast.
+have harg : exec_getrandom_arg_s
+    [seq Vword (asm_reg xm r) | r <- take 2 call_reg_args] =
+    ok (wunsigned w2).
+- by rewrite hva /exec_getrandom_arg_s /= hw2.
+rewrite harg /= bind_ret_l /exec_getrandom_s_core /=.
+apply: (xrutt_bind (RR := eq)).
+- apply: xrutt_trigger; first exact: RPre_eq_refl.
+  by move=> t1 t2 /(_ erefl) ->.
+move=> [scs1 bs] ? <- /=.
+apply: lxrutt_bind_iresult => -[[scs2 m1] pw] /=.
+rewrite /exec_getrandom_s_store /=; t_xrbindP => m1' hfill <- <- <-.
+have hst : exec_syscall_store_s (RandomBytes ws len0) scs1 (asm_mem xm)
+    [seq Vword (asm_reg xm r) | r <- take 2 call_reg_args] bs =
+    ok (scs1, m1', [:: Vword w1]).
+- by rewrite /= hva /exec_getrandom_store_s /= hw1 /= hfill.
+have [s2 hs2 [hscs hmem hvres]] :=
+  store_syscall_ans_spec (o := RandomBytes ws len0) (s1 := xm) harg hst.
+rewrite hs2 /=.
+have [hpres hrip hss] := store_syscall_ans_preserves hs2.
+apply: xrutt_Ret.
+by split => //=; rewrite ?hscs ?hmem.
+Qed.
+
+Lemma asm_exec_syscall_coreS o xm :
+  lutt (fun _ _ => True) (fun _ _ _ => True)
+    (fun xm' => xm.(asm_rip) = xm'.(asm_rip)
+             /\ stack_stable xm.(asm_mem) xm'.(asm_mem))
+    (asm_exec_syscall_core o xm).
+Proof.
+rewrite /asm_exec_syscall_core.
+apply: (lutt_bind (R := fun _ => True)); first by apply: lutt_iresult.
+move=> len _ /=.
+apply: (lutt_bind (R := fun _ => True)); first by apply: lutt_trigger.
+move=> [scs' bytes] _ /=.
+apply: lutt_iresult => // s2 /store_syscall_ans_preserves [_ hrip hss].
+by split.
+Qed.
+
+Lemma asm_exec_syscallS o xm :
+  lutt (fun _ _ => True) (fun _ _ _ => True)
+    (fun xm' => xm.(asm_rip) = xm'.(asm_rip)
+             /\ stack_stable xm.(asm_mem) xm'.(asm_mem))
+    (translate subevent (asm_exec_syscall_core o xm) : itree E _).
+Proof.
+have [t' /rutt_eq_trans_refl h] := asm_exec_syscall_coreS o xm.
+eexists; apply/eutt_rutt/eutt_translate_gen/gen_rutt_eutt.
+apply: rutt_weaken h => //.
+by move=> T1 T2 e1 e2 [].
+Qed.
+
+Definition asm_exec_syscall
+  (o : syscall_t) (s : asm_state) : itree E asm_state :=
+  m' <- translate subevent (asm_exec_syscall_core o s.(asm_m)) ;;
+  Ret (st_update_next m' s).
+
+Definition ifetch_and_eval (s: asm_state) : itree E asm_state :=
+  if asm_next_is_syscall s is Some o then asm_exec_syscall o s
+  else iresult (fetch_and_eval s).
+
+Lemma fetch_and_eval_not_syscall s s' :
+  fetch_and_eval s = ok s' -> asm_next_is_syscall s = None.
+Proof.
+rewrite /fetch_and_eval /asm_next_is_syscall /asm_is_syscall.
+case: oseq.onth => [i|] //=.
+by case: (asmi_i i) => // ?; rewrite /eval_instr.
+Qed.
+
+Local Notation continue_loop s := (ret (inl s)).
+Local Notation exit_loop s := (ret (inr s)).
 
 Definition iasmsem_body (endpc : funname * nat) (s:asm_state) :=
   if endpc == (s.(asm_f), s.(asm_ip)) then exit_loop s
@@ -644,27 +821,27 @@ Lemma asmsem_body_nE endpc n s :
   end.
 Proof. by case: n. Qed.
 
-Lemma i_asmsem_body endpc s :
-  iasmsem_body endpc s ≅ iresult (asmsem_body endpc s).
+Lemma i_asmsem_body endpc s s' :
+  asmsem_body endpc s = ok s' ->
+  iasmsem_body endpc s ≅ Ret s'.
 Proof.
-  rewrite /iasmsem_body /ifetch_and_eval /asmsem_body; case: eqP => h /=.
-  + reflexivity.
-  case: fetch_and_eval => [s' | ] /=.
-  + rewrite bind_ret_l; reflexivity.
-  move=> e; apply bind_throw.
+rewrite /iasmsem_body /asmsem_body.
+case: eqP => h.
++ by move=> [<-]; reflexivity.
+rewrite /ifetch_and_eval; t_xrbindP => s0 hfe <-.
+rewrite (fetch_and_eval_not_syscall hfe) /=.
+by rewrite hfe /= bind_ret_l; reflexivity.
 Qed.
 
-Lemma i_asmsem_body_n endpc n s :
-    (iter_n (iasmsem_body endpc) n s) ≈
-    (iresult (asmsem_body_n endpc n s)).
+Lemma i_asmsem_body_n endpc n s s' :
+  asmsem_body_n endpc n s = ok s' ->
+  iter_n (iasmsem_body endpc) n s ≈ Ret s'.
 Proof.
-  elim: n s => /= [ | n hn] s.
-  + rewrite i_asmsem_body; case: asmsem_body => [ ins|] /=; reflexivity.
-  rewrite i_asmsem_body; case: asmsem_body => [ ins|] /=.
-  + rewrite bind_ret_l; case: ins => s' /=; last reflexivity.
-    by apply eqit_Tau_l; apply hn.
-  move=> e; rewrite /Exception.throw /= bind_vis.
-  apply eqit_Vis; case.
+elim: n s => /= [ | n hn] s; t_xrbindP.
++ by move=> ins /i_asmsem_body h <-; rewrite h; reflexivity.
+move=> ins /i_asmsem_body h; rewrite h bind_ret_l; case: ins h => [i|r] h.
++ by move=> /hn h'; rewrite tau_eutt; exact: h'.
+by move=> [<-]; reflexivity.
 Qed.
 
 End ITREE.
@@ -674,7 +851,11 @@ End PROG.
 (* -------------------------------------------------------------------- *)
 Section ITREE.
 
-Context {E E0} {wE : with_Error E E0}.
+Context
+  {E E0}
+  {wE : with_Error E E0}
+  {rE : with_RndEvent syscall_state E0}
+.
 
 Import MonadNotation.
 Local Open Scope monad_scope.
