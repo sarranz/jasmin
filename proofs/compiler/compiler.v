@@ -486,7 +486,8 @@ Definition compiler_back_end entries (pd: sprog) :=
 
 Definition compiler_back_end_to_asm (entries: seq funname) (p: sprog) :=
   Let lp := compiler_back_end entries p in
-  assemble_prog agparams lp.
+  Let ap := assemble_prog agparams lp in
+  ok ap.
 
 Definition compile_prog_to_asm entries (p: uprog): cexec asm_prog :=
   compiler_front_end entries p >>= compiler_back_end_to_asm entries.

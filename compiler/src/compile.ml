@@ -239,12 +239,12 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
   in
 
   let pp_cuprog s cp =
-    Conv.prog_of_cuprog cp |> visit_prog_after_pass ~debug:true s
+    Conv.prog_of_cuprog cp |> visit_prog_after_pass ~debug:!Glob_options.debug s
   in
 
   let pp_csprog fmt cp =
     let p = Conv.prog_of_csprog cp in
-    Printer.pp_sprog ~debug:true Arch.pointer_data Arch.msf_size Arch.asmOp fmt p
+    Printer.pp_sprog ~debug:!Glob_options.debug Arch.pointer_data Arch.msf_size Arch.asmOp fmt p
   in
 
   let pp_linear fmt lp = PrintLinear.pp_prog Arch.pointer_data Arch.msf_size Arch.asmOp fmt lp in
