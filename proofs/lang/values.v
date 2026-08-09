@@ -1035,4 +1035,6 @@ Proof.
   by case: v => //= sz w _; rewrite eqxx truncate_word_u.
 Qed.
 
-
+Definition sem_tuple_of_values
+  (ts : seq ctype) (vs : values) : exec (sem_tuple ts) :=
+  app_sopn ts (sem_prod_ok ts (sem_prod_tuple ts)) vs.
