@@ -27,6 +27,9 @@ Require Import
   arch_decl
   while.
 
+Require Import core_logics.
+Require Import xrutt xrutt_facts rutt_extras.
+
 Require Export it_sems_core_defs.
 
 (* -------------------------------------------------------------------- *)
@@ -127,6 +130,16 @@ Definition preserved_registerb (r : asm_typed_reg) (m0 m1 : asmmem) :=
 
 (* -------------------------------------------------------------------- *)
 
+Definition read_sc_vargs o xm : values :=
+  let sig := syscall_sig_s o in
+  let params := take (size (sc_in_s o)) call_reg_args in
+  [seq Vword (xm.(asm_reg) r) | r <- params].
+
+Definition read_sc_vres o xm : values :=
+  let sig := syscall_sig_s o in
+  let rets := take (size (sc_out_s o)) call_reg_ret in
+  [seq Vword (xm.(asm_reg) r) | r <- rets].
+
 (* Axiomatization of external calls at assembly level. We prove the compiler
    relative to an arbitrary function [store_syscall_ans] that models that
    behavior of executing the external call.
@@ -146,19 +159,13 @@ Class asm_syscall_sem := {
 
   store_syscall_ans_spec :
     forall o s1 args bytes scs scs' m' res,
-      let: sig := syscall_sig_s o in
-      let: params := take (size (sc_in_s o)) call_reg_args in
-      let: vargs := [seq Vword (s1.(asm_reg) r) | r <- params] in
-      let: rets := take (size (sc_out_s o)) call_reg_ret in
-      sem_syscall_cast o vargs = ok args ->
-      sem_syscall_store o s1.(asm_mem) args (scs, bytes) =
-        ok (scs', m', res) ->
+      sem_syscall_cast o (read_sc_vargs o s1) = ok args ->
+      sem_syscall_store o s1.(asm_mem) args (scs, bytes) = ok (scs', m', res) ->
       exists s2,
-        let: vres := [seq Vword (s2.(asm_reg) r) | r <- rets] in
         [/\ store_syscall_ans o scs bytes s1 = ok s2
           , s2.(asm_scs) = scs
           , s2.(asm_mem) = m'
-          & sem_tuple_of_values (sc_out_s o) vres = ok res ];
+          & sem_tuple_of_values (sc_out_s o) (read_sc_vres o s2) = ok res ];
 
   store_syscall_ans_preserves :
     forall o scs bytes s1 s2,
@@ -636,12 +643,56 @@ Definition next_is_SysCall (s : asm_state) : option syscall_t :=
   let%opt i := oseq.onth s.(asm_c) s.(asm_ip) in is_SysCall i.
 
 Definition asm_exec_syscall_core o xm : itree E asmmem :=
-  let sig := syscall_sig_s o in
-  let params := take (size (sc_in_s o)) call_reg_args in
-  let vargs := [seq Vword (xm.(asm_reg) r) | r <- params] in
-  args' <- iresult (sem_syscall_cast o vargs) ;;
+  args' <- iresult (sem_syscall_cast o (read_sc_vargs o xm)) ;;
   '(scs', bytes) <- sem_syscall o xm.(asm_scs) args' ;;
   iresult (store_syscall_ans o scs' bytes xm).
+
+Definition syscall_ans_rel o xm r xm' : Prop :=
+  [/\ r.1.1 = xm'.(asm_scs)
+    , r.1.2 = xm'.(asm_mem)
+    , r.2 = read_sc_vres o xm'
+    , forall x, x \in callee_saved -> preserved_register x xm xm'
+    & xm.(asm_rip) = xm'.(asm_rip) ].
+
+Lemma asm_exec_syscall_coreP o xm vargs :
+  values_uincl vargs (read_sc_vargs o xm) ->
+  lxeutt (syscall_ans_rel o xm)
+    (exec_syscall_s xm.(asm_scs) xm.(asm_mem) o vargs)
+    (asm_exec_syscall_core o xm).
+Proof.
+rewrite /exec_syscall_s /asm_exec_syscall_core => uv.
+apply: lxrutt_bind_iresult => args hcast.
+have hcast' := sem_syscall_castP uv hcast.
+rewrite hcast' bind_ret_l.
+apply: (xrutt_bind (RR := eq)); first by apply: eutt_lxeutt; reflexivity.
+move=> [scs1 bytes] _ <- /=.
+apply: lxrutt_bind_iresult => -[[scs2 m1] t] hst.
+have [s2 [hs2 ?? hvres]] := store_syscall_ans_spec hcast' hst; subst scs1 m1.
+have [hcs hrip _] := store_syscall_ans_preserves hs2.
+rewrite hs2; apply: xrutt_Ret.
+rewrite /syscall_ans_rel /= hrip.
+
+(* TODO this could be generic *)
+clear - hst hvres hcs.
+case: o args t hst hvres => ws len /= args t hst hvres; split=> //.
+- by move: hst; rewrite /exec_getrandom_s_store; t_xrbindP=> _ _ <- _ _.
+move: hvres; rewrite /sem_tuple_of_values /read_sc_vres /=.
+case: call_reg_ret => [//|x ?] /=; t_xrbindP=> w.
+by rewrite truncate_word_u take0 /= => -[->] [->].
+Qed.
+
+Lemma asm_exec_syscall_coreS o xm :
+  lutt (fun _ _ => True) (fun _ _ _ => True)
+    (fun xm' => asmsem_invariant xm xm')
+    (asm_exec_syscall_core o xm).
+Proof.
+rewrite /asm_exec_syscall_core.
+apply: (lutt_bind (R := fun _ => True)); first exact: lutt_iresult.
+move=> args _ /=.
+apply: (lutt_bind (R := fun _ => True)); first exact: lutt_true.
+move=> [scs' bytes] _ /=.
+by apply: lutt_iresult => // s2 /store_syscall_ans_preserves [_ hrip hss].
+Qed.
 
 Lemma fetch_and_eval_not_syscall s s' :
   fetch_and_eval s = ok s' ->
@@ -669,6 +720,28 @@ Definition asm_exec_syscall
   (o : syscall_t) (s : asm_state) : itree E asm_state :=
   m' <- translate subevent (asm_exec_syscall_core o s.(asm_m)) ;;
   Ret (st_update_next m' s).
+
+Lemma asm_exec_syscallS o xm :
+  lutt (fun _ _ => True) (fun _ _ _ => True)
+    (fun xm' => asmsem_invariant xm xm')
+    (translate subevent (asm_exec_syscall_core o xm) : itree E _).
+Proof.
+have [t' /rutt_eq_trans_refl h] := asm_exec_syscall_coreS o xm.
+eexists; apply/eutt_rutt/eutt_translate_gen/gen_rutt_eutt.
+apply: rutt_weaken h => //.
+by move=> T1 T2 e1 e2 [].
+Qed.
+
+Lemma asm_exec_syscall_invariant o s :
+  lutt (fun _ _ => True) (fun _ _ _ => True)
+    (fun s' => asmsem_invariant s.(asm_m) s'.(asm_m))
+    (asm_exec_syscall o s).
+Proof.
+rewrite /asm_exec_syscall.
+apply: (lutt_bind (R := fun m' => asmsem_invariant s.(asm_m) m')).
+- exact: asm_exec_syscallS.
+by move=> m' h; apply/lutt_Ret'.
+Qed.
 
 Definition ifetch_and_eval (s: asm_state) : itree E asm_state :=
   if next_is_SysCall s is Some o then asm_exec_syscall o s

@@ -454,6 +454,7 @@ Qed.
 Notation Lilabel := (linear.Llabel InternalLabel).
 Definition dummy_linstr := MkLI dummy_instr_info Lalign.
 
+(* TODO replace the following two by one lemma with [is_reflect] *)
 Lemma is_Lsyscall_rP i o : reflect (i = Lsyscall o) (is_Lsyscall_r i == Some o).
 Proof.
 case: i => >; try by constructor. by apply: (iffP idP) => [|-> //] /eqP [->].

@@ -31,13 +31,13 @@ Section WITH_PARAMS.
 
 Context
   {syscall_state : Type}
-  {sc_sem : syscall_sem syscall_state}
   {reg regx xreg rflag cond asm_op extra_op : Type}
   {asm_e : asm_extra reg regx xreg rflag cond asm_op extra_op}
   {call_conv : calling_convention}
-  {asm_scsem : asm_syscall_sem}
+  {asm_scsem : asm_syscall_sem (syscall_state := syscall_state)}
   {E E0 : Type -> Type}
   {wE : with_Error E E0}
+  {rE : with_RndEvent syscall_state E0}
 .
 
 #[local] Existing Instance asmsem_invariant_Equiv.
@@ -62,11 +62,14 @@ Proof.
   apply: (lutt_bind (R := fun s' => asmsem_invariant xm s'.(asm_m))).
   - apply: (lutt_iter (I := fun s => asmsem_invariant xm s.(asm_m))) => //.
     move=> s hI.
-    rewrite /iasmsem_body /while.while_body.
+    rewrite /iasmsem_body.
     case: ifP => _.
     * cbn; apply lutt_Ret; exact: hI.
     apply: (lutt_bind (R := fun s' => asmsem_invariant xm s'.(asm_m))).
     -- rewrite /ifetch_and_eval.
+       case: next_is_SysCall => [o|].
+       ++ apply: lutt_weaken (asm_exec_syscall_invariant o s) => // s' h.
+          by etransitivity; first exact: hI.
        case h: (fetch_and_eval xp s) => [s' | e].
        ++ apply lutt_Ret.
           etransitivity; first exact: hI.
