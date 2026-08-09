@@ -111,54 +111,55 @@ Notation E := (ErrEvent +' RndEvent syscall_state).
 
 Implicit Types
   (o : syscall_t)
+  (vs : values)
   (scs : syscall_state)
   (m : mem)
   (p : pointer)
   (len : pointer)
 .
 
-Definition sc_s_atype_in o :=
+Definition sc_in_s o :=
   [seq eval_atype t | t <- (syscall_sig_s o).(scs_tin)].
-Definition sc_s_atype_out o :=
+Definition sc_out_s o :=
   [seq eval_atype t | t <- (syscall_sig_s o).(scs_tout)].
 
-Lemma syscall_sig_s_noarr o : all is_not_carr (sc_s_atype_in o).
+Lemma syscall_sig_s_noarr o : all is_not_carr (sc_in_s o).
 Proof. by case: o. Qed.
 
-(* The semantics of a stack syscall is a three-stage composition: cast the
-   argument values to the semantic input type of the syscall, trigger the
-   [Rnd] event, and store the answer into memory. The cast and the store
-   are deterministic ([exec]); only the trigger is an itree. *)
+(* Cast syscall inputs to signature *)
+Definition sem_syscall_cast o : values -> exec (sem_tuple (sc_in_s o)) :=
+  sem_tuple_of_values (sc_in_s o).
 
-Definition sem_syscall_cast o (vs : values) :
-  exec (sem_tuple (sc_s_atype_in o)) :=
-  app_sopn _ (sem_prod_ok _ (sem_prod_tuple (sc_s_atype_in o))) vs.
-
+(* Just the trigger
+   TODO For now, syscalls always return bytes. We should generalize the
+   writeback to return other stuff. *)
 Definition exec_getrandom_s_core
   scs (args : pointer * pointer) : itree E (syscall_state * seq u8) :=
   trigger (Rnd scs (wunsigned args.2)).
 
-Definition sc_s_trigger o :=
-  syscall_state -> sem_tuple (sc_s_atype_in o) ->
-    itree E (syscall_state * seq u8).
-
-Definition sem_syscall o : sc_s_trigger o :=
+Definition sem_syscall o :
+  syscall_state ->
+  sem_tuple (sc_in_s o) ->
+  itree E (syscall_state * seq u8) :=
   match o with
   | RandomBytes _ _ => exec_getrandom_s_core
   end.
 Arguments sem_syscall : clear implicits.
 
+(* Writeback *)
 Definition exec_getrandom_s_store
-  m (args : pointer * pointer) (ans : syscall_state * seq u8) :
+  (m : mem)
+  (args : pointer * pointer)
+  (ans : syscall_state * seq u8) :
   exec (syscall_state * mem * pointer) :=
   Let m' := fill_mem m args.1 ans.2 in
   ok (ans.1, m', args.1).
 
-Definition sc_s_store o :=
-  mem -> sem_tuple (sc_s_atype_in o) -> syscall_state * seq u8 ->
-    exec (syscall_state * mem * sem_tuple (sc_s_atype_out o)).
-
-Definition sem_syscall_store o : sc_s_store o :=
+Definition sem_syscall_store o :
+  mem ->
+  sem_tuple (sc_in_s o) ->
+  syscall_state * seq u8 ->
+  exec (syscall_state * mem * sem_tuple (sc_out_s o)) :=
   match o with
   | RandomBytes _ _ => exec_getrandom_s_store
   end.
@@ -179,11 +180,11 @@ Proof. exact: vuincl_sopn (syscall_sig_s_noarr o). Qed.
 Lemma sem_syscall_castE ws n vs args :
   sem_syscall_cast (RandomBytes ws n) vs = ok args ->
   exists v1 v2,
-    [/\ vs = [:: v1; v2],
-        to_word Uptr v1 = ok args.1 &
-        to_word Uptr v2 = ok args.2].
+    [/\ vs = [:: v1; v2]
+      , to_word Uptr v1 = ok args.1
+      & to_word Uptr v2 = ok args.2 ].
 Proof.
-rewrite /sem_syscall_cast.
+rewrite /sem_syscall_cast /sem_tuple_of_values /=.
 case: vs => [|v1 [|v2 [|??]]] /=; t_xrbindP => //.
 by move=> w1 hw1 w2 hw2 <-; exists v1, v2.
 Qed.
