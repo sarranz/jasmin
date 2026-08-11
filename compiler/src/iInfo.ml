@@ -6,7 +6,7 @@ let var_info_of_ii (l, _) = Location.(l.base_loc)
 
 (* Short display names for slot variables: a variable is printed as its
    source name when possible; distinct variables sharing a source name get
-   [name_1], [name_2], ... in order of first appearance. *)
+   [name.1], [name.2], ... in order of first appearance. *)
 let slot_name_tbl : (string, string) Hashtbl.t = Hashtbl.create 17
 let seen_slot_names : (string, unit) Hashtbl.t = Hashtbl.create 17
 
@@ -19,7 +19,7 @@ let slot_name (x : Var0.Var.var) : string =
       let rec fresh i =
         let cand =
           if i = 0 then name.v_name
-          else Format.sprintf "%s_%d" name.v_name i
+          else Format.sprintf "%s.%d" name.v_name i
         in
         if Hashtbl.mem seen_slot_names cand then fresh (i + 1) else cand
       in
@@ -29,7 +29,7 @@ let slot_name (x : Var0.Var.var) : string =
       s
 
 (* Expand each accessed byte range [ofs, ofs + len) of a slot [s] into the
-   per-byte names [s_ofs], ..., [s_(ofs+len-1)]. *)
+   per-byte names [s[ofs]], ..., [s[ofs+len-1]]. *)
 let add_array_annot
     (rs : (Var0.Var.var * (BinNums.coq_Z * BinNums.coq_Z)) list)
     ((l, annot) : t) : t =
@@ -42,7 +42,7 @@ let add_array_annot
     List.concat_map bytes rs
     |> List.sort_uniq (fun (b1, o1) (b2, o2) ->
            match String.compare b1 b2 with 0 -> Z.compare o1 o2 | c -> c)
-    |> List.map (fun (b, o) -> b ^ "_" ^ Z.to_string o)
+    |> List.map (fun (b, o) -> Format.sprintf "%s[%s]" b (Z.to_string o))
   in
   if names = [] then (l, annot)
   else (l, Annotations.add_array_annot ~loc:Location.(l.base_loc) names annot)
