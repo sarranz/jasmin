@@ -53,3 +53,24 @@ let entry_info (fi: t) : IInfo.t =
 
 let ret_info (fi: t) : IInfo.t =
   let (_, _, _, ri) = fi in (Location.i_loc0 ri.ret_loc, [])
+
+let user_annot ((_, fa, _, _) : t) : annotations = fa.f_user_annot
+
+let add_stack_frame_annot
+    (slots : (Var0.Var.var * (BinNums.coq_Z * BinNums.coq_Z)) list)
+    ((fl, fa, cc, ri) : t) : t =
+  let doit (x, (ofs, size)) =
+    (IInfo.slot_name x,
+     (CoreConv.z_of_cz ofs, CoreConv.z_of_cz size))
+  in
+  let slots =
+    List.sort
+      (fun (_, (o1, _)) (_, (o2, _)) -> Z.compare o1 o2)
+      (List.map doit slots)
+  in
+  let fa =
+    { fa with
+      f_user_annot =
+        Annotations.add_stack_frame_annot ~loc:fl slots fa.f_user_annot }
+  in
+  (fl, fa, cc, ri)

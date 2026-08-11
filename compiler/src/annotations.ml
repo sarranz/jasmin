@@ -46,22 +46,69 @@ let add_symbol ~loc s annot =
 
 (* -------------------------------------------------------------------- *)
 (* Records, on an instruction built by the stack allocation pass out of a
-   memory access, the name of the source-program array it came from. *)
+   memory access, the set of per-byte names of the slot bytes the access
+   uses: a slot [s] of N bytes yields the names [s_0], ..., [s_(N-1)]. *)
 let array_annot = "Internal::array"
 
-let has_array_annot name annot =
-  List.exists
-    (fun (k, a) ->
-      String.equal (Location.unloc k) array_annot
-      && match a with
-         | Some { Location.pl_desc = Astring s; _ } -> String.equal s name
-         | _ -> false)
-    annot
+let has_array_annot annot = has_symbol array_annot annot
 
-let add_array_annot ~loc name annot =
-  if has_array_annot name annot
+let add_array_annot ~loc (names : string list) annot =
+  if has_array_annot annot
   then annot
-  else (Location.mk_loc loc array_annot, Some (Location.mk_loc loc (Astring name))) :: annot
+  else
+    let mk d = Location.mk_loc loc d in
+    (mk array_annot,
+     Some (mk (Astruct (List.map (fun n -> (mk n, None)) names))))
+    :: annot
+
+let get_array_annot (annot : annotations) : string list option =
+  match get array_annot annot with
+  | Some (Some { Location.pl_desc = Astruct l; _ }) ->
+      Some (List.map (fun (k, _) -> Location.unloc k) l)
+  | _ -> None
+
+(* -------------------------------------------------------------------- *)
+(* Records, on a function, the layout of its stack frame as computed by the
+   stack allocation pass: each stack slot (local variable, local stack array,
+   stack-pointer cell) is mapped to the range [offset, offset + size) it
+   occupies relative to the stack pointer. *)
+let stack_frame_annot = "Internal::stack_frame"
+
+let has_stack_frame_annot annot = has_symbol stack_frame_annot annot
+
+let add_stack_frame_annot ~loc (slots : (string * (Z.t * Z.t)) list) annot =
+  if has_stack_frame_annot annot
+  then annot
+  else
+    let mk d = Location.mk_loc loc d in
+    let mk_int z = Some (mk (Aint z)) in
+    let mk_slot (name, (ofs, size)) =
+      (mk name,
+       Some (mk (Astruct [ (mk "offset", mk_int ofs);
+                           (mk "size", mk_int size) ])))
+    in
+    (mk stack_frame_annot, Some (mk (Astruct (List.map mk_slot slots))))
+    :: annot
+
+let get_stack_frame_annot (annot : annotations) :
+    (string * (Z.t * Z.t)) list option =
+  let get_int a k =
+    match get k a with
+    | Some (Some { Location.pl_desc = Aint z; _ }) -> Some z
+    | _ -> None
+  in
+  let decode_slot (k, a) =
+    match a with
+    | Some { Location.pl_desc = Astruct s; _ } ->
+      (match get_int s "offset", get_int s "size" with
+       | Some ofs, Some size -> Some (Location.unloc k, (ofs, size))
+       | _ -> None)
+    | _ -> None
+  in
+  match get stack_frame_annot annot with
+  | Some (Some { Location.pl_desc = Astruct slots; _ }) ->
+    Some (List.filter_map decode_slot slots)
+  | _ -> None
 
 (* -------------------------------------------------------------------- *)
 let sint = "Internal::wint::signed"
