@@ -153,4 +153,4 @@ let ensure_uniq1 ?(case_sensitive = true) id f annot =
 let consume id annot : A.annotations =
   List.filter (fun (k, _) -> not (String.equal id (L.unloc k))) annot
 
-let has_array_annot = ensure_uniq1 Annotations.array_annot str
+let has_array_annot = Annotations.get_array_annot

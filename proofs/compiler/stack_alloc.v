@@ -1742,28 +1742,51 @@ Definition slot_of_ptr_kind (p : ptr_kind) : slot :=
   | Pdirect s _ _ _ _ | Pregptr s | Pstkptr s _ _ _ _ => s
   end.
 
-Definition slot_e (e : pexpr) : option slot :=
+(* The slot accessed by [a[e]] when [a] is allocated as [pk], together with
+   the byte range [ofs, ofs + len) the access uses within it: the word at a
+   constant index when the index is known, everything otherwise
+   (conservative). *)
+Definition slot_range_get
+    (aa : arr_access) (ws : wsize) (a : var) (pk : ptr_kind) (e : pexpr) :
+    slot * (Z * Z) :=
+  match pk with
+  | Pdirect s _ _ cs _ =>
+      if expr.is_const e is Some i
+      then (s, ((cs.(cs_ofs) + i * mk_scale aa ws)%Z, wsize_size ws))
+      else (s, (0%Z, size_slot s))
+  | Pregptr p =>
+      if expr.is_const e is Some i
+      then (p, ((i * mk_scale aa ws)%Z, wsize_size ws))
+      else (p, (0%Z, size_slot a))
+  | Pstkptr s _ _ _ _ => (s, (0%Z, size_slot s))
+  end.
+
+Definition slot_e (e : pexpr) : option (slot * (Z * Z)) :=
   match e with
   | Pvar x =>
       match get_local x.(gv).(v_var) with
-      | Some (Pdirect s _ _ _ _) | Some (Pstkptr s _ _ _ _) => Some s
+      | Some (Pdirect s _ _ cs _) | Some (Pstkptr s _ _ cs _) =>
+          Some (s, (cs.(cs_ofs), cs.(cs_len)))
       | _ => None (* ignore assignments to reg ptr *)
       end
-  | Pget _ _ _ a e =>
-      if get_local a.(gv).(v_var) is Some pk then Some (slot_of_ptr_kind pk)
+  | Pget _ aa ws a e =>
+      if get_local a.(gv).(v_var) is Some pk
+      then Some (slot_range_get aa ws a.(gv).(v_var) pk e)
       else None
   | _ => None
   end.
 
-Definition slot_lv (lv : lval) : option slot :=
+Definition slot_lv (lv : lval) : option (slot * (Z * Z)) :=
   match lv with
   | Lvar x =>
       match get_local x.(v_var) with
-      | Some (Pdirect s _ _ _ _) | Some (Pstkptr s _ _ _ _) => Some s
+      | Some (Pdirect s _ _ cs _) | Some (Pstkptr s _ _ cs _) =>
+          Some (s, (cs.(cs_ofs), cs.(cs_len)))
       | None | Some (Pregptr _) => None (* ignore assignments to reg ptr *)
       end
-  | Laset _ _ _ a e =>
-      if get_local a.(v_var) is Some pk then Some (slot_of_ptr_kind pk)
+  | Laset _ aa ws a e =>
+      if get_local a.(v_var) is Some pk
+      then Some (slot_range_get aa ws a.(v_var) pk e)
       else None
   | _ => None
   end.
@@ -1820,8 +1843,9 @@ Definition seq_of_opt {T : Type} (ox : option T) : seq T :=
 
 Definition add_arr_annot
   (lvs : lvals) (es : pexprs) (ii : instr_info) : cexec instr_info :=
-  let oss := [seq slot_e e | e <- es] ++ [seq slot_lv lv | lv <- lvs] in
-  let ss := sv_of_list id (seq.pmap id oss) in
+  let ors := [seq slot_e e | e <- es] ++ [seq slot_lv lv | lv <- lvs] in
+  let rs := seq.pmap id ors in
+  let ss := sv_of_list fst rs in
   let xs := Sv.elements ss in
   Let _ := (* DEBUG *)
     let chk := Sv.union (slot_chk_lvs lvs) (slot_chk_es es) in
@@ -1829,7 +1853,7 @@ Definition add_arr_annot
   in
   match xs with
   | [::] => ok ii
-  | [:: s ] => ok (ii_add_array_annot s ii)
+  | [:: _ ] => ok (ii_add_array_annot rs ii)
   | [:: s & ss ] => Error (too_many_slots [:: s] ss)
   end.
 
@@ -1960,6 +1984,12 @@ Definition init_stack_layout (mglob : Mvar.t (Z * wsize)) sao :=
   let '(stack, size) := sp in
   if (size <= sao.(sao_size))%CMP then ok stack
   else Error (stk_ierror_no_var "stack size").
+
+(* The frame layout recorded in the function annotation: each stack slot
+   occupies the range [ofs, ofs + size_slot x) relative to the stack
+   pointer. *)
+Definition frame_layout (stack : Mvar.t (Z * wsize)) : seq (var * (Z * Z)) :=
+  [seq (xi.1, (xi.2.1, size_slot xi.1)) | xi <- Mvar.elements stack].
 
 Definition add_alloc globals stack (xpk:var * ptr_kind_init) (lrx: Mvar.t ptr_kind * region_map * Sv.t) :=
   let '(locals, rmap, sv) := lrx in
@@ -2162,7 +2192,7 @@ Definition alloc_fd_aux P p_extra mglob (local_alloc: funname -> stk_alloc_oracl
   Let res :=
       check_results pmap rmap paramsi fd.(f_params) sao.(sao_return) fd.(f_res) in
   ok {|
-    f_info := f_info fd;
+    f_info := fi_add_frame_annot (frame_layout stack) (f_info fd);
     f_contract := f_contract fd;
     f_tyin := map2 (fun o ty => if o is Some _ then aword Uptr else ty) sao.(sao_params) fd.(f_tyin);
     f_params := params;

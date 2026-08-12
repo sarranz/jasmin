@@ -54,10 +54,9 @@ module Make(Target : AsmTarget) : S
         List.map (fun x -> Dwarf x) (DebugInfo.source_positions ii)
 
     let pp_arr_annot annot =
-      Option.map_default
-        (fun x -> [ArrAnnot (Format.sprintf "%s" x)])
-        []
-        (Annot.has_array_annot annot)
+      match Annot.has_array_annot annot with
+      | None | Some [] -> []
+      | Some names -> [ArrAnnot (String.concat " " names)]
 
     let pp_instr name instr =
         let Arch_decl.({ asmi_i = i; asmi_ii = ii}) = instr in
@@ -84,12 +83,30 @@ module Make(Target : AsmTarget) : S
             Target.function_tail
         else []
 
+    (* The stack frame layout computed by stack allocation, one comment
+       line per slot: [// name: [ofs, ofs+size)], relative to the stack
+       pointer. *)
+    let pp_stack_frame_annot decl =
+        match
+          Annotations.get_stack_frame_annot (FInfo.user_annot decl.asm_fd_info)
+        with
+        | None | Some [] -> []
+        | Some slots ->
+          Comment "stack frame layout:" ::
+          List.map
+            (fun (name, (ofs, size)) ->
+              Comment
+                (Format.asprintf "  %s: [%a, %a)"
+                   name Z.pp_print ofs Z.pp_print (Z.add ofs size)))
+            slots
+
     let pp_function (fname,decl) =
         let name = escape fname.fn_name in
         let headers = pp_function_header name decl in
+        let frame = pp_stack_frame_annot decl in
         let body = pp_body name decl in
         let tail = pp_function_tail decl in
-        headers @ body @ tail
+        headers @ frame @ body @ tail
 
     let pp_functions funcs = List.concat_map pp_function funcs
 

@@ -357,7 +357,7 @@ Module Type InstrInfoT <: TAG.
   Parameter with_location : t -> t.
   Parameter is_inline : t -> bool.
   Parameter var_info_of_ii : t -> var_info.
-  Parameter add_array_annot : var -> t -> t.
+  Parameter add_array_annot : seq (var * (Z * Z)) -> t -> t.
 End InstrInfoT.
 
 Module InstrInfo : InstrInfoT.
@@ -366,7 +366,7 @@ Module InstrInfo : InstrInfoT.
   Definition with_location (ii : t) := ii.
   Definition is_inline (_ : t) : bool := false.
   Definition var_info_of_ii (_ : t) : var_info := dummy_var_info.
-  Definition add_array_annot (_ : var) (ii : t) : t := ii.
+  Definition add_array_annot (_ : seq (var * (Z * Z))) (ii : t) : t := ii.
 End InstrInfo.
 
 Definition instr_info := InstrInfo.t.
@@ -374,8 +374,11 @@ Definition dummy_instr_info : instr_info := InstrInfo.witness.
 Definition ii_with_location (ii : instr_info) : instr_info :=
   InstrInfo.with_location ii.
 Definition ii_is_inline (ii : instr_info) : bool := InstrInfo.is_inline ii.
-Definition ii_add_array_annot (x : var) (ii : instr_info) : instr_info :=
-  InstrInfo.add_array_annot x ii.
+(* [rs] associates to each accessed slot the byte range [ofs, ofs + len)
+   the access uses within it. *)
+Definition ii_add_array_annot (rs : seq (var * (Z * Z))) (ii : instr_info) :
+    instr_info :=
+  InstrInfo.add_array_annot rs ii.
 Definition var_info_of_ii (ii : instr_info) : var_info := InstrInfo.var_info_of_ii ii.
 
 #[only(eqbOK)] derive
@@ -480,6 +483,7 @@ Module Type FunInfoT <: TAG.
   Include TAG.
   Parameter entry_info : t -> instr_info.
   Parameter ret_info : t -> instr_info.
+  Parameter add_frame_annot : seq (var * (Z * Z)) -> t -> t.
 End FunInfoT.
 
 Module FunInfo : FunInfoT.
@@ -487,11 +491,17 @@ Module FunInfo : FunInfoT.
   Definition witness : t := 1%positive.
   Definition entry_info (_: t) := dummy_instr_info.
   Definition ret_info (_: t) := dummy_instr_info.
+  Definition add_frame_annot (_ : seq (var * (Z * Z))) (fi : t) : t := fi.
 End FunInfo.
 
 Definition fun_info := FunInfo.t.
 Definition entry_info_of_fun_info (fi: fun_info) : instr_info := FunInfo.entry_info fi.
 Definition ret_info_of_fun_info (fi: fun_info) : instr_info := FunInfo.ret_info fi.
+(* [slots] associates to each stack slot the range [ofs, ofs + size) it
+   occupies in the stack frame, relative to the stack pointer. *)
+Definition fi_add_frame_annot (slots : seq (var * (Z * Z))) (fi : fun_info) :
+    fun_info :=
+  FunInfo.add_frame_annot slots fi.
 
 Section ASM_OP.
 
