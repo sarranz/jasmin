@@ -13,12 +13,34 @@ let lmax (a : level) (b : level) : level =
 
 let lmaxs : level list -> level = List.fold_left lmax Public
 
-type env = level SM.t
+let norm (pub : SS.t) (lvl : level) : level =
+  match lvl with
+  | Poly s ->
+      let free = SS.diff s pub in
+      if SS.is_empty free then Public else Poly free
+  | Public | Secret -> lvl
+
+exception Leak of string
+
+type env = { v : level SM.t; pub : SS.t }
 
 let getl (env : env) (x : string) : level =
-  Option.value ~default:Public (SM.find_opt x env)
+  norm env.pub (Option.value ~default:Public (SM.find_opt x env.v))
 
-let setl (env : env) (x : string) (l : level) : env = SM.add x l env
+let setl (env : env) (x : string) (l : level) : env =
+  { env with v = SM.add x (norm env.pub l) env.v }
+
+let use_public (env : env) (x : string) : env =
+  match getl env x with
+  | Public -> env
+  | Secret -> raise (Leak (Printf.sprintf "secret value in %s used as an address" x))
+  | Poly s -> { env with pub = SS.union s env.pub }
+
+
+let write (env : env) ~(strong : bool) (mem : string list) (x : string)
+    (l : level) : env =
+  if strong || not (List.mem x mem) then setl env x l
+  else setl env x (lmax (getl env x) l)
 
 type signature = {
   slots : string list;
@@ -45,7 +67,7 @@ let string_of_level : level -> string = function
   | Poly s -> "poly{" ^ String.concat "," (SS.elements s) ^ "}"
 
 let pp_slot (s : signature) fmt (slot : string) =
-  Format.fprintf fmt "%-4s %-12s -> %s" slot
+  Format.fprintf fmt "%-5s %-12s -> %s" slot
     (string_of_level (getl s.pre slot))
     (string_of_level (getl s.post slot))
 
@@ -56,8 +78,8 @@ let pp_signature fmt ((name : string), (s : signature)) =
 
 let pp_result fmt (name, r) =
   match r with
-  | Some s -> pp_signature fmt (name, s)
-  | None -> Format.fprintf fmt "%s: skipped" name
+  | Ok s -> pp_signature fmt (name, s)
+  | Error msg -> Format.fprintf fmt "%s: %s" name msg
 
 let pp_signatures fmt results =
   Format.fprintf fmt "@[<v>==== asmCtChecker: signatures ====@,%a@,%s@]@."
@@ -66,48 +88,94 @@ let pp_signatures fmt results =
 
 (* ==================================================================== *)
 
-(* registers and flags (as strings) from the analyzed architecture *)
+let reg_name arch r = arch._arch_decl.toS_r.to_string r
+let flag_name arch f = arch._arch_decl.toS_f.to_string f
+
 let slots_of arch : string list =
-  List.map arch._arch_decl.toS_r.to_string (Arch_decl.registers arch._arch_decl)
-  @ List.map arch._arch_decl.toS_f.to_string (Arch_decl.rflags arch._arch_decl)
+  List.map (reg_name arch) (Arch_decl.registers arch._arch_decl)
+  @ List.map (flag_name arch) (Arch_decl.rflags arch._arch_decl)
 
 exception Unsupported
 
-(* get the string representation from an operand descriptor *)
-let slot_of_ad arch args arg_desc : string option =
-  match arg_desc with
-  | ADImplicit (IArflag f) -> Some (arch._arch_decl.toS_f.to_string f)
-  | ADImplicit (IAreg r) -> Some (arch._arch_decl.toS_r.to_string r)
-  | ADExplicit (_, n, _) -> (
-      match List.nth_opt args (Conv.int_of_nat n) with
-      | Some (Reg r) -> Some (arch._arch_decl.toS_r.to_string r)
-      | Some (Imm _) | None -> None
-      | _ -> raise Unsupported)
+let get_mem_annotation intr : string list =
+  Option.value ~default:[] (Annot.has_array_annot (snd intr.asmi_ii))
+
+let regs_of_address arch : _ Arch_decl.address -> string list = function
+  | Areg { ad_base; ad_offset; _ } ->
+      List.filter_map (Option.map (reg_name arch)) [ ad_base; ad_offset ]
+  | Arip _ -> []
+
+(* Get the slots the operand descriptors (id_in or id_out) read / write to.
+  Addresses must be public, so the env is passed to record that requirement. *)
+let process_op_descs arch args mem_annotation env ods : env * string list =
+  List.fold_left
+    (fun (env, acc) od ->
+      match od with
+      | ADImplicit (IArflag f) -> (env, flag_name arch f :: acc)
+      | ADImplicit (IAreg r) -> (env, reg_name arch r :: acc)
+      | ADExplicit (kind, n, _) -> (
+          match List.nth_opt args (Conv.int_of_nat n) with
+          | Some (Reg r) -> (env, reg_name arch r :: acc)
+          | Some (Addr a) -> (
+              let addr_regs = regs_of_address arch a in
+              match kind with
+              | AK_compute -> (env, addr_regs @ acc)
+              | AK_mem _ ->
+                  let env = List.fold_left use_public env addr_regs in
+                  if mem_annotation = [] then raise Unsupported
+                  else (env, mem_annotation @ acc))
+          | Some (Imm _) | None -> (env, acc)
+          | _ -> raise Unsupported))
+    (env, []) ods
+
+let mem_write_size args op_desc : int option =
+  List.combine op_desc.id_out op_desc.id_tout
+  |> List.find_map (fun (od, ty) ->
+         match (od, ty) with
+         | ADExplicit (AK_mem _, n, _), Type.Coq_lword ws -> (
+             match List.nth_opt args (Conv.int_of_nat n) with
+             | Some (Addr _) -> Some (Prog.size_of_ws ws)
+             | _ -> None)
+         | _ -> None)
 
 let ty_instr arch env intr : env =
   match intr.asmi_i with
   | ALIGN -> env
   | AsmOp (op, args) ->
       let op_desc = arch._asm_op_decl.instr_desc_op op in
-      let slots args_desc = List.filter_map (slot_of_ad arch args) args_desc in
-      let level = lmaxs (List.map (getl env) (slots op_desc.id_in)) in
-      List.fold_left (fun env x -> setl env x level) env (slots op_desc.id_out)
+      let mem_annotation = get_mem_annotation intr in
+      let env_slots = process_op_descs arch args mem_annotation in
+      let env, in_slots = env_slots env op_desc.id_in in
+      let env, out_slots = env_slots env op_desc.id_out in
+      let level = lmaxs (List.map (getl env) in_slots) in
+      let strong =
+        mem_write_size args op_desc = Some (List.length mem_annotation)
+      in
+      List.fold_left
+        (fun env x -> write env ~strong mem_annotation x level)
+        env out_slots
   | _ -> raise Unsupported
 
 let ty_fundef arch analysis (f_name, f_def) =
   let name = f_name.CoreIdent.fn_name in
-  let slots = slots_of arch in
+  let mem_slots =
+    List.concat_map get_mem_annotation f_def.asm_fd_body
+    |> List.sort_uniq String.compare
+  in
+  let slots = slots_of arch @ mem_slots in
   let pre =
     List.fold_left
       (fun env x -> setl env x (fresh analysis (x ^ "_")))
-      SM.empty slots
+      { v = SM.empty; pub = SS.empty } slots
   in
   match List.fold_left (ty_instr arch) pre f_def.asm_fd_body with
   | post ->
+      let pre = { pre with pub = post.pub } in
       let f_sig = { slots; pre; post } in
       Hashtbl.replace analysis.sigs name f_sig;
-      Some f_sig
-  | exception Unsupported -> None
+      Ok f_sig
+  | exception Unsupported -> Error "skipped"
+  | exception Leak msg -> Error ("leak: " ^ msg)
 
 
 let signatures arch prog =
