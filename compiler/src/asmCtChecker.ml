@@ -21,11 +21,19 @@ let norm (pub : SS.t) (lvl : level) : level =
   | Public | Secret -> lvl
 
 exception Leak of string
+exception Unknown_slot of string
+
+(* Slot standing for memory accesses that carry no array annotation: we
+   dont not know which region is accessed, but we interpret it as disjoint from
+   every other region. *)
+let unknown_mem_slot = "%unknown_mem"
 
 type env = { v : level SM.t; pub : SS.t }
 
 let getl (env : env) (x : string) : level =
-  norm env.pub (Option.value ~default:Public (SM.find_opt x env.v))
+  match SM.find_opt x env.v with
+  | Some l -> norm env.pub l
+  | None -> raise (Unknown_slot x)
 
 let setl (env : env) (x : string) (l : level) : env =
   { env with v = SM.add x (norm env.pub l) env.v }
@@ -39,7 +47,8 @@ let use_public (env : env) (x : string) : env =
 
 let write (env : env) ~(strong : bool) (mem : string list) (x : string)
     (l : level) : env =
-  if strong || not (List.mem x mem) then setl env x l
+  if x = unknown_mem_slot then env
+  else if strong || not (List.mem x mem) then setl env x l
   else setl env x (lmax (getl env x) l)
 
 type signature = {
@@ -89,10 +98,14 @@ let pp_signatures fmt results =
 (* ==================================================================== *)
 
 let reg_name arch r = arch._arch_decl.toS_r.to_string r
+let regx_name arch r = arch._arch_decl.toS_rx.to_string r
+let xreg_name arch r = arch._arch_decl.toS_x.to_string r
 let flag_name arch f = arch._arch_decl.toS_f.to_string f
 
 let slots_of arch : string list =
   List.map (reg_name arch) (Arch_decl.registers arch._arch_decl)
+  @ List.map (regx_name arch) (Arch_decl.registerxs arch._arch_decl)
+  @ List.map (xreg_name arch) (Arch_decl.xregisters arch._arch_decl)
   @ List.map (flag_name arch) (Arch_decl.rflags arch._arch_decl)
 
 exception Unsupported
@@ -116,16 +129,18 @@ let process_op_descs arch args mem_annotation env ods : env * string list =
       | ADExplicit (kind, n, _) -> (
           match List.nth_opt args (Conv.int_of_nat n) with
           | Some (Reg r) -> (env, reg_name arch r :: acc)
+          | Some (Regx r) -> (env, regx_name arch r :: acc)
+          | Some (XReg r) -> (env, xreg_name arch r :: acc)
           | Some (Addr a) -> (
               let addr_regs = regs_of_address arch a in
               match kind with
               | AK_compute -> (env, addr_regs @ acc)
               | AK_mem _ ->
                   let env = List.fold_left use_public env addr_regs in
-                  if mem_annotation = [] then raise Unsupported
+                  if mem_annotation = [] then (env, unknown_mem_slot :: acc)
                   else (env, mem_annotation @ acc))
           | Some (Imm _) | None -> (env, acc)
-          | _ -> raise Unsupported))
+          | Some (Condt _) -> raise Unsupported))
     (env, []) ods
 
 let mem_write_size args op_desc : int option =
@@ -168,6 +183,7 @@ let ty_fundef arch analysis (f_name, f_def) =
       (fun env x -> setl env x (fresh analysis (x ^ "_")))
       { v = SM.empty; pub = SS.empty } slots
   in
+  let pre = setl pre unknown_mem_slot Secret in
   match List.fold_left (ty_instr arch) pre f_def.asm_fd_body with
   | post ->
       let pre = { pre with pub = post.pub } in
@@ -176,6 +192,7 @@ let ty_fundef arch analysis (f_name, f_def) =
       Ok f_sig
   | exception Unsupported -> Error "skipped"
   | exception Leak msg -> Error ("leak: " ^ msg)
+  | exception Unknown_slot x -> Error ("unknown slot: " ^ x)
 
 
 let signatures arch prog =
