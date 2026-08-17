@@ -31,6 +31,11 @@ module Riscv_core = struct
 
   let is_ct_asm_extra (_o : extra_op) = true
 
+  let var_of_reg (r : reg) : Prog.var = atoI.toI_r.to_ident r
+
+  let vars_of_condt (c : cond) : Prog.var list =
+    List.filter_map (Option.map var_of_reg) [ c.cond_fst; c.cond_snd ]
+
 end
 
 module Riscv (Lowering_params : Riscv_input) : Arch_full.Core_arch

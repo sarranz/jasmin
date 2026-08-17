@@ -50,6 +50,20 @@ module X86_core = struct
   (* All of the extra ops compile into CT instructions (no DIV). *)
   let is_ct_asm_extra (_o : extra_op) = true
 
+  let var_of_flag (f : rflag) : Prog.var = atoI.toI_f.to_ident f
+
+  let vars_of_condt (c : cond) : Prog.var list =
+    List.map var_of_flag
+      (match c with
+      | O_ct | NO_ct -> [ OF ]
+      | B_ct | NB_ct -> [ CF ]
+      | E_ct | NE_ct -> [ ZF ]
+      | BE_ct | NBE_ct -> [ CF; ZF ]
+      | S_ct | NS_ct -> [ SF ]
+      | P_ct | NP_ct -> [ PF ]
+      | L_ct | NL_ct -> [ SF; OF ]
+      | LE_ct | NLE_ct -> [ ZF; SF; OF ])
+
 end
 
 

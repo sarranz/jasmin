@@ -34,6 +34,19 @@ module Arm_core = struct
   (* All of the extra ops compile into CT instructions (no DIV). *)
   let is_ct_asm_extra (_o : extra_op) = true
 
+  let var_of_flag (f : rflag) : Prog.var = atoI.toI_f.to_ident f
+
+  let vars_of_condt (c : cond) : Prog.var list =
+    List.map var_of_flag
+      (match c with
+      | EQ_ct | NE_ct -> [ ZF ]
+      | CS_ct | CC_ct -> [ CF ]
+      | MI_ct | PL_ct -> [ NF ]
+      | VS_ct | VC_ct -> [ VF ]
+      | HI_ct | LS_ct -> [ CF; ZF ]
+      | GE_ct | LT_ct -> [ NF; VF ]
+      | GT_ct | LE_ct -> [ ZF; NF; VF ])
+
 end
 
 module Arm (Lowering_params : Arm_input) : Arch_full.Core_arch
