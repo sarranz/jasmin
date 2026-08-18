@@ -366,12 +366,8 @@ Qed.
 
 End SAFE_XRUTT_RUTT.
 
-Definition lxrutt
-  {E0l E0r El Er} {wEl : with_Error El E0l} {wEr : with_Error Er E0r} {R1 R2} :
-  (forall A B, El A -> Er B -> Prop) ->
-  (forall A B, El A -> A -> Er B -> B -> Prop) ->
-  (R1 -> R2 -> Prop) -> itree El R1 -> itree Er R2 -> Prop :=
-  xrutt (errcutoff (is_error wEl)) nocutoff.
+Notation lxrutt := (xrutt (errcutoff (is_error _)) nocutoff).
+Notation lxeutt := (xrutt (errcutoff (is_error _)) nocutoff RPre_eq RPost_eq).
 
 (* TODO is this somewhere?? *)
 Lemma is_error_Throw {E0 E} {wE : with_Error E E0} e :
@@ -381,14 +377,11 @@ Proof. by rewrite /errcutoff /is_error mid12. Qed.
 Section EQ.
   Context {E0 E} {wE : with_Error E E0}.
 
-  Definition lxeutt
-    {R1 R2} (RR : R1 -> R2 -> Prop) : itree E R1 -> itree E R2 -> Prop :=
-    lxrutt RPre_eq RPost_eq RR.
-
   Lemma eutt_lxeutt {R1 R2} (RR : R1 -> R2 -> Prop) t1 t2 :
-    eutt RR t1 t2 -> lxeutt RR t1 t2.
+    eutt RR t1 t2 ->
+    lxeutt RR t1 t2.
   Proof.
-  move=> h; rewrite /lxeutt /lxrutt; apply: rutt_xrutt.
+  move=> h; apply: rutt_xrutt.
   apply: gen_eutt_rutt h => [u e|u e a b]; [exact: RPre_eq_refl | exact: RPost_eqI].
   Qed.
 

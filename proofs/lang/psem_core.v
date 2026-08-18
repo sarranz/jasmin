@@ -74,7 +74,7 @@ Lemma exec_syscallP scs m o vargs vargs' :
     (exec_syscall scs m o vargs)
     (exec_syscall scs m o vargs').
 Proof.
-  move=> /exec_syscall_coreP; rewrite /lxeutt /lxrutt /exec_syscall.
+  move=> /exec_syscall_coreP; rewrite /exec_syscall.
   move=> h; apply: xrutt_translate (h scs m o).
   + by move=> X [e|e] //= _; rewrite /errcutoff /is_error /= mid12.
   + done.
