@@ -27,6 +27,7 @@ Section SourceSysCall.
 Context
   {pd: PointerData}
   {syscall_state : Type}
+  {sc_sem : syscall_sem syscall_state}
 .
 
 Notation E := (ErrEvent +' RndEvent syscall_state).
@@ -105,6 +106,7 @@ Section StackSyscall.
 Context
   {pd : PointerData}
   {syscall_state : Type}
+  {sc_sem : syscall_sem syscall_state}
 .
 
 Notation E := (ErrEvent +' RndEvent syscall_state).

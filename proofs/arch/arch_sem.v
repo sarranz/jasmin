@@ -93,11 +93,11 @@ Notation rflagmap := RflagMap.map.
 (* -------------------------------------------------------------------- *)
 Section SEM.
 
-Context {syscall_state : Type} `{asm_d : asm} {call_conv: calling_convention}.
+Context {syscall_state : Type} {sc_sem : syscall_sem syscall_state} `{asm_d : asm} {call_conv: calling_convention}.
 
 Record asmmem : Type := AsmMem {
   asm_rip  : pointer;
-  asm_scs : syscall_state;
+  asm_scs : syscall_state_t;
   asm_mem  : mem;
   asm_reg  : regmap;
   asm_regx : regxmap;

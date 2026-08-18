@@ -31,7 +31,7 @@ Context
   {pT : progT}
   {scP : semCallParams}.
 
-Record fstate := { fscs : syscall_state; fmem : mem; fvals : values; }.
+Record fstate := { fscs : syscall_state_t; fmem : mem; fvals : values }.
 
 (* Recursion events (curried version of Call in ITree) *)
 Variant recCall : Type -> Type :=
