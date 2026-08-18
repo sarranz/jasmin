@@ -45,7 +45,7 @@ Section WITH_PARAMS.
 Context
   {atoI  : arch_toIdent}
   {syscall_state : Type}
-  {ep : EstateParams syscall_state}
+  {sc_sem : syscall_sem syscall_state}
   {call_conv : calling_convention}.
 
 #[local] Existing Instance withsubword.
@@ -296,7 +296,7 @@ Section WITH_PARAMS.
 Context
   {atoI  : arch_toIdent}
   {syscall_state : Type}
-  {ep : EstateParams syscall_state}
+  {sc_sem : syscall_sem syscall_state}
   {call_conv : calling_convention}
 .
 

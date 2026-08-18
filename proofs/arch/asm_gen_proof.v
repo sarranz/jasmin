@@ -1,3 +1,8 @@
+Set Uniform Inductive Parameters.
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
+
 From ITree Require Import
   ITree
   ITreeFacts
@@ -38,17 +43,9 @@ Section ASM_EXTRA.
 
 #[local] Existing Instance withsubword.
 
-Context {syscall_state : Type}
+Context {syscall_state : Type} {sc_sem : syscall_sem syscall_state}
         `{asm_e : asm_extra} {call_conv: calling_convention}
-         {asm_scsem : asm_syscall_sem (syscall_state := syscall_state)}.
-
-(* TODO remove *)
-Let ep : EstateParams syscall_state := ep_of_asm_e.
-#[local] Existing Instance ep.
-Let sip : SemInstrParams extended_op syscall_state := sip_of_asm_e.
-#[local] Existing Instance sip.
-Notation asmmem := (asmmem (syscall_state := syscall_state)).
-Notation asm_state := (asm_state (syscall_state := syscall_state)).
+         {asm_scsem : asm_syscall_sem}.
 
 (* -------------------------------------------------------------------- *)
 Lemma xreg_of_varI {ii x y} :
@@ -993,7 +990,7 @@ Proof.
   by apply exclude_mem_check.
 Qed.
 
-Lemma check_not_addr1_write asm_args ad ws ty (v: sem_olt ty) (s : asmmem) :
+Lemma check_not_addr1_write asm_args ad ws ty (v: sem_olt ty) s :
   check_not_addr1 asm_args ad ->
   mem_write_val MSB_CLEAR asm_args (ad, extend_size ws ty)
        (oto_val (wextend_size ws v)) s =
@@ -1010,8 +1007,7 @@ Proof.
   by rewrite /mem_write_xreg !word_extend_CLEAR zero_extend_cut.
 Qed.
 
-Lemma check_not_addr_write (s : asmmem) ws asm_args id_out id_tout
-  (t : sem_ltuple id_tout) :
+Lemma check_not_addr_write s ws asm_args id_out id_tout (t : sem_ltuple id_tout) :
   size id_out = size id_tout →
   check_not_addr id_out asm_args →
   mem_write_vals MSB_CLEAR s asm_args id_out [seq extend_size ws i | i <- id_tout]
@@ -1029,7 +1025,7 @@ Proof.
   case: mem_write_val => //=.
 Qed.
 
-Lemma exec_desc_desc_op op asm_args (s s' : asmmem) :
+Lemma exec_desc_desc_op op asm_args s s' :
   check_i_args_kinds (instr_desc op).(id_args_kinds) asm_args ->
   exec_instr_op (instr_desc op) asm_args s = ok s' ->
   exec_instr_op (instr_desc_op op.2) asm_args s = ok s'.
@@ -1476,7 +1472,7 @@ Proof.
   by case: drop => //= ? ? [->]; rewrite drop0.
 Qed.
 
-Lemma asm_pos_incr i ai c n ac0 ac1 (xs : asm_state) :
+Lemma asm_pos_incr i ai c n ac0 ac1 xs:
   assemble_i agparams rip i = ok [:: ai] ->
   onth c n = Some i ->
   mapM (assemble_i agparams rip) (take n c) = ok ac0 ->
@@ -1490,7 +1486,7 @@ Proof.
   by rewrite ltnn ltnNge leqnSn /= !mapM_cat subSnn hhd /= hi subnn take0 /= flatten_cat cats0 size_cat addn1.
 Qed.
 
-Lemma assemble_get_label_after_pc i ai lc (xs : asm_state) ls l:
+Lemma assemble_get_label_after_pc i ai lc xs ls l:
   assemble_c agparams rip lc = ok (asm_c xs)
   → onth lc (lpc ls) = Some i
   → assemble_i agparams rip i = ok [::ai]
@@ -1711,7 +1707,7 @@ Proof using hagparams ok_p' rndE.
   case: (hloeq) => /= hscs hmem _ _ _ _ _ _.
   rewrite hscs hmem.
   apply: (xrutt_facts.xrutt_bind (RR := syscall_ans_rel sc (asm_m xs))).
-  - exact/lxeutt_lrutt_RndRels2/asm_exec_syscall_coreP/uves.
+  - exact/lxeutt_lrutt_RndRels_refl/asm_exec_syscall_coreP/uves.
   move=> [[scs m] vs] xm' [/= hscs1 hmem1 hvs hpr hrip].
   rewrite bind_ret_l.
   apply: xrutt_bind_iresult_left => ls''.
