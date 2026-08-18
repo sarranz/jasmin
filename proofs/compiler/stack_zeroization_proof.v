@@ -333,8 +333,7 @@ Proof.
   rewrite /eval_instr.
   case: li_i; t_xrbindP.
   + by move=> *; subst s' => /=; move: hget; rewrite /= hget1 => -[<-].
-  + move=> > _ [[??]?] _; t_xrbindP => *; subst s' => /=.
-    by move: hget; rewrite /= hget1 => -[<-].
+  + by move=> [].
   + by move=> [x|] r; t_xrbindP => *; apply: (eval_jump_in_bound hget); eauto.
   + by move=> *; apply: (eval_jump_in_bound hget); eauto.
   + by move=> *; subst s' => /=; move: hget; rewrite /= hget1 => -[<-].
@@ -349,7 +348,13 @@ Qed.
 
 Section ITREE.
 
-Context {E E0: Type -> Type} {wE: with_Error E E0} {rE0 : EventRels E0}.
+Context
+  {E E0 : Type -> Type}
+  {wE : with_Error E E0}
+  {rE0 : EventRels E0}
+  {rndE : with_RndEvent syscall_state E0}
+  {rndE_refl : RndRels_refl rE0}
+.
 
 Section EXPORT.
 
@@ -370,23 +375,37 @@ Let post s1 s2 :=
 
 Lemma istack_zeroization_lprog_lsem :
   wkequiv pre (ilsem lp (endpc lp fn)) (ilsem lp' (fun s => endpc lp fn s && endpc lp' fn s)) post.
-Proof using hszparams pp' hget hget'.
+Proof using hszparams pp' hget hget' rndE_refl.
   apply wkequiv_iter.
   rewrite /while_body => s _ [<-] hpre.
   case: ifPn => hpc /=; last first.
   + by apply xrutt.xrutt_Ret; constructor; split => //; apply /negP.
+  have hlt : lfn s = fn -> lpc s < size (lfd_body lfd).
+  + move=> h; move: hpc; rewrite /endpc h eqxx hget /= => hne.
+    by rewrite ltn_neqAle hne (hpre h).
   have -> : endpc lp' fn s.
   + move: hpc; rewrite /endpc hget hget' /= size_cat; case: eqP => //.
     move=> h; have := hpre (sym_eq h).
-    rewrite leq_eqVlt => /orP [->// | ] hlt _; apply /eqP => heq.
+    rewrite leq_eqVlt => /orP [->// | ] {}hlt _; apply /eqP => heq.
     by have := lt_nm_n (size (lfd_body lfd)) (size cmd); rewrite -heq hlt.
   apply xrutt_facts.xrutt_bind with pre; last first.
   + by move=> s1 s2 hpre'; apply xrutt.xrutt_Ret; constructor.
-  apply wkequiv_iresult with (P:= pre); last by split.
-  move=> {hpre hpc}s _ s' [<- hpre] hstep; exists s'.
-  + by apply: stack_zeroization_lprog_lsem1 pp' hstep.
-  split => // ?; subst fn.
-  by apply: step_in_bound hstep.
+  rewrite /istep /next_is_Lsyscall.
+  case hfi: find_instr => [i|] /=; last first.
+  + rewrite /step hfi.
+    apply: xrutt.xrutt_CutL.
+    by rewrite /core_logics.errcutoff /is_error /Subevent.subevent /CategoryOps.resum /fromErr mid12.
+  rewrite (find_instrP pp' hfi) /=.
+  case: is_Lsyscall => [o|].
+  + eapply xrutt_facts.xrutt_weaken_v3.
+    2: exact: ((eq_lsyscall o : forall i1 i2, i1 = i2 -> _) s s erefl).
+    move=> s1' s2' [<- hfn' hpc'].
+    split=> // h; rewrite hfn' in h.
+    by rewrite hpc'; apply: hlt h.
+  apply: xrutt_iresult => v1 hev; exists v1.
+  + exact: stack_zeroization_lprog_lsem1 pp' hev.
+  split=> // ?; subst fn.
+  exact: step_in_bound hev.
 Qed.
 
 End EXPORT.
@@ -406,7 +425,7 @@ Lemma istack_zeroization_lprogP_aux lp lp' fn lfd ptr :
       [/\ escs s1 = escs s2
         , (evm s1) =[sv_of_list v_var lfd.(lfd_res)] (evm s2)
         & match_mem_zero_export (emem s1) (emem s2) bottom lfd.(lfd_stk_max) (szs_of_fn fn)]).
-Proof using hszparams.
+Proof using hszparams rndE_refl.
   move=> hin hzerolp hlfd enough_stk bottom s _ [<-] hvalid hrsp.
   rewrite /ilsem_exportcall hlfd /=.
   have [lfd' hzero hlfd'] := stack_zeroization_lprog_get_fundef hzerolp hlfd.
@@ -529,7 +548,7 @@ Lemma istack_zeroization_lprogP lp lp' fn lfd :
     (ilsem_exportcall lp fn)
     (ilsem_exportcall lp' fn)
     (sz_post lp fn lfd).
-Proof using hszparams.
+Proof using hszparams rndE_refl.
   move=> hin hzerolp hlfd s1 _ [ptr [hrsp <- enough_stk hvalid]].
   have := istack_zeroization_lprogP_aux hin hzerolp hlfd enough_stk (And3 erefl hvalid hrsp).
   apply: xrutt_facts.xrutt_weaken => // o1 o2 [hscs hvm hmatch]; exists ptr; split => //.
