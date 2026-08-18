@@ -61,6 +61,10 @@ val to_array :
   ?signed:bool ->
   Prog.ty -> BinNums.coq_Z -> Warray_.WArray.array -> wsize * Z.t array
 
+val to_array8 :
+  ?signed:bool ->
+  Prog.ty -> BinNums.coq_Z -> Warray_.WArray.array -> Z.t array
+
 val error_of_cerror :
   (Format.formatter -> Compiler_util.pp_error -> unit) ->
    Compiler_util.pp_error_loc -> Utils.hierror
