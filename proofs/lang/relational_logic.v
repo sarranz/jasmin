@@ -2483,6 +2483,9 @@ Context
   {rE0 : EventRels E0}
   {rndE : RndRels_refl rE0}
   {ep : EstateParams syscall_state}
+  {spp : SemPexprParams}
+  {asm_op : Type}
+  {sip : SemInstrParams asm_op syscall_state}
 .
 
 #[export]

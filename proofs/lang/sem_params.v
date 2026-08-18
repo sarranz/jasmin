@@ -49,12 +49,13 @@ Arguments mk_spp {_}.
 Class SemInstrParams (asm_op syscall_state : Type) := mk_sip
   {
     _asmop : asmOp asm_op;
+    _sc_sem : syscall_sem syscall_state;
   }.
 
 #[global]
-Existing Instances _asmop | 1000.
+Existing Instances _asmop _sc_sem | 1000.
 
-Arguments mk_sip {_ _ _}.
+Arguments mk_sip {_ _ _ _}.
 
 Class WithAssert := { assert_allowed : bool }.
 Definition noassert : WithAssert := {| assert_allowed := false |}.

@@ -192,7 +192,7 @@ with sem_call : instr_info → Sv.t → estate → funname → estate → Prop :
     let k' := Sv.union (ra_undef f var_tmp) (ra_vm_return f.(f_extra)) in
     sem_call ii (Sv.union k k') s1 fn s2.
 
-Variant sem_export_call_conclusion (scs: syscall_state) (m: mem) (fd: sfundef) (args: values) (vm: Vm.t) (scs': syscall_state) (m': mem) (res: values) : Prop :=
+Variant sem_export_call_conclusion (scs: syscall_state_t) (m: mem) (fd: sfundef) (args: values) (vm: Vm.t) (scs': syscall_state_t) (m': mem) (res: values) : Prop :=
   | SemExportCallConclusion (m1: mem) (k: Sv.t) (m2: mem) (vm2: Vm.t) (res':values) of
     saved_stack_valid fd k &
     Sv.Subset (Sv.inter callee_saved (Sv.union k (ra_undef fd var_tmp))) (sv_of_list fst fd.(f_extra).(sf_to_save)) &
@@ -205,7 +205,7 @@ Variant sem_export_call_conclusion (scs: syscall_state) (m: mem) (fd: sfundef) (
     valid_RSP m2 vm2 &
     m' = free_stack m2.
 
-Variant sem_export_call (gd: @extra_val_t progStack)  (scs: syscall_state) (m: mem) (fn: funname) (args: values)  (scs': syscall_state) (m': mem) (res: values) : Prop :=
+Variant sem_export_call (gd: @extra_val_t progStack)  (scs: syscall_state_t) (m: mem) (fn: funname) (args: values)  (scs': syscall_state_t) (m': mem) (res: values) : Prop :=
   | SemExportCall (fd: sfundef) of
                   get_fundef p.(p_funcs) fn = Some fd &
       is_RAnone fd.(f_extra).(sf_return_address) &

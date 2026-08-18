@@ -48,7 +48,7 @@ Notation labels := label_in_lprog.
 (* Semantic                                                                    *)
 
 Record lstate := Lstate
-  { lscs : syscall_state;
+  { lscs : syscall_state_t;
     lmem : mem;
     lvm  : Vm.t;
     lfn : funname;

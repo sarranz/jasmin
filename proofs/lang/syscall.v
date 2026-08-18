@@ -39,3 +39,9 @@ Definition syscall_sig_s {pd:PointerData} (o:syscall_t) : syscall_sig_t :=
   match o with
   | RandomBytes _ _ => {| scs_tin := [::aword Uptr; aword Uptr]; scs_tout := [::aword Uptr] |}
   end.
+
+(* TODO remove with syscall_state *)
+Class syscall_sem (syscall_state : Type).
+
+
+Definition syscall_state_t {syscall_state : Type} {sc_sem: syscall_sem syscall_state} := syscall_state.
