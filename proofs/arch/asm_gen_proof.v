@@ -1711,7 +1711,7 @@ Proof using hagparams ok_p' rndE.
   case: (hloeq) => /= hscs hmem _ _ _ _ _ _.
   rewrite hscs hmem.
   apply: (xrutt_facts.xrutt_bind (RR := syscall_ans_rel sc (asm_m xs))).
-  - exact/lxeutt_lrutt_RndRels2/asm_exec_syscall_coreP/uves.
+  - exact/lxeutt_lrutt_RndRels_refl/asm_exec_syscall_coreP/uves.
   move=> [[scs m] vs] xm' [/= hscs1 hmem1 hvs hpr hrip].
   rewrite bind_ret_l.
   apply: xrutt_bind_iresult_left => ls''.

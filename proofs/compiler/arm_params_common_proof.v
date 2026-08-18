@@ -45,10 +45,13 @@ Section WITH_PARAMS.
 Context
   {atoI  : arch_toIdent}
   {syscall_state : Type}
-  {ep : EstateParams syscall_state}
   {call_conv : calling_convention}.
 
 #[local] Existing Instance withsubword.
+
+(* TODO remove with syscall_state *)
+Let I : EstateParams syscall_state := ep_of_asm_e.
+#[local] Existing Instance I.
 
 Let mkv xname vi :=
   let: x := {| vname := xname; vtype := aword arm_reg_size; |} in
@@ -296,11 +299,14 @@ Section WITH_PARAMS.
 Context
   {atoI  : arch_toIdent}
   {syscall_state : Type}
-  {ep : EstateParams syscall_state}
   {call_conv : calling_convention}
 .
 
 #[local] Existing Instance withsubword.
+
+(* TODO remove with syscall_state *)
+Let I : EstateParams syscall_state := ep_of_asm_e.
+#[local] Existing Instance I.
 
 Lemma store_mn_of_wsizeP ws ws' mn (w : word ws) (w' : word ws') :
   store_mn_of_wsize ws = Some mn

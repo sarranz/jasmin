@@ -52,8 +52,11 @@ Section Section.
 Context
   {atoI  : arch_toIdent}
   {syscall_state : Type}
-  {sc_sem : syscall_sem syscall_state}
   {call_conv : calling_convention}.
+
+(* TODO remove with syscall_state *)
+Let I : EstateParams syscall_state := ep_of_asm_e.
+#[local] Existing Instance I.
 
 (* ------------------------------------------------------------------------ *)
 (* Stack alloc hypotheses. *)

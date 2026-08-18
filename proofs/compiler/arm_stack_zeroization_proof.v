@@ -48,8 +48,16 @@ End FIXME.
 
 Section STACK_ZEROIZATION.
 
-Context {atoI : arch_toIdent} {syscall_state : Type} {ep : EstateParams syscall_state}.
+Context {atoI : arch_toIdent} {syscall_state : Type}.
 Context {call_conv : calling_convention}.
+
+(* TODO remove with syscall_state *)
+Let I : EstateParams syscall_state := ep_of_asm_e.
+#[local] Existing Instance I.
+Let Ispp : SemPexprParams := spp_of_asm_e.
+#[local] Existing Instance Ispp.
+Let Isip : SemInstrParams _ syscall_state := sip_of_asm_e.
+#[local] Existing Instance Isip.
 
 Section RSP.
 
@@ -403,8 +411,8 @@ Proof using halign le_ws_ws_align hstack hsmall hbody rsp_nin hlabel.
     have := wsize_size_pos ws.
     by clear -hstack hlt3; lia.
   have [lfd -> -> /=] := hbody.
-  rewrite (find_label_cat_hd (sip := sip_of_asm_e) _ hlabel).
-  rewrite (find_labelE (sip := sip_of_asm_e)) /=.
+  rewrite (find_label_cat_hd (sip := Isip) _ hlabel).
+  rewrite (find_labelE (sip := Isip)) /=.
   rewrite /is_label /= eqxx /=.
   rewrite /setcpc /=.
   by rewrite -addnS.
