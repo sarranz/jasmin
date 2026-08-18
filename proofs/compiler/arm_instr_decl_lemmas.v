@@ -33,7 +33,7 @@ Context
   {wsw : WithSubWord}
   {atoI : arch_toIdent}
   {syscall_state : Type}
-  {sc_sem : syscall_sem syscall_state}
+  {ep : EstateParams syscall_state}
   {pT : progT}
   {sCP : semCallParams}.
 
