@@ -1,5 +1,10 @@
 
 (* ** Imports and settings *)
+Set Uniform Inductive Parameters.
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
+
 From Coq
 Require Import Setoid Morphisms Lia.
 
