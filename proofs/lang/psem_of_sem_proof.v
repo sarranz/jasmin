@@ -255,7 +255,7 @@ Proof using rndE.
   + move=> xs sc es ii.
     apply wequiv_syscall_rel_eq_core with checker_st_eq tt => // fs _ <-.
     apply: (xrutt_bind (RR := eq)).
-    + exact/lxeutt_lrutt_RndRels2/hsyscall.
+    + exact/lxeutt_lrutt_RndRels_refl/hsyscall.
     by move=> [[scs m] vs] _ <-; apply: xrutt_Ret.
   + by move=> a ii; apply wequiv_noassert.
   + by move=> > hc1 hc2 ii; apply wequiv_if_rel_eq with checker_st_eq tt tt tt.

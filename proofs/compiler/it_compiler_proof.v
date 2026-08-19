@@ -509,6 +509,15 @@ Definition isem_asm (xp : asm_prog) :=
 
 Section FIRST_PART.
 
+Context
+  {E E0 : Type -> Type}
+  {wE : with_Error E E0}
+  {rndE : with_RndEvent syscall_state E0}
+  {rE : EventRels E0}
+  {rndE_refl : RndRels_refl rE}
+  {rE_trans : EventRels_trans rE rE rE}
+.
+
 #[local] Existing Instance withsubword.
 #[local] Existing Instance progUnit.
 #[local] Existing Instance sCP_unit.
@@ -641,6 +650,12 @@ Context
   {entries : seq funname}
   {p p' : sprog}
   {ev : pointer}
+  {E E0 : Type -> Type}
+  {wE : with_Error E E0}
+  {rndE : with_RndEvent syscall_state E0}
+  {rE : EventRels E0}
+  {rndE_refl : RndRels_refl rE}
+  {rE_trans : EventRels_trans rE rE rE}
 .
 
 #[local] Existing Instance withsubword.
@@ -726,6 +741,12 @@ Context
   (up : uprog (asmop := _asmop))
   (sp : sprog (pd := _pd) (asmop := _asmop))
   (rip : pointer)
+  {E E0 : Type -> Type}
+  {wE : with_Error E E0}
+  {rndE : with_RndEvent syscall_state E0}
+  {rE : EventRels E0}
+  {rndE_refl : RndRels_refl rE}
+  {rE_trans : EventRels_trans rE rE rE}
 .
 
 Definition wf_args_s fn ms mt vs vt :=

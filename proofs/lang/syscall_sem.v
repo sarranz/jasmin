@@ -53,6 +53,11 @@ Definition exec_syscall_u
       Ret (scs', m, vs')
   end.
 
+Definition sc_in_u o :=
+  [seq eval_atype t | t <- (syscall_sig_u o).(scs_tin)].
+Definition sc_out_u o :=
+  [seq eval_atype t | t <- (syscall_sig_u o).(scs_tout)].
+
 Definition sc_res_uincl (r1 r2 : syscall_state * mem * values) : Prop :=
   let '(scs1, m1, vres1) := r1 in
   let '(scs2, m2, vres2) := r2 in
@@ -97,6 +102,30 @@ Proof.
 case: o => [ws p].
 apply: lutt_bind; first exact: lutt_true.
 by move=> [??] _; apply/lutt_Ret'.
+Qed.
+
+Lemma exec_syscall_u_typed_res (scs : syscall_state) m o vs :
+  lutt
+    (fun _ _ => True) (fun _ _ _ => True)
+    (fun '(_, _, vs') => truncate_vals (sc_out_u o) vs' = ok vs')
+    (exec_syscall_u scs m o vs).
+Proof.
+move: o => [ws len] /=.
+case: vs => [|v vs].
+- by rewrite /exec_getrandom_u /= !bind_bind bind_throw; apply: lutt_throw.
+rewrite /exec_getrandom_u /=.
+case: vs => [|v2 vs]; last first.
+- by rewrite !bind_bind bind_throw; apply: lutt_throw.
+case: (to_arr (arr_size ws len) v) => [a|e]; last first.
+- by rewrite !bind_throw; apply: lutt_throw.
+rewrite !bind_bind bind_ret_l !bind_bind.
+apply: (lutt_bind (R := fun _ => True)); first exact: lutt_trigger.
+move=> [scs' bs] _.
+rewrite !bind_bind.
+case: WArray.fill => [a'|e]; last first.
+- by rewrite !bind_throw; apply: lutt_throw.
+rewrite !bind_ret_l; apply/lutt_Ret'.
+by rewrite /truncate_val /= WArray.castK /=.
 Qed.
 
 End SourceSysCall.
