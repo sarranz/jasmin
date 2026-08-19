@@ -139,6 +139,13 @@ Instance sCP_unit : semCallParams (pT := progUnit) :=
     exec_syscall_coreS := @exec_syscallSu _ _;
 }.
 
+Lemma exec_syscall_typed_res (scs : syscall_state) m o vs :
+  lutt
+    (fun _ _ => True) (fun _ _ _ => True)
+    (fun '(_, _, vs') => truncate_vals (sc_out_u o) vs' = ok vs')
+    (exec_syscall (pT := progUnit) scs m o vs).
+Proof. exact: lutt_translate (exec_syscall_u_typed_res _ _ _ _). Qed.
+
 (* ** Semantic with stack
  * -------------------------------------------------------------------- *)
 
