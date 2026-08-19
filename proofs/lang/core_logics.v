@@ -676,6 +676,84 @@ Qed.
 
 End LUTT_RUTT_TRANS.
 
+Lemma lutt_translate
+  {E F : Type -> Type} {R : Type}
+  (h : forall T, E T -> F T)
+  (PEv : prepred E) (PAns : postpred E)
+  (PEv' : prepred F) (PAns' : postpred F)
+  (P : R -> Prop)
+  (t : itree E R) :
+  (forall A (e : E A), PEv A e -> PEv' A (h A e)) ->
+  (forall A (e : E A) (a : A), PEv A e -> PAns' A (h A e) a -> PAns A e a) ->
+  lutt PEv PAns P t ->
+  lutt PEv' PAns' P (translate h t).
+Proof.
+move=> he ha [t' ht].
+exists (translate h t').
+apply: rutt_translate ht.
+- move=> A B e1 e2 [hp [heq ->]]; subst B; split; first exact: he.
+  by exists erefl.
+move=> A B e1 a e2 b [hp [heq ->]] [hp' hb]; clear e2.
+move: b hp' hb; subst B => b hp' hb; split; last exact: hb.
+exact: ha hp hp'.
+Qed.
+
+(* TODO why is lutt_xrutt_trans_l restricted to left cutoff? *)
+Lemma xrutt_lutt_bind_l
+  {E1 E2 R1 R2}
+  (is_error1 : forall T, E1 T -> bool)
+  (REv : forall A B, E1 A -> E2 B -> Prop)
+  (PEv : forall A, E1 A -> Prop)
+  (RAns RAns' : forall A B, E1 A -> A -> E2 B -> B -> Prop)
+  (PAns : forall A, E1 A -> A -> Prop)
+  (R : R1 -> Prop)
+  (RR : R1 -> R2 -> Prop)
+  {T1 T2}
+  (RT : T1 -> T2 -> Prop) t1 t2 k1 k2 :
+  (forall A1 A2 e1 a1 e2 a2,
+      IsNoCut_ (errcutoff is_error1) A1 e1 ->
+      PEv A1 e1 ->
+      REv A1 A2 e1 e2 ->
+      RAns' A1 A2 e1 a1 e2 a2 ->
+      PAns A1 e1 a1 /\ RAns A1 A2 e1 a1 e2 a2) ->
+  xrutt (errcutoff is_error1) nocutoff REv RAns RR t1 t2 ->
+  lutt PEv PAns R t1 ->
+  (forall r1 r2,
+      R r1 ->
+      RR r1 r2 ->
+      xrutt (errcutoff is_error1) nocutoff REv RAns' RT (k1 r1) (k2 r2)) ->
+  xrutt (errcutoff is_error1) nocutoff
+    REv RAns' RT
+    (x <- t1;; k1 x) (x <- t2;; k2 x).
+Proof.
+move=> hans hr hp h.
+apply: (xrutt_bind (RR := fun r1 r2 => R r1 /\ RR r1 r2)).
+- apply: xrutt_weaken (lutt_xrutt_trans_l hp hr) => //.
+  - by move=> A1 A2 e1 e2 [].
+  by move=> A1 A2 e1 a1 e2 a2 ? _ [??]; apply: hans.
+by move=> r1 r2 []; apply: h.
+Qed.
+
+Lemma xrutt_lutt_true_bind_l
+  {E1 E2 R1 R2}
+  (is_error1 : forall T, E1 T -> bool)
+  (REv : forall A B, E1 A -> E2 B -> Prop)
+  (RAns : forall A B, E1 A -> A -> E2 B -> B -> Prop)
+  (R : R1 -> Prop)
+  (RR : R1 -> R2 -> Prop)
+  {T1 T2}
+  (RT : T1 -> T2 -> Prop) t1 t2 k1 k2 :
+  xrutt (errcutoff is_error1) nocutoff REv RAns RR t1 t2 ->
+  lutt (fun _ _ => True) (fun _ _ _ => True) R t1 ->
+  (forall r1 r2,
+      R r1 ->
+      RR r1 r2 ->
+      xrutt (errcutoff is_error1) nocutoff REv RAns RT (k1 r1) (k2 r2)) ->
+  xrutt (errcutoff is_error1) nocutoff
+    REv RAns RT
+    (x <- t1;; k1 x) (x <- t2;; k2 x).
+Proof. by move=> hr hp h; apply: (xrutt_lutt_bind_l _ hr hp h). Qed.
+
 Section SAFE_RUTT.
 
 Context {E : Type -> Type}.

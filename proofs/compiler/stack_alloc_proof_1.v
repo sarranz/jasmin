@@ -2,6 +2,7 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype fintype.
 From mathcomp Require Import div ssralg.
 From mathcomp Require Import word_ssrZ.
+From ITree Require Import ITreeFacts.
 Require Import seq_extra psem psem_facts compiler_util low_memory.
 Require Export stack_alloc stack_alloc_params_proof.
 Require slh_lowering_proof.
@@ -7116,124 +7117,59 @@ Proof.
 Qed.
 
 (* TODO: in the long term, try to merge with what is proved about calls *)
-Lemma alloc_syscallP ii rmap rs o es rmap2 c table vme m0 s1 s2 ves scs m vs s1' :
+(* TODO_RndEvent: this lemma's target code ([c], from [alloc_syscall]) still
+   genuinely contains a [Csyscall] (only the array argument/result gets
+   turned into a pointer + an explicit length register); it does not get
+   compiled away. Since this branch's ITree-events refactor, syscalls are
+   itree-valued/non-deterministic (see git history: commit 2f0e2678 turned
+   [syscall_sem.exec_syscall_u]/[exec_syscall_s] itree-typed, and in the same
+   commit [it_sems_core.esem_i]'s [Csyscall] case became an unconditional
+   [Error ErrSemUndef] instead of calling [sem_syscall]), so this lemma can
+   no longer be phrased as a plain [exec]-level Hoare triple ("if the source
+   syscall deterministically returns (scs, m, vs), then ...") the way it was
+   before -- [exec_syscall_u (escs s1) (emem s1) o ves = ok (scs, m, vs)] no
+   longer type-checks ([exec_syscall_u] returns an [itree], not a [result]),
+   and the old proof script below it is equally stale (it unfolds
+   [sem_syscall]/[fexec_syscall]/[exec_syscall_s] as if they were still
+   [exec]-typed, and rewrites with an [esem P' rip c s2 = ok s2'] equality
+   that can never hold now that [esem]'s own [Csyscall] case always errors).
+   The statement below is the itree-level replacement: it compares the
+   *source*'s one-instruction [Csyscall] step (using [exec_syscall_u],
+   array-shaped) against the *target*'s two-instruction sequence's step
+   (using [exec_syscall_s], pointer-shaped) via [eutt], up to [valid_state]
+   on the final states. Both sides trigger literally the same
+   [Rnd (escs s1) (arr_size ws len)] event once the target's length register
+   is shown to hold [wrepr Uptr (arr_size ws len)] and [wunsigned] of that
+   equals [arr_size ws len] (both already established by the surrounding
+   development, exactly as in the old proof's "write [arr_size ws len] in
+   register [vxlen]" step) -- so this does NOT need the missing cross-[scP]
+   [RndRels2] instance that PROGRESS.md items 1 ([it_linearization_proof.v]'s
+   Hsyscall cluster, which has the exact same [exec_syscall_s ... = ok (...)]
+   stale-hypothesis symptom) and 20 ([it_merge_varmaps_proof.v]'s Csyscall
+   bridge) are blocked on: since we never go through [wequiv]/[wkequiv]/
+   [xrutt] here (only raw [eutt]/[ITree.bind]/[Vis] congruence, via e.g. the
+   library's [eutt_translate_gen]), this should be provable independently of
+   that shared gap. Left [Admitted]: completing it is a genuine, non-
+   mechanical itree proof (comparable in size to those two), not attempted
+   in this pass. Most of the old proof's [valid_state]/memory reasoning
+   (everything from "write [arr_size ws len] in register [vxlen]" through
+   "write the result" above, about 90 lines, untouched by this issue) should
+   carry over essentially unchanged, now universally quantified over the
+   syscall's actual random answer (a [bs : seq u8] such that
+   [WArray.fill (arr_size ws len) bs = ok a2], playing the role the erstwhile
+   hypothesis's destructured [a2]/[hfill] used to play) instead of being
+   derived from destructuring a since-removed concrete-result hypothesis. *)
+Lemma alloc_syscallP ii rmap rs o es rmap2 c table vme m0 s1 s2 ves
+    {E E0 : Type -> Type} {wE : with_Error E E0}
+    {rE : with_RndEvent syscall_state E0} :
   alloc_syscall saparams pmap ii rmap rs o es = ok (rmap2, c) ->
   valid_state table rmap vme m0 s1 s2 ->
   sem_pexprs true gd s1 es = ok ves ->
-  exec_syscall_u (escs s1) (emem s1) o ves = ok (scs, m, vs) ->
-  write_lvals true gd (with_scs (with_mem s1 m) scs) rs vs = ok s1' ->
-  exists s2',
-    esem P' rip c s2 = ok s2' /\
-    valid_state (foldl remove_binding_lval table rs) rmap2 vme m0 s1' s2'.
-Proof using addr_no_overflow disjoint_writable wf_pmap0 hsaparams.
-  move=> halloc hvs.
-  move: halloc; rewrite /alloc_syscall; move=> /add_iinfoP.
-  case: o => [ws len].
-  t_xrbindP=> /ZleP hlen0 /ZltP hlen.
-  case: rs => // -[] // x [] //.
-  case: es => // -[] // g [] //.
-  t_xrbindP=> pg /get_regptrP hlg px /get_regptrP hlx srg /get_sub_regionP hsrg {}rmap2 hrmap2 <- <-{c}.
-  rewrite /= /exec_getrandom_u /=.
-  t_xrbindP=> vg hgvarg <-{ves} [_ _] ag' /to_arrI ?
-    a2 hfill [<- <-] <-{scs} <-{m} <-{vs} /=; subst vg.
-  t_xrbindP=> {}s1' /write_varP + <- => -[-> hdb h].
-  have /wf_locals /= hlocal := hlx.
-  have /vm_truncate_valE [hty htreq]:= h.
-  set i1 := (X in [:: X; _]).
-  set i2 := (X in [:: _; X]).
-
-  (* write [arr_size ws len] in register [vxlen] *)
-  have := sap_immediateP hsaparams P' rip s2 (x := with_var (gv g) (vxlen pmap)) dummy_instr_info (arr_size ws len) (@wt_len wf_pmap0).
-  set s2' := with_vm s2 _ => hsem1.
-  have hvs': valid_state table rmap vme m0 s1 s2'.
-  + apply (valid_state_distinct_reg _ hvs).
-    + by apply len_neq_rip.
-    + by apply len_neq_rsp.
-    + by apply len_in_new.
-    by move=> y p; apply len_neq_ptr.
-
-  have hwfg: wf_sub_region vme srg (eval_atype g.(gv).(vtype)).
-  + by apply (wfr_wf hsrg).
-  have srg_vars: wf_vars_zone table.(vars) srg.(sr_zone).
-  + by apply (wfr_vars_zone hsrg).
-
-  (* clear the argument *)
-  have hincl: Incl rmap2 rmap.
-  + move /set_clearP : hrmap2 => [_ ->].
-    by apply Incl_set_clear_pure.
-  have hwfst: wfr_STATUS rmap2 vme.
-  + move /set_clearP : hrmap2 => [_ ->] /=.
-    by apply (wfr_STATUS_set_clear_status wfr_wf hwfg wfr_status).
-  have hvarss: wfr_VARS_STATUS table.(vars) rmap2.
-  + move /set_clearP : hrmap2 => [_ ->].
-    by apply (wfr_VARS_STATUS_set_clear_status wfr_vars_zone srg_vars wfr_vars_status).
-  have hvs2 := valid_state_Incl hincl hwfst hvarss hvs'.
-
-  (* write the randombytes in memory (in the target) *)
-  move: hwfg; rewrite (type_of_get_gvar_array hgvarg) => hwfg.
-  have [addrg ok_addrg] := wf_sub_region_sub_region_addr hwfg.
-  have [m2 hfillm] := fill_fill_mem hvs hwfg ok_addrg hfill.
-  have hvs2': valid_state table rmap2 vme m0 s1 (with_mem s2' m2).
-  + case: (Z.nonpos_pos_cases (arr_size ws len)) => [hneg|hpos].
-    + (* if [arr_size ws len <= 0], nothing was written *)
-      have hsize: size (get_random (escs s1) (arr_size ws len)).2 = 0%nat.
-      + by have := WArray.fill_size hfill; clear -hneg; lia.
-      by move: hfillm; rewrite /fill_mem (size0nil hsize) /= => -[<-].
-    rewrite -(with_mem_same s1).
-    apply (valid_state_holed_rmap
-            (l:=[::(srg, carr (arr_size ws len))])
-            hvs2 (λ _ _ _, erefl) (fill_mem_stack_stable hfillm)
-            (fill_mem_validw_eq hfillm)).
-    + move=> p hvalid.
-      rewrite (fill_mem_disjoint hfillm); first by apply vs_eq_mem.
-      rewrite -(WArray.fill_size hfill) (Z2Nat.id _ (Z.lt_le_incl _ _ hpos)).
-      apply (disjoint_zrange_incl_l (zbetween_sub_region_addr hwfg hpos ok_addrg)).
-      apply (vs_disjoint hwfg.(wfr_slot)) => //.
-      by apply (wf_sub_region_size_slot_gt0 hwfg hpos).
-    + constructor; last by constructor.
-      split=> //.
-      by move: hrmap2 => /set_clearP [? _].
-    + move=> p hvalid1 hvalid2 /List_Forall_inv [/(_ _ ok_addrg) hdisj _].
-      rewrite (fill_mem_disjoint hfillm) //.
-      rewrite -(WArray.fill_size hfill) (Z2Nat.id _ (Z.lt_le_incl _ _ hpos)).
-      by apply (hdisj hpos erefl).
-    constructor; last by constructor.
-    have /set_clearP [_ ->] /= := hrmap2.
-    by apply (set_clear_pure_sub_region_cleared wfr_wf wfr_status hwfg).
-
-  (* update the [scs] component *)
-  set s1'' := with_scs s1 (get_random (escs s1) (arr_size ws len)).1.
-  set s2'' := with_scs (with_mem s2' m2) (get_random (escs s1) (arr_size ws len)).1.
-  have hvs2'': valid_state table rmap2 vme m0 s1'' s2''.
-  + by apply valid_state_scs.
-
-  (* write the result *)
-  set s1''' := with_vm s1'' (evm s1'').[x <- Varr a2].
-  set s2''' := with_vm s2'' (evm s2'').[px <- Vword addrg].
-  have hvs2''': valid_state (remove_binding table x) (set_move rmap2 x srg Valid) vme m0 s1''' s2'''.
-  + rewrite /s1''' /s2'''.
-    move: hwfg; rewrite -hty => hwfg.
-    apply: (valid_state_set_move_regptr hvs2'' hwfg ok_addrg _ srg_vars _ hlx h) => //.
-    rewrite htreq; split=> // off addrg' w ok_addrg' off_valid /[dup] /get_val_byte_bound /= hoff.
-    move: ok_addrg'; rewrite ok_addrg => -[?]; subst addrg'.
-    rewrite (WArray.fill_get8 hfill) (fill_mem_read8_no_overflow _ hfillm)
-            -?(WArray.fill_size hfill) ?Z2Nat.id /=;
-      try (clear -hlen hoff; lia).
-    by case: andb.
-
-  (* wrap up *)
-  exists s2'''; split=> //.
-  move: hsem1 => /= -> /=; rewrite LetK.
-  rewrite /sem_syscall.
-  rewrite /= /get_gvar /= /get_var.
-  have /wfr_ptr := hsrg; rewrite /get_local hlg => -[_ [[<-] /= hpk]].
-  rewrite (hpk _ ok_addrg) /=.
-  rewrite Vm.setP_eq wt_len vm_truncate_val_eq //=.
-  rewrite /fexec_syscall /= /exec_syscall_s /= !truncate_word_u /=.
-  rewrite /exec_getrandom_s_core wunsigned_repr_small //.
-  rewrite -vs_scs hfillm /=.
-  rewrite /upd_estate /= LetK.
-  by apply write_var_eq_type; rewrite // (convertible_eval_atype hlocal.(wfr_rtype)).
-Qed.
+  eutt
+    (fun s1' s2' =>
+       valid_state (foldl remove_binding_lval table rs) rmap2 vme m0 s1' s2')
+    (isem_cmd_ P ev [:: MkI ii (Csyscall rs o es)] s1)
+    (isem_cmd_ P' rip c s2).
+Admitted.
 
 End WITH_PARAMS.

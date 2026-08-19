@@ -538,6 +538,9 @@ Qed.
 Definition truncate_val (ty: ctype) (v: value) : exec value :=
   of_val ty v >>= λ x, ok (to_val x).
 
+Definition truncate_vals (ty : seq ctype) (vs : values) : exec values :=
+  mapM2 ErrType truncate_val ty vs.
+
 Lemma truncate_val_typeE ty v vt :
   truncate_val ty v = ok vt ->
   match ty with

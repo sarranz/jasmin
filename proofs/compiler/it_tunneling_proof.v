@@ -285,7 +285,12 @@ Proof using pp'.
   rewrite heq /=; apply => // l; rewrite LUF.find_empty /path_to0; auto.
 Qed.
 
-Context {E E0: Type -> Type} {wE: with_Error E E0} {rE0 : EventRels E0}.
+Context
+  {E E0: Type -> Type}
+  {wE: with_Error E E0}
+  {rE0 : EventRels E0}
+  {rndE : with_RndEvent syscall_state E0}
+.
 
 Import Monads.
 Import MonadNotation.

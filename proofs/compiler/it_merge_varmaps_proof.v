@@ -329,7 +329,9 @@ Section CMD.
 
 Context {E_l E0_l : Type -> Type} {wE_l: with_Error E_l E0_l}
         {E_r E0_r : Type -> Type} {wE_r: with_Error E_r E0_r}
-        {rE0 : EventRels2 E0_l E0_r}.
+        {rE0 : EventRels2 E0_l E0_r}
+        {rE_l : with_RndEvent syscall_state E0_l}
+        {rE_r : with_RndEvent syscall_state E0_r}.
 
 Context (sem_F1 : sem_Fun (pT:= progStack) E_l)
         (sem_F2 : sem_FunK E_r).
