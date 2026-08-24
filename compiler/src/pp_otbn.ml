@@ -98,7 +98,6 @@ let pp_reg_address addr =
 let pp_address addr =
   match addr with Areg ra -> pp_reg_address ra | Arip r -> pp_rip_address r
 
-
 (* TODO_OTBN: Some instructions need signedness and some don't accept it.
    Currently the only ones that don't accept signedness are the ones that take
    [U8]s, so this is a hack. *)
@@ -214,13 +213,14 @@ let pp_args_mulqacc_selectors op args =
 let pp_args op args =
   pp_args_shift op args |> pp_args_flag_group op |> pp_args_mulqacc_selectors op
 
-let need_nop c =
-  match (List.last c).asmi_i with
-  | LABEL _ | REPEATLOOP _ | JMP _ | JMPI _ | Jcc _ | JAL _ | CALL _ | CALL_HWCS _
-  | RET_HWCS | POPPC | SysCall _ -> true
-  | _ -> false
-  | exception Invalid_argument _ -> true
+let need_nop_i = function
+  | LABEL _ | REPEATLOOP _ | JMP _ | JMPI _ | Jcc _ | JAL _ | CALL _
+  | CALL_HWCS _ | RET_HWCS | POPPC | SysCall _ ->
+      true
+  | ALIGN | STORELABEL _ | Declassify_val _ | Declassify_mem _ | AsmOp _ ->
+      false
 
+let need_nop c = try need_nop_i (List.last c).asmi_i with Failure _ -> true
 let notlbl = function Label _ -> false | _ -> true
 
 module OTBNTarget :
@@ -245,7 +245,11 @@ module OTBNTarget :
      so the data segment must go into [.data] (which the ACC linker script maps
      to DMEM) rather than the default [.text] section (mapped to IMEM). *)
   let data_segment_header =
-    [ Header (".data", []); Instr (".p2align", [ "5" ]); Label global_datas_label ]
+    [
+      Header (".data", []);
+      Instr (".p2align", [ "5" ]);
+      Label global_datas_label;
+    ]
 
   let function_directives = []
 
@@ -307,4 +311,5 @@ end
 
 module OTBNPrinter = AsmTargetBuilder.Make (OTBNTarget)
 
-let print_prog fmt prog = PrintASM.pp_asm ~comment_prefix:"#" fmt (OTBNPrinter.asm_of_prog prog)
+let print_prog fmt prog =
+  PrintASM.pp_asm ~comment_prefix:"#" fmt (OTBNPrinter.asm_of_prog prog)

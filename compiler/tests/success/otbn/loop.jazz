@@ -23,6 +23,29 @@ fn main() -> reg u32 {
     return x;
 }
 
+export
+fn empty() -> reg u32 {
+    reg u32 x;
+    x = 0;
+
+    repeat 4 { }
+    repeat N { }
+    repeat x { }
+    repeat (4 + N) { }
+
+    inline int i;
+    for i = 0 to 2 {
+        repeat i { }
+    }
+
+    x = 4;
+    while (x != 0) {
+        repeat x { }
+        x -= 1;
+    }
+    return x;
+}
+
 // if/else at end of body: loop body ends with a LABEL (merge point) -> nop inserted
 export
 fn cond_at_end(reg u32 x) -> reg u32 {
