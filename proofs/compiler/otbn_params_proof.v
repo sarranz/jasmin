@@ -1097,6 +1097,92 @@ Proof using atoI call_conv sc_sem syscall_state.
   - by move: hexec; rewrite /exec_sopn /sopn_sem /sopn_sem_ /=; t_xrbindP.
 Qed.
 
+(* Proof plan (ADD_LARGE_IMM) -- same shape as SUBI, but simpler: the
+   [v_var x != v_var y] assert is unconditional (not an "or" with
+   [imm = 0]), so [otbn_smart_addi_sem_fopns]'s disjunctive precondition is
+   discharged directly from that hypothesis, without SUBI's [gen_smart_opi]
+   guard unpacking. cf. otbn_assemble_SUBI_correct. *)
+Lemma otbn_assemble_ADD_LARGE_IMM_correct :
+  assemble_extra_correct (ap_agp otbn_params) ADD_LARGE_IMM.
+Proof using atoI call_conv sc_sem syscall_state.
+  move=> rip ii lvs args m xs ys m' s ops ops'.
+  move=> hrex hexec hwle hops hmap hlom.
+  move: hops; rewrite /to_asm /= /assemble_extra /assemble_ADD_LARGE_IMM.
+  move: hrex hwle.
+  case: lvs => // -[] // [[xt xn] xii] [] //.
+  case: args => // -[] //.
+  move=> f l.
+  case: f => //= y.
+  (* peel the [wconst] immediate *)
+  rewrite /arm_extra.uncons_wconst.
+  case: l => // -[] // -[] //.
+  move=> s0 f0 l0.
+  case: s0 => //= ws.
+  case: f0 => //= imm.
+  (* peel the assemble premise: [hxy] (register disequality), [hc] (the
+     dest type assert), [args0], etc. *)
+  move=> hrex hwle; t_xrbindP => hxy hc args0 hsmart hops_eq.
+  set xi := {| v_var := {| vtype := xt; vname := xn |}; v_info := xii |}.
+  move: hrex hexec hwle hmap hlom.
+  (* peel [sem_rexprs]; note the scrambled binder order from the nested Lets *)
+  t_xrbindP => vy hvy vs hvs.
+  move=> hvl heqv heqxs; subst vs; subst xs.
+  move=> hexec; move: hexec.
+  rewrite /exec_sopn /sopn_sem /sopn_sem_ /=.
+  change (to_word U32) with (to_word Uptr).
+  (* split off the degenerate l0-tail: [main], [l0-tail], [extra dests] *)
+  case: hvs hvl => [|v1 vl1] hvl /=.
+  (* --- main case --- *)
+  change (to_word U32) with (to_word Uptr).
+  t_xrbindP => tval wyv hvyw wiv htr hadd heqys.
+  subst tval; subst ys.
+  case heq: (set_var true (evm m) {| vtype := xt; vname := xn |}
+                       (Vword (wyv + wiv)%R))
+    => [vm1 |] /= // [<-] hmap hlom.
+  have hc' : convertible xi.(vtype) (aword otbn_reg_size) := hc.
+  have hget : get_var true (evm m) y >>= to_word U32 = ok wyv
+    by rewrite hvy /=; exact hvyw.
+  have hsome : otbn_params_core.OTBNFopn_core.smart_addi xi y imm = Some args0
+    := o2rP hsmart.
+  have HOR : otbn_params_core.is_arith_small imm \/ v_var xi <> v_var y.
+    right => h; rewrite /xi /= in h; move: hxy; rewrite h eqxx; by [].
+  have [vm' [hsem heq_vm hgetx]] :=
+    otbn_smart_addi_sem_fopns (xi := xi) (y := y) (imm := imm)
+      (s := m) (w := wyv) hc' HOR hget.
+  have hargs_eq :
+    smart_addi_fopn xi y imm = [seq fopn_args_of_opn_args a | a <- args0]
+    by rewrite /smart_addi_fopn /smart_addi hsome /=.
+  have hsopns : sem_sopns m ops = ok (with_vm m vm')
+    by rewrite -hops_eq otbn_sem_sopns_asm_args -hargs_eq; exact: hsem.
+  have hall : all (fun '(op, _, _) =>
+    match op.1 with | Some _ => false | None => true end) ops
+    by rewrite -hops_eq all_map; apply/allT => -[[]].
+  have [s' hfold hlom'] :=
+    assemble_opsP otbn_eval_assemble_cond hmap hall hsopns hlom.
+  exists s' => //.
+  apply: (lom_eqv_ext _ hlom') => z /=.
+  (* the immediate reconciliation: [wiv = wrepr reg_size imm] *)
+  have hwiv : wiv = wrepr U32 imm
+    by move: htr => /truncate_wordP [hle ->]; rewrite zero_extend_wrepr.
+  move/set_varP: heq => [_ _ ->].
+  rewrite Vm.setP (convertible_eval_atype hc).
+  case: eqP => [<- | hne];
+    last by apply: heq_vm; rewrite Sv.singleton_spec; exact: not_eq_sym hne.
+  rewrite hwiv.
+  move/get_varP: hgetx => [h1 _ _].
+  by rewrite -h1.
+  (* --- l0-tail (degenerate: ADD_LARGE_IMM reads only [y] and [imm]) --- *)
+  by move=> /=; case: (to_word U32 vy) => //= ?;
+     case: (truncate_word U32 (wrepr ws imm)) => //=.
+  (* --- extra dests (ADD_LARGE_IMM has exactly one output) --- *)
+  move=> a l hrex hwle _.
+  case: ys hexec hwle => [| b [| b0 lb]] hexec hwle.
+  - move: hexec; rewrite /exec_sopn /sopn_sem /sopn_sem_ /=; by t_xrbindP.
+  - move: hwle; rewrite /write_lexprs /=.
+    by case: (set_var true (evm m) {| vtype := xt; vname := xn |} b).
+  - by move: hexec; rewrite /exec_sopn /sopn_sem /sopn_sem_ /=; t_xrbindP.
+Qed.
+
 Lemma otbn_assemble_swap_correct ws :
   assemble_extra_correct (ap_agp otbn_params) (SWAP ws).
 Proof.
@@ -1208,10 +1294,9 @@ Proof using atoI call_conv sc_sem syscall_state.
   + exact: otbn_assemble_set0_correct.
   + exact: otbn_assemble_MOV_correct.
   + exact: otbn_assemble_SUBI_correct.
-  + (* TODO_OTBN: ADD_LARGE_IMM (adapt [otbn_assemble_SUBI_correct]). *)
-    admit.
+  + exact: otbn_assemble_ADD_LARGE_IMM_correct.
   exact: otbn_assemble_swap_correct.
-Admitted.
+Qed.
 
 Lemma otbn_assemble_extra_sz ii op lvs args ops :
   to_asm ii op lvs args = ok ops -> ssrnat.leq 1 (size ops).
@@ -1240,8 +1325,26 @@ Proof.
     - case: ifP => hxy //=.
       by move: hne; rewrite hmov hxy.
     - by case: ifP.
-  + (* TODO_OTBN: ADD_LARGE_IMM (adapt the SUBI case above). *)
-    admit.
+  + (* ADD_LARGE_IMM: [v_var x != v_var y] is unconditional (unlike SUBI's
+       [imm = 0 \/ x <> y]), so the [is_mov]/[smart_mov] branch never hits
+       the [x == y] empty-list case; both branches give a singleton list. *)
+    rewrite /assemble_ADD_LARGE_IMM.
+    case: (arm_extra.uncons_LLvar ii lvs) => // -[x ?].
+    case: (arm_extra.uncons_rvar ii args) => // -[y ?].
+    simpl; case: (arm_extra.uncons_wconst ii _) => // -[imm ?].
+    simpl.
+    t_xrbindP => hxy hc args0 hargs <-.
+    rewrite /asm_args_of_opn_args size_map.
+    move/o2rP: hargs.
+    rewrite /otbn_params_core.OTBNFopn_core.smart_addi
+            /otbn_params_core.OTBNFopn_core.gen_smart_opi.
+    case: ifP => // _ [<-].
+    rewrite /otbn_params_core.OTBNFopn_core.gen_unsafe_smart_opi
+            /otbn_params_core.OTBNFopn_core.is_mov /=
+            /otbn_params_core.OTBNFopn_core.smart_mov.
+    case: ifP => hmov.
+    - by rewrite (negbTE hxy).
+    - by case: ifP.
   + move=> ws; rewrite /assemble_swap.
     case: args => // -[] // [] // z [] // -[] // [] // w [] //.
     simpl; case: ifP => _.
@@ -1251,7 +1354,7 @@ Proof.
       + case: lvs => // ? [] // ? [] // ? [] // -[] // x [] // -[] // y [] //.
         simpl; t_xrbindP => _ _ _ <-; done.
       + done.
-Admitted.
+Qed.
 
 Definition otbn_hagparams : h_asm_gen_params (ap_agp otbn_params) :=
   {|

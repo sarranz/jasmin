@@ -62,6 +62,15 @@ let check_options () =
     then warning Experimental Location.i_dummy
       "support of the RISC-V architecture is experimental";
 
+  if !target_arch = OTBN
+    then warning Experimental Location.i_dummy
+      "support of the OTBN architecture is VERY experimental. \
+       The loop instruction is not part of the verified compiler. \
+       The call stack is not part of the verified compiler. \
+       The compiler does NOT check whether the loop and call stacks \
+       overflow/underflow. \
+       The compiler does NOT check that memory accesses are aligned.";
+
   if
     !check_safety || !trust_aligned || !safety_param <> None
     || !safety_config <> None
