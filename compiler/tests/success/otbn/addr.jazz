@@ -1,0 +1,270 @@
+/* addr.jazz -- exercise every pattern that reaches sap_mov_ofs
+   (get_addr / alloc_array_move in stack_alloc.v) in the OTBN/ACC backend.
+
+   mov_ofs in otbn_params.v receives (x, tag, movk, y, ofs) where
+     - movk = MK_LEA iff the source is a global (mk_mov in stack_alloc.v),
+       MK_MOV otherwise;
+     - x is Lvar p for a reg ptr destination, or Lmem [SP + c] for a
+       stack ptr spill slot;
+     - y is the base: a reg ptr, SP (stack array), the RIP variable
+       (global), or a load from a spill slot (stack ptr source);
+     - ofs is the displacement: a constant for whole arrays and
+       constant-index sub-arrays, or scale * e + c for variable-index
+       sub-arrays (mk_ofs).
+
+   Expected instruction per case (mirroring riscv_mov_ofs):
+     MK_LEA,           ofs constant    -> LA
+     MK_MOV, y load,   ofs = 0         -> LW  (unspill)
+     MK_MOV, x Lmem,   ofs = 0         -> SW  (spill)
+     MK_MOV, x Lvar,   ofs = 0         -> MOV
+     MK_MOV, x Lvar,   ofs small const -> ADDI
+     MK_MOV, x Lvar,   ofs large const -> LI + ADD
+     MK_MOV, x Lvar,   ofs variable    -> ADD
+
+   Addresses on OTBN are register + immediate only, so every access below is
+   realizable. Patterns that inherently need an intermediate register are
+   rejected by the compiler; they are listed in a comment at the end of the
+   file, each with its idiomatic workaround (which is tested here). */
+
+u32[4] g = { 0x10, 0x11, 0x12, 0x13 };
+
+u8[8] g8 = { 1, 2, 3, 4, 5, 6, 7, 8 };
+
+// Global sources: MK_LEA, y = RIP.
+export
+fn glob_patterns(reg u32 i) -> reg u32 {
+    reg ptr u32[4] p;
+    reg ptr u32[2] p2;
+    reg ptr u32[1] p1;
+    reg u32 res tmp;
+
+    // whole global: ofs = offset of g in the data section
+    p = g;                 // LA
+    res = p[#aligned 0];
+
+    // constant scaled index: ofs += 4
+    p2 = g[1:2];           // LA
+    tmp = p2[#aligned 0];
+    res += tmp;
+
+    // constant unscaled index: ofs += 8
+    p1 = g.[8:1];          // LA
+    tmp = p1[#aligned 0];
+    res += tmp;
+
+    // u32 view of a u8 global: ofs += 4
+    p1 = g8[:u32 1:1];     // LA
+    tmp = p1[#aligned 0];
+    res += tmp;
+
+    // variable index: LA only takes constant displacements, so we index the
+    // reg ptr p instead (an ADD, see regptr_patterns)
+    p1 = p.[i:1];          // ADD
+    tmp = p1.[0];
+    res += tmp;
+
+    return res;
+}
+
+// Reg ptr sources: MK_MOV, y = reg ptr. The pointer comes in as an argument
+// so that these cases do not depend on a stack array move.
+#[required_alignment = { r = u32 }]
+export
+fn regptr_patterns(reg ptr u32[8] r, reg u32 i) -> reg u32 {
+    reg ptr u32[8] rs;
+    reg ptr u32[2] r2;
+    reg ptr u32[1] r1;
+    reg u32 res tmp;
+
+    // whole reg ptr: ofs = 0
+    rs = r;                // MOV
+
+    // constant scaled index: ofs = 4
+    r2 = rs[1:2];          // ADDI
+    res = r2[#aligned 0];
+
+    // constant index 0: ofs = 0
+    r1 = r2[0:1];          // MOV
+    tmp = r1[#aligned 0];
+    res += tmp;
+
+    // constant unscaled index: ofs = 12
+    r1 = rs.[12:1];        // ADDI
+    tmp = r1[#aligned 0];
+    res += tmp;
+
+    // variable unscaled index: ofs = i
+    r1 = rs.[i:1];         // ADD
+    tmp = r1.[0];
+    res += tmp;
+
+    // a variable scaled index rs[i:1] (ofs = 4 * i) would need slli+add, so
+    // the scaling must be done by hand
+    tmp = i;
+    tmp <<= 2;
+    r1 = rs.[tmp:1];       // ADD
+    tmp = r1.[0];
+    res += tmp;
+
+    return res;
+}
+
+// Stack array sources at offset 0: MK_MOV, y = SP, ofs = slot offset + index.
+// s is the only stack object of this function, so it sits at SP + 0 and a
+// variable-index sub-array is a plain ADD of SP (subarrays/risc-v/map.jazz
+// relies on the same layout); at SP + c the ofs would be i + c, which needs
+// an intermediate register.
+export
+fn stack_patterns(reg u32 i) -> reg u32 {
+    stack u32[4] s;
+    reg ptr u32[4] rs;
+    reg ptr u32[1] r1;
+    reg u32 res tmp;
+    inline int j;
+
+    for j = 0 to 4 {
+        tmp = j;
+        s[#aligned j] = tmp;
+    }
+
+    // whole stack array: ofs = 0
+    rs = s;                // MOV
+    res = rs[#aligned 3];
+
+    // constant scaled index: ofs = 8 + 0
+    r1 = s[2:1];           // ADDI
+    tmp = r1[#aligned 0];
+    res += tmp;
+
+    // variable unscaled index: ofs = i + 0
+    r1 = s.[i:1];          // ADD
+    tmp = r1.[0];
+    res += tmp;
+
+    return res;
+}
+
+// Stack arrays at a nonzero offset: with two stack arrays, at least one sits
+// at SP + c with c <> 0, so at least one of the two moves takes the
+// ofs <> 0 branch.
+export
+fn stack_two_arrays() -> reg u32 {
+    stack u32[2] a, b;
+    reg ptr u32[2] ra, rb;
+    reg u32 res tmp;
+    inline int j;
+
+    for j = 0 to 2 {
+        tmp = j;
+        a[#aligned j] = tmp;
+        b[#aligned j] = tmp;
+    }
+
+    ra = a;                // MOV or ADDI
+    rb = b;                // ADDI or MOV
+    res = ra[#aligned 0];
+    tmp = rb[#aligned 1];
+    res += tmp;
+
+    return res;
+}
+
+// Constant offset that does not fit in the 12-bit immediate of ADDI:
+// ofs = 4 * 520 = 2080 > 2047. Note that the accesses themselves go through
+// r1 with displacement 0, since 2080 does not fit in the LW/SW immediate
+// either.
+export
+fn large_offset() -> reg u32 {
+    stack u32[528] s;
+    reg ptr u32[528] rs;
+    reg ptr u32[1] r1;
+    reg u32 res tmp;
+
+    rs = s;                // MOV
+    r1 = rs[520:1];        // LI + ADD
+    tmp = 42;
+    r1[#aligned 0] = tmp;
+    res = r1[#aligned 0];
+
+    return res;
+}
+
+// Spill and unspill of a reg ptr: MK_MOV with x = Lmem [SP + c] (SW) and
+// y = a load from the spill slot (LW). The displacement is folded into the
+// slot address, so mov_ofs only accepts ofs = 0 here.
+#[required_alignment = { r = u32 }]
+export
+fn spill_patterns(reg ptr u32[2] r) -> reg u32 {
+    stack ptr u32[2] ps;
+    reg u32 res tmp;
+
+    ps = r;                // SW (spill)
+    r = ps;                // LW (unspill)
+    res = r[#aligned 0];
+
+    // #spill/#unspill on a reg ptr take the same branches
+    #spill(r);             // SW
+    #unspill(r);           // LW
+    tmp = r[#aligned 1];
+    res += tmp;
+
+    return res;
+}
+
+// The same spill/unspill branches through full-length sub-arrays (ofs = 0).
+#[required_alignment = { r = u32 }]
+export
+fn spill_sub_patterns(reg ptr u32[2] r) -> reg u32 {
+    stack ptr u32[2] ps;
+    reg u32 res;
+
+    ps = r[0:2];           // SW
+    r = ps[0:2];           // LW
+    res = r[#aligned 0];
+
+    return res;
+}
+
+// Wide (u256) arrays: the same branches with scale 32.
+export
+fn wide_patterns() -> reg u256 {
+    stack u256[2] w;
+    reg ptr u256[2] rw;
+    reg ptr u256[1] rw1;
+    reg u256 acc x;
+    reg u32 tmp;
+    inline int j;
+
+    for j = 0 to 16 {
+        tmp = j;
+        w[:u32 j] = tmp;
+    }
+
+    rw = w;                // MOV
+    acc = rw[#aligned 0];
+
+    // constant scaled index: ofs = 32
+    rw1 = rw[1:1];         // ADDI
+    x = rw1[#aligned 0];
+    acc = acc ^256u x;
+
+    return acc;
+}
+
+/* Patterns that reach sap_mov_ofs but are rejected ("the address computation
+   in the right-hand side is too complex, an intermediate variable might be
+   needed"), because they are not a single register + immediate computation:
+
+     r1 = rs[i:1];    // ofs = 4 * i needs slli+add: scale by hand and use an
+                      // unscaled index (regptr_patterns)
+     r1 = s.[i:1];    // stack array at SP + c, c <> 0: ofs = i + c; move s
+                      // into a reg ptr first (regptr_patterns), or make sure
+                      // s is the only stack object (stack_patterns)
+     p1 = g.[i:1];    // MK_LEA with a variable ofs needs la+add: take the
+                      // address of g first, then index it (glob_patterns)
+     q = r[1:1];      // (stack ptr u32[1] q) spill with ofs <> 0: SW cannot
+                      // add; slice into a fresh reg ptr first, then spill that
+     r1 = ps[1:1];    // unspill with ofs <> 0: LW cannot add; unspill the
+                      // whole array, then slice
+     ps = g;          // MK_LEA into a spill slot (Lmem) needs la+sw: take the
+                      // address into a reg ptr, then spill it */

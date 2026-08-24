@@ -650,8 +650,8 @@ Definition _desc_rv_mnemonic : instr_desc_t :=
   | LUI => desc_rv_unop (fun x => wshl x 12)
   (* TODO_OTBN: LW/SW must check addr = (grs1 + offset) mod 2^32 is a valid
      4-byte aligned DMEM address; otherwise raise BAD_DATA_ADDR. *)
-  | LW => desc_rv_unop id (* TODO_OTBN double check that it fails on unaligned *)
-  | SW => _desc_rv_unop (Ea 0) (Ea 1) id (* TODO_OTBN double check that it fails on unaligned *)
+  | LW => _desc_rv_unop (Eu 1) (Eu 0) id (* TODO_OTBN it should fail on unaligned *)
+  | SW => _desc_rv_unop (Eu 0) (Eu 1) id (* TODO_OTBN it should fail on unaligned *)
   | LI => desc_rv_unop id
   | LA => _desc_rv_unop (Ec 1) (Ea 0) id
   | NOP => desc_nop

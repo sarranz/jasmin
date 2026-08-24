@@ -79,6 +79,7 @@ Variant extra_op :=
 | set0 of wsize
 | MOV  (* [ADDI x, y, 0]. *)
 | SUBI (* [ADDI x, y, -imm]. *)
+| ADD_LARGE_IMM (* [LI x, imm; ADD x, x, y]. *)
 | SWAP of wsize (* Three [XOR]s. *)
 .
 
@@ -92,6 +93,7 @@ Definition string_of_extra_op (eo : extra_op) : string :=
   | set0 _ => "set0"
   | MOV => "MOV"
   | SUBI => "SUBI"
+  | ADD_LARGE_IMM => "add_large_imm"
   | SWAP _ => "swap"
   end.
 
@@ -129,6 +131,30 @@ Definition desc_SUBI : instruction_desc :=
     (fun x y => x - y)%R
     true DOIT.
 
+(* [conflicts] ensures that the destination register is distinct from the
+   first argument: the expansion [LI x, imm; ADD x, x, y] uses the
+   destination as a temporary. *)
+Definition desc_ADD_LARGE_IMM : instruction_desc :=
+  let ty := aword U32 in
+  let cty := eval_atype ty in
+  let ctin := [:: cty; cty ] in
+  let semi := fun (x y : word U32) => (x + y)%R in
+  {| str := pp_s (string_of_extra_op ADD_LARGE_IMM)
+   ; tin := [:: ty; ty ]
+   ; i_in := [:: E 1; E 2 ]
+   ; tout := [:: ty ]
+   ; i_out := [:: E 0 ]
+   ; conflicts := [:: (APout 0, APin 0) ]
+   ; semi := sem_prod_ok ctin semi
+   ; semu := @values.vuincl_app_sopn_v ctin [:: cty ] (sem_prod_ok ctin semi) refl_equal
+   ; i_safe := [::]
+   ; i_valid := true
+   ; i_doit := DOIT
+   ; i_safe_wf := refl_equal
+   ; i_semi_errty := fun _ => sem_prod_ok_error (tin := ctin) semi _
+   ; i_semi_safe := fun _ => values.sem_prod_ok_safe (tin := ctin) semi
+   |}.
+
 Definition desc_swap_large : instruction_desc :=
   mk_instr_desc_safe
     (pp_s (string_of_extra_op (SWAP U256)))
@@ -143,6 +169,7 @@ Definition get_instr_desc (eo : extra_op) : instruction_desc :=
   | set0 ws => if (ws <= reg_size)%CMP then desc_set0_small else desc_set0_large
   | MOV => desc_MOV
   | SUBI => desc_SUBI
+  | ADD_LARGE_IMM => desc_ADD_LARGE_IMM
   | SWAP ws => if (ws <= reg_size)%CMP then Oswap_instr (aword ws) else desc_swap_large
   end.
 
@@ -210,6 +237,24 @@ Definition assemble_SUBI
   Let args := o2r (E.invalid_args ii) (OTBNFopn_core.smart_subi x y imm) in
   ok (asm_args_of_opn_args args).
 
+(* [x = y + imm] with an immediate too large for [ADDI]: expand to
+   [LI x, imm; ADD x, x, y] via [smart_addi]. The [conflicts] field of
+   [desc_ADD_LARGE_IMM] makes register allocation keep [x <> y], which
+   [smart_addi] requires when [imm] is large. *)
+Definition assemble_ADD_LARGE_IMM
+  (les : seq lexpr)
+  (res : seq rexpr) :
+  cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
+  Let: (x, _) := uncons_LLvar les in
+  Let: (y, res) := uncons_rvar res in
+  Let: (imm, _) := uncons_wconst res in
+  Let _ := assert (v_var x != v_var y)
+                  (E.internal_error "add_large_imm: invalid register" ii) in
+  Let _ := assert (convertible x.(vtype) (aword U32))
+                  (E.internal_error "add_large_imm: bad register type" ii) in
+  Let args := o2r (E.invalid_args ii) (OTBNFopn_core.smart_addi x y imm) in
+  ok (asm_args_of_opn_args args).
+
 (* [x, y = swap(z, w)] using the standard three-[XOR] sequence:
    - [x = z ^ w];
    - [y = x ^ w = z];
@@ -258,6 +303,7 @@ Definition assemble_extra
   | set0 ws => assemble_set0 ws les res
   | MOV => assemble_MOV les res
   | SUBI => assemble_SUBI les res
+  | ADD_LARGE_IMM => assemble_ADD_LARGE_IMM les res
   | SWAP ws => assemble_swap ws les res
   end.
 

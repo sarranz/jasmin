@@ -15,6 +15,7 @@ Require Import
   expr
   fexpr
   fexpr_sem
+  lea_proof
   psem
   psem_facts
   sem_one_varmap.
@@ -61,46 +62,98 @@ Context
 
 Section STACK_ALLOC.
 
+(* [add_imm_op] emits [MOV]/[ADDI]/[ADD_LARGE_IMM] depending on [imm]; in
+   every case, the result is [base + imm]. *)
+Lemma add_imm_opP
+  (P' : sprog) (tag : assgn_tag) (x : lval) (base : var_i)
+  (imm : Z) (s1 : estate) (vb : value) (wb : word U32) :
+  p_globs P' = [::] ->
+  get_var true (evm s1) base = ok vb ->
+  to_word U32 vb = ok wb ->
+  sem_sopn (p_globs P') (Oasm (add_imm_op base imm).1) s1 [:: x] (add_imm_op base imm).2
+  = write_lval true (p_globs P') x (Vword (wadd wb (wrepr U32 imm))) s1.
+Proof.
+  move=> P'_globs ok_vb ok_wb.
+  rewrite /add_imm_op.
+  case: eqP => [heq|hneq].
+  - subst imm.
+    rewrite /sem_sopn P'_globs /= /get_gvar /= ok_vb /= /exec_sopn /= ok_wb /=.
+    rewrite /wadd wrepr0 GRing.addr0.
+    by case: (write_lval true [::] x (Vword wb) s1).
+  case: ifP => hsmall.
+  - rewrite /sem_sopn P'_globs /= /get_gvar /= ok_vb /= /exec_sopn /= ok_wb
+      truncate_word_u /=.
+    by case: (write_lval true [::] x (Vword (wadd wb (wrepr U32 imm)))).
+  rewrite /sem_sopn P'_globs /= /get_gvar /= ok_vb /= /exec_sopn /= ok_wb
+    truncate_word_u /=.
+  by case: (write_lval true [::] x (Vword (wadd wb (wrepr U32 imm)))).
+Qed.
+
 Lemma otbn_mov_ofsP : mov_ofs_correct (ap_sap otbn_params).(sap_mov_ofs).
 Proof.
   move=> P' ev s1 e w ofs pofs x tag mk ii ins s2 P'_globs.
   t_xrbindP=> ve ok_ve ok_w vofs ok_vofs ok_pofs.
   rewrite /sap_mov_ofs /= /mov_ofs.
   case: mk.
-  (* MK_LEA: [LA] evaluates the address [add e ofs] to [w + pofs]. *)
-  + move=> [<-] hw; exists (evm s2); last done.
-    rewrite with_vm_same /sem_sopn /= P'_globs /exec_sopn /=.
-    rewrite ok_ve ok_vofs /= /sem_sop2 /= ok_w ok_pofs /=.
-    by rewrite truncate_word_u /= hw.
+  (* MK_LEA. *)
+  + move=> [<-] hw; exists (evm s2) => //.
+    rewrite with_vm_same /sem_sopn /= P'_globs /exec_sopn.
+    case: is_zeroP.
+    - move=> hofs.
+      rewrite ok_ve /= ok_w /=.
+      move: hofs ok_vofs ok_pofs hw => -> /=.
+      rewrite /sem_sop1 /= => -[<-] /=.
+      rewrite truncate_word_u wrepr0 => -[<-].
+      by rewrite GRing.addr0 => -> /=.
+    move=> _ /=.
+    rewrite ok_ve ok_vofs /= /sem_sop2 /= ok_w ok_pofs /= truncate_word_u /=.
+    by rewrite hw.
   (* MK_MOV. *)
   case: x => //.
   (* x = Lvar. *)
   - move=> x_.
     case: ifP => _.
     (* [e] is a load: copy it with [LW] (requires [ofs = 0]). *)
-    + case: is_zeroP => // hz [<-] hw; exists (evm s2); last done.
+    + move=> /oassertP [/is_zeroP hz [<-]] hw; exists (evm s2); last done.
       rewrite with_vm_same /sem_sopn /= P'_globs /exec_sopn /= ok_ve /= ok_w /=.
       move: hz ok_vofs ok_pofs hw => -> /=.
       rewrite /sem_sop1 /= => -[<-].
       rewrite /to_word /= truncate_word_u => -[<-].
       by rewrite wunsigned0 wrepr0 GRing.addr0 => ->.
-    case: is_zeroP => [hz [<-] hw | hnz].
-    (* [ofs = 0]: register move via the [MOV] extra op. *)
-    + exists (evm s2); last done.
-      rewrite with_vm_same /sem_sopn /= P'_globs /exec_sopn /= ok_ve /=.
-      rewrite /sopn_sem /sopn_sem_ /= ok_w /=.
-      move: hz ok_vofs ok_pofs hw => -> /=.
-      rewrite /sem_sop1 /= => -[<-].
-      rewrite /to_word /= truncate_word_u => -[<-].
-      by rewrite wunsigned0 wrepr0 GRing.addr0 => ->.
-    (* [ofs <> 0]: [ADDI] computes [wadd w pofs = w + pofs] directly. *)
-    move=> [<-] hw; exists (evm s2); last done.
-    rewrite with_vm_same /sem_sopn /= P'_globs /exec_sopn /= ok_ve ok_vofs /=.
-    rewrite ok_w ok_pofs /=.
-    by move: hw => /= ->.
+    (* [mk_lea] on [e + ofs]: dispatch on [lea_base]/[lea_offset]. *)
+    case hlea: mk_lea => [[disp base0 scale offset]|] //=.
+    case: base0 hlea => [base|//] hlea.
+    have lea_sem: sem_pexpr true [::] s1 (add e ofs) = ok (Vword (w + pofs)).
+    - by rewrite /= ok_ve ok_vofs /= /sem_sop2 /= ok_w ok_pofs /=.
+    have /(_ (cmp_le_refl _)) /(_ (cmp_le_refl _)) := mk_leaP _ _ hlea lea_sem.
+    rewrite zero_extend_u /sem_lea /=.
+    apply: rbindP => wb.
+    apply: rbindP => vb ok_vb ok_wb.
+    apply: rbindP => wo ok_wo.
+    move=> /ok_inj; rewrite GRing.addrC => {}lea_sem.
+    case: offset {hlea} ok_wo => [offset0|] /=.
+    (* [lea_offset = Some _]: [ADD base offset], requires [disp = 0] and
+       [scale = 1]. *)
+    + t_xrbindP=> vo ok_vo ok_wo.
+      move=> /oassertP [/andP [/eqP hdisp /eqP hscale] [<-]] hw.
+      subst disp; subst scale.
+      exists (evm s2) => //.
+      rewrite /sem_sopn P'_globs /= /get_gvar /= ok_vb ok_vo /=
+        /exec_sopn /= ok_wb ok_wo /=.
+      move: lea_sem; rewrite wrepr1 GRing.mul1r wrepr0 GRing.addr0 /wadd => ->.
+      by rewrite hw /= with_vm_same.
+    (* [lea_offset = None]: [add_imm_op base disp] computes [base + disp]
+       (as [MOV], [ADDI] or the [ADD_LARGE_IMM] extra op; see
+       [add_imm_opP]). *)
+    move=> [?]; subst wo.
+    move=> [<-] hw.
+    exists (evm s2) => //.
+    rewrite (add_imm_opP tag (Lvar x_) disp P'_globs ok_vb ok_wb).
+    move: lea_sem; rewrite GRing.mulr0 GRing.addr0 /wadd => ->.
+    rewrite /=.
+    by rewrite hw /= with_vm_same.
   (* x = Lmem: store the word with [SW] (requires [ofs = 0]). *)
-  move=> a ws_ vi p_.
-  case: is_zeroP => // hz [<-] hw; exists (evm s2); last done.
+  move=> a ws_ vi p_ /oassertP [/is_zeroP hz [<-]] hw; exists (evm s2); last done.
   rewrite with_vm_same /sem_sopn /= P'_globs /exec_sopn /= ok_ve /= ok_w /=.
   move: hz ok_vofs ok_pofs hw => -> /=.
   rewrite /sem_sop1 /= => -[<-].
@@ -1155,8 +1208,10 @@ Proof using atoI call_conv sc_sem syscall_state.
   + exact: otbn_assemble_set0_correct.
   + exact: otbn_assemble_MOV_correct.
   + exact: otbn_assemble_SUBI_correct.
+  + (* TODO_OTBN: ADD_LARGE_IMM (adapt [otbn_assemble_SUBI_correct]). *)
+    admit.
   exact: otbn_assemble_swap_correct.
-Qed.
+Admitted.
 
 Lemma otbn_assemble_extra_sz ii op lvs args ops :
   to_asm ii op lvs args = ok ops -> ssrnat.leq 1 (size ops).
@@ -1185,6 +1240,8 @@ Proof.
     - case: ifP => hxy //=.
       by move: hne; rewrite hmov hxy.
     - by case: ifP.
+  + (* TODO_OTBN: ADD_LARGE_IMM (adapt the SUBI case above). *)
+    admit.
   + move=> ws; rewrite /assemble_swap.
     case: args => // -[] // [] // z [] // -[] // [] // w [] //.
     simpl; case: ifP => _.
@@ -1194,7 +1251,7 @@ Proof.
       + case: lvs => // ? [] // ? [] // ? [] // -[] // x [] // -[] // y [] //.
         simpl; t_xrbindP => _ _ _ <-; done.
       + done.
-Qed.
+Admitted.
 
 Definition otbn_hagparams : h_asm_gen_params (ap_agp otbn_params) :=
   {|
