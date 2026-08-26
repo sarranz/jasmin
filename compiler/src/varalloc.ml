@@ -167,12 +167,12 @@ let classes_alignment (onfun : funname -> param_info option list) (gtbl: alignme
          | Exact range ->
             if (fst range + i) land (size_of_ws ws - 1) <> 0 then
               hierror ~loc:(Lone (L.loc x.gv)) "bad range alignment for %a[%d]: %a was allocated in slot %a, which conflicts with the required alignment (%s)"
-                (Printer.pp_var ~debug:false) x' i
-                (Printer.pp_var ~debug:false) x' Alias.pp_slice c (string_of_ws ws)
+                (Printer.pp_var ~debug:!Glob_options.debug) x' i
+                (Printer.pp_var ~debug:!Glob_options.debug) x' Alias.pp_slice c (string_of_ws ws)
          | Sub ws' ->
            if not (wsize_le ws ws') then
              hierror ~loc:(Lone (L.loc x.gv)) "@[the access to array %a (aligned on %a) could not be proved to be aligned on %a;@ if you know what you are doing or want to perform an unaligned access,@ you can use “#unaligned”@]"
-               (Printer.pp_var ~debug:false) x' PrintCommon.pp_wsize ws' PrintCommon.pp_wsize ws
+               (Printer.pp_var ~debug:!Glob_options.debug) x' PrintCommon.pp_wsize ws' PrintCommon.pp_wsize ws
       end
     else set ~loc al x' E.Sglob ws in
 
@@ -203,7 +203,7 @@ let classes_alignment (onfun : funname -> param_info option list) (gtbl: alignme
         match get_ofs aa ws e with
         | None ->
           (* this error is probably always caught before by the similar code in alias.ml *)
-          hierror ~loc:(Lone (L.loc x.gv)) "Cannot compile sub-array %a that has a non-constant start index" (Printer.pp_var ~debug:true) (L.unloc x.gv)
+          hierror ~loc:(Lone (L.loc x.gv)) "Cannot compile sub-array %a that has a non-constant start index" (Printer.pp_var ~debug:!Glob_options.debug) (L.unloc x.gv)
         | Some i -> i in
       add_ggvar ~loc:(Siloc.add loc pi.pi_align.ac_strict.trace) Aligned x pi.pi_align.ac_strict.get_ws i;
       add_ggvar ~loc:(Siloc.singleton loc) Unaligned x pi.pi_align.ac_heuristic i
@@ -229,7 +229,7 @@ let classes_alignment (onfun : funname -> param_info option list) (gtbl: alignme
 
 (* --------------------------------------------------- *)
 let err_var_not_initialized x =
-  hierror ~loc:Lnone "variable “%a” (declared at %a) may not be initialized" (Printer.pp_var ~debug:true) x Location.pp_loc x.v_dloc
+  hierror ~loc:Lnone "variable “%a” (declared at %a) may not be initialized" (Printer.pp_var ~debug:!Glob_options.debug) x Location.pp_loc x.v_dloc
 
 let get_slot ?var coloring x =
   let sz = max 0 (size_of x.v_ty) in
@@ -258,8 +258,8 @@ let init_slots pd stack_pointers alias coloring fv =
           | Exact range -> range
           | Sub _ ->
               hierror ~loc:(Lone v.v_dloc) "cannot allocate in the stack the variable “%a” to “%a” with non constant start index"
-                    (Printer.pp_var ~debug:false) v
-                    (Printer.pp_var ~debug:false) c.in_var in
+                    (Printer.pp_var ~debug:!Glob_options.debug) v
+                    (Printer.pp_var ~debug:!Glob_options.debug) c.in_var in
         if c.scope = E.Sglob then
           add_local v (Direct (c.in_var, r2i range, E.Sglob))
         else
@@ -275,7 +275,7 @@ let init_slots pd stack_pointers alias coloring fv =
               add_slot slot;
               add_local v (Direct (slot, r2i(0, sz), E.Slocal))
            | _ -> hierror ~loc:(Lone v.v_dloc) "cannot allocate in the stack the variable “%a” of type %a"
-                    (Printer.pp_var ~debug:false) v
+                    (Printer.pp_var ~debug:!Glob_options.debug) v
                     PrintCommon.pp_ty v.v_ty
            end
 
@@ -317,7 +317,7 @@ let all_alignment ~funname ~contract pd (ctbl: alignment) alias params lalloc : 
         | ws ->
           if wsize_cmp ws pi_align.ac_strict.get_ws == Lt then
             hierror ~funname ~loc:(Lone x.v_dloc) "argument %a is used with %a-bit alignment at:\n%a"
-              (Printer.pp_var ~debug:false) x
+              (Printer.pp_var ~debug:!Glob_options.debug) x
               PrintCommon.pp_wsize pi_align.ac_strict.get_ws
               (pp_list "@ " L.pp_iloc) (Siloc.elements pi_align.ac_strict.trace);
           max_align ~loc:Siloc.empty Aligned ws pi_align
@@ -405,7 +405,7 @@ let get_returned_params ~funname (alias: Alias.alias) args =
            in
            hierror ~loc:(Lone (L.loc xr)) ~funname
              "returned variable %a points to %s: %a"
-             (Printer.pp_var ~debug:false) x
+             (Printer.pp_var ~debug:!Glob_options.debug) x
              msg
              Alias.pp_slice c
         | i -> Some i

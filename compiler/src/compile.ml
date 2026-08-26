@@ -68,7 +68,7 @@ let catch_error cp =
   match cp with
   | Utils0.Ok cp -> cp
   | Utils0.Error e ->
-    let e = Conv.error_of_cerror (Printer.pp_err ~debug:false) e in
+    let e = Conv.error_of_cerror (Printer.pp_err ~debug:!debug) e in
     raise (HiError e)
 
 let do_wint_int
@@ -242,12 +242,12 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
   in
 
   let pp_cuprog s cp =
-    Conv.prog_of_cuprog cp |> visit_prog_after_pass ~debug:true s
+    Conv.prog_of_cuprog cp |> visit_prog_after_pass ~debug:!debug s
   in
 
   let pp_csprog fmt cp =
     let p = Conv.prog_of_csprog cp in
-    Printer.pp_sprog ~debug:true Arch.pointer_data Arch.msf_size Arch.asmOp fmt p
+    Printer.pp_sprog ~debug:!debug Arch.pointer_data Arch.msf_size Arch.asmOp fmt p
   in
 
   let pp_linear fmt lp = PrintLinear.pp_prog Arch.pointer_data Arch.msf_size Arch.asmOp fmt lp in

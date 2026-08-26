@@ -650,8 +650,8 @@ Definition _desc_rv_mnemonic : instr_desc_t :=
   | LUI => desc_rv_unop (fun x => wshl x 12)
   (* TODO_OTBN: LW/SW must check addr = (grs1 + offset) mod 2^32 is a valid
      4-byte aligned DMEM address; otherwise raise BAD_DATA_ADDR. *)
-  | LW => _desc_rv_unop (Eu 1) (Eu 0) id (* TODO_OTBN it should fail on unaligned *)
-  | SW => _desc_rv_unop (Eu 0) (Eu 1) id (* TODO_OTBN it should fail on unaligned *)
+  | LW => _desc_rv_unop (Eu 1) (Ea 0) id (* TODO_OTBN it should fail on unaligned *)
+  | SW => _desc_rv_unop (Ea 0) (Eu 1) id (* TODO_OTBN it should fail on unaligned *)
   | LI => desc_rv_unop id
   | LA => _desc_rv_unop (Ec 1) (Ea 0) id
   | NOP => desc_nop
@@ -1552,7 +1552,7 @@ Definition desc_BN_LD : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := [:: lword256 ];
-    id_in := [:: Ea 1 ];
+    id_in := [:: Eu 1 ]; (* TODO_OTBN: this should be aligned *)
     id_tout := [:: lword256 ];
     id_out := [:: Ea 0 ];
     id_semi := fun x => ok x;
@@ -1576,7 +1576,7 @@ Definition desc_BN_SD : instr_desc_t :=
     id_tin := [:: lword256 ];
     id_in := [:: Ea 0 ];
     id_tout := [:: lword256 ];
-    id_out := [:: Ea 1 ];
+    id_out := [:: Eu 1 ]; (* TODO_OTBN: this should be aligned *)
     id_semi := fun x => ok x;
     id_args_kinds := ak_xreg_mem;
     id_nargs := 2;
