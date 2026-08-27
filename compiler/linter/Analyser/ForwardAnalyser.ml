@@ -153,6 +153,34 @@ module Make (Logic : Logic) : S with type domain = Logic.domain = struct
       (* Should we really remove the proxy_var ?*)
 
   (**
+  Analysis of repeat loop :
+
+  [e] is evaluated once, before the loop is (maybe) entered, and never
+  again, so it is accounted for here, once, rather than on every pass
+  through the body (mirroring the fix made to the backward/liveness
+  analyser for the same reason).
+
+  The loop may also run zero times, so whatever holds right before it
+  ([pre]) must still hold afterwards; and it may run more than once, so we
+  iterate to a fixpoint, exactly as done for [analyse_for] above and
+  [analyse_while] below.
+  *)
+  and analyse_repeat
+      (e : expr)
+      (body : ('info, 'asm) stmt)
+      (in_annotation : annot) : (annot, 'asm) instr_r * annot =
+      let pre, _ = Logic.assume e in_annotation in
+      let rec loop cur =
+          let body, post = analyse_stmt body cur in
+          let merged = Annotation.merge pre post Logic.merge in
+          if Annotation.included merged cur Logic.included then
+            (Cfor (FIrepeat e, body), merged)
+          else
+            loop merged
+      in
+      loop pre
+
+  (**
   Analysis of while loop
   *)
   and analyse_while
@@ -200,9 +228,7 @@ module Make (Logic : Logic) : S with type domain = Logic.domain = struct
       | Cfor (fi, bloc) ->
           (match fi with
            | FIrange (var, dir, e1, e2) -> analyse_for loc var (dir, e1, e2) bloc annotation
-           | FIrepeat _ ->
-               let body, annotation = analyse_stmt bloc annotation in
-               (Cfor (fi, body), annotation))
+           | FIrepeat e -> analyse_repeat e bloc annotation)
       | Cwhile (align, b1, cond, info, b2) -> analyse_while align cond info b1 b2 annotation
 
   and analyse_instr (in_annotation : annot) (instr : ('info, 'asm) instr) :

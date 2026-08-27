@@ -172,7 +172,7 @@ struct
           in
           let in_annotation = Annotation.bind in_annotation (L.forget proxy_var) in
           (body, in_annotation)
-      | FIrepeat _ ->
+      | FIrepeat e ->
           let rec loop out_dom =
               let body, in_dom = analyse_stmt body out_dom in
               let out_dom' = L.account (Pconst (Z.of_int 0)) in_dom out_annotation in
@@ -181,7 +181,16 @@ struct
               else
                 loop out_dom'
           in
-          loop out_annotation
+          let body, in_annotation = loop out_annotation in
+          (* [e] is evaluated once, right before the loop is (maybe) entered,
+             not on every pass through the body: its variables must be live
+             just there, so they are folded in only after the fixpoint above
+             has converged, not inside [loop] (which would incorrectly make
+             them look live at the loop's back-edge too, on every iteration,
+             and could hide a genuine dead store to one of them inside the
+             body). *)
+          let in_annotation = L.account e in_annotation in_annotation in
+          (body, in_annotation)
 
   (**
     Analysis of while loop
