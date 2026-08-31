@@ -770,7 +770,8 @@ register allocation: conflicting variables “x” and “z” must be merged du
   at "fail/nolea/x86-64/test_merge.jazz", line 25 (3-12):
      _4,  _5,  _6,  _7,  _8, z1 = #ADD_64(z1, z2);
   at "fail/nolea/x86-64/test_merge.jazz", line 24 (3-17):
-    z1 = add1(z1);
+    #[Internal::instantiation={}]
+  z1 = add1(z1);
 
 fail/param_expansion/x86-64/array_size_mismatch.jazz:
 
@@ -937,14 +938,16 @@ fail/register_allocation/x86-64/bug_426.jazz:
 compilation error:
 register allocation: conflicting variables “x” and “y” must be merged due to:
   at "fail/register_allocation/x86-64/bug_426.jazz", line 9 (2-16):
-    foo(p, p);
+    #[Internal::instantiation={}]
+  foo(p, p);
 
 fail/register_allocation/x86-64/bug_426_bis.jazz:
 
 compilation error:
 register allocation: conflicting variables “x” and “y” must be merged due to:
   at "fail/register_allocation/x86-64/bug_426_bis.jazz", line 8 (2-16):
-    p = foo(p, p);
+    #[Internal::instantiation={}]
+  p = foo(p, p);
 
 fail/register_allocation/x86-64/bug_523.jazz:
 
@@ -974,7 +977,8 @@ register allocation: conflicting variables “z” and “res” must be merged 
   at "fail/register_allocation/x86-64/conflicting_variables.jazz", line 12 (2-11):
      _0,  _1,  _2,  _3,  _4, z = #ADD_64(z, res);
   at "fail/register_allocation/x86-64/conflicting_variables.jazz", line 11 (2-14):
-    res = f(z);
+    #[Internal::instantiation={}]
+  res = f(z);
 
 fail/register_allocation/x86-64/merge_across_banks.jazz:
 
@@ -1410,7 +1414,7 @@ stack allocation: the access to array r (aligned on 8) could not be proved to be
 
 fail/stack_allocation/x86-64/writage_reg_ptr_args_not_disjoint.jazz:
 
-"fail/stack_allocation/x86-64/writage_reg_ptr_args_not_disjoint.jazz", line 14 (2-15):
+"fail/stack_allocation/x86-64/writage_reg_ptr_args_not_disjoint.jazz", line 6 (1) to line 18 (1):
 compilation error in function main:
 stack allocation: in the call to function f,
                   some writable reg ptr are not disjoint
