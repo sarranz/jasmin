@@ -34,9 +34,12 @@ let add_array_annot
     (rs : (Var0.Var.var * (BinNums.coq_Z * BinNums.coq_Z)) list)
     ((l, annot) : t) : t =
   let bytes (x, (ofs, len)) =
-    let base = slot_name x in
-    let ofs = CoreConv.z_of_cz ofs and len = CoreConv.z_of_cz len in
-    List.init (Z.to_int len) (fun i -> (base, Z.add ofs (Z.of_int i)))
+    let len = Z.max Z.zero (CoreConv.z_of_cz len) in
+    if len > Z.of_int 10000 then failwith "slot too large"
+    else
+      let base = slot_name x in
+      let ofs = CoreConv.z_of_cz ofs in
+      List.init (Z.to_int len) (fun i -> (base, Z.add ofs (Z.of_int i)))
   in
   let names =
     List.concat_map bytes rs

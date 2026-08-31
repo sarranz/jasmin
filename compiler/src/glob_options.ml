@@ -31,6 +31,8 @@ let verbosity = ref 1
 
 let linting_level = ref 1
 
+let asm_ct_chk = ref false
+
 let set_linting_level i =
   if 0 <= i && i <= 2 then begin
       linting_level := i;
@@ -223,6 +225,7 @@ let options = [
     "-wall", Arg.Unit enable_all_warnings, " Enable all warnings";
     "-nowarning", Arg.Unit (nowarning), " Do no print warnings";
     "-linting-level", Arg.Int set_linting_level, "[n] Set linting level to n (defaults to 1; disable linting when set to 0)";
+    "-asm-ct-chk", Arg.Set asm_ct_chk, " Run ASM CT checker";
     "-color", Arg.Symbol (["auto"; "always"; "never"], set_color), " Print messages with color";
     "-help-intrinsics", Arg.Set help_intrinsics, " List the set of intrinsic operators (and exit)";
     "-auto-spill", Arg.Unit set_auto_spill, " Enable naive spilling of #[spill]-annotated variables";

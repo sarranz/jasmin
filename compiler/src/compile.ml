@@ -454,6 +454,7 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
       Compiler.dead_vars_sfd;
       Compiler.pp_sr;
       Compiler.apply_ret_annot = StackAlloc.apply_ret_annot;
+      Compiler.region_annot = !asm_ct_chk;
     }
   in
 

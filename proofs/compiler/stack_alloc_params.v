@@ -28,7 +28,6 @@ Record stack_alloc_params :=
     (* Build an instruction that swap two registers *)
     (* [sap_swap t d1 d2 s1 s2] is equivalent to d1,d2 = s2, s1 *)
     sap_swap : assgn_tag -> var_i -> var_i -> var_i -> var_i -> instr_r;
-
   }.
 
 Definition add {pd:PointerData} := eaddw Uptr.

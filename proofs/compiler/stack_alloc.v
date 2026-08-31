@@ -904,6 +904,7 @@ Context
 Context
   (shparams : slh_lowering.sh_params)
   (saparams : stack_alloc_params)
+  (region_annot : bool)
   (is_move_op : asm_op_t -> bool)
   (fresh_var_ident  : v_kind -> Uint63.int -> string -> atype -> Ident.ident)
   (pp_sr : sub_region -> pp_error)
@@ -1843,19 +1844,21 @@ Definition seq_of_opt {T : Type} (ox : option T) : seq T :=
 
 Definition add_arr_annot
   (lvs : lvals) (es : pexprs) (ii : instr_info) : cexec instr_info :=
-  let ors := [seq slot_e e | e <- es] ++ [seq slot_lv lv | lv <- lvs] in
-  let rs := seq.pmap id ors in
-  let ss := sv_of_list fst rs in
-  let xs := Sv.elements ss in
-  Let _ := (* DEBUG *)
-    let chk := Sv.union (slot_chk_lvs lvs) (slot_chk_es es) in
-    assert (Sv.subset chk ss) (too_many_slots xs (Sv.elements chk))
-  in
-  match xs with
-  | [::] => ok ii
-  | [:: _ ] => ok (ii_add_array_annot rs ii)
-  | [:: s & ss ] => Error (too_many_slots [:: s] ss)
-  end.
+  if ~~ region_annot then ok ii
+  else
+    let ors := [seq slot_e e | e <- es] ++ [seq slot_lv lv | lv <- lvs] in
+    let rs := seq.pmap id ors in
+    let ss := sv_of_list fst rs in
+    let xs := Sv.elements ss in
+    Let _ := (* DEBUG *)
+      let chk := Sv.union (slot_chk_lvs lvs) (slot_chk_es es) in
+      assert (Sv.subset chk ss) (too_many_slots xs (Sv.elements chk))
+    in
+    match xs with
+    | [::] => ok ii
+    | [:: _ ] => ok (ii_add_array_annot rs ii)
+    | [:: s & ss ] => Error (too_many_slots [:: s] ss)
+    end.
 
 Fixpoint alloc_i sao (trmap:table*region_map) (i: instr) : cexec (table * region_map * cmd) :=
   let (table, rmap) := trmap in
