@@ -113,13 +113,14 @@ Record linearization_params {asm_op : Type} {asmop : asmOp asm_op} :=
       -> seq fopn_args;
 
     (* Return the arguments for a linear instruction that corresponds to
-       a move between two registers.
-       In symbols, the linear instruction derived from [lip_lmove xd xs]
+       a move of the given size between two registers.
+       In symbols, the linear instruction derived from [lip_lmove ws xd xs]
        corresponds to:
-               xd := (Uptr)xs
+               xd := (ws)xs
      *)
     lip_lmove :
-      var_i       (* Destination variable. *)
+      wsize       (* Size of the moved value *)
+      -> var_i    (* Destination variable. *)
       -> var_i    (* Source variable. *)
       -> fopn_args;
 
@@ -134,7 +135,8 @@ Record linearization_params {asm_op : Type} {asmop : asmOp asm_op} :=
                [xd + ofs] := xs
      *)
     lip_lstore :
-      var_i        (* Base register. *)
+      wsize        (* Size of the stored value *)
+      -> var_i     (* Base register. *)
       -> Z         (* Offset. *)
       -> var_i     (* Source register. *)
       -> fopn_args;
@@ -146,7 +148,8 @@ Record linearization_params {asm_op : Type} {asmop : asmOp asm_op} :=
                xd = [xs + ofs]
      *)
     lip_lload :
-      var_i        (* Destination register. *)
+      wsize        (* Size of the loaded value *)
+      -> var_i     (* Destination register. *)
       -> var_i     (* Base register. *)
       -> Z         (* Offset. *)
       -> fopn_args;
@@ -244,13 +247,13 @@ Record linearization_params {asm_op : Type} {asmop : asmOp asm_op} :=
 Section DEFAULT.
 Context {asm_op : Type} {pd : PointerData} {asmop : asmOp asm_op}.
 Context (lip_tmp2 : Ident.ident).
-Context (lip_lstore  : var_i -> Z -> var_i -> fopn_args)
-        (lip_lload   : var_i -> var_i -> Z -> fopn_args)
+Context (lip_lstore  : wsize -> var_i -> Z -> var_i -> fopn_args)
+        (lip_lload   : wsize -> var_i -> var_i -> Z -> fopn_args)
         (lip_add_imm : var_i -> var_i -> Z -> seq fopn_args)
         (lip_imm_small : Z -> bool).
 
 Definition lstores_dfl (rsp: var_i) (to_save : seq (var * Z)) :=
-  map (fun '(x,ofs) => lip_lstore rsp ofs (VarI x dummy_var_info)) to_save.
+  map (fun '(x,ofs) => lip_lstore (wsize_of_atype (vtype x)) rsp ofs (VarI x dummy_var_info)) to_save.
 
 Definition lstores_imm_dfl (rsp : var_i) (to_save : seq (var * Z)) :=
   if all (fun '(_,ofs) => lip_imm_small ofs) to_save then
@@ -262,7 +265,7 @@ Definition lstores_imm_dfl (rsp : var_i) (to_save : seq (var * Z)) :=
     lip_add_imm tmp2 rsp ofs0 ++ lstores_dfl tmp2 to_save.
 
 Definition lloads_aux (rsp:var_i) (to_restore : seq (var * Z)) :=
-  map (fun '(x, ofs) => lip_lload (VarI x dummy_var_info) rsp ofs) to_restore.
+  map (fun '(x, ofs) => lip_lload (wsize_of_atype (vtype x)) (VarI x dummy_var_info) rsp ofs) to_restore.
 
 Definition lloads_dfl (rsp:var_i) (to_restore : seq (var * Z)) (spofs:Z) :=
   lloads_aux rsp (to_restore ++ [:: (v_var rsp, spofs)]).
@@ -293,10 +296,11 @@ Context
  *)
 Definition lmove
   (ii: instr_info)
+  (ws: wsize)
   (rd : var_i)      (* Destination register. *)
   (rs : var_i)       (* Source register. *)
   : linstr :=
-  li_of_fopn_args ii (lip_lmove liparams rd rs).
+  li_of_fopn_args ii (lip_lmove liparams ws rd rs).
 
 (* Return a linear instruction that corresponds to loading from memory.
    The linear instruction [lload rd rs ofs] corresponds to
@@ -304,11 +308,12 @@ Definition lmove
  *)
 Definition lload
   (ii: instr_info)
+  (ws: wsize)
   (rd : var_i) (* Destination register. *)
   (rs : var_i) (* Base register. *)
   (ofs : Z)    (* Offset. *)
   : linstr :=
-  li_of_fopn_args ii (lip_lload liparams rd rs ofs).
+  li_of_fopn_args ii (lip_lload liparams ws rd rs ofs).
 
 (* Return a linear instruction that corresponds to storing to memory.
    The linear instruction [lstore rd ofs rs] corresponds to
@@ -316,11 +321,12 @@ Definition lload
  *)
 Definition lstore
   (ii: instr_info)
+  (ws: wsize)
   (rd : var_i)      (* Base register. *)
   (ofs : Z)         (* Offset. *)
   (rs : var_i)      (* Source register. *)
   : linstr :=
-  li_of_fopn_args ii (lip_lstore liparams rd ofs rs).
+  li_of_fopn_args ii (lip_lstore liparams ws rd ofs rs).
 
 Definition set_up_sp_register
   (ii: instr_info)
@@ -809,12 +815,12 @@ Definition linear_body (fi: fun_info) (e: stk_fun_extra) (body: cmd) : label * l
        )
      | RAstack ra_call ra_return z _ =>
        ( if ra_return is Some ra_return
-         then [:: lload ret_ii (mk_var_i ra_return) rspi z;
+         then [:: lload ret_ii Uptr (mk_var_i ra_return) rspi z;
                   MkLI ret_ii (Ligoto (Rexpr (Fvar (mk_var_i ra_return)))) ]
          else [:: MkLI ret_ii Lret ]
        , MkLI fentry_ii (Llabel 1) ::
          (if ra_call is Some ra_call
-          then [:: lstore fentry_ii rspi z (mk_var_i ra_call) ]
+          then [:: lstore fentry_ii Uptr rspi z (mk_var_i ra_call) ]
           else [::])
        , 2%positive
        )
@@ -834,7 +840,7 @@ Definition linear_body (fi: fun_info) (e: stk_fun_extra) (body: cmd) : label * l
           *       Setup stack.
           *)
          let r := mk_var_i x in
-         ( [:: lmove ret_ii rspi r ]
+         ( [:: lmove ret_ii Uptr rspi r ]
          , set_up_sp_register fentry_ii rspi sf_sz (sf_align e) r (mk_var_i var_tmp)
          , 1%positive
          )

@@ -287,15 +287,15 @@ Qed.
 
 Lemma arm_lmove_correct : lmove_correct arm_liparams.
 Proof.
-  move=> xd xs w ws w' s htxd htxs hget htr.
+  move=> xd xs ws w s /eqP hws htxd; t_xrbindP => z hget htr; subst.
   rewrite /arm_liparams /lip_lmove /arm_lmove /= hget /=.
-  rewrite /exec_sopn /= htr /=.
-  by rewrite set_var_eq_type ?htxd.
+  rewrite /exec_sopn /= htr /= /set_var /=.
+  by case: vtype htxd.
 Qed.
 
 Lemma arm_lstore_correct : lstore_correct_aux arm_check_ws arm_lstore.
 Proof.
-  move=> xd xs ofs ws w wp s m htxs /eqP hchk; t_xrbindP; subst ws.
+  move=> xd xs ofs ws w wp s m /eqP hchk; t_xrbindP; subst ws.
   move=> vd hgetd htrd vs hgets htrs hwr.
   rewrite /arm_lstore /= hgets hgetd /= /exec_sopn /= htrs /=.
   rewrite /sem_sop2 /= htrd /= !truncate_word_u /= truncate_word_u /=.
@@ -317,7 +317,7 @@ Qed.
 
 Lemma arm_lload_correct : lload_correct_aux (lip_check_ws arm_liparams) arm_lload.
 Proof.
-  move=> xd xs ofs ws top s w vm heq hcheck; t_xrbindP => ? hgets hto hread hset.
+  move=> xd xs ofs ws top s w vm hcheck; t_xrbindP => ? hgets hto hread hset.
   move/eqP: hcheck => ?; subst ws.
   rewrite /arm_lload /= hgets /= /sem_sop2 /= hto /= !truncate_word_u /= truncate_word_u /= hread /=.
   by rewrite /exec_sopn /= truncate_word_u /= zero_extend_u hset.

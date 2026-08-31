@@ -387,31 +387,29 @@ Definition free_stack_frame_correct :=
   Eval hnf in sf_correct free_stack_frame (fun x y => x + y)%R.
 
 Definition lmove_correct :=
-  forall (xd xs : var_i) w ws (w':word ws) s,
-    vtype xd = aword Uptr -> convertible (vtype xs) (aword Uptr) ->
-    get_var true (evm s) xs = ok (Vword w') ->
-    truncate_word Uptr w' = ok w ->
-    sem_fopn_args (lip_lmove liparams xd xs) s = ok (with_vm s (evm s).[xd <- Vword w]).
+  forall (xd xs : var_i) ws w s,
+    lip_check_ws liparams ws ->
+    subatype (aword ws) (vtype xd) ->
+    get_var true (evm s) xs >>= to_word ws = ok w ->
+    sem_fopn_args (lip_lmove liparams ws xd xs) s = ok (with_vm s (evm s).[xd <- Vword w]).
 
 Definition lstore_correct_aux lip_check_ws lip_lstore :=
   forall (xd xs : var_i) ofs ws (w: word ws) wp s m,
-    convertible (vtype xs) (aword ws) ->
     lip_check_ws ws ->
     (get_var true (evm s) xd >>= to_word Uptr) = ok wp ->
     (get_var true (evm s) xs >>= to_word ws) = ok w ->
     write (emem s) Aligned (wp + wrepr Uptr ofs)%R w = ok m ->
-    sem_fopn_args (lip_lstore xd ofs xs) s = ok (with_mem s m).
+    sem_fopn_args (lip_lstore ws xd ofs xs) s = ok (with_mem s m).
 
 Definition lstore_correct := lstore_correct_aux (lip_check_ws liparams) (lip_lstore liparams).
 
 Definition lload_correct_aux lip_check_ws lip_lload :=
   forall (xd xs : var_i) ofs ws wp s w vm,
-    convertible (vtype xd) (aword ws) ->
     lip_check_ws ws ->
     (get_var true (evm s) xs >>= to_word Uptr) = ok wp ->
     read (emem s) Aligned (wp + wrepr Uptr ofs)%R ws = ok w ->
     set_var true (evm s) xd (Vword w) = ok vm ->
-    sem_fopn_args (lip_lload xd xs ofs) s = ok (with_vm s vm).
+    sem_fopn_args (lip_lload ws xd xs ofs) s = ok (with_vm s vm).
 
 Definition lload_correct := lload_correct_aux (lip_check_ws liparams) (lip_lload liparams).
 
@@ -500,8 +498,8 @@ Section DEFAULT.
 
 Context (lip_tmp2 : Ident.ident).
 Context (lip_check_ws : wsize -> bool)
-        (lip_lstore  : var_i -> Z -> var_i -> fopn_args)
-        (lip_lload   : var_i -> var_i -> Z -> fopn_args)
+        (lip_lstore  : wsize -> var_i -> Z -> var_i -> fopn_args)
+        (lip_lload   : wsize -> var_i -> var_i -> Z -> fopn_args)
         (lip_add_imm : var_i -> var_i -> Z -> seq fopn_args)
         (lip_imm_small : Z -> bool).
 
@@ -536,8 +534,7 @@ Proof using lstore_correct.
   elim: to_save s => /= [ | [x ofs] to_save ih] s hget.
   + by move=> [<-]; rewrite with_mem_same.
   t_xrbindP; case heq: vtype => [|||ws]// m' _ [<-] hchk w v hgetx htow hw hf.
-  have := lstore_correct (xd:= rspi) (xs:= VarI x dummy_var_info) _ hchk hget _ hw.
-  rewrite heq => /(_ (convertible_refl _)) ->.
+  have -> := lstore_correct (xd:= rspi) (xs:= VarI x dummy_var_info) hchk hget _ hw.
   + by have /= -> := ih (with_mem s m') hget hf.
   by rewrite hgetx /= htow.
 Qed.
@@ -594,8 +591,7 @@ Proof using lload_correct.
   move=> [x ofs] to_restore ih s /= hnin hget.
   case heqt: vtype => [|||ws] //=; t_xrbindP.
   move=> vm1 hchk w hread hset hf.
-  rewrite (lload_correct (xd := VarI x dummy_var_info) _ hchk hget hread hset);
-    last by rewrite heqt; apply convertible_refl.
+  rewrite (lload_correct (xd := VarI x dummy_var_info) hchk hget hread hset).
   apply: ih => //.
   + by move: hnin; rewrite in_cons negb_or => /andP [].
   rewrite -(get_var_eq_ex _ _ (set_var_eq_ex hset)) //.
@@ -611,11 +607,10 @@ Proof using lload_correct.
   move=> vm2' hchk w hread hset ?; subst vm2'.
   have [+ hget2]:= lloads_aux_correct hnin hget hf.
   rewrite /lloads_aux map_cat sem_fopns_args_cat => -> /=.
-  rewrite
+  rewrite heqt
     (lload_correct
       (xd := VarI rspi dummy_var_info) (s:= with_vm s vm1)
-      _ hchk hget2 hread hset);
-    last by rewrite heqt; apply convertible_refl.
+      hchk hget2 hread hset).
   by exists vm2.
 Qed.
 
@@ -669,47 +664,47 @@ Section HLIPARAMS.
   Context
     (hliparams : h_linearization_params).
 
-  Lemma spec_lmove {lp ii ls} {x y:var_i} (w : word Uptr) :
-    vtype x = aword Uptr ->
-    convertible (vtype y) (aword Uptr) ->
-    get_var true (lvm ls) (v_var y) = ok (Vword w) ->
-    let li := lmove liparams ii x y in
+  Lemma spec_lmove {lp ii ls} {x y:var_i} {ws} (w : word ws) :
+    lip_check_ws liparams ws ->
+    subatype (aword ws) (vtype x) ->
+    get_var true (lvm ls) (v_var y) >>= to_word ws = ok w ->
+    let li := lmove liparams ii ws x y in
     let s := to_estate ls in
     eval_instr lp li ls = ok (lnext_pc (lset_estate' ls (with_vm s (evm s).[x <- Vword w]))).
   Proof using hliparams.
-    move=> htx hty hget /=; rewrite -(lset_estate_same ls).
+    move=> hws htx hget /=; rewrite -(lset_estate_same ls).
     apply sem_fopn_args_eval_instr.
-    by rewrite (spec_lip_lmove hliparams (s:= to_estate ls) htx hty hget (truncate_word_u w)).
+    by rewrite (spec_lip_lmove hliparams (s:= to_estate ls) hws htx hget).
   Qed.
 
-  Lemma spec_lstore {lp ii ls m ofs} {x y:var_i} {wx ws' wy'} {wy : word ws'} :
-    convertible (vtype y) (aword Uptr) ->
+  Lemma spec_lstore {lp ii ls m ofs} {x y:var_i} {wx ws ws' wy'} {wy : word ws'} :
+    lip_check_ws liparams ws ->
     get_var true (lvm ls) y = ok (Vword wy) ->
-    truncate_word Uptr wy = ok wy' ->
-    get_var true (lvm ls) x = ok (Vword wx) ->
+    truncate_word ws wy = ok wy' ->
+    get_var true (lvm ls) x >>= to_pointer = ok wx ->
     write (lmem ls) Aligned (wx + wrepr Uptr ofs)%R wy' = ok m ->
-    let: li := lstore liparams ii x ofs y in
+    let: li := lstore liparams ii ws x ofs y in
     eval_instr lp li ls = ok (lnext_pc (lset_mem ls m)).
   Proof using hliparams.
-    move=> hty hgy htr hgx hw /=.
+    move=> hws hgy htr hgx hw /=.
     apply sem_fopn_args_eval_instr => /=.
-    apply: (spec_lip_lstore hliparams (s:= to_estate ls) hty (spec_lip_check_ws hliparams) _ _ hw).
-    + by rewrite hgx /= truncate_word_u.
+    apply: (spec_lip_lstore hliparams (s:= to_estate ls) hws hgx _ hw).
     by rewrite hgy /= htr.
   Qed.
 
-  Lemma spec_lload {lp ii ls ofs} {x y:var_i} {wx wy} :
-    convertible (vtype x) (aword Uptr) ->
-    get_var true (lvm ls) y = ok (Vword wy) ->
-    read (lmem ls) Aligned (wy + wrepr Uptr ofs)%R Uptr = ok wx ->
-    let: li := lload liparams ii x y ofs in
+  Lemma spec_lload {lp ii ls ofs} {x y:var_i} {sx} {wx wy} :
+    subatype (aword sx) (vtype x) ->
+    lip_check_ws liparams sx ->
+    get_var true (lvm ls) y >>= to_pointer = ok wy ->
+    read (lmem ls) Aligned (wy + wrepr Uptr ofs)%R sx = ok wx ->
+    let: li := lload liparams ii sx x y ofs in
     eval_instr lp li ls = ok (lnext_pc (lset_vm ls ls.(lvm).[x <- Vword wx])).
   Proof using hliparams.
-    move=> hty hgy hread /=.
+    move=> hty hsx hgy hread /=.
     apply sem_fopn_args_eval_instr => /=.
-    apply: (spec_lip_lload hliparams (s:= to_estate ls) hty (spec_lip_check_ws hliparams) _ hread).
-    + by rewrite hgy /= truncate_word_u.
-    by apply set_var_eq_type => //; rewrite (convertible_eval_atype hty).
+    apply: (spec_lip_lload hliparams (s:= to_estate ls) hsx hgy hread).
+    apply: set_var_truncate; first by [].
+    by case: vtype hty.
   Qed.
 
   Lemma set_up_sp_register_ok {E E0: Type -> Type} {wE: with_Error E E0}
@@ -3335,8 +3330,8 @@ End ILSTEPS_END.
     find_label xH (lfd_body (linear_fd f fd).2) = ok 0.
   Proof. by rewrite /linear_fd /linear_body; case: sf_return_address. Qed.
 
-  Lemma is_label_lstore ii lbl x ofs y :
-    is_label lbl (lstore liparams ii x ofs y) = false.
+  Lemma is_label_lstore ii lbl ws x ofs y :
+    is_label lbl (lstore liparams ii ws x ofs y) = false.
   Proof. done. Qed.
 
   Lemma preserved_metadata_store_top_stack m1 ws sz ioff sz' m1' m2 (ptr : word Uptr) m2' :
@@ -4341,11 +4336,11 @@ Qed.
         rewrite (mix_ilsteps_split_handle_call_cond (P:=P ++ lbody) (lc:=Q) _ ok_body); last by simpl_size; lia.
         rewrite catA in ok_body.
         rewrite (step_mix_ilsteps ok_body) //=; last by simpl_size;lia.
-        have hgetr2 : get_var true (lvm ls2) (mk_var_i {| vtype := stty; vname := saved_stack|}) = ok (Vword (top_stack (emem s1))).
-        + rewrite  -(get_var_eq_ex _ saved_stack_not_written K2); exact: hgetr.
+        have hgetr2 : get_var true (lvm ls2) (mk_var_i {| vtype := stty; vname := saved_stack|}) >>= to_word Uptr = ok (top_stack (emem s1)).
+        + by rewrite  -(get_var_eq_ex _ saved_stack_not_written K2) hgetr /= truncate_word_u.
         rewrite (@spec_lmove _ hliparams p' _ ls2
                   (vid (sp_rsp (p_extra p))) (mk_var_i {| vtype := stty; vname := saved_stack|}) _
-                  erefl hc hgetr2).
+                  _ (spec_lip_check_ws hliparams) (subatype_refl _) hgetr2).
         rewrite mix_ilsteps_b0 => //; last by rewrite /lnext_pc /= hpc2 addn1.
         rewrite bind_ret_l mix_ilsteps_0; last first.
         + by rewrite /handle_call_cond if_arg /in_fn /endpc /lnext_pc /= hfn2 eqxx ok_fd' /= hpc2 catA !size_cat /Q /= addn1 eqxx; case: ifP.
@@ -4920,10 +4915,11 @@ Qed.
         + rewrite (step_mix_ilsteps ok_body) //=.
           set x := eval_instr _ _ _.
           have -> : x = ok (lnext_pc (lset_mem t1 m1s)).
-          + apply: (spec_lstore hliparams) => //=.
+          + apply: (spec_lstore hliparams) => //.
+            * exact: spec_lip_check_ws.
             * by rewrite /get_var ok_ra.
             * by rewrite truncate_word_u.
-            * by rewrite /get_var ok_rsp.
+            * by rewrite /get_var ok_rsp; exact: truncate_word_u.
             rewrite wrepr0 GRing.addr0.
             exact: ok_m1s.
           rewrite mix_ilsteps_b0 //=.
@@ -5060,8 +5056,10 @@ Qed.
             rewrite (step_mix_ilsteps ok_body) //=; last by simpl_size;lia.
             set x := (eval_instr _ _ _).
             have -> : x = ok (lnext_pc (lset_vm ls2 (lvm ls2).[(mk_var_i ra_return) <- Vword retptr])).
-            + apply: (spec_lload hliparams) => //=.
-              * by rewrite /get_var ok_rsp2; reflexivity.
+            + apply: (spec_lload hliparams) => //.
+              * apply: convertible_subatype; apply: convertible_sym; exact: ra_return_ty.
+              * exact: spec_lip_check_ws.
+              * by rewrite /get_var ok_rsp2 /= truncate_word_u; reflexivity.
               rewrite wrepr0 GRing.addr0 hreadf.
               exact: hreadi.
             move: ok_body; rewrite /Q -[[:: _; _]]cat1s catA => ok_body.

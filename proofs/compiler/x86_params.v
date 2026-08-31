@@ -81,10 +81,18 @@ Definition x86_free_stack_frame (rspi: var_i) (tmp: option var_i) (sz: Z) :=
   let p := Fapp2 (Oadd (Op_w Uptr)) (Fvar rspi) (fconst Uptr sz) in
   [:: ([:: LLvar rspi ], Ox86 (LEA Uptr), [:: Rexpr p ])].
 
+Definition is_regx_e (e: rexpr) :=
+  if e is Rexpr (Fvar x) then is_regx x
+  else false.
+
+Definition is_regx_l (x: lexpr) :=
+  if x is LLvar x then is_regx x
+  else false.
+
 (* TODO: consider using VMOVDQA when the address is known to be aligned *)
 Definition x86_lassign (x: lexpr) (ws: wsize) (e: rexpr) :=
   let op := if (ws <= U64)%CMP
-            then MOV ws
+            then (if (is_regx_e e || is_regx_l x) && (U32 ≤ ws)%CMP then MOVX else MOV) ws
             else VMOVDQU ws
   in ([:: x ], Ox86 op, [:: e ]).
 
@@ -94,17 +102,15 @@ Definition x86_set_up_sp_register
   let i2 := x86_op_align rspi Uptr al in
   i0 :: rcons (if sf_sz != 0%Z then x86_allocate_stack_frame rspi None sf_sz else [::]) i2.
 
-Definition x86_lmove (xd xs: var_i) :=
-  x86_lassign (LLvar xd) (wsize_of_atype (vtype xd)) (Rexpr (Fvar xs)).
+Definition x86_lmove ws (xd xs: var_i) :=
+  x86_lassign (LLvar xd) ws (Rexpr (Fvar xs)).
 
 Definition x86_check_ws (_: wsize) := true.
 
-Definition x86_lstore (xd : var_i) (ofs : Z) (xs :  var_i) :=
-  let ws := wsize_of_atype (vtype xs) in
+Definition x86_lstore (ws: wsize) (xd : var_i) (ofs : Z) (xs :  var_i) :=
   x86_lassign (Store Aligned ws (faddv Uptr xd (fconst Uptr ofs))) ws (Rexpr (Fvar xs)).
 
-Definition x86_lload (xd xs: var_i) (ofs : Z) :=
-  let ws := wsize_of_atype (vtype xd) in
+Definition x86_lload (ws: wsize) (xd xs: var_i) (ofs : Z) :=
   x86_lassign (LLvar xd) ws (Load Aligned ws (faddv Uptr xs (fconst Uptr ofs))).
 
 Definition x86_tmp := vname (v_var vtmpi).

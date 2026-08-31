@@ -134,6 +134,24 @@ Definition vm_op_align
     .[to_var ZF <- ZF_of_word w]
     .[x <- Vword w].
 
+Lemma x86_lassign_correct s x ws e (w : word ws) s':
+  let lcmd := x86_lassign x ws e in
+  sem_rexpr (emem s) (evm s) e >>= to_word ws = ok w ->
+  write_lexpr x (Vword w) s = ok s' ->
+  sem_fopn_args lcmd s = ok s'.
+Proof.
+  move=> /=; t_xrbindP => v -> /= hv hwr.
+  rewrite /exec_sopn /=.
+  case: ifP => /= h.
+  1: case: andP => [ [] hregx hws32 | hmov ] /=.
+  all: rewrite hv /= /sopn_sem /sopn_sem_ /= /semi_to_atype computational_eq_refl.
+  + by rewrite /x86_MOVX /size_32_64 hws32 h /= hwr.
+  + by rewrite /x86_MOV /= /size_8_64 h /= hwr.
+  by rewrite /x86_VMOVDQ (wsize_nle_u64_size_128_256 h) /= hwr.
+Qed.
+
+Opaque x86_lassign.
+
 Context {call_conv : calling_convention}.
 
 Lemma x86_spec_lip_allocate_stack_frame :
@@ -163,7 +181,9 @@ Proof.
   move=> [ [? nrsp] vi1] [[tyr nr] vi2] tmp ts al sz s + /= ? hc _ _ +  _ /=; subst.
   set vrsp := {| vname := nrsp |}; set rsp := {| v_var := vrsp |}.
   set r := {| vname := nr |} => hget hne.
-  rewrite hget /= /exec_sopn /= truncate_word_u /= /set_var /= (convertible_eval_atype hc) /=.
+  erewrite x86_lassign_correct => /=; last first.
+  + by rewrite /set_var /= (convertible_eval_atype hc).
+  + by rewrite hget /= truncate_word_u.
   rewrite -cats1 sem_fopns_args_cat.
   set vm0 := (evm s).[r <- Vword ts].
   set vm2 := if sz != 0%Z then vm0.[vrsp <- Vword (ts - wrepr Uptr sz)] else vm0.
@@ -200,32 +220,19 @@ Proof.
     by repeat (rewrite Vm.setP_neq; last by apply /eqP => h; have := inj_to_var h); rewrite Vm.setP_eq.
 Qed.
 
-Lemma x86_lassign_correct s x ws e (w : word ws) s':
-  let lcmd := x86_lassign x ws e in
-  sem_rexpr (emem s) (evm s) e >>= to_word ws = ok w ->
-  write_lexpr x (Vword w) s = ok s' ->
-  sem_fopn_args lcmd s = ok s'.
-Proof.
-  move=> /=; t_xrbindP => v -> /= hv hwr.
-  rewrite /exec_sopn /=.
-  case: ifP => /= h; rewrite hv /= /sopn_sem /sopn_sem_ /= /semi_to_atype computational_eq_refl.
-  + by rewrite /x86_MOV /= /size_8_64 h /= hwr.
-  by rewrite /x86_VMOVDQ (wsize_nle_u64_size_128_256 h) /= hwr.
-Qed.
-
 Lemma x86_lmove_correct : lmove_correct x86_liparams.
 Proof.
-  move=> xd xs w ws w' s htxd htxs hget htr.
+  move=> xd xs ws w s _ htxd hget.
   rewrite /x86_liparams /lip_lmove /x86_lmove.
-  rewrite htxd; apply: x86_lassign_correct => /=.
-  + by rewrite hget /= htr.
-  by rewrite set_var_eq_type ?htxd.
+  apply: x86_lassign_correct => /=.
+  + exact: hget.
+  rewrite /set_var /=.
+  by case: vtype htxd.
 Qed.
 
 Lemma x86_lstore_correct : lstore_correct_aux x86_check_ws x86_lstore.
 Proof.
-  move=> xd xs ofs ws w wp s m htxs _ hgetd hgets hwr.
-  rewrite /x86_lstore (wsize_of_atypeP (convertible_eval_atype htxs)).
+  move=> xd xs ofs ws w wp s m _ hgetd hgets hwr.
   apply: x86_lassign_correct => /=; first by apply hgets.
   move: hgetd; t_xrbindP => ? hgetd hto.
   by rewrite hgetd /= /sem_sop2 /= hto /= !truncate_word_u /= truncate_word_u /= hwr.
@@ -236,8 +243,7 @@ Proof. apply/lstores_dfl_correct/x86_lstore_correct. Qed.
 
 Lemma x86_lload_correct : lload_correct_aux (lip_check_ws x86_liparams) x86_lload.
 Proof.
-  move=> xd xs ofs ws top s w vm hc hcheck; t_xrbindP => ? hgets hto hread hset.
-  rewrite /x86_lload (wsize_of_atypeP (convertible_eval_atype hc)).
+  move=> xd xs ofs ws top s w vm hcheck; t_xrbindP => ? hgets hto hread hset.
   apply: x86_lassign_correct => /=.
   + rewrite hgets /= /sem_sop2 /= hto /=.
     by rewrite !truncate_word_u /= truncate_word_u /= hread /= truncate_word_u.

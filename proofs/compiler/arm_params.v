@@ -128,18 +128,16 @@ Definition arm_set_up_sp_register
 Definition arm_tmp  : Ident.ident := vname (v_var vtmpi).
 Definition arm_tmp2 : Ident.ident := vname (v_var vtmp2i).
 
-Definition arm_lmove (xd xs : var_i) :=
+Definition arm_lmove (_: wsize) (xd xs : var_i) :=
   ([:: LLvar xd], Oarm (ARM_op MOV default_opts), [:: Rexpr (Fvar xs)]).
 
 Definition arm_check_ws ws := ws == reg_size.
 
-Definition arm_lstore (xd : var_i) (ofs : Z) (xs : var_i) :=
-  let ws := reg_size in
+Definition arm_lstore (ws: wsize) (xd : var_i) (ofs : Z) (xs : var_i) :=
   let mn := STR in
   ([:: Store Aligned ws (faddv Uptr xd (fconst ws ofs))], Oarm (ARM_op mn default_opts), [:: Rexpr (Fvar xs)]).
 
-Definition arm_lload (xd : var_i) (xs: var_i) (ofs : Z) :=
-  let ws := reg_size in
+Definition arm_lload (ws: wsize) (xd : var_i) (xs: var_i) (ofs : Z) :=
   let mn := LDR in
   ([:: LLvar xd], Oarm (ARM_op mn default_opts), [:: Load Aligned ws (faddv Uptr xs (fconst ws ofs))]).
 
