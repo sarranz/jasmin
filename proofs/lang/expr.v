@@ -358,6 +358,7 @@ Module Type InstrInfoT <: TAG.
   Parameter is_inline : t -> bool.
   Parameter var_info_of_ii : t -> var_info.
   Parameter add_array_annot : seq (var * (Z * Z)) -> t -> t.
+  Parameter add_instantiation_annot : seq (var * var) -> t -> t.
 End InstrInfoT.
 
 Module InstrInfo : InstrInfoT.
@@ -367,6 +368,7 @@ Module InstrInfo : InstrInfoT.
   Definition is_inline (_ : t) : bool := false.
   Definition var_info_of_ii (_ : t) : var_info := dummy_var_info.
   Definition add_array_annot (_ : seq (var * (Z * Z))) (ii : t) : t := ii.
+  Definition add_instantiation_annot (_ : seq (var * var)) (ii : t) : t := ii.
 End InstrInfo.
 
 Definition instr_info := InstrInfo.t.
@@ -379,6 +381,9 @@ Definition ii_is_inline (ii : instr_info) : bool := InstrInfo.is_inline ii.
 Definition ii_add_array_annot (rs : seq (var * (Z * Z))) (ii : instr_info) :
     instr_info :=
   InstrInfo.add_array_annot rs ii.
+Definition ii_add_instantiation_annot
+  (rs : seq (var * var)) (ii : instr_info) : instr_info :=
+  InstrInfo.add_instantiation_annot rs ii.
 Definition var_info_of_ii (ii : instr_info) : var_info := InstrInfo.var_info_of_ii ii.
 
 #[only(eqbOK)] derive

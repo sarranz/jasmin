@@ -76,6 +76,7 @@ let stack_frame_annot = "Internal::stack_frame"
 
 let has_stack_frame_annot annot = has_symbol stack_frame_annot annot
 
+(* TODO why check that there isn't an existing annotation? *)
 let add_stack_frame_annot ~loc (slots : (string * (Z.t * Z.t)) list) annot =
   if has_stack_frame_annot annot
   then annot
@@ -109,6 +110,12 @@ let get_stack_frame_annot (annot : annotations) :
   | Some (Some { Location.pl_desc = Astruct slots; _ }) ->
     Some (List.filter_map decode_slot slots)
   | _ -> None
+
+let add_instantiation_annot ~loc (inst : (string * string) list) annot =
+  let mk d = Location.mk_loc loc d in
+  let mk_inst (name, value) = (mk name, Some (mk (Astring value))) in
+  let inst_annot = (mk "Internal::instantiation", Some (mk (Astruct (List.map mk_inst inst)))) in
+  inst_annot :: annot
 
 (* -------------------------------------------------------------------- *)
 let sint = "Internal::wint::signed"

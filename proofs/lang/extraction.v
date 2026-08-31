@@ -32,6 +32,7 @@ Extract Constant expr.InstrInfo.with_location => "IInfo.with_location".
 Extract Constant expr.InstrInfo.is_inline => "IInfo.is_inline".
 Extract Constant expr.InstrInfo.var_info_of_ii => "IInfo.var_info_of_ii".
 Extract Constant expr.InstrInfo.add_array_annot => "IInfo.add_array_annot".
+Extract Constant expr.InstrInfo.add_instantiation_annot => "IInfo.add_instantiation_annot".
 Extract Constant expr.instr_info => "IInfo.t".
 Extract Constant expr.fun_info => "FInfo.t".
 Extract Constant expr.entry_info_of_fun_info => "FInfo.entry_info".

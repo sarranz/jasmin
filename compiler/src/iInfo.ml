@@ -49,3 +49,11 @@ let add_array_annot
   in
   if names = [] then (l, annot)
   else (l, Annotations.add_array_annot ~loc:Location.(l.base_loc) names annot)
+
+let add_instantiation_annot
+ (inst : (Var0.Var.var * Var0.Var.var) list) ((l, annot) : t) : t =
+  let inst = List.map (fun (x, y) -> (slot_name x, slot_name y)) inst in
+  let annot =
+    Annotations.add_instantiation_annot ~loc:Location.(l.base_loc) inst annot
+  in
+  (l, annot)
