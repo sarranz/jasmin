@@ -67,5 +67,6 @@ module OTBN (Input : OTBN_input) :
   let pp_asm = Pp_otbn.print_prog
 
   let callstyle = Arch_full.OnHWStack
+  let sp_min_align = Wsize.U8
   let internal_call_conv = Otbn_decl.internal_call_conv
 end

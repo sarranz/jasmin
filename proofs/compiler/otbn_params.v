@@ -193,13 +193,13 @@ Section LIPARAMS.
 
   Definition check_ws ws := ws == reg_size.
 
-  Definition lstore (xd : var_i) (ofs : Z) (xs : var_i) : fopn_args :=
-    let e := faddv reg_size xd (fconst reg_size ofs) in
-    fopn_args_of_opn_args (OTBNFopn_core.sw reg_size e xs).
+  Definition lstore (ws : wsize) (xd : var_i) (ofs : Z) (xs : var_i) : fopn_args :=
+    let e := faddv Uptr xd (fconst ws ofs) in
+    fopn_args_of_opn_args (OTBNFopn_core.sw ws e xs).
 
-  Definition lload (xd : var_i) (xs : var_i) (ofs : Z) :=
-    let e := faddv reg_size xs (fconst reg_size ofs) in
-    fopn_args_of_opn_args (OTBNFopn_core.lw reg_size xd e).
+  Definition lload (ws : wsize) (xd : var_i) (xs : var_i) (ofs : Z) :=
+    let e := faddv Uptr xs (fconst ws ofs) in
+    fopn_args_of_opn_args (OTBNFopn_core.lw ws xd e).
 
   Definition smart_addi_fopn x y imm :=
     [seq fopn_args_of_opn_args a | a <- smart_addi x y imm ].
@@ -218,7 +218,7 @@ Section LIPARAMS.
       lip_allocate_stack_frame := allocate_stack_frame;
       lip_free_stack_frame := free_stack_frame;
       lip_set_up_sp_register := set_up_sp_register;
-      lip_lmove := lmove;
+      lip_lmove := fun _ => lmove;
       lip_check_ws := check_ws;
       lip_lstore  := lstore;
       lip_lload := lload;

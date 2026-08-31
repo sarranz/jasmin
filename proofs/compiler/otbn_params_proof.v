@@ -554,35 +554,35 @@ Qed.
 
 Lemma otbn_lmove_correct : lmove_correct (ap_lip otbn_params).
 Proof.
-  move=> xd xs w ws w' s htxd htxs hget htr.
+  move=> xd xs [] // w' s _ htxd; t_xrbindP=> v hget htr.
   rewrite /lip_lmove /= /lmove /fopn_args_of_opn_args /= hget /=.
   rewrite /exec_sopn /= htr /=.
   rewrite truncate_word_u /=.
-  rewrite /wadd wrepr0 GRing.addr0 set_var_eq_type ?htxd //.
+  rewrite /wadd wrepr0 GRing.addr0 /set_var /=.
+  by case: vtype htxd.
 Qed.
 
 Lemma otbn_lstore_correct :
   lstore_correct_aux (lip_check_ws (ap_lip otbn_params))
                      (lip_lstore (ap_lip otbn_params)).
 Proof.
-  move=> xd xs ofs ws w wp s m htxs /eqP hchk; t_xrbindP; subst ws.
-  move=> vd hgetd htrd vs hgets htrs hwr.
+  move=> xd xs ofs [] // w wp s m _.
+  t_xrbindP => vd hgetd htrd vs hgets htrs hwr.
   rewrite /lip_lstore /= /lstore /fopn_args_of_opn_args /= hgets hgetd /=
           /exec_sopn /= htrs /=.
   rewrite /sem_sop2 /= htrd /= !truncate_word_u /=.
-  rewrite truncate_word_u /= add_wordE hwr //.
+  by rewrite truncate_word_u /= hwr.
 Qed.
 
 Lemma otbn_lload_correct :
   lload_correct_aux (lip_check_ws (ap_lip otbn_params))
                     (lip_lload (ap_lip otbn_params)).
 Proof.
-  move=> xd xs ofs ws top s w vm heq hcheck.
-  t_xrbindP => ? hgets hto hread hset.
-  move/eqP: hcheck => ?; subst ws.
+  move=> xd xs ofs [] // top s w vm _.
+  t_xrbindP => vs hgets hto hread hset.
   rewrite /lip_lload /= /lload /fopn_args_of_opn_args /= hgets /=.
-  rewrite /sem_sop2 /= hto /= !truncate_word_u /= add_wordE.
-  rewrite truncate_word_u /= hread /= /exec_sopn /= truncate_word_u /= hset //.
+  rewrite /sem_sop2 /= hto /= !truncate_word_u /=.
+  by rewrite truncate_word_u /= hread /= /exec_sopn /= truncate_word_u /= hset.
 Qed.
 
 Lemma otbn_smart_addi_correct : ladd_imm_correct_aux smart_addi_fopn.
@@ -594,9 +594,8 @@ Qed.
 
 Lemma otbn_lstores_correct : lstores_correct (ap_lip otbn_params).
 Proof using atoI call_conv sc_sem syscall_state.
-  apply/lstores_imm_dfl_correct.
-  + by apply otbn_lstore_correct.
-  apply otbn_smart_addi_correct.
+apply/lstores_imm_dfl_correct; first exact: otbn_lstore_correct.
+exact: otbn_smart_addi_correct.
 Qed.
 
 Lemma otbn_lloads_correct : lloads_correct (ap_lip otbn_params).
