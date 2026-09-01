@@ -77,8 +77,6 @@ let le (e1 : env) (e2 : env) : bool =
   SS.subset e1.pub e2.pub
   && SM.for_all (fun x l -> lle (norm e1.pub l) (norm e2.pub (held e2 x))) e1.v
 
-let equiv (e1 : env) (e2 : env) : bool = le e1 e2 && le e2 e1
-
 let write (env : env) ~(strong : bool) (mem : string list) (x : string)
     (l : level) : env =
   if x = unknown_mem_slot then env
@@ -90,6 +88,8 @@ type signature = {
   pre : env;
   post : env;
 }
+
+type inst = level SM.t
 
 type analysis = {
   sigs : (string, signature) Hashtbl.t;
@@ -207,7 +207,34 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
       (fun env x -> write env ~strong mem_annotation x level)
       env out_slots
 
-  let step fn_name labels ~exit env (i : int) intr : (int * env) list =
+  let subst (inst : inst) (lvl : level) : level =
+    match lvl with
+    | Public | Secret -> lvl
+    | Poly ty_vars -> lmaxs (List.map
+      (fun ty_var -> Option.value ~default:Secret (SM.find_opt ty_var inst)) (SS.elements ty_vars))
+
+  let call_env (caller_env : env) (callee_sig : signature) : env =
+    let bind (inst : inst) (var : string) (lvl : level) : inst =
+      SM.update var
+        (function None -> Some lvl | Some lvl' -> Some (lmax lvl lvl'))
+        inst
+    in
+    let caller_env, inst =
+      List.fold_left
+        (fun (caller_env, inst) slot ->
+          match getl callee_sig.pre slot with
+          | Public -> (use_public caller_env slot, inst)
+          | Secret -> (caller_env, inst)
+          | Poly vars ->
+              let actual = getl caller_env slot in
+              (caller_env, SS.fold (fun var inst -> bind inst var actual) vars inst))
+        (caller_env, SM.empty) callee_sig.slots
+    in
+    List.fold_left
+      (fun caller_env slot -> setl caller_env slot (subst inst (getl callee_sig.post slot)))
+      caller_env callee_sig.slots
+
+  let step fn_name labels ~exit env (i : int) intr sigs : (int * env) list =
     let target lbl = LM.find lbl labels in
     match intr.asmi_i with
     | ALIGN | LABEL _ -> [ (i + 1, env) ]
@@ -219,6 +246,10 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
         let env = List.fold_left use_public env (condt_slots c) in
         [ (target lbl, env); (i + 1, env) ]
     | POPPC -> [ (exit, env) ]
+    | CALL (fn, _) -> (
+        match Hashtbl.find_opt sigs fn.CoreIdent.fn_name with
+        | Some callee -> [ (i + 1, call_env env callee) ]
+        | None -> raise Unsupported) (* signature not available *)
     | _ -> raise Unsupported
 
   let label_map body : int LM.t =
@@ -231,17 +262,22 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
       body;
     !m
 
-  let ty_body fn_name body (pre : env) : SS.t * env option =
+  let ty_body fn_name body (pre : env) sigs : SS.t * env option =
     let labels = label_map body in
     let exit = Array.length body in
     let envs : env option array = Array.make (exit + 1) None in
     let changed = ref true in
-    let flow (j, env) =
-      let new_env = match envs.(j) with None -> env | Some old -> join old env in
-      if not (Option.equal equiv envs.(j) (Some new_env)) then begin
-        envs.(j) <- Some new_env;
-        changed := true
-      end
+    let flow (instr_i, new_env) =
+      match envs.(instr_i) with
+      | None ->
+          envs.(instr_i) <- Some new_env;
+          changed := true
+      | Some old_env ->
+          let joined = join old_env new_env in
+          if not (le joined old_env) then begin
+            envs.(instr_i) <- Some joined;
+            changed := true
+          end
     in
     flow (0, pre);
     while !changed do
@@ -250,7 +286,7 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
         (fun i intr ->
           match envs.(i) with
           | None -> ()
-          | Some env -> List.iter flow (step fn_name labels ~exit env i intr))
+          | Some env -> List.iter flow (step fn_name labels ~exit env i intr sigs))
         body
     done;
     let pub =
@@ -260,11 +296,24 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
     in
     (pub, envs.(exit))
 
+  let callees f_def : string list =
+    List.filter_map
+      (fun intr ->
+        match intr.asmi_i with
+        | CALL (fn, _) -> Some fn.CoreIdent.fn_name
+        | _ -> None)
+      f_def.asm_fd_body
+
   let ty_fundef analysis (f_name, f_def) =
     let name = f_name.CoreIdent.fn_name in
+    let callee_slots fn =
+      match Hashtbl.find_opt analysis.sigs fn with Some s -> s.slots | None -> []
+    in
     let mem_slots =
       List.concat_map get_mem_annotation f_def.asm_fd_body
+      @ List.concat_map callee_slots (callees f_def)
       |> List.sort_uniq String.compare
+      |> List.filter (fun x -> not (List.mem x arch_slots))
     in
     let slots = arch_slots @ mem_slots in
     let pre =
@@ -274,7 +323,7 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
     in
     let pre = setl pre unknown_mem_slot Secret in
     let body = Array.of_list f_def.asm_fd_body in
-    match ty_body name body pre with
+    match ty_body name body pre analysis.sigs with
     | _, None -> Error "no path returns"
     | pub, Some post ->
         let pre = { pre with pub } in
@@ -286,12 +335,38 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
     | exception Leak msg -> Error ("leak: " ^ msg)
     | exception Unknown_slot x -> Error ("unknown slot: " ^ x)
 
+  let callees_first funcs =
+    let by_name = Hashtbl.create 17 in
+    List.iter
+      (fun ((f_name : CoreIdent.funname), f_def) ->
+        Hashtbl.replace by_name f_name.CoreIdent.fn_name (f_name, f_def))
+      funcs;
+    let seen = Hashtbl.create 17 in
+    let acc = ref [] in
+    let rec visit ((f_name : CoreIdent.funname), f_def) =
+      if not (Hashtbl.mem seen f_name.CoreIdent.fn_name) then begin
+        Hashtbl.replace seen f_name.CoreIdent.fn_name ();
+        List.iter
+          (fun c -> Option.iter visit (Hashtbl.find_opt by_name c))
+          (callees f_def);
+        acc := (f_name, f_def) :: !acc
+      end
+    in
+    List.iter visit funcs;
+    List.rev !acc
 
   let signatures prog =
     let an : analysis = create () in
+    let results = Hashtbl.create 17 in
+    List.iter
+      (fun ((f_name : CoreIdent.funname), f_def) ->
+        Hashtbl.replace results f_name.CoreIdent.fn_name
+          (ty_fundef an (f_name, f_def)))
+      (callees_first prog.asm_funcs);
     List.map
-      (fun (f_name, f_def) ->
-        (f_name.CoreIdent.fn_name, ty_fundef an (f_name, f_def)))
+      (fun ((f_name : CoreIdent.funname), _) ->
+        let name = f_name.CoreIdent.fn_name in
+        (name, Hashtbl.find results name))
       prog.asm_funcs
 
   let chk
