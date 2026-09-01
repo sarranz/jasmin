@@ -111,11 +111,26 @@ let get_stack_frame_annot (annot : annotations) :
     Some (List.filter_map decode_slot slots)
   | _ -> None
 
+let instantiation_annot = "Internal::instantiation"
+
 let add_instantiation_annot ~loc (inst : (string * string) list) annot =
   let mk d = Location.mk_loc loc d in
   let mk_inst (name, value) = (mk name, Some (mk (Astring value))) in
-  let inst_annot = (mk "Internal::instantiation", Some (mk (Astruct (List.map mk_inst inst)))) in
+  let inst_annot = (mk instantiation_annot, Some (mk (Astruct (List.map mk_inst inst)))) in
   inst_annot :: annot
+
+let has_instantiation_annot annot = has_symbol instantiation_annot annot
+
+let get_instantiation_annot (annot : annotations) : (string * string) list option =
+  match get instantiation_annot annot with
+  | Some (Some { Location.pl_desc = Astruct l; _ }) ->
+    let doit (k, a) =
+      match a with
+      | Some { Location.pl_desc = Astring v } -> Some (Location.unloc k, v)
+      | _ -> None
+    in
+    Some (List.filter_map doit l)
+  | _ -> None
 
 (* -------------------------------------------------------------------- *)
 let sint = "Internal::wint::signed"

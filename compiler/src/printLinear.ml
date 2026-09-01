@@ -27,6 +27,7 @@ let pp_label_kind fmt = function
   | ExternalLabel -> F.fprintf fmt "#returnaddress "
 
 let pp_instr pd msfsize asmOp fmt i =
+  F.fprintf fmt "%a" Printer.pp_annotations (snd i.li_ii);
   match i.li_i with
   | Lopn (lvs, op, es) ->
     F.fprintf fmt "@[%a@] = %a%a@[(%a)@]"
