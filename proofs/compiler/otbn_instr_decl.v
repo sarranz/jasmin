@@ -51,6 +51,13 @@ End ASCII.
 
 Section PRIM.
 
+(* IMPORTANT
+   The printer for [-help-intrinsics] uses [allowed_prim_otbn_suffixes] to
+   derive the list of all accepted suffixes for a [PrimOTBN]. It assumes that
+   the list is ordered from most general suffix to least (e.g., all [PrimOTBNws]
+   come before [PrimOTBNnone]) and that there are no incompatible suffixes
+   (i.e., at most one kind plus [PrimOTBNnone]). *)
+
 Context {asm_op : Type}.
 
 Let err s : result string asm_op :=

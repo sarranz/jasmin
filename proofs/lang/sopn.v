@@ -112,6 +112,22 @@ Variant prim_otbn_suffix :=
 | PrimOTBNwreg of 'I_32
 .
 
+(* The order is important. This is used by the [-help-intrinsics] flag to print
+   the expected suffixes. We only look at the first accepted suffix of the list,
+   so we must give the most general one first. *)
+Definition prim_otbn_suffixes : seq prim_otbn_suffix :=
+  [seq PrimOTBNws ws | ws <- wsizes] ++
+  [seq PrimOTBNfg fg | fg <- bn_flag_groups] ++
+  [seq PrimOTBNwb None wb | wb <- bn_halfword_writebacks] ++
+  [seq PrimOTBNwb (Some fg) wb
+   | fg <- bn_flag_groups, wb <- bn_halfword_writebacks] ++
+  [seq PrimOTBNwreg r | r : 'I_32] ++
+  [:: PrimOTBNnone].
+
+Definition allowed_prim_otbn_suffixes
+  {A : Type} (f : prim_otbn_suffix -> result string A) : seq prim_otbn_suffix :=
+  [seq s <- prim_otbn_suffixes | is_ok (f s)].
+
 Variant prim_constructor (asm_op:Type) :=
   | PrimX86 of seq prim_x86_suffix & (prim_x86_suffix -> option asm_op)
   | PrimARM of
