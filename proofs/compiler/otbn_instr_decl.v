@@ -152,6 +152,9 @@ Variant rv_mnemonic : Type :=
 
 | NOP
 
+(* Syntax sugar for [x0]. These translations are NOT verified. *)
+| NEG (* 2's complement negation. Printed as [SUB _, x0, _].  *)
+
 (* TODO_OTBN missing CSRRS *)
 .
 
@@ -162,8 +165,8 @@ Instance eqTC_rv_mnemonic : eqTypeC rv_mnemonic :=
 Canonical rv_mnemonic_eqType := ceqT_eqType (ceqT := eqTC_rv_mnemonic).
 
 Definition rv_mnemonics : seq rv_mnemonic :=
-  [:: ADD; ADDI; SUB; AND; ANDI; OR; ORI; XOR; XORI; SLL; SLLI; SRL; SRLI; SRA
-    ; SRAI; LUI; LW; SW; LI; LA; NOP
+  [:: ADD; ADDI; SUB; NEG; AND; ANDI; OR; ORI; XOR; XORI; SLL; SLLI; SRL; SRLI
+    ; SRA; SRAI; LUI; LW; SW; LI; LA; NOP
   ].
 
 Lemma rv_mnemonic_fin_axiom : Finite.axiom rv_mnemonics.
@@ -178,6 +181,7 @@ Definition rv_mnemonic_to_string (mn : rv_mnemonic) : string :=
   | ADD => "ADD"
   | ADDI => "ADDI"
   | SUB => "SUB"
+  | NEG => "NEG"
   | AND => "AND"
   | ANDI => "ANDI"
   | OR => "OR"
@@ -553,7 +557,7 @@ Let pp_rv_op mn args := pp_otbn_op (RV32 mn) args.
 (* Kind of the last argument. *)
 Definition rv_last_ak : arg_kind :=
   match mn with
-  | ADD | SUB | AND | OR | XOR | SLL | SRL | SRA => CAreg
+  | ADD | SUB | NEG | AND | OR | XOR | SLL | SRL | SRA => CAreg
   | ADDI | ANDI | ORI | XORI => ak_s12
   | SLLI | SRLI | SRAI => CAimm (Some (CAimmC_otbn_nbits Unsigned 5)) U8
   | LUI => CAimm (Some (CAimmC_otbn_nbits Unsigned 20)) U32
@@ -648,6 +652,7 @@ Definition _desc_rv_mnemonic : instr_desc_t :=
   match mn with
   | ADD | ADDI => desc_rv_binop wadd
   | SUB => desc_rv_binop wsub
+  | NEG => desc_rv_unop (fun x => (- x)%w)
   | AND | ANDI => desc_rv_binop wand
   | OR | ORI => desc_rv_binop wor
   | XOR | XORI => desc_rv_binop wxor

@@ -1,6 +1,10 @@
 export
 fn neg(reg u32 arg0) {
     reg u32 x;
+
     x = -arg0;
+    [#aligned x] = x;
+
+    x = -x;
     [#aligned x] = x;
 }

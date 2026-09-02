@@ -402,8 +402,7 @@ Section LOWER_ASSIGN.
     in
     li_simple op [:: e ].
 
-  (* Lower an expression of the form [<+> e].
-     TODO_OTBN: introduce extra op for negation and lower [x = -y]. *)
+  (* Lower an expression of the form [<+> e]. *)
   Definition lower_Papp1 (ws : wsize) (op : sop1) (e : pexpr) : low_instr :=
     match op with
     | Oword_of_int _ =>
@@ -413,6 +412,10 @@ Section LOWER_ASSIGN.
     | Olnot _ =>
         if ws == xreg_size then
           li_issue lnone_mlz (BN_basic BN_NOT FG1) [:: e ]
+        else skip
+    | Oneg (Op_w _) =>
+        if ws == reg_size then
+          li_simple (RV32 NEG) [:: e]
         else skip
     | _ => Error (E.not_implemented ii)
     end.

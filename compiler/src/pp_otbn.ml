@@ -131,16 +131,21 @@ let indirect_args pp =
   | "BN.LID" | "BN.SID" -> List.tl pp.pp_aop_args
   | _ -> pp.pp_aop_args
 
-(* TODO_OTBN: Is this generic? *)
-let pp_otbn_op pp =
-  let pp_args = indirect_args pp in
-  let name =
-    Format.sprintf "%s%s"
-      (pp.pp_aop_name |> String.lowercase)
-      (pp_mnemonic_ext pp.pp_aop_ext)
-  in
-  let args = List.filter_map (fun (_, a) -> pp_asm_arg a) pp_args in
-  (name, args)
+let pp_otbn_op op pp =
+  if op = RV32 NEG then
+    match pp.pp_aop_args with
+    | [ (_, Reg r1); (_, Reg r2) ] ->
+        ("sub", [ pp_register r1; x0; pp_register r2 ])
+    | _ -> E.invalid_args ()
+  else
+    let pp_args = indirect_args pp in
+    let name =
+      Format.sprintf "%s%s"
+        (pp.pp_aop_name |> String.lowercase)
+        (pp_mnemonic_ext pp.pp_aop_ext)
+    in
+    let args = List.filter_map (fun (_, a) -> pp_asm_arg a) pp_args in
+    (name, args)
 
 let symbol_of_shift sh =
   match sh with Otbn_options.RS_left -> "<<" | RS_right -> ">>"
@@ -304,7 +309,7 @@ module OTBNTarget :
     | AsmOp (op, args) ->
         let id = instr_desc otbn_decl otbn_op_decl (None, op) in
         let pp = id.id_pp_asm args in
-        let name, args = pp_otbn_op pp in
+        let name, args = pp_otbn_op op pp in
         let args = pp_args op args in
         [ Instr (name, args) ]
 end

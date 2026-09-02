@@ -292,7 +292,8 @@ Qed.
 
 (* [Oword_of_int] (ws <= reg_size) -> [RV32 LI] (immediate;
    [es = [:: Papp1 op1 e1]]); [Olnot] (ws = xreg_size) -> [BN_NOT FG1] with
-   [lvs = lnone_mlz] (3 dummies).  Other [sop1] are errors (not reached). *)
+   [lvs = lnone_mlz] (3 dummies); [Oneg] (ws = reg_size) -> [RV32 NEG].
+   Other [sop1] are errors (not reached). *)
 Lemma lower_Papp1P ii ws op1 e1 lv v v' s0 s1 lvs op es :
   lower_Papp1 ii ws op1 e1 = ok (Some (lvs, op, es)) ->
   sem_pexpr true (p_globs p) s0 (Papp1 op1 e1) = ok v ->
@@ -310,6 +311,20 @@ case: op1 he => //= ws'; t_xrbindP=> v0.
   subst v v'.
   rewrite /= /to_word htw /= /sopn_sem_ /= /write_lvals /=.
   by rewrite hw.
+- case: eqP => [?|//]; subst ws.
+  move=> ++ [???]; subst lvs op es.
+  have [w_r [ws_v [w' [htw hv hv']]]] := truncate_val_typeE htr.
+  subst v v'.
+  rewrite /sem_sop1 /=.
+  t_xrbindP=> hwe1 we1 heq ?; subst ws_v.
+  move=> [?]; subst w'.
+  rewrite /sem_sopn /= hwe1 /exec_sopn /= /sopn_sem /sopn_sem_ /=.
+  move: we1 htr htw hwe1 heq; case: ws' => //= we1 htr htw hwe1 heq.
+  have h_wr : w_r = wnot we1.
+  - by have [_ ->] := truncate_wordP htw; apply: zero_extend_u.
+  subst w_r.
+  by rewrite heq /= /semi_to_atype /= /write_lvals /= /write_none /= hw.
+case: ws' => [|ws'] //=.
 case: eqP => [?|//]; subst ws.
 move=> ++ [???]; subst lvs op es.
 have [w_r [ws_v [w' [htw hv hv']]]] := truncate_val_typeE htr.
@@ -318,11 +333,16 @@ rewrite /sem_sop1 /=.
 t_xrbindP=> hwe1 we1 heq ?; subst ws_v.
 move=> [?]; subst w'.
 rewrite /sem_sopn /= hwe1 /exec_sopn /= /sopn_sem /sopn_sem_ /=.
-move: we1 htr htw hwe1 heq; case: ws' => //= we1 htr htw hwe1 heq.
-have h_wr : w_r = wnot we1.
-- by have [_ ->] := truncate_wordP htw; apply: zero_extend_u.
+have [hcmp hw_req] := truncate_wordP htw.
+rewrite (wopp_zero_extend we1 hcmp) in hw_req.
 subst w_r.
-by rewrite heq /= /semi_to_atype /= /write_lvals /= /write_none /= hw.
+have [sz0 [w0 [hsz0 hv0 hwe1eq]]] := to_wordI' heq.
+subst v0 we1.
+rewrite /to_word /= truncate_word_le; last exact: (cmp_le_trans hcmp hsz0).
+rewrite zero_extend_idem // in hw.
+rewrite /semi_to_atype /=.
+rewrite /write_lvals /=.
+by rewrite hw.
 Qed.
 
 (* RV32 small case -- shifts [Olsl/Olsr/Oasr] via
