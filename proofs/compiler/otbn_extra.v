@@ -78,6 +78,7 @@ Let F (f : rflag) := ADImplicit (to_var f).
 Variant extra_op :=
 | set0 of wsize
 | MOV  (* [ADDI x, y, 0]. *)
+| NOT  (* [XORI x, y, -1]. *)
 | SUBI (* [ADDI x, y, -imm]. *)
 | ADD_LARGE_IMM (* [LI x, imm; ADD x, x, y]. *)
 | SWAP of wsize (* Three [XOR]s. *)
@@ -92,6 +93,7 @@ Definition string_of_extra_op (eo : extra_op) : string :=
   match eo with
   | set0 _ => "set0"
   | MOV => "MOV"
+  | NOT => "NOT"
   | SUBI => "SUBI"
   | ADD_LARGE_IMM => "add_large_imm"
   | SWAP _ => "swap"
@@ -121,6 +123,14 @@ Definition desc_MOV : instruction_desc :=
     [:: aword U32 ] [:: E 1 ]
     [:: aword U32 ] [:: E 0 ]
     id
+    true DOIT.
+
+Definition desc_NOT : instruction_desc :=
+  mk_instr_desc_safe
+    (pp_s (string_of_extra_op NOT))
+    [:: aword U32 ] [:: E 1 ]
+    [:: aword U32 ] [:: E 0 ]
+    wnot
     true DOIT.
 
 Definition desc_SUBI : instruction_desc :=
@@ -168,6 +178,7 @@ Definition get_instr_desc (eo : extra_op) : instruction_desc :=
   match eo with
   | set0 ws => if (ws <= reg_size)%CMP then desc_set0_small else desc_set0_large
   | MOV => desc_MOV
+  | NOT => desc_NOT
   | SUBI => desc_SUBI
   | ADD_LARGE_IMM => desc_ADD_LARGE_IMM
   | SWAP ws => if (ws <= reg_size)%CMP then Oswap_instr (aword ws) else desc_swap_large
@@ -176,6 +187,7 @@ Definition get_instr_desc (eo : extra_op) : instruction_desc :=
 Definition prim_string : seq (string * prim_constructor extra_op) :=
   [:: (string_of_extra_op (set0 U8), prim_otbn_ws set0)
     ; (string_of_extra_op MOV, prim_otbn_none MOV)
+    ; (string_of_extra_op NOT, prim_otbn_none NOT)
     ; (string_of_extra_op SUBI, prim_otbn_none SUBI)
   ].
 
@@ -222,6 +234,16 @@ Definition assemble_MOV
   Let _ := assert (convertible x.(vtype) (aword U32))
                   (E.internal_error "mov: bad register type" ii) in
   ok (asm_args_of_opn_args [:: OTBNFopn_core.mov x y ]).
+
+Definition assemble_NOT
+  (les : seq lexpr)
+  (res : seq rexpr) :
+  cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
+  Let: (x, _) := uncons_LLvar les in
+  Let: (y, _) := uncons_rvar res in
+  Let _ := assert (convertible x.(vtype) (aword U32))
+                  (E.internal_error "not: bad register type" ii) in
+  ok (asm_args_of_opn_args [:: OTBNFopn_core.not x y ]).
 
 Definition assemble_SUBI
   (les : seq lexpr)
@@ -302,6 +324,7 @@ Definition assemble_extra
   match eo with
   | set0 ws => assemble_set0 ws les res
   | MOV => assemble_MOV les res
+  | NOT => assemble_NOT les res
   | SUBI => assemble_SUBI les res
   | ADD_LARGE_IMM => assemble_ADD_LARGE_IMM les res
   | SWAP ws => assemble_swap ws les res

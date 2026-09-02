@@ -1,0 +1,6 @@
+export
+fn not(reg u32 arg0) -> reg u32 {
+    reg u32 x;
+    x = #NOT(arg0);
+    return x;
+}

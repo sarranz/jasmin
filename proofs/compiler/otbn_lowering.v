@@ -412,6 +412,8 @@ Section LOWER_ASSIGN.
     | Olnot _ =>
         if ws == xreg_size then
           li_issue lnone_mlz (BN_basic BN_NOT FG1) [:: e ]
+        else if ws == reg_size then
+          li_xissue [::] NOT [:: e ]
         else skip
     | Oneg (Op_w _) =>
         if ws == reg_size then

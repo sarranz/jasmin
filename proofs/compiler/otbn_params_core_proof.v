@@ -125,6 +125,31 @@ Proof.
        set_var_truncate // (convertible_eval_atype hc).
 Qed.
 
+(* [R[x] := R[y] ^ imm % 2^32]. *)
+Lemma xori_sem_fopn_args {s} {xi:var_i} {y imm wy} :
+  convertible xi.(vtype) (aword otbn_reg_size) ->
+  get_var true (evm s) (v_var y) >>= to_word Uptr = ok wy ->
+  let: wx' := Vword (s:=reg_size) (wxor wy (wrepr reg_size imm)) in
+  let: vm' := (evm s).[xi <- wx'] in
+  sem_fopn_args (OTBNFopn_core.xori xi y imm) s = ok (with_vm s vm').
+Proof.
+  move=> hc.
+  rewrite /=; t_xrbindP => *; t_otbn_op.
+  by rewrite /= set_var_truncate // (convertible_eval_atype hc).
+Qed.
+
+(* [R[x] := ~ R[y]] (implemented as [XORI x, y, -1]). *)
+Lemma not_sem_fopn_args {s} {xi:var_i} {y} {wy : word Uptr} :
+  convertible xi.(vtype) (aword otbn_reg_size) ->
+  get_var true (evm s) (v_var y) >>= to_word Uptr = ok wy ->
+  let: vm' := (evm s).[xi <- Vword (wnot wy)] in
+  sem_fopn_args (OTBNFopn_core.not xi y) s = ok (with_vm s vm').
+Proof.
+  move=> hc hgety.
+  have -> : wnot wy = wxor wy (wrepr reg_size (-1)) by rewrite /wnot wrepr_m1.
+  exact: xori_sem_fopn_args hc hgety.
+Qed.
+
 (* [R[x] := imm] (loaded with the single [LI] instruction). *)
 Lemma movi_sem_fopn_args {s imm} {xi:var_i} :
   convertible xi.(vtype) (aword otbn_reg_size) ->
@@ -142,6 +167,8 @@ Opaque OTBNFopn_core.mov.
 Opaque OTBNFopn_core.li.
 Opaque OTBNFopn_core.sub.
 Opaque OTBNFopn_core.subi.
+Opaque OTBNFopn_core.xori.
+Opaque OTBNFopn_core.not.
 
 (* NOTE: The RISC-V proof file additionally contains the word-arithmetic helper
    lemmas [wbit_n_add], [mov_movt_aux], [mov_movt_aux1] and [mov_movt].  These

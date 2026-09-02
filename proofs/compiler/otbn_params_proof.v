@@ -976,6 +976,61 @@ rewrite Vm.setP (convertible_eval_atype hc).
 done.
 Qed.
 
+(* Proof plan (NOT) -- identical to [otbn_assemble_MOV_correct] above (same
+   uncons_LLvar / uncons_rvar / convertible-assert shape in [assemble_NOT]),
+   except the extra op's semantics is [wnot] instead of [id] and the emitted
+   opn_args is [OTBNFopn_core.not] (single [XORI _, _, -1]) instead of
+   [OTBNFopn_core.mov]: the destination is set to [wnot v0] rather than
+   [v0], where [v0] is [b]'s (U32-truncated) value.
+
+   Key lemmas: assemble_opsP, otbn_eval_assemble_cond,
+     otbn_sem_sopns_asm_args, OTBNFopn_coreP.not_sem_fopn_args. *)
+Lemma otbn_assemble_NOT_correct :
+  assemble_extra_correct (ap_agp otbn_params) NOT.
+Proof.
+move=> rip ii lvs args m xs ys m' s ops ops'.
+move=> hrex hexec hwle hops hmap hlom.
+move: hops hwle hrex; rewrite /to_asm /= /assemble_extra /assemble_NOT.
+t_xrbindP=> -[x les] /=.
+case: lvs => // -[] // [[aty aid] aii] _ /= [<- ->] {x}.
+t_xrbindP=> -[y res]; case: args => // -[] // -[] // b _ /= [<- ->] {y}.
+t_xrbindP; case: aty => // _ /eqP [->].
+set a := {| vname := aid; |}.
+set ai := {| v_var := a |}.
+move=> hops_eq.
+case: ys hexec => // v ys.
+t_xrbindP=> + _ vm0 hvm0 <- + v1 + vs + ?; subst xs.
+rewrite /exec_sopn /sopn_sem /sopn_sem_ /=.
+t_xrbindP; case: vs => // _ v0 hv0 [<-] ??; subst v ys.
+change U32 with Uptr in v0.
+case: les => //= -[?]; subst m'.
+case: res => //=; last by t_xrbindP.
+move=> hv1 _.
+have hc : convertible ai.(v_var).(vtype) (aword reg_size) by [].
+have hget : get_var true (evm m) b >>= to_word Uptr = ok v0.
+- by rewrite hv1 /= hv0.
+set vm' := (evm m).[v_var ai <- Vword (wnot v0)].
+have hsem := OTBNFopn_coreP.not_sem_fopn_args hc hget.
+have hops_form : ops =
+    asm_args_of_opn_args [:: otbn_params_core.OTBNFopn_core.not ai b]
+  by rewrite -hops_eq.
+have hsopns : sem_sopns m ops = ok (with_vm m vm').
+- rewrite hops_form otbn_sem_sopns_asm_args
+    -otbn_sem_fopns_equiv /OTBNFopn_coreP.sem_fopns_args.
+  cbn [foldM].
+  by rewrite hsem.
+have hall : all (fun '(op, _, _) =>
+  match op.1 with | Some _ => false | None => true end) ops.
+- by rewrite hops_form all_map; apply/allT => -[[]].
+have [s' hfold hlom'] :=
+  assemble_opsP otbn_eval_assemble_cond hmap hall hsopns hlom.
+exists s' => //.
+apply: (lom_eqv_ext _ hlom') => z /=.
+move/set_varP : hvm0 => [_ _ ->].
+rewrite Vm.setP (convertible_eval_atype hc).
+done.
+Qed.
+
 (* Proof plan (SUBI) -- uses the common assemble_opsP bridge above.
 
    assemble_SUBI: les = [LLvar x], res = [rvar y; wconst imm] (uncons_LLvar /
@@ -1292,6 +1347,7 @@ Proof using atoI call_conv sc_sem syscall_state.
   case: op.
   + exact: otbn_assemble_set0_correct.
   + exact: otbn_assemble_MOV_correct.
+  + exact: otbn_assemble_NOT_correct.
   + exact: otbn_assemble_SUBI_correct.
   + exact: otbn_assemble_ADD_LARGE_IMM_correct.
   exact: otbn_assemble_swap_correct.
@@ -1304,6 +1360,10 @@ Proof.
   case: op.
   + move=> ws; rewrite /assemble_set0; by case: ifP => _ [<-].
   + rewrite /assemble_MOV.
+    case: (arm_extra.uncons_LLvar ii lvs) => // -[x ?].
+    case: (arm_extra.uncons_rvar ii args) => // -[y ?].
+    simpl; t_xrbindP => _ <-; done.
+  + rewrite /assemble_NOT.
     case: (arm_extra.uncons_LLvar ii lvs) => // -[x ?].
     case: (arm_extra.uncons_rvar ii args) => // -[y ?].
     simpl; t_xrbindP => _ <-; done.

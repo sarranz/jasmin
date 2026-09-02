@@ -51,10 +51,16 @@ Module OTBNFopn_core.
   Definition slli := op_bin_shamt SLLI.
   Definition srli := op_bin_shamt SRLI.
   Definition andi := op_bin_imm ANDI.
+  Definition xori := op_bin_imm XORI.
 
   Definition mov x y: opn_args := addi x y 0.
   Definition smart_mov x y : seq opn_args :=
     if v_var x == v_var y then [::] else [:: mov x y ].
+
+  (* [R[x] := ~ R[y]], implemented as [XORI x, y, -1]. The immediate [-1] is
+     always in range, so unlike [smart_addi]/[smart_subi] no fallback via a
+     temporary register is ever needed. *)
+  Definition not x y : opn_args := xori x y (-1).
 
   Definition lw ws x e : opn_args :=
     ([:: LLvar x ], RV32 LW, [::  Load Aligned ws e ]).
