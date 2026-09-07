@@ -876,7 +876,7 @@ fail/register_allocation/arm-m4/force_regalloc_conflict_unknown.jazz:
 
 "fail/register_allocation/arm-m4/force_regalloc_conflict_unknown.jazz", line 2 (28-31):
 compilation error:
-register allocation: unknown register “FOO” in force_regalloc_conflict annotation on variable x.4842
+register allocation: unknown register “FOO” in force_regalloc_conflict annotation on variable x.4877
 
 fail/register_allocation/arm-m4/force_regalloc_dup.jazz:
 
@@ -993,7 +993,7 @@ register allocation: conflicting variables “z” and “res” must be merged 
 fail/register_allocation/x86-64/force_regalloc_conflict_vs_arch.jazz:
 
 compilation error:
-register allocation: variable q.6036 (declared at line 8) is allocated to register RAX but the force_regalloc_conflict annotation forbids it
+register allocation: variable q.6071 (declared at line 8) is allocated to register RAX but the force_regalloc_conflict annotation forbids it
 
 fail/register_allocation/x86-64/force_regalloc_dup.jazz:
 
@@ -1002,7 +1002,7 @@ fail/register_allocation/x86-64/force_regalloc_dup.jazz:
 fail/register_allocation/x86-64/force_regalloc_self_contradict.jazz:
 
 compilation error:
-register allocation: variable x.6136 (declared at line 4) is allocated to register RAX but the force_regalloc_conflict annotation forbids it
+register allocation: variable x.6171 (declared at line 4) is allocated to register RAX but the force_regalloc_conflict annotation forbids it
 
 fail/register_allocation/x86-64/force_regalloc_vs_arch.jazz:
 

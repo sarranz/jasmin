@@ -14,6 +14,10 @@ module Core_arch_OTBN = Otbn_arch_full.OTBN (struct
   let call_conv = Otbn_decl.otbn_call_conv
 end)
 
+module Core_arch_ARMV8A = Armv8a_arch_full.Armv8a (struct
+  let call_conv = Armv8a_decl.armv8a_call_conv
+end)
+
 let core_arch_x86 call_conv :
     (module Arch_full.Core_arch
        with type reg = register
@@ -39,5 +43,6 @@ let get_arch_module arch call_conv : (module Arch_full.Arch) =
                       (module (val core_arch_x86 call_conv)
                       : Arch_full.Core_arch)
                   | ARM_M4 -> (module Core_arch_ARM : Arch_full.Core_arch)
+                  | ARMv8A -> (module Core_arch_ARMV8A : Arch_full.Core_arch)
                   | RISCV -> (module Core_arch_RISCV : Arch_full.Core_arch)
                   | OTBN -> (module Core_arch_OTBN : Arch_full.Core_arch))))

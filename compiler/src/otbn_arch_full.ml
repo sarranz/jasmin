@@ -68,5 +68,9 @@ module OTBN (Input : OTBN_input) :
 
   let callstyle = Arch_full.OnHWStack
   let sp_min_align = Wsize.U8
+
+  (* BN.SD stores a full wide (256-bit) register in one instruction. *)
+  let max_store_size = Wsize.U256
+
   let internal_call_conv = Otbn_decl.internal_call_conv
 end

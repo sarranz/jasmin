@@ -76,6 +76,7 @@ Separate Extraction
   x86_instr_decl
   x86_extra
   x86_params
+  arm_common
   arm_decl
   arm_instr_decl
   arm_extra
@@ -88,5 +89,9 @@ Separate Extraction
   otbn_instr_decl
   otbn_extra
   otbn_params
+  armv8a_decl
+  armv8a_instr_decl
+  armv8a_extra
+  armv8a_params
   compiler
   wint_int.

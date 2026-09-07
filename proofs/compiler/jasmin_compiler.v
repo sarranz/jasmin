@@ -5,5 +5,6 @@ Require arm_params.
 Require x86_params.
 Require riscv_params.
 Require otbn_params.
+Require armv8a_params.
 Require sem_params_of_arch_extra.
 Require wint_int.
