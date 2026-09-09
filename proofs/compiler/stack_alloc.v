@@ -904,6 +904,7 @@ Context
 Context
   (shparams : slh_lowering.sh_params)
   (saparams : stack_alloc_params)
+  (region_annot : bool)
   (is_move_op : asm_op_t -> bool)
   (fresh_var_ident  : v_kind -> Uint63.int -> string -> atype -> Ident.ident)
   (pp_sr : sub_region -> pp_error)
@@ -1507,6 +1508,132 @@ Section PROG.
 
 Context (local_alloc: funname -> stk_alloc_oracle_t) (P:_uprog).
 
+(* --------------------------------------- *)
+(* Get the slot accessed by an instruction *)
+
+Definition slot_of_ptr_kind (p : ptr_kind) : slot :=
+  match p with
+  | Pdirect s _ _ _ _ | Pregptr s | Pstkptr s _ _ _ _ => s
+  end.
+
+(* The slot accessed by [a[e]] when [a] is allocated as [pk], together with
+   the byte range [ofs, ofs + len) the access uses within it: the word at a
+   constant index when the index is known, everything otherwise
+   (conservative). *)
+Definition slot_range_get
+    (aa : arr_access) (ws : wsize) (a : var) (pk : ptr_kind) (e : pexpr) :
+    slot * (Z * Z) :=
+  match pk with
+  | Pdirect s _ _ cs _ =>
+      if expr.is_const e is Some i
+      then (s, ((cs.(cs_ofs) + i * mk_scale aa ws)%Z, wsize_size ws))
+      else (s, (0%Z, size_slot s))
+  | Pregptr p =>
+      if expr.is_const e is Some i
+      then (p, ((i * mk_scale aa ws)%Z, wsize_size ws))
+      else (p, (0%Z, size_slot a))
+  | Pstkptr s _ _ _ _ => (s, (0%Z, size_slot s))
+  end.
+
+Definition slot_e (e : pexpr) : option (slot * (Z * Z)) :=
+  match e with
+  | Pvar x =>
+      match get_local x.(gv).(v_var) with
+      | Some (Pdirect s _ _ cs _) | Some (Pstkptr s _ _ cs _) =>
+          Some (s, (cs.(cs_ofs), cs.(cs_len)))
+      | _ => None (* ignore assignments to reg ptr *)
+      end
+  | Pget _ aa ws a e =>
+      if get_local a.(gv).(v_var) is Some pk
+      then Some (slot_range_get aa ws a.(gv).(v_var) pk e)
+      else None
+  | _ => None
+  end.
+
+Definition slot_lv (lv : lval) : option (slot * (Z * Z)) :=
+  match lv with
+  | Lvar x =>
+      match get_local x.(v_var) with
+      | Some (Pdirect s _ _ cs _) | Some (Pstkptr s _ _ cs _) =>
+          Some (s, (cs.(cs_ofs), cs.(cs_len)))
+      | None | Some (Pregptr _) => None (* ignore assignments to reg ptr *)
+      end
+  | Laset _ aa ws a e =>
+      if get_local a.(v_var) is Some pk
+      then Some (slot_range_get aa ws a.(v_var) pk e)
+      else None
+  | _ => None
+  end.
+
+(* ------------------------------------------------------------- *)
+(* DEBUG Find all slots in expression to check there is only one *)
+
+Definition Sv_unions : seq Sv.t -> Sv.t := foldl Sv.union Sv.empty.
+
+Fixpoint slot_chk_e (e : pexpr) : Sv.t :=
+  let slot_chk_es es := Sv_unions [seq slot_chk_e e | e <- es] in
+  match e with
+  | Pconst _ | Pbool _ | Parr_init _ _ => Sv.empty
+  | Pvar x =>
+      match get_local x.(gv).(v_var) with
+      | Some (Pdirect s _ _ _ _) | Some (Pstkptr s _ _ _ _) => Sv.singleton s
+      | _ => Sv.empty (* ignore assignments to reg ptr *)
+      end
+  | Pget _ _ _ a e =>
+      if get_local a.(gv).(v_var) is Some pk then
+        Sv.add (slot_of_ptr_kind pk) (slot_chk_e e)
+      else slot_chk_e e
+  | Psub _ _ _ _ e | Pload _ _ e | Papp1 _ e => slot_chk_e e
+  | Papp2 _ e1 e2 => slot_chk_es [:: e1; e2]
+  | PappN _ es => slot_chk_es es
+  | Pif _ e1 e2 e3 => slot_chk_es [:: e1; e2; e3]
+  end.
+
+Definition slot_chk_es (es : pexprs) : Sv.t :=
+  Sv_unions [seq slot_chk_e e | e <- es].
+
+Definition slot_chk_lv (lv : lval) : Sv.t :=
+  match lv with
+  | Lnone _ _ => Sv.empty
+  | Lvar x =>
+      match get_local x.(v_var) with
+      | Some (Pdirect s _ _ _ _) | Some (Pstkptr s _ _ _ _) => Sv.singleton s
+      | None | Some (Pregptr _) => Sv.empty (* ignore assignments to reg ptr *)
+      end
+  | Laset _ _ _ a e =>
+      if get_local a.(v_var) is Some pk then
+        Sv.add (slot_of_ptr_kind pk) (slot_chk_e e)
+      else slot_chk_e e
+  | Lasub _ _ _ _ e | Lmem _ _ _ e => slot_chk_e e
+  end.
+
+Definition slot_chk_lvs (lvs : lvals) : Sv.t :=
+  Sv_unions [seq slot_chk_lv lv | lv <- lvs].
+
+(* End DEBUG *)
+
+Definition seq_of_opt {T : Type} (ox : option T) : seq T :=
+  if ox is Some x then [:: x] else [::].
+
+Definition add_arr_annot
+  (lvs : lvals) (es : pexprs) (ii : instr_info) : cexec instr_info :=
+  if ~~ region_annot then ok ii
+  else
+    let ors := [seq slot_e e | e <- es] ++ [seq slot_lv lv | lv <- lvs] in
+    let rs := seq.pmap id ors in
+    let ss := sv_of_list fst rs in (* remove offsets *)
+    let xs := Sv.elements ss in
+    Let _ := (* DEBUG *)
+      let chk := Sv.union (slot_chk_lvs lvs) (slot_chk_es es) in
+      assert (Sv.subset chk ss) (too_many_slots xs (Sv.elements chk))
+    in
+    match xs with
+    | [::] => ok ii
+    | [:: _ ] => ok (ii_add_array_annot rs ii)
+    | [:: s & ss ] => Error (too_many_slots [:: s] ss)
+    end.
+
+
 Definition get_Pvar e :=
   match e with
   | Pvar x => ok x
@@ -1633,8 +1760,18 @@ Definition alloc_lval_call (srs:seq (option (bool * sub_region) * pexpr)) rmap (
 Definition alloc_call_res rmap srs ret_pos rs :=
   fmapM2 bad_lval_number (alloc_lval_call srs) rmap rs ret_pos.
 
-Definition alloc_call (sao_caller:stk_alloc_oracle_t) rmap rs fn es :=
+Definition get_param_inst (sao_param : option param_info) (e : pexpr) : cexec (option (slot * slot)) :=
+  Let x := get_Pvar e in
+  match sao_param, get_local x.(gv) with
+  | None, None => ok None
+  | Some pi, Some (Pregptr p) => ok (Some (pi.(pp_ptr), p))
+  | _, _ => Error (stk_ierror_basic x.(gv) "inst 1")
+  end.
+
+Definition alloc_call (ii : instr_info) (sao_caller:stk_alloc_oracle_t) rmap rs fn es : cexec (region_map * instr) :=
   let sao_callee := local_alloc fn in
+  Let inst := mapM2 (stk_ierror_no_var "inst 2") get_param_inst sao_callee.(sao_params) es in
+  let inst := seq.pmap id inst in
   Let es  := alloc_call_args rmap fn sao_callee.(sao_params) es in
   let '(rmap, es) := es in
   Let rs  := alloc_call_res rmap es sao_callee.(sao_return) rs in
@@ -1650,7 +1787,8 @@ Definition alloc_call (sao_caller:stk_alloc_oracle_t) rmap rs fn es :=
                           (stk_ierror_no_var "non aligned function call")
   in
   let es  := map snd es in
-  ok (rs.1, Ccall rs.2 fn es).
+  let ii := ii_add_instantiation_annot inst ii in
+  ok (rs.1, MkI ii (Ccall rs.2 fn es)).
 
 (* Before stack_alloc :
      Csyscall [::x] (getrandom len) [::t]
@@ -1733,129 +1871,6 @@ Definition alloc_declassify_array rmap es :=
       ok (Copn [::] AT_keep (Opseudo_op (pseudo_operator.Odeclassify_mem len)) [:: e ])
     else Error (stk_ierror_basic xv "register array remains")
   else Error (stk_ierror_no_var "declassify: invalid args").
-
-(* --------------------------------------- *)
-(* Get the slot accessed by an instruction *)
-
-Definition slot_of_ptr_kind (p : ptr_kind) : slot :=
-  match p with
-  | Pdirect s _ _ _ _ | Pregptr s | Pstkptr s _ _ _ _ => s
-  end.
-
-(* The slot accessed by [a[e]] when [a] is allocated as [pk], together with
-   the byte range [ofs, ofs + len) the access uses within it: the word at a
-   constant index when the index is known, everything otherwise
-   (conservative). *)
-Definition slot_range_get
-    (aa : arr_access) (ws : wsize) (a : var) (pk : ptr_kind) (e : pexpr) :
-    slot * (Z * Z) :=
-  match pk with
-  | Pdirect s _ _ cs _ =>
-      if expr.is_const e is Some i
-      then (s, ((cs.(cs_ofs) + i * mk_scale aa ws)%Z, wsize_size ws))
-      else (s, (0%Z, size_slot s))
-  | Pregptr p =>
-      if expr.is_const e is Some i
-      then (p, ((i * mk_scale aa ws)%Z, wsize_size ws))
-      else (p, (0%Z, size_slot a))
-  | Pstkptr s _ _ _ _ => (s, (0%Z, size_slot s))
-  end.
-
-Definition slot_e (e : pexpr) : option (slot * (Z * Z)) :=
-  match e with
-  | Pvar x =>
-      match get_local x.(gv).(v_var) with
-      | Some (Pdirect s _ _ cs _) | Some (Pstkptr s _ _ cs _) =>
-          Some (s, (cs.(cs_ofs), cs.(cs_len)))
-      | _ => None (* ignore assignments to reg ptr *)
-      end
-  | Pget _ aa ws a e =>
-      if get_local a.(gv).(v_var) is Some pk
-      then Some (slot_range_get aa ws a.(gv).(v_var) pk e)
-      else None
-  | _ => None
-  end.
-
-Definition slot_lv (lv : lval) : option (slot * (Z * Z)) :=
-  match lv with
-  | Lvar x =>
-      match get_local x.(v_var) with
-      | Some (Pdirect s _ _ cs _) | Some (Pstkptr s _ _ cs _) =>
-          Some (s, (cs.(cs_ofs), cs.(cs_len)))
-      | None | Some (Pregptr _) => None (* ignore assignments to reg ptr *)
-      end
-  | Laset _ aa ws a e =>
-      if get_local a.(v_var) is Some pk
-      then Some (slot_range_get aa ws a.(v_var) pk e)
-      else None
-  | _ => None
-  end.
-
-(* ------------------------------------------------------------- *)
-(* DEBUG Find all slots in expression to check there is only one *)
-
-Definition Sv_unions : seq Sv.t -> Sv.t := foldl Sv.union Sv.empty.
-
-Fixpoint slot_chk_e (e : pexpr) : Sv.t :=
-  let slot_chk_es es := Sv_unions [seq slot_chk_e e | e <- es] in
-  match e with
-  | Pconst _ | Pbool _ | Parr_init _ _ => Sv.empty
-  | Pvar x =>
-      match get_local x.(gv).(v_var) with
-      | Some (Pdirect s _ _ _ _) | Some (Pstkptr s _ _ _ _) => Sv.singleton s
-      | _ => Sv.empty (* ignore assignments to reg ptr *)
-      end
-  | Pget _ _ _ a e =>
-      if get_local a.(gv).(v_var) is Some pk then
-        Sv.add (slot_of_ptr_kind pk) (slot_chk_e e)
-      else slot_chk_e e
-  | Psub _ _ _ _ e | Pload _ _ e | Papp1 _ e => slot_chk_e e
-  | Papp2 _ e1 e2 => slot_chk_es [:: e1; e2]
-  | PappN _ es => slot_chk_es es
-  | Pif _ e1 e2 e3 => slot_chk_es [:: e1; e2; e3]
-  end.
-
-Definition slot_chk_es (es : pexprs) : Sv.t :=
-  Sv_unions [seq slot_chk_e e | e <- es].
-
-Definition slot_chk_lv (lv : lval) : Sv.t :=
-  match lv with
-  | Lnone _ _ => Sv.empty
-  | Lvar x =>
-      match get_local x.(v_var) with
-      | Some (Pdirect s _ _ _ _) | Some (Pstkptr s _ _ _ _) => Sv.singleton s
-      | None | Some (Pregptr _) => Sv.empty (* ignore assignments to reg ptr *)
-      end
-  | Laset _ _ _ a e =>
-      if get_local a.(v_var) is Some pk then
-        Sv.add (slot_of_ptr_kind pk) (slot_chk_e e)
-      else slot_chk_e e
-  | Lasub _ _ _ _ e | Lmem _ _ _ e => slot_chk_e e
-  end.
-
-Definition slot_chk_lvs (lvs : lvals) : Sv.t :=
-  Sv_unions [seq slot_chk_lv lv | lv <- lvs].
-
-(* End DEBUG *)
-
-Definition seq_of_opt {T : Type} (ox : option T) : seq T :=
-  if ox is Some x then [:: x] else [::].
-
-Definition add_arr_annot
-  (lvs : lvals) (es : pexprs) (ii : instr_info) : cexec instr_info :=
-  let ors := [seq slot_e e | e <- es] ++ [seq slot_lv lv | lv <- lvs] in
-  let rs := seq.pmap id ors in
-  let ss := sv_of_list fst rs in
-  let xs := Sv.elements ss in
-  Let _ := (* DEBUG *)
-    let chk := Sv.union (slot_chk_lvs lvs) (slot_chk_es es) in
-    assert (Sv.subset chk ss) (too_many_slots xs (Sv.elements chk))
-  in
-  match xs with
-  | [::] => ok ii
-  | [:: _ ] => ok (ii_add_array_annot rs ii)
-  | [:: s & ss ] => Error (too_many_slots [:: s] ss)
-  end.
 
 Fixpoint alloc_i sao (trmap:table*region_map) (i: instr) : cexec (table * region_map * cmd) :=
   let (table, rmap) := trmap in
@@ -1949,8 +1964,8 @@ Fixpoint alloc_i sao (trmap:table*region_map) (i: instr) : cexec (table * region
     Let _ := assert (if get_fundef (p_funcs P) fn is None then false else true)
                 (pp_at_ii ii (stk_ierror_no_var "call to a undefined function")) in
     let table := remove_binding_lvals table rs in
-    Let ri := add_iinfo ii (alloc_call sao rmap rs fn es) in
-    ok (table, ri.1, [::MkI ii ri.2])
+    Let: (rmap', i') := alloc_call ii sao rmap rs fn es in
+    ok (table, rmap', [:: i'])
 
   | Cfor _ _ _  => Error (pp_at_ii ii (stk_ierror_no_var "don't deal with for loop"))
 

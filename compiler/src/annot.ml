@@ -154,3 +154,4 @@ let consume id annot : A.annotations =
   List.filter (fun (k, _) -> not (String.equal id (L.unloc k))) annot
 
 let has_array_annot = Annotations.get_array_annot
+let has_instantiation_annot = Annotations.get_instantiation_annot

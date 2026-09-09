@@ -92,3 +92,5 @@ val consume :
   string -> Annotations.annotations -> Annotations.annotations
 
 val has_array_annot : Annotations.annotations -> string list option
+val has_instantiation_annot :
+  Annotations.annotations -> (string * string) list option

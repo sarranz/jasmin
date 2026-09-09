@@ -190,6 +190,7 @@ let memory_analysis pp_sr pp_err ~debug callee_saved_strategy up =
         Compiler.default_LoopCounter
         Arch.aparams.ap_shp
         Arch.aparams.ap_sap
+        !Glob_options.asm_ct_chk
         Arch.aparams.ap_is_move_op
         (fun vk -> Conv.fresh_var_ident vk IInfo.dummy)
         pp_sr

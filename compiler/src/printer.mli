@@ -1,5 +1,7 @@
 open Prog
 
+val pp_annotations : Format.formatter -> Annotations.annotations -> unit
+
 val pp_warning_msg :  Format.formatter -> Compiler_util.warning_msg -> unit
 val pp_err : debug:bool -> Format.formatter -> Compiler_util.pp_error -> unit
 

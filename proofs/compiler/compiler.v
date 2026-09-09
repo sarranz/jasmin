@@ -209,6 +209,8 @@ Record compiler_params
     (* Same as dead_vars_ufd, but for _sfun_decl instead of _ufun_decl. *)
   pp_sr            : sub_region -> pp_error;
   apply_ret_annot  : seq bool -> fun_info -> fun_info;
+  (* Whether to add region annotations *)
+  region_annot : bool;
 }.
 
 Context
@@ -421,6 +423,7 @@ Definition compiler_front_end (entries: seq funname) (p: uprog) : cexec sprog :=
       true
       shparams
       saparams
+      cparams.(region_annot)
       (ap_is_move_op aparams)
       (fun vk => fresh_var_ident cparams vk dummy_instr_info)
       (pp_sr cparams)

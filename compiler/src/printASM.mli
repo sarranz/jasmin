@@ -7,7 +7,8 @@ type asm_element =
   | Instr of string * string list
   | Comment of string
   | Bytes of string list
-  | ArrAnnot of string
+  | ArrAnnot of string list
+  | InstAnnot of (string * string) list
 
 type asm = asm_element list
 

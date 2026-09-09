@@ -56,17 +56,24 @@ module Make(Target : AsmTarget) : S
     let pp_arr_annot annot =
       match Annot.has_array_annot annot with
       | None | Some [] -> []
-      | Some names -> [ArrAnnot (String.concat " " names)]
+      | Some slots -> [ArrAnnot slots]
+
+    let pp_instantiation_annot annot =
+      Format.printf "%a@." Printer.pp_annotations annot;
+      match Annot.has_instantiation_annot annot with
+      | None | Some [] -> []
+      | Some inst -> [InstAnnot inst]
 
     let pp_instr name instr =
         let Arch_decl.({ asmi_i = i; asmi_ii = ii}) = instr in
         asm_debug_info ii
         @ Target.pp_instr_r name i
         @ pp_arr_annot (snd ii)
+        @ pp_instantiation_annot (snd ii)
 
     let pp_instrs name instrs = List.concat_map (pp_instr name) instrs
 
-    let pp_body name decl =pp_instrs name decl.asm_fd_body
+    let pp_body name decl = pp_instrs name decl.asm_fd_body
 
     let pp_function_header (name:string) decl =
         if decl.asm_fd_export then

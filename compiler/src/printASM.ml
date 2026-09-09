@@ -7,7 +7,8 @@ type asm_element =
 | Instr of string * string list
 | Comment of string
 | Bytes of string list
-| ArrAnnot of string
+| ArrAnnot of string list
+| InstAnnot of (string * string) list
 
 let iwidth = 4
 
@@ -55,11 +56,17 @@ let pp_asm_element fmt asm_element =
     pp_comment fmt content
   | Bytes data ->
     pp_bytes fmt data
-  | ArrAnnot annot -> pp_comment fmt annot
+  | ArrAnnot slots -> pp_comment fmt (String.concat " " slots)
+  | InstAnnot insts ->
+    let inst_str = List.map (fun (k, v) -> Printf.sprintf "%s<-%s" k v) insts in
+    pp_comment fmt (String.concat ", " inst_str)
 
+let needs_newline = function
+  | ArrAnnot _ | InstAnnot _ -> false
+  | _ -> true
 
 let pp_asm_line fmt l =
-  let nl = match l with ArrAnnot _ -> " " | _ -> "\n" in
+  let nl = if needs_newline l then "\n" else " " in
   Format.fprintf fmt "%s%a%!" nl pp_asm_element l
 
 let pp_asm fmt asm =
