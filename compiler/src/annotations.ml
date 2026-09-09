@@ -44,6 +44,9 @@ let add_symbol ~loc s annot =
   then annot
   else (Location.mk_loc loc s, None) :: annot
 
+let remove_symbol s annot =
+  List.filter (fun (k, _) -> not (String.equal (Location.unloc k) s)) annot
+
 (* -------------------------------------------------------------------- *)
 (* Records, on an instruction built by the stack allocation pass out of a
    memory access, the set of per-byte names of the slot bytes the access
@@ -53,8 +56,7 @@ let array_annot = "Internal::array"
 let has_array_annot annot = has_symbol array_annot annot
 
 let add_array_annot ~loc (names : string list) annot =
-  if has_array_annot annot
-  then annot
+  if has_array_annot annot then annot
   else
     let mk d = Location.mk_loc loc d in
     (mk array_annot,

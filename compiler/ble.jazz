@@ -1,0 +1,30 @@
+fn foo(reg ptr u64[2] a1, reg u64 x1) -> reg ptr u64[2] {
+  stack u64 s1 = x1;
+  x1 = s1;
+  a1[0] = x1;
+  a1[1] = 0;
+  return a1;
+}
+
+export fn main(reg ptr u64[2] a) -> reg ptr u64[2] {
+  reg u64 x = a[0];
+  stack u64 s = x;
+  x = s;
+  a = foo(a, x);
+  return a;
+}
+
+/*
+export fn main(reg ptr u64[2] a) -> reg ptr u64[2] {
+  reg u64 x;
+  x = a[0];
+  stack u64 s;
+  s = x;
+  s += 1;
+  x = s;
+  x += 1;
+  a[0] = x;
+  a[1] = 0;
+  return a;
+}
+*/

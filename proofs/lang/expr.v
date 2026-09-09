@@ -5,6 +5,7 @@ Require Import oseq.
 From Coq Require Export ZArith Setoid Morphisms.
 From mathcomp Require Import word_ssrZ.
 Require Export strings word utils type ident var global sem_type slh_ops sopn syscall operators.
+Require Export iinfo_types.
 Require Import xseq.
 Import Utf8 ZArith.
 
@@ -357,8 +358,9 @@ Module Type InstrInfoT <: TAG.
   Parameter with_location : t -> t.
   Parameter is_inline : t -> bool.
   Parameter var_info_of_ii : t -> var_info.
-  Parameter add_array_annot : seq (var * (Z * Z)) -> t -> t.
-  Parameter add_instantiation_annot : seq (var * var) -> t -> t.
+  Parameter add_array_annot : ii_mem_annot -> t -> t.
+  Parameter add_instantiation_annot : ii_inst_annot -> t -> t.
+  Parameter allocate_stack_frame : t -> t.
 End InstrInfoT.
 
 Module InstrInfo : InstrInfoT.
@@ -367,8 +369,9 @@ Module InstrInfo : InstrInfoT.
   Definition with_location (ii : t) := ii.
   Definition is_inline (_ : t) : bool := false.
   Definition var_info_of_ii (_ : t) : var_info := dummy_var_info.
-  Definition add_array_annot (_ : seq (var * (Z * Z))) (ii : t) : t := ii.
-  Definition add_instantiation_annot (_ : seq (var * var)) (ii : t) : t := ii.
+  Definition add_array_annot (_ : ii_mem_annot) (ii : t) : t := ii.
+  Definition add_instantiation_annot (_ : ii_inst_annot) (ii : t) : t := ii.
+  Definition allocate_stack_frame (_ : t) := witness.
 End InstrInfo.
 
 Definition instr_info := InstrInfo.t.
@@ -378,12 +381,13 @@ Definition ii_with_location (ii : instr_info) : instr_info :=
 Definition ii_is_inline (ii : instr_info) : bool := InstrInfo.is_inline ii.
 (* [rs] associates to each accessed slot the byte range [ofs, ofs + len)
    the access uses within it. *)
-Definition ii_add_array_annot (rs : seq (var * (Z * Z))) (ii : instr_info) :
-    instr_info :=
-  InstrInfo.add_array_annot rs ii.
-Definition ii_add_instantiation_annot
-  (rs : seq (var * var)) (ii : instr_info) : instr_info :=
-  InstrInfo.add_instantiation_annot rs ii.
+Definition ii_add_array_annot : _ -> instr_info -> instr_info :=
+  InstrInfo.add_array_annot.
+Definition ii_add_instantiation_annot : _ -> instr_info -> instr_info :=
+  InstrInfo.add_instantiation_annot.
+Definition ii_allocate_stack_frame : instr_info -> instr_info :=
+  InstrInfo.allocate_stack_frame.
+
 Definition var_info_of_ii (ii : instr_info) : var_info := InstrInfo.var_info_of_ii ii.
 
 #[only(eqbOK)] derive

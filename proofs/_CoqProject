@@ -170,6 +170,7 @@ lang/gen_map.v
 lang/global.v
 lang/hoare_logic.v
 lang/ident.v
+lang/iinfo_types.v
 lang/it_sems_core.v
 lang/it_sems_core_defs.v
 lang/it_sems_one_varmap.v

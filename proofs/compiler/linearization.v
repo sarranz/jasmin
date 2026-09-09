@@ -657,6 +657,7 @@ Definition allocate_stack_frame (free: bool) (ii: instr_info) (sz: Z) (tmp: opti
     let args := if free
                    then (lip_free_stack_frame liparams) rspi tmp sz
                    else (lip_allocate_stack_frame liparams) rspi tmp sz in
+    let ii := ii_allocate_stack_frame ii in
      map (li_of_fopn_args ii) args.
 
 Definition is_RAstack_None_call ra :=
