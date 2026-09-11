@@ -2588,8 +2588,9 @@ Definition allocate_stack_frame' (free : bool) (sz : Z) (tmp : option var_i) (ra
   else lip_allocate_stack_frame liparams (vid (sp_rsp (p_extra p))) tmp sz0.
 
 Lemma allocate_stack_frame_frame' free ii sz tmp rastack :
+  let: ii' := ii_allocate_stack_frame ii in
   allocate_stack_frame liparams p free ii sz tmp rastack =
-  map (li_of_fopn_args ii) (allocate_stack_frame' free sz tmp rastack).
+  map (li_of_fopn_args ii') (allocate_stack_frame' free sz tmp rastack).
 Proof. by rewrite /allocate_stack_frame /allocate_stack_frame'; case: eqP. Qed.
 
 Lemma pre_i_call xs f es ii lbl lbli li P Q ls :
@@ -2606,14 +2607,15 @@ Lemma pre_i_call xs f es ii lbl lbli li P Q ls :
     & let before_ops :=
         allocate_stack_frame' false (stack_frame_allocation_size (f_extra fd'))
           (tmpi_of_ra (sf_return_address (f_extra fd'))) (is_RAstack_None_call (sf_return_address (f_extra fd'))) in
-      let before := [seq li_of_fopn_args ii i | i <- before_ops] in
+      let ii' := ii_allocate_stack_frame ii in
+      let before := [seq li_of_fopn_args ii' i | i <- before_ops] in
       let licall :=
         {| li_ii := ii; li_i := Lcall (ovari_of_ra (sf_return_address (f_extra fd'))) (f, 1%positive) |} in
       let lilabel := {| li_ii := ii; li_i := Llabel ExternalLabel lbl |} in
       let after_ops :=
         allocate_stack_frame' true (stack_frame_allocation_size (f_extra fd'))
           (tmpi_of_ra (sf_return_address (f_extra fd'))) (is_RAstack_None_return (sf_return_address (f_extra fd'))) in
-      let after := [seq li_of_fopn_args ii i | i <- after_ops] in
+      let after := [seq li_of_fopn_args ii' i | i <- after_ops] in
       li = before ++ [:: licall, lilabel & after] /\
       mix_ilsteps p' (pc_between_c fn P li) ls ≈
        ls1 <- match sem_fopns_args (to_estate ls) before_ops with
@@ -3399,6 +3401,7 @@ End ILSTEPS_END.
   Qed.
 
   Lemma has_label_allocate_stack_frame' b ii z tmp rastack lbl :
+    let: ii := ii_allocate_stack_frame ii in
     ~~has (is_label lbl) (map (li_of_fopn_args ii) (allocate_stack_frame' b z tmp rastack)).
   Proof.
     rewrite -allocate_stack_frame_frame'.

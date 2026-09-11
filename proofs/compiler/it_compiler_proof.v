@@ -310,7 +310,7 @@ Lemma compiler_back_end_to_asm_meta entries (p : sprog) (xp : asm_prog) :
 Proof using sc_sem print_linearP.
   rewrite /compiler_back_end_to_asm.
   t_xrbindP=> tp /compiler_back_end_meta[] _ _ <-.
-  by move=> /assemble_progP [_ <-].
+  by move=> _ /assemble_progP [_ <-] <- _ ->.
 Qed.
 
 (* The memory has an allocated stack region that is large enough to hold the local variables of the function and all functions it may call.
@@ -336,7 +336,7 @@ Proof using print_linearP.
   t_xrbindP => ? /allMP ok_export _ lp ok_lp.
   rewrite print_linearP => zp ok_zp.
   rewrite print_linearP => tp ok_tp.
-  rewrite print_linearP => <- ok_xp /InP ok_fn M S.
+  rewrite print_linearP => <- {}xp ok_xp <- /InP ok_fn M S.
   move => fd get_fd.
   move: ok_export => /(_ _ ok_fn); rewrite get_fd => /assertP export.
   split; last by rewrite export.
@@ -382,7 +382,7 @@ Lemma compiler_back_end_to_asm_get_fundef entries sp xp fn :
 Proof using sc_sem print_linearP.
   move=> ok_xp ok_fn.
   move: ok_xp; rewrite /compiler_back_end_to_asm.
-  t_xrbindP=> lp ok_lp ok_xp.
+  t_xrbindP=> lp ok_lp {}xp ok_xp <-.
   move: ok_lp; rewrite /compiler_back_end.
   t_xrbindP=> hcheck _ lp1 ok_lp1 lp2.
   rewrite print_linearP => ok_lp2 lp3.
@@ -1575,7 +1575,8 @@ Lemma it_compiler_back_end_to_asmP {fn} :
           (back_end_to_asm_post fn xfd)
    ].
 Proof using haparams print_linearP.
-rewrite /compiler_back_end_to_asm; t_xrbindP=> lp ok_lp ok_xp ok_fn.
+rewrite /compiler_back_end_to_asm; t_xrbindP=> lp ok_lp xp' ok_xp ? ok_fn.
+subst xp'.
 have [disj_rip ok_lp_rsp ok_globs ok_funcs] := assemble_progP ok_xp.
 have [_ meta_rsp _] := compiler_back_end_meta print_linearP ok_lp.
 have rsp_in_callee_saved :
