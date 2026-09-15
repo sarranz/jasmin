@@ -24,6 +24,8 @@ Require Import
   arch_utils.
 Require Import otbn_decl.
 
+Require Import otbn_admit.
+
 #[local] Open Scope Z.
 #[local] Open Scope ring_scope.
 
@@ -380,6 +382,19 @@ Variant otbn_op : Type :=
 | BN_MULQACC_SO of bn_flag_group & bn_halfword_writeback
 | BN_MULQACC_SO_Z of bn_flag_group & bn_halfword_writeback
 
+(* Galois field multiply and accumulate. *)
+| BN_GFMUL_8          (* Multiply by scalar. *)
+| BN_GFMUL_8_ACC      (* Write to accumulator. *)
+| BN_GFMUL_8_ACCH     (* Write to accumulator. *)
+| BN_GFMUL_8_ACC_Z    (* Set to zero and write to accumulator. *)
+| BN_GFMUL_8_ACCH_Z   (* Set to zero and write to accumulator. *)
+
+| BN_GFMUL_8_VV        (* Multiply pointwise. *)
+| BN_GFMUL_8_ACC_VV    (* Write to accumulator. *)
+| BN_GFMUL_8_ACCH_VV   (* Write to accumulator. *)
+| BN_GFMUL_8_ACC_VV_Z  (* Set to zero and write to accumulator. *)
+| BN_GFMUL_8_ACCH_VV_Z (* Set to zero and write to accumulator. *)
+
 (* Wrappers for WSRR and WSRW. *)
 | BN_ACCR  (* Read from ACC register to wide register. *)
 | BN_ACCW  (* Write from wide register to ACC register. *)
@@ -428,6 +443,17 @@ Definition otbn_op_to_string (op : otbn_op) : string :=
   | BN_MULQACC_WO_Z _ => "BN.MULQACC.WO.Z"
   | BN_MULQACC_SO _ _ => "BN.MULQACC.SO"
   | BN_MULQACC_SO_Z _ _ => "BN.MULQACC.SO.Z"
+  | BN_GFMUL_8 => "BN.GFMUL.8"
+  | BN_GFMUL_8_ACC => "BN.GFMUL.8.ACC"
+  | BN_GFMUL_8_ACCH => "BN.GFMUL.8.ACCH"
+  | BN_GFMUL_8_ACC_Z => "BN.GFMUL.8.ACC.Z"
+  | BN_GFMUL_8_ACCH_Z => "BN.GFMUL.8.ACCH.Z"
+
+  | BN_GFMUL_8_VV => "BN.GFMUL.8.VV"
+  | BN_GFMUL_8_ACC_VV => "BN.GFMUL.8.ACC.VV"
+  | BN_GFMUL_8_ACCH_VV => "BN.GFMUL.8.ACCH.VV"
+  | BN_GFMUL_8_ACC_VV_Z => "BN.GFMUL.8.ACC.VV.Z"
+  | BN_GFMUL_8_ACCH_VV_Z => "BN.GFMUL.8.ACCH.VV.Z"
   | BN_ACCR => "BN.ACCR"
   | BN_ACCW => "BN.ACCW"
   | BN_MODR => "BN.MODR"
@@ -468,6 +494,10 @@ Section I_ARGS_KINDS.
 
   Definition ak_xreg_xreg_xreg : i_args_kinds :=
     [:: [:: xreg; xreg; xreg ] ].
+
+  Definition ak_xreg_xreg_xreg_xreg : i_args_kinds :=
+    [:: [:: xreg; xreg; xreg; xreg] ].
+
 
   Definition ak_xreg_xreg_imm10 : i_args_kinds :=
     [:: [:: xreg; xreg; imm_u10 ] ].
@@ -534,7 +564,7 @@ Proof. by case: adout. Qed.
    These instructions are unary or binary word operations, so we define generic
    instruction descriptions [desc_rv_unop] and [desc_rv_binop]. *)
 
-Definition acc_mod := [:: ACC; MOD ].
+Definition acc_mod := [:: ACC; MOD; ACCH; MOD1 ].
 Definition EXa n := ADExplicit (AK_mem Aligned) n (ACR_avoid_xreg acc_mod).
 Definition EXc n := ADExplicit AK_compute n (ACR_avoid_xreg acc_mod).
 
@@ -1532,6 +1562,204 @@ Definition desc_BN_MULQACC_SO_Z : instr_desc_t :=
 
 End MULQACC.
 
+Section GFMUL.
+Let base_gfmul_tin :=
+  [:: lword256; lword256; lword256 ].
+
+Definition desc_BN_GFMUL_8 : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := base_gfmul_tin ++ [:: lword256];
+    id_in := [:: EXa 1; EXa 2; Xreg MOD; Xreg MOD1 ];
+    id_tout := [:: lword256 ];
+    id_out := [:: EXa 0 ];
+    id_semi := fun _ _ _ _ => ok 0%R; (*TODO for later*)
+    id_args_kinds := ak_xreg_xreg_xreg_xreg;
+    id_nargs := 3;
+    id_str_jas := pp_s (otbn_op_to_string BN_GFMUL_8);
+    id_pp_asm := pp_otbn_op BN_GFMUL_8;
+    id_valid := true;
+    id_safe := [::];
+    id_doit := DOIT; (* TODO_OTBN: check *)
+    id_eq_size := refl_equal;
+    id_check_dest := refl_equal;
+    id_safe_wf := refl_equal;
+    id_semi_errty := OTBN_ADMIT "GF8 id_semi_errty"; (*TODO for later*)
+    id_semi_safe := OTBN_ADMIT "GF8 id_semi_safe"; (*TODO for later*)
+  |}.
+
+(*
+Definition desc_BN_GFMUL_8_ACC : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := base_gfmul_acc_tin;
+    id_in := [:: EXa 1; EXa 2; Xreg MOD1; Xreg MOD ];
+    id_tout := [:: lword256 ];
+    id_out := [:: Xa 0; Xreg ACC ];
+    id_semi := semi_BN_GFMUL_8_ACC;
+    id_args_kinds := ak_xreg_xreg_xreg;
+    id_nargs := 3;
+    id_str_jas := pp_s (otbn_op_to_string BN_GFMUL_8_ACC);
+    id_pp_asm := pp_otbn_op BN_GFMUL_8_ACC;
+    id_valid := true;
+    id_safe := [::];
+    id_doit := DOIT; (* TODO_OTBN: check *)
+    id_eq_size := refl_equal;
+    id_check_dest := refl_equal;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+  |}.
+
+Definition desc_BN_GFMUL_8_ACCH : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := base_gfmul_acc_tin;
+    id_in := [:: Xa 1; Xa 2; Xreg MOD1; Xreg MOD; Xreg ACCH ];
+    id_tout := [:: lword256 ];
+    id_out := [:: Xa 0; Xreg ACCH ];
+    id_semi := semi_BN_GFMUL_8_ACCH;
+    id_args_kinds := ak_xreg_xreg_xreg;
+    id_nargs := 3;
+    id_str_jas := pp_s (otbn_op_to_string BN_GFMUL_8_ACCH);
+    id_pp_asm := pp_otbn_op BN_GFMUL_8_ACCH;
+    id_valid := true;
+    id_safe := [::];
+    id_doit := DOIT; (* TODO_OTBN: check *)
+    id_eq_size := refl_equal;
+    id_check_dest := refl_equal;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+  |}.
+
+Definition desc_BN_GFMUL_8_ACC_Z : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := base_gfmul_tin;
+    id_in := [:: Xa 1; Xa 2; Xreg MOD1; Xreg MOD ];
+    id_tout := [:: lword256 ];
+    id_out := [:: Xa 0; Xreg ACC ];
+    id_semi := semi_BN_GFMUL_8_ACC_Z;
+    id_args_kinds := ak_xreg_xreg_xreg;
+    id_nargs := 3;
+    id_str_jas := pp_s (otbn_op_to_string BN_GFMUL_8_ACC_Z);
+    id_pp_asm := pp_otbn_op BN_GFMUL_8_ACC_Z;
+    id_valid := true;
+    id_safe := [::];
+    id_doit := DOIT; (* TODO_OTBN: check *)
+    id_eq_size := refl_equal;
+    id_check_dest := refl_equal;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+  |}.
+
+Definition desc_BN_GFMUL_8_ACCH_Z : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := base_gfmul_tin;
+    id_in := [:: Xa 1; Xa 2; Xreg MOD1; Xreg MOD ];
+    id_tout := [:: lword256 ];
+    id_out := [:: Xa 0; Xreg ACCH ];
+    id_semi := semi_BN_GFMUL_8_ACCH_Z;
+    id_args_kinds := ak_xreg_xreg_xreg;
+    id_nargs := 3;
+    id_str_jas := pp_s (otbn_op_to_string BN_GFMUL_8_ACCH_Z);
+    id_pp_asm := pp_otbn_op BN_GFMUL_8_ACCH_Z;
+    id_valid := true;
+    id_safe := [::];
+    id_doit := DOIT; (* TODO_OTBN: check *)
+    id_eq_size := refl_equal;
+    id_check_dest := refl_equal;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+  |}.
+
+Definition desc_BN_GFMUL_8_VV : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := base_gfmul_tin;
+    id_in := [:: Xa 1; Xa 2; Xreg MOD ];
+    id_tout := [:: lword256 ];
+    id_out := [:: Xa 0 ];
+    id_semi := semi_BN_GFMUL_8_VV;
+    id_args_kinds := ak_xreg_xreg_xreg;
+    id_nargs := 3;
+    id_str_jas := pp_s (otbn_op_to_string BN_GFMUL_8_VV);
+    id_pp_asm := pp_otbn_op BN_GFMUL_8_VV;
+    id_valid := true;
+    id_safe := [::];
+    id_doit := DOIT; (* TODO_OTBN: check *)
+    id_eq_size := refl_equal;
+    id_check_dest := refl_equal;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+  |}.
+
+Definition desc_BN_GFMUL_8_ACC_VV : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := base_gfmul_acc_tin;
+    id_in := [:: Xa 1; Xa 2; Xreg MOD; Xreg ACC ];
+    id_tout := [:: lword256 ];
+    id_out := [:: Xa 0; Xreg ACC ];
+    id_semi := semi_BN_GFMUL_8_ACC_VV;
+    id_args_kinds := ak_xreg_xreg_xreg;
+    id_nargs := 3;
+    id_str_jas := pp_s (otbn_op_to_string BN_GFMUL_8_ACC_VV);
+    id_pp_asm := pp_otbn_op BN_GFMUL_8_ACC_VV;
+    id_valid := true;
+    id_safe := [::];
+    id_doit := DOIT; (* TODO_OTBN: check *)
+    id_eq_size := refl_equal;
+    id_check_dest := refl_equal;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+  |}.
+
+Definition desc_BN_GFMUL_8_ACCH_VV : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := base_gfmul_acc_tin;
+    id_in := [:: Xa 1; Xa 2; Xreg MOD; Xreg ACCH ];
+    id_tout := [:: lword256 ];
+    id_out := [:: Xa 0; Xreg ACCH ];
+    id_semi := semi_BN_GFMUL_8_ACCH_VV;
+    id_args_kinds := ak_xreg_xreg_xreg;
+    id_nargs := 3;
+    id_str_jas := pp_s (otbn_op_to_string BN_GFMUL_8_ACCH_VV);
+    id_pp_asm := pp_otbn_op BN_GFMUL_8_ACCH_VV;
+    id_valid := true;
+    id_safe := [::];
+    id_doit := DOIT; (* TODO_OTBN: check *)
+    id_eq_size := refl_equal;
+    id_check_dest := refl_equal;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+  |}.
+
+Definition desc_BN_GFMUL_8_ACC_VV_Z : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := base_gfmul_tin;
+    id_in := [:: Xa 1; Xa 2; Xreg MOD ];
+    id_tout := [:: lword256 ];
+    id_out := [:: Xa 0; Xreg ACC ];
+    id_semi := semi_BN_GFMUL_8_ACC_VV_Z;
+    id_args_kinds := ak_xreg_xreg_xreg;
+    id_nargs := 3;
+    id_str_jas := pp_s (otbn_op_to_string BN_GFMUL_8_ACC_VV_Z);
+    id_pp_asm := pp_otbn_op BN_GFMUL_8_ACC_VV_Z;
+    id_valid := true;
+  |}.
+*)
+End GFMUL.
+
 (* This is used to read and write [MOD] and [ACC].
    In both reads and writes, there is only one explicit argument (which is an
    input or an output, respectively). *)
@@ -1716,6 +1944,18 @@ Definition desc_otbn_op (op : otbn_op) : instr_desc_t :=
   | BN_MULQACC_WO_Z fg => desc_BN_MULQACC_WO_Z fg
   | BN_MULQACC_SO fg wb => desc_BN_MULQACC_SO fg wb
   | BN_MULQACC_SO_Z fg wb => desc_BN_MULQACC_SO_Z fg wb
+  | BN_GFMUL_8 => desc_BN_GFMUL_8
+  | BN_GFMUL_8_ACC => OTBN_ADMIT "desc_BN_GFMUL_8_ACC"
+  | BN_GFMUL_8_ACCH => OTBN_ADMIT "desc_BN_GFMUL_8_ACCH"
+  | BN_GFMUL_8_ACC_Z => OTBN_ADMIT "desc_BN_GFMUL_8_ACC_Z"
+  | BN_GFMUL_8_ACCH_Z => OTBN_ADMIT "desc_BN_GFMUL_8_ACCH_Z"
+
+  | BN_GFMUL_8_VV => OTBN_ADMIT "desc_BN_GFMUL_8_VV"
+  | BN_GFMUL_8_ACC_VV => OTBN_ADMIT "desc_BN_GFMUL_8_ACC_VV"
+  | BN_GFMUL_8_ACCH_VV => OTBN_ADMIT "desc_BN_GFMUL_8_ACCH_VV"
+  | BN_GFMUL_8_ACC_VV_Z => OTBN_ADMIT "desc_BN_GFMUL_8_ACC_VV_Z"
+  | BN_GFMUL_8_ACCH_VV_Z => OTBN_ADMIT "desc_BN_GFMUL_8_ACCH_VV_Z"
+
   | BN_ACCR => desc_BN_WSR BN_ACCR ACC true
   | BN_ACCW => desc_BN_WSR BN_ACCW ACC false
   | BN_MODR => desc_BN_WSR BN_MODR MOD true
@@ -1804,6 +2044,9 @@ Section PRIM_STRING.
         ; (str_so, prim_otbn_mulqacc_so BN_MULQACC_SO)
         ; (str_so_z, prim_otbn_mulqacc_so BN_MULQACC_SO_Z) ].
 
+  Let bn_gfmul_8 :=
+    [:: (otbn_op_to_string BN_GFMUL_8, prim_otbn_none BN_GFMUL_8)].
+
   Definition otbn_prim_string : seq (string * prim_constructor otbn_op) :=
     Eval vm_compute in
     [seq (replace_dot s, p)
@@ -1815,7 +2058,8 @@ Section PRIM_STRING.
         ++ bn_vec_prim_string
         ++ bn_mulqacc_prim_string
         ++ bn_lid_prim_string
-        ++ bn_sid_prim_string ].
+        ++ bn_sid_prim_string
+        ++ bn_gfmul_8 ].
 
 End PRIM_STRING.
 
