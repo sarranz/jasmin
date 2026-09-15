@@ -1566,6 +1566,8 @@ Section GFMUL.
 Let base_gfmul_tin :=
   [:: lword256; lword256; lword256 ].
 
+(* can't use the string with underscore because it matches the size suffix of
+   existing operators*)
 Definition desc_BN_GFMUL_8 : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
@@ -1573,10 +1575,10 @@ Definition desc_BN_GFMUL_8 : instr_desc_t :=
     id_in := [:: EXa 1; EXa 2; Xreg MOD; Xreg MOD1 ];
     id_tout := [:: lword256 ];
     id_out := [:: EXa 0 ];
-    id_semi := fun _ _ _ _ => ok 0%R; (*TODO for later*)
+    id_semi := fun _ _ _ _ => ok (OTBN_ADMIT "BN_GFMUL_8 semi");
     id_args_kinds := ak_xreg_xreg_xreg_xreg;
     id_nargs := 3;
-    id_str_jas := pp_s (otbn_op_to_string BN_GFMUL_8);
+    id_str_jas := pp_s "BN_GFMUL8";
     id_pp_asm := pp_otbn_op BN_GFMUL_8;
     id_valid := true;
     id_safe := [::];
@@ -1584,8 +1586,8 @@ Definition desc_BN_GFMUL_8 : instr_desc_t :=
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
     id_safe_wf := refl_equal;
-    id_semi_errty := OTBN_ADMIT "GF8 id_semi_errty"; (*TODO for later*)
-    id_semi_safe := OTBN_ADMIT "GF8 id_semi_safe"; (*TODO for later*)
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
   |}.
 
 (*
@@ -2045,7 +2047,8 @@ Section PRIM_STRING.
         ; (str_so_z, prim_otbn_mulqacc_so BN_MULQACC_SO_Z) ].
 
   Let bn_gfmul_8 :=
-    [:: (otbn_op_to_string BN_GFMUL_8, prim_otbn_none BN_GFMUL_8)].
+    let get_name op := (desc_otbn_op op).(id_str_jas) tt in
+    [:: (get_name BN_GFMUL_8, prim_otbn_none BN_GFMUL_8)].
 
   Definition otbn_prim_string : seq (string * prim_constructor otbn_op) :=
     Eval vm_compute in
