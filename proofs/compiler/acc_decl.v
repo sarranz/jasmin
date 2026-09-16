@@ -111,7 +111,7 @@ Variant wide_register : Type :=
 | W00 | W01 | W02 | W03 | W04 | W05 | W06 | W07 | W08 | W09 | W10 | W11 | W12
 | W13 | W14 | W15 | W16 | W17 | W18 | W19 | W20 | W21 | W22 | W23 | W24 | W25
 | W26 | W27 | W28 | W29 | W30 | W31
-| ACC | MOD
+| ACC | ACCH | MOD
 .
 
 #[export]
@@ -124,7 +124,7 @@ Definition wide_registers : seq wide_register :=
   [:: W00; W01; W02; W03; W04; W05; W06; W07; W08; W09; W10; W11; W12; W13; W14
     ; W15; W16; W17; W18; W19; W20; W21; W22; W23; W24; W25; W26; W27; W28; W29
     ; W30; W31
-    ; ACC; MOD (* TODO_ACC these should be extra registers *)
+    ; ACC; ACCH; MOD (* TODO_ACC these should be extra registers *)
   ].
 
 Lemma wide_register_fin_axiom : Finite.axiom wide_registers.
@@ -171,6 +171,7 @@ Definition wide_register_to_string (w : wide_register) : string :=
   | W30 => "w30"
   | W31 => "w31"
   | ACC => "acc"
+  | ACCH => "acch"
   | MOD => "mod"
   end.
 

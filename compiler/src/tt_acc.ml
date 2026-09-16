@@ -51,7 +51,7 @@ let tt_prim err ps s sa =
         let name, ofg, owb, owr = get_acc_opts s in
         (name, ofg, owb, None, owr)
     | Some (Sopn.PVp ws) -> (s, None, None, Some ws, None)
-    | _ -> raise (err "unsupported size suffix")
+    | _ -> raise (err "unsupported size suffix") (* TODO_OTBN: should be an error *)
   in
   match List.assoc name ps with
   | Sopn.PrimACC pr -> begin
@@ -62,11 +62,11 @@ let tt_prim err ps s sa =
         | None,    Some fg, None,    None    -> Sopn.PrimACCfg fg
         | None,    None,    None,    Some i  -> Sopn.PrimACCwreg (Conv.nat_of_int i)
         | None,    None,    None,    None    -> Sopn.PrimACCnone
-        | _ -> raise (err "invalid combination of suffixes")
+        | _ -> raise (err "invalid combination of suffixes") (* TODO_OTBN: should be an error *)
       in
       match pr pv with
       | Ok op -> op
       | Error msg -> raise (err msg)
     end
   | _ | (exception Not_found) ->
-      raise (err "unknown mnemonic or invalid suffix")
+      raise (err "unknown mnemonic or invalid suffix") (* TODO_OTBN: should be an error *)
