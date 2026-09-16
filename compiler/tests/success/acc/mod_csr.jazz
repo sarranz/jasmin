@@ -1,0 +1,11 @@
+export
+fn mod_csr(reg u256 seed, reg u32 x) -> reg u256 {
+    reg u256 m = #BN_MODW(seed);
+    m = #MOD0W(m, x);
+    m = #MOD1W(m, x);
+    m = #MOD0Wzero(m);
+    m = #MOD1Wzero(m);
+
+    reg u256 res = #BN_MODR(m);
+    return res;
+}
