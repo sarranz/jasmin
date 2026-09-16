@@ -1,10 +1,11 @@
 (* ** Imports and settings *)
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat eqtype.
 From Coq Require Import Uint63.
-From ITree Require ITree.
+From ITree Require Import ITreeFacts.
 
-Require Import psem compiler_util.
+Require Import psem compiler_util core_logics.
 Require Export makeReferenceArguments.
+Require Import xrutt xrutt_facts rutt_extras.
 Import Utf8.
 
 Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then remove the line when requiring MathComp >= 2.6 *)
@@ -404,21 +405,6 @@ Context
     forall (X:Sv.t) c', update_c (update_i fresh_reg_ptr p X) c = ok c' ->
      Sv.Subset (Sv.union (read_c c) (write_c c)) X ->
      wequiv_rec p p' ev ev mra_spec (st_eq_on X) c c' (st_eq_on X).
-
-From ITree Require Import
-  ITree
-  ITreeFacts
-  Basics.HeterogeneousRelations
-  Interp.Recursion
-  Eq.Rutt
-  Eq.RuttFacts
-  Exception.
-  Import ITree Core.ITreeDefinition.ITreeNotations.
-  Import Monads.
-  Import MonadNotation.
-  Import core_logics.
-  Require Import xrutt xrutt_facts rutt_extras.
-
 
   Lemma it_makeReferenceArguments_callP fn :
     wiequiv_f p p' ev ev (rpreF (eS:= mra_spec)) fn fn (rpostF (eS:=mra_spec)).
