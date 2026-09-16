@@ -386,6 +386,15 @@ Variant acc_op : Type :=
 | BN_MODR  (* Read from MOD register to wide register. *)
 | BN_MODW  (* Write from wide register to MOD register. *)
 
+(* Write a 32-bit word into the low ([MOD0W]) or next ([MOD1W]) word of
+   [MOD], via a CSR write whose read result is discarded.
+   Compiles to [csrrw x0, mod0, rs] / [csrrw x0, mod1, rs]; the [zero]
+   variants write the constant 0 and compile to [csrrw x0, mod0/mod1, x0]. *)
+| MOD0W
+| MOD0Wzero
+| MOD1W
+| MOD1Wzero
+
 (* Direct load and store. *)
 | BN_LD
 | BN_SD
@@ -432,6 +441,10 @@ Definition acc_op_to_string (op : acc_op) : string :=
   | BN_ACCW => "BN.ACCW"
   | BN_MODR => "BN.MODR"
   | BN_MODW => "BN.MODW"
+  | MOD0W => "MOD0W"
+  | MOD0Wzero => "MOD0Wzero"
+  | MOD1W => "MOD1W"
+  | MOD1Wzero => "MOD1Wzero"
   | BN_LD => "BN.LD"
   | BN_SD => "BN.SD"
   | BN_LID _ => "BN.LID"
@@ -462,6 +475,9 @@ Section I_ARGS_KINDS.
 
   Definition ak_xreg : i_args_kinds :=
     [:: [:: xreg ] ].
+
+  Definition ak_reg : i_args_kinds :=
+    [:: [:: [:: CAreg ] ] ].
 
   Definition ak_xreg_xreg : i_args_kinds :=
     [:: [:: xreg; xreg ] ].
@@ -1560,6 +1576,58 @@ Definition desc_BN_WSR op xr is_read : instr_desc_t :=
     id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
   |}.
 
+(* Replace the 32-bit word of [r] starting at bit [shift] with [w], keeping
+   every other bit of [r] unchanged. Used to model [MOD0W]/[MOD1W] (and their
+   [zero] variants), which each set one 32-bit word of [MOD] via a CSR write,
+   leaving the rest of [MOD] untouched. *)
+Definition write_mod_word32 (shift : Z) (r : u256) (w : u32) : u256 :=
+  let mask := wrepr U256 (Z.shiftl (Z.shiftl 1 32 - 1) shift) in
+  wor (wand r (wnot mask)) (wshl (zero_extend U256 w) shift).
+
+Definition desc_MOD_word32W (op : acc_op) (shift : Z) : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := [:: lword256; lword U32 ];
+    id_in := [:: Xreg MOD; Ea 0 ];
+    id_tout := [:: lword256 ];
+    id_out := [:: Xreg MOD ];
+    id_semi := fun r w => ok (write_mod_word32 shift r w);
+    id_nargs := 1;
+    id_args_kinds := ak_reg;
+    id_str_jas := pp_s (acc_op_to_string op);
+    id_pp_asm := pp_acc_op op;
+    id_valid := true;
+    id_safe := [::];
+    id_doit := DOIT; (* TODO_ACC: check *)
+    id_eq_size := refl_equal;
+    id_check_dest := check_dest_unop_lword;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+  |}.
+
+Definition desc_MOD_word32Wzero (op : acc_op) (shift : Z) : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := [:: lword256 ];
+    id_in := [:: Xreg MOD ];
+    id_tout := [:: lword256 ];
+    id_out := [:: Xreg MOD ];
+    id_semi := fun r => ok (write_mod_word32 shift r 0%R);
+    id_nargs := 0;
+    id_args_kinds := [:: [::] ];
+    id_str_jas := pp_s (acc_op_to_string op);
+    id_pp_asm := pp_acc_op op;
+    id_valid := true;
+    id_safe := [::];
+    id_doit := DOIT; (* TODO_ACC: check *)
+    id_eq_size := refl_equal;
+    id_check_dest := check_dest_unop_lword;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+  |}.
+
 Definition desc_BN_LD : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
@@ -1720,6 +1788,10 @@ Definition desc_acc_op (op : acc_op) : instr_desc_t :=
   | BN_ACCW => desc_BN_WSR BN_ACCW ACC false
   | BN_MODR => desc_BN_WSR BN_MODR MOD true
   | BN_MODW => desc_BN_WSR BN_MODW MOD false
+  | MOD0W => desc_MOD_word32W MOD0W 0
+  | MOD0Wzero => desc_MOD_word32Wzero MOD0Wzero 0
+  | MOD1W => desc_MOD_word32W MOD1W 32
+  | MOD1Wzero => desc_MOD_word32Wzero MOD1Wzero 32
   | BN_LD => desc_BN_LD
   | BN_SD => desc_BN_SD
   | BN_LID i => desc_BN_LID i
@@ -1761,6 +1833,7 @@ Section PRIM_STRING.
       acc_op_to_string
       prim_acc_none
       [:: BN_MOV; BN_RSHI; BN_ADDM; BN_SUBM; BN_ACCR; BN_ACCW; BN_MODR; BN_MODW
+        ; MOD0W; MOD0Wzero; MOD1W; MOD1Wzero
         ; BN_LD; BN_SD ].
 
   (* The element size, modular flag and shift direction are all encoded in the

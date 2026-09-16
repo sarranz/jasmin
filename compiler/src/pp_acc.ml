@@ -131,12 +131,33 @@ let indirect_args pp =
   | "BN.LID" | "BN.SID" -> List.tl pp.pp_aop_args
   | _ -> pp.pp_aop_args
 
+(* [MOD0W]/[MOD1W] and their [zero] variants are syntax sugar for a CSR
+   write that discards the read result (destination [x0]); see
+   [Acc_instr_decl.desc_MOD_word32W]/[desc_MOD_word32Wzero]. This translation
+   is not verified. *)
+let is_MODnW = function
+  | MOD0W | MOD0Wzero | MOD1W | MOD1Wzero -> true
+  | _ -> false
+
+let dst_of_MODnW = function
+  | MOD0W | MOD0Wzero -> "mod0"
+  | MOD1W | MOD1Wzero -> "mod1"
+  | _ -> E.invalid_args ()
+
+let src_of_MODnW op pp =
+  match (op, pp.pp_aop_args) with
+  | (MOD0W | MOD1W), [ (_, Reg r) ] -> pp_register r
+  | (MOD0Wzero | MOD1Wzero), [] -> x0
+  | _ -> E.invalid_args ()
+
 let pp_acc_op op pp =
   if op = RV32 NEG then
     match pp.pp_aop_args with
     | [ (_, Reg r1); (_, Reg r2) ] ->
         ("sub", [ pp_register r1; x0; pp_register r2 ])
     | _ -> E.invalid_args ()
+  else if is_MODnW op then
+    ("csrrw", [ x0; dst_of_MODnW op; src_of_MODnW op pp ])
   else
     let pp_args = indirect_args pp in
     let name =
