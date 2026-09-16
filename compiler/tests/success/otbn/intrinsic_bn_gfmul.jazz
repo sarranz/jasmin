@@ -5,11 +5,11 @@ export fn bn_gfmul(reg u256 x y) -> reg u256 {
     ?{}, z = #set0_256();
     mod = #BN_MODW(z); // BN.WSRW
 
-    /*mod_32 = 0x11d; // li x31, 0x11d
+    mod_32 = 0x11d; // li x31, 0x11d
     mod = #MOD0W(mod, mod_32); // csrrw x0, mod0, x31
 
     idx = 0;  // li x31, 0
-    mod = #MOD1W(mod, idx);  // csrrw x0, mod1, x31*/
+    mod = #MOD1W(mod, idx);  // csrrw x0, mod1, x31
 
     r = #BN_GFMUL8(x, y, mod);
     r = #BN_GFMUL8_VV(r, y, mod);
@@ -21,10 +21,10 @@ export fn bn_gfmul(reg u256 x y) -> reg u256 {
     r, acch = #BN_GFMUL8_ACCH_VV_Z(r, y, mod);
 
     r, acc = #BN_GFMUL8_ACC(r, y, mod, acc);
-    /*r, acch = #BN_GFMUL8_ACCH(r, y, mod, acch);
+    r, acch = #BN_GFMUL8_ACCH(r, y, mod, acch);
 
     r, acc = #BN_GFMUL8_ACC_VV(r, y, mod, acc);
-    r, acch = #BN_GFMUL8_ACCH_VV(r, y, mod, acch);*/
+    r, acch = #BN_GFMUL8_ACCH_VV(r, y, mod, acch);
 
     return r;
 }
