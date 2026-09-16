@@ -16,14 +16,14 @@ module Core_arch_RISCV : Arch_full.Core_arch
    and type asm_op = Riscv_instr_decl.riscv_op
    and type extra_op = Riscv_extra.riscv_extra_op
 
-module Core_arch_OTBN : Arch_full.Core_arch
-  with type reg = Otbn_decl.register
+module Core_arch_ACC : Arch_full.Core_arch
+  with type reg = Acc_decl.register
    and type regx = Arch_utils.empty
-   and type xreg = Otbn_decl.wide_register
-   and type rflag = Otbn_decl.rflag
-   and type cond = Otbn_decl.condition
-   and type asm_op = Otbn_instr_decl.otbn_op
-   and type extra_op = Otbn_extra.extra_op
+   and type xreg = Acc_decl.wide_register
+   and type rflag = Acc_decl.rflag
+   and type cond = Acc_decl.condition
+   and type asm_op = Acc_instr_decl.acc_op
+   and type extra_op = Acc_extra.extra_op
 
 module Core_arch_ARMV8A : Arch_full.Core_arch
   with type reg = Armv8a_decl.register

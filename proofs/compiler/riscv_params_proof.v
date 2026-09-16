@@ -411,7 +411,7 @@ Lemma assemble_cond_argP ii e or vm v rr :
   (forall r, value_uincl vm.[to_var r] (Vword (rr r))) ->
   assemble_cond_arg ii e = ok or ->
   sem_fexpr vm e = ok v ->
-  value_uincl v (Vword (s := Uptr) (sem_cond_arg rr or)). (* TODO_OTBN implicit argument should not be here *)
+  value_uincl v (Vword (s := Uptr) (sem_cond_arg rr or)). (* TODO_ACC implicit argument should not be here *)
 Proof.
   move=> eqr.
   case: e => //=.

@@ -178,7 +178,7 @@ type architecture =
   | ARM_M4
   | ARMv8A
   | RISCV
-  | OTBN
+  | ACC
 
 let architecture_to_string arch =
   match arch with
@@ -186,7 +186,7 @@ let architecture_to_string arch =
   | ARM_M4 -> "arm-m4"
   | ARMv8A -> "armv8a"
   | RISCV -> "riscv"
-  | OTBN -> "otbn"
+  | ACC -> "acc"
 
 (* -------------------------------------------------------------------- *)
 type system =

@@ -3,7 +3,7 @@ From HB Require Import structures.
 From mathcomp Require Import ssreflect ssrfun ssrbool seq eqtype ssralg fintype.
 
 Require Import
-  otbn_options
+  acc_options
   pseudo_operator
   sem_type
   shift_kind
@@ -104,29 +104,29 @@ Variant prim_x86_suffix :=
   | PVvv of velem & wsize & velem & wsize
 .
 
-Variant prim_otbn_suffix :=
-| PrimOTBNnone
-| PrimOTBNws of wsize
-| PrimOTBNfg of bn_flag_group
-| PrimOTBNwb of option bn_flag_group & bn_halfword_writeback
-| PrimOTBNwreg of 'I_32
+Variant prim_acc_suffix :=
+| PrimACCnone
+| PrimACCws of wsize
+| PrimACCfg of bn_flag_group
+| PrimACCwb of option bn_flag_group & bn_halfword_writeback
+| PrimACCwreg of 'I_32
 .
 
 (* The order is important. This is used by the [-help-intrinsics] flag to print
    the expected suffixes. We only look at the first accepted suffix of the list,
    so we must give the most general one first. *)
-Definition prim_otbn_suffixes : seq prim_otbn_suffix :=
-  [seq PrimOTBNws ws | ws <- wsizes] ++
-  [seq PrimOTBNfg fg | fg <- bn_flag_groups] ++
-  [seq PrimOTBNwb None wb | wb <- bn_halfword_writebacks] ++
-  [seq PrimOTBNwb (Some fg) wb
+Definition prim_acc_suffixes : seq prim_acc_suffix :=
+  [seq PrimACCws ws | ws <- wsizes] ++
+  [seq PrimACCfg fg | fg <- bn_flag_groups] ++
+  [seq PrimACCwb None wb | wb <- bn_halfword_writebacks] ++
+  [seq PrimACCwb (Some fg) wb
    | fg <- bn_flag_groups, wb <- bn_halfword_writebacks] ++
-  [seq PrimOTBNwreg r | r : 'I_32] ++
-  [:: PrimOTBNnone].
+  [seq PrimACCwreg r | r : 'I_32] ++
+  [:: PrimACCnone].
 
-Definition allowed_prim_otbn_suffixes
-  {A : Type} (f : prim_otbn_suffix -> result string A) : seq prim_otbn_suffix :=
-  [seq s <- prim_otbn_suffixes | is_ok (f s)].
+Definition allowed_prim_acc_suffixes
+  {A : Type} (f : prim_acc_suffix -> result string A) : seq prim_acc_suffix :=
+  [seq s <- prim_acc_suffixes | is_ok (f s)].
 
 Variant prim_constructor (asm_op:Type) :=
   | PrimX86 of seq prim_x86_suffix & (prim_x86_suffix -> option asm_op)
@@ -134,7 +134,7 @@ Variant prim_constructor (asm_op:Type) :=
     (bool                 (* set_flags *)
      -> bool              (* is_conditional *)
      -> result string asm_op)
-  | PrimOTBN of prim_otbn_suffix -> result string asm_op
+  | PrimACC of prim_acc_suffix -> result string asm_op
 .
 
 Class asmOp (asm_op : Type) := {
@@ -611,7 +611,7 @@ Definition map_prim_constructor {A B} (f: A -> B) (p : prim_constructor A) : pri
   match p with
   | PrimX86 a k => PrimX86 a (fun x => omap f (k x))
   | PrimARM mk => PrimARM (fun sf ic => Let y := mk sf ic in ok (f y))
-  | PrimOTBN k => PrimOTBN (fun s => Let y := k s in ok (f y))
+  | PrimACC k => PrimACC (fun s => Let y := k s in ok (f y))
   end.
 
 Definition primM {A: Type} f  := @PrimX86 A [::] (fun _ => Some f).

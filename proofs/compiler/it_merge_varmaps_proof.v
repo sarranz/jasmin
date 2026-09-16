@@ -13,7 +13,7 @@ From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssralg.
 Require Import sem_one_varmap it_sems_one_varmap merge_varmaps psem_facts core_logics relational_logic.
 Require sem_one_varmap_facts.
 Require Import seq_extra.
-Require Import otbn_admit.
+Require Import acc_admit.
 Import Utf8.
 Import word_ssrZ.
 Import psem.
@@ -714,7 +714,7 @@ Proof using ok_p hcall mvp_not_written.
     move: hc' ii; case: a => [x d lo hi | e0] hc' ii.
     + move: ii; rewrite /check_instr_r /=.
       by [].
-    exact: OTBN_ADMIT_PROOF. (* TODO_OTBN: no semantics for repeat loops. *)
+    exact: ACC_ADMIT_PROOF. (* TODO_ACC: no semantics for repeat loops. *)
   (* while *)
   + move=> a c e iiw c' hc hc' ii I O.
   rewrite {1}write_i_while; t_xrbindP => hsub /check_instr_r_CwhileP [D1 [leID1 hchc hche _ hchc']].
@@ -899,7 +899,7 @@ Proof using ok_p.
          (λ x : var_i, if vtype x is aword _ then true else false)
          (f_params fd)
         ]
-    | RAhwstack _ => True (* TODO_OTBN: no semantics for HW call stack *)
+    | RAhwstack _ => True (* TODO_ACC: no semantics for HW call stack *)
     end.
   - case heq : sf_return_address checked_ra => [ | ra ? | ra_call ra_return ofs ? | ra_hw].
     + by t_xrbindP => ??.
@@ -913,7 +913,7 @@ Proof using ok_p.
         by t_xrbindP => /Sv.is_empty_spec /= h ->; split => //; clear -h; SvD.fsetdec.
       case: ra_return heq hempty hreturn => [ r | ] // heq.
       by t_xrbindP => /Sv.is_empty_spec /= h ->; split => //; clear -h; SvD.fsetdec.
-    by []. (* TODO_OTBN: no semantics for HW call stack *)
+    by []. (* TODO_ACC: no semantics for HW call stack *)
   have ra_neq_magic :
     match sf_return_address (f_extra fd) with
     | RAreg ra _ => [&& ra != vgd, ra != vrsp & convertible (vtype ra) (aword Uptr)]

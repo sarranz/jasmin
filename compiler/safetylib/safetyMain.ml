@@ -60,11 +60,11 @@ let get_arch_with_analyze arch call_conv : (module ArchWithAnalyze) =
 
         let analyze = Safety.analyze
       end)
-  | OTBN ->
+  | ACC ->
       (module struct
-         module C = CoreArchFactory.Core_arch_OTBN
+         module C = CoreArchFactory.Core_arch_ACC
          module A = Arch_full.Arch_from_Core_arch (C)
-         module Safety = Make (Otbn_safety.Otbn_safety (A))
+         module Safety = Make (Acc_safety.Acc_safety (A))
          let analyze = Safety.analyze
        end)
   | ARMv8A ->

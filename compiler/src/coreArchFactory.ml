@@ -10,8 +10,8 @@ module Core_arch_RISCV = Riscv_arch_full.Riscv (struct
   let call_conv = Riscv_decl.riscv_linux_call_conv
 end)
 
-module Core_arch_OTBN = Otbn_arch_full.OTBN (struct
-  let call_conv = Otbn_decl.otbn_call_conv
+module Core_arch_ACC = Acc_arch_full.ACC (struct
+  let call_conv = Acc_decl.acc_call_conv
 end)
 
 module Core_arch_ARMV8A = Armv8a_arch_full.Armv8a (struct
@@ -45,4 +45,4 @@ let get_arch_module arch call_conv : (module Arch_full.Arch) =
                   | ARM_M4 -> (module Core_arch_ARM : Arch_full.Core_arch)
                   | ARMv8A -> (module Core_arch_ARMV8A : Arch_full.Core_arch)
                   | RISCV -> (module Core_arch_RISCV : Arch_full.Core_arch)
-                  | OTBN -> (module Core_arch_OTBN : Arch_full.Core_arch))))
+                  | ACC -> (module Core_arch_ACC : Arch_full.Core_arch))))

@@ -507,7 +507,7 @@ Proof.
   by move=> ?; rewrite Vm.setP_neq.
 Qed.
 
-(* TODO_OTBN: generalize to the other registers... *)
+(* TODO_ACC: generalize to the other registers... *)
 Lemma lom_eqv_write_var_xreg f rip s xs (x : var_i) sz (w : word sz) s' xr :
   lom_eqv rip s xs
   -> write_var true x (Vword w) s = ok s'

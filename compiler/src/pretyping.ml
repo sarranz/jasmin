@@ -1652,7 +1652,7 @@ let check_deprecated_intrinsic (old_name: string) (loc:L.t) =
   | Some new_name ->
     warning Deprecated (L.i_loc0 loc) "Intrinsic operator '%s' is deprecated. Please use '%s' instead." old_name new_name
 
-(* TODO_OTBN: Pseudo-operators have [PrimX86] for all architectures. So we first
+(* TODO_ACC: Pseudo-operators have [PrimX86] for all architectures. So we first
    match with X86.Maybe these should go in a different list? *)
 let tt_prim (arch_info : 'asm P.arch_info) id =
   let { L.pl_loc = loc ; L.pl_desc = s } = id in
@@ -1678,7 +1678,7 @@ let tt_prim (arch_info : 'asm P.arch_info) id =
       let err msg = tyerror ~loc (UnknownPrim(s, " (" ^ msg ^ ")")) in
       match arch_info.arch with
       | ARM_M4 -> Tt_arm_m4.tt_prim err ps name sz
-      | OTBN -> Tt_otbn.tt_prim err ps name sz
+      | ACC -> Tt_acc.tt_prim err ps name sz
       | _ -> raise (err "")
   in c
 
@@ -2088,7 +2088,7 @@ let rec tt_instr arch_info (env : 'asm Env.env) ((pannot,pi) : S.pinstr) : 'asm 
            let () = match ty with
              | P.ETarr _ -> ()
              (* Any word size is accepted here; each backend's lowering rejects
-                the sizes it does not support (e.g. OTBN allows u32 and u256). *)
+                the sizes it does not support (e.g. ACC allows u32 and u256). *)
              | P.ETword _ -> ()
              | _ ->
                 let w = match ty with P.ETword(w, _ws) -> w | _ -> None in
