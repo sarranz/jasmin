@@ -256,6 +256,15 @@ Proof.
   by move=> ?? [/hR].
 Qed.
 
+Lemma lutt_weakenQ
+  {E : Type -> Type} (T : Type)
+  (PEv : prepred E) (PAns : postpred E)
+  (Q Q': T -> Prop) t :
+  (forall r, Q r -> Q' r) ->
+  lutt PEv PAns Q t ->
+  lutt PEv PAns Q' t.
+Proof. exact: lutt_weaken. Qed.
+
 Lemma interp_mrec_lutt (D E : Type -> Type) (bodies : forall T : Type, D T -> itree (D +' E) T)
   (PEv : prepred E) (DPEv : prepred D)
   (PAns : postpred E) (DPAns : postpred D) :
@@ -425,6 +434,11 @@ Section XRUTT.
   case: x1 => [v1 | ??]; last by rewrite bind_throw; apply: lxrutt_throw.
   by rewrite bind_ret_l => /(_ _ erefl).
   Qed.
+
+  Lemma lxrutt_iresult_left (x1 : exec R1) t2 :
+    (forall v1, x1 = ok v1 -> lxrutt REv RAns RR (Ret v1) t2) ->
+    lxrutt REv RAns RR (iresult x1) t2.
+  Proof. rewrite -[iresult _]bind_ret_r; exact: lxrutt_bind_iresult. Qed.
 
 End XRUTT.
 
@@ -675,6 +689,61 @@ Proof.
 Qed.
 
 End LUTT_RUTT_TRANS.
+
+(* TODO replace current one *)
+Lemma lutt_xrutt_trans_r'
+  {E1 E2 : Type -> Type}
+  (REv REv' : prerel E1 E2) (RAns RAns' : postrel E1 E2)
+  (PEv2 : prepred E2) (PAns2 : postpred E2)
+  {R1 R2 : Type}
+  (RR RR' : R1 -> R2 -> Prop) (P1 : R1 -> Prop) (P2:R2 -> Prop)
+  (is_error1 : forall T, E1 T -> bool)
+  t1 t2 :
+  (forall A1 A2 (e1 : E1 A1) (e2 : E2 A2),
+      PEv2 _ e2 -> REv _ _ e1 e2 -> REv' _ _ e1 e2) ->
+  (forall A1 A2 (e1 : E1 A1) a1 (e2 : E2 A2) a2,
+      IsNoCut_ (errcutoff is_error1) A1 e1 ->
+      IsNoCut_ nocutoff A2 e2 ->
+      PEv2 _ e2 ->
+      REv _ _ e1 e2 ->
+      RAns' _ _ e1 a1 e2 a2 ->
+      PAns2 _ e2 a2 /\ RAns _ _ e1 a1 e2 a2) ->
+  (forall r1 r2, P2 r2 -> RR r1 r2 -> RR' r1 r2) ->
+  lutt PEv2 PAns2 P2 t2 ->
+  xrutt (errcutoff is_error1) nocutoff REv RAns RR t1 t2 ->
+  xrutt (errcutoff is_error1) nocutoff REv' RAns' RR' t1 t2.
+Proof.
+move=> he ha hr h1 h2; apply/xrutt_weaken/lutt_xrutt_trans_r/h2/h1 => //.
+- by move=> A1 A2 e1 e2 []; apply: he.
+- by move=> A1 A2 e1 a1 e2 a2 ++ []; apply: ha.
+by move=> r1 r2 []; apply: hr.
+Qed.
+
+Lemma lutt_xrutt_trans_rQ
+  {E1 E2 : Type -> Type}
+  (REv : prerel E1 E2) (RAns : postrel E1 E2)
+  (PEv2 : prepred E2) (PAns2 : postpred E2)
+  {R1 R2 : Type}
+  (RR RR' : R1 -> R2 -> Prop) (P2 : R2 -> Prop)
+  (is_error1 : forall T, E1 T -> bool)
+  t1 t2 :
+  (forall A1 A2 (e1 : E1 A1) a1 (e2 : E2 A2) a2,
+      IsNoCut_ (errcutoff is_error1) A1 e1 ->
+      IsNoCut_ nocutoff A2 e2 ->
+      PEv2 _ e2 ->
+      REv _ _ e1 e2 ->
+      RAns _ _ e1 a1 e2 a2 ->
+      PAns2 _ e2 a2) ->
+  (forall r1 r2, P2 r2 -> RR r1 r2 -> RR' r1 r2) ->
+  lutt PEv2 PAns2 P2 t2 ->
+  xrutt (errcutoff is_error1) nocutoff REv RAns RR t1 t2 ->
+  xrutt (errcutoff is_error1) nocutoff REv RAns RR' t1 t2.
+Proof.
+move=> ha hr h1 h2; apply: lutt_xrutt_trans_r' hr h1 h2 => //.
+- exact: (fun _ => True).
+move=> A1 A2 e1 a1 e2 a2 he1 he2 hp hre hra; split=> //.
+exact: ha he1 he2 hp hre hra.
+Qed.
 
 Lemma lutt_translate
   {E F : Type -> Type} {R : Type}
