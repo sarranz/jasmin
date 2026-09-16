@@ -19,6 +19,7 @@ Require Import
   array_copy
   array_expansion
   array_init
+  call_depth
   constant_prop
   dead_calls
   lower_spill
@@ -452,8 +453,23 @@ Definition check_export entries (p: sprog) : cexec unit :=
           else Error (pp_at_fn fn (merge_varmaps.E.gen_error true None (pp_s "unknown export function")))
        ) entries.
 
+(* When the architecture has no hardware call stack, no function may be
+   compiled to use it as its return-address location: this is what lets
+   the linearization proof assume the stack exists whenever a [RAhwstack]
+   function is executed. *)
+Definition check_hwcs_usage (p: sprog) : cexec unit :=
+  if ad_hwcs_size is Some _ then ok tt
+  else
+    allM (λ '(fn, fd),
+            assert
+              (~~ is_RAhwstack fd.(f_extra).(sf_return_address))
+              (pp_at_fn fn (merge_varmaps.E.gen_error true None
+                 (pp_s "hardware call stack not available on this architecture")))
+         ) (p_funcs p).
+
 Definition compiler_back_end entries (pd: sprog) :=
   Let _ := check_export entries pd in
+  Let _ := check_hwcs_usage pd in
   (* linearisation                     *)
   Let _ := merge_varmaps.check pd var_tmps in
   Let pl := linear_prog liparams pd in
@@ -488,7 +504,21 @@ Definition compiler_back_end_to_asm (entries: seq funname) (p: sprog) :=
   Let lp := compiler_back_end entries p in
   assemble_prog agparams lp.
 
+(* The static (source) call-graph depth of every entry point must fit in
+   what is left of the hardware call stack once the compiled code takes
+   over: this is the compile-time counterpart of [enough_hwcs_space]. *)
+Definition check_hwcs_depth entries (up : uprog) (xp: asm_prog) : cexec unit :=
+  allM (λ fn,
+          if get_fundef xp.(asm_funcs) fn is Some xfd then
+            assert
+              (asm_fd_max_call_depth xfd <=? Z.of_nat (call_depth up fn))%Z
+              (pp_at_fn fn (merge_varmaps.E.gen_error true None (pp_s "hardware call stack depth problem")))
+          else Error (pp_at_fn fn (merge_varmaps.E.gen_error true None (pp_s "unknown export function")))
+       ) entries.
+
 Definition compile_prog_to_asm entries (p: uprog): cexec asm_prog :=
-  compiler_front_end entries p >>= compiler_back_end_to_asm entries.
+  Let xp := compiler_front_end entries p >>= compiler_back_end_to_asm entries in
+  Let _ := check_hwcs_depth entries p xp in
+  ok xp.
 
 End COMPILER.

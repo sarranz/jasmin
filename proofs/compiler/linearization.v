@@ -549,6 +549,8 @@ Definition classify_cassgn (x: lval) (ty: atype) (e: pexpr) : cassign_kind :=
           (E.ii_error ii "caller need alignment greater than callee") in
         Let _ := assert (sf_stk_max e + frame_size e_caller <=? sf_stk_max e_caller)%Z
           (E.ii_error ii "max size problem") in
+        Let _ := assert (sf_max_call_depth e + 1 <=? sf_max_call_depth e_caller)%Z
+          (E.ii_error ii "max call depth problem") in
         ok tt
       else Error (E.ii_error ii "call to unknown function")
     end.
@@ -665,6 +667,8 @@ Definition check_fd (fn: funname) (fd:sfundef) :=
                       stack_frame_allocation_size e <? wbase Uptr
                     & frame_size e <=? sf_stk_max e]%Z
                   (E.error "bad stack size") in
+  Let _ := assert (0 <? sf_max_call_depth e)%Z
+                  (E.error "bad call depth") in
   Let _ := assert match sf_return_address e with
                   | RAnone => ~~ (var_tmp2 \in map v_var fd.(f_res))
                   | RAreg ra tmp => convertible (vtype ra) (aword Uptr) && ov_type_ptr tmp
@@ -918,6 +922,7 @@ Definition linear_fd (fd: sfundef) :=
     ; lfd_export := is_export
     ; lfd_callee_saved := if is_export then map fst e.(sf_to_save) else [::]
     ; lfd_stk_max := sf_stk_max e
+    ; lfd_max_call_depth := sf_max_call_depth e
     ; lfd_frame_size := frame_size e
     ; lfd_align_args := sf_align_args e
     |}).

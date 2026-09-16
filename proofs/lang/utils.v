@@ -205,6 +205,9 @@ Proof. by case: b. Qed.
 
 Arguments assertP {E b e u} _.
 
+Definition runcons {eT rT} (xs : seq rT) (e : eT) : result eT (rT * seq rT) :=
+  if xs is x :: xs' then ok (x, xs') else Error e.
+
 Lemma map_errP eT1 eT2 aT (f : eT1 -> eT2) (r : result eT1 aT) x :
   Result.map_err f r = ok x ->
   r = ok x.
@@ -214,7 +217,8 @@ Arguments map_errP {_ _ _ _ _ _}.
 Definition assertion_label := string.
 
 Variant error :=
- | ErrOob | ErrAddrUndef | ErrAddrInvalid | ErrStack | ErrType | ErrArith | ErrSemUndef
+ | ErrOob | ErrAddrUndef | ErrAddrInvalid | ErrStack | ErrHWCallStack | ErrType
+ | ErrArith | ErrSemUndef
  | ErrAssert of assertion_label.
 
 Definition exec t := result error t.

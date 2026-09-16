@@ -455,9 +455,6 @@ Definition eval_PUSH (w: wreg) (s: asm_state) : exec asm_state :=
 (* Hardware call stack (see [ad_hwcs_size]). Overflow and underflow are
    hardware faults. *)
 
-(* TODO_ACC: use the constructor from utils once it exists. *)
-Local Notation ErrHWCallStack := ErrStack.
-
 Definition eval_PUSH_HWCS (w : wreg) (s : asm_state) : exec asm_state :=
   Let n := o2r ErrSemUndef ad_hwcs_size in
   Let _ := assert (size s.(asm_hwcs) < n) ErrHWCallStack in
@@ -643,7 +640,7 @@ Proof.
   - rewrite /eval_POP; t_xrbindP => _ ? _ ? _ <-.
     by case: decode_label => // ? /eval_JMP_invariant <-.
   - case: return_address_from => // ra; rewrite /eval_PUSH_HWCS.
-    by t_xrbindP => ? ? _ _ <- /eval_JMP_invariant /=; rewrite mem_write_hwcs_invariant.
+    by t_xrbindP => ? ? ? ? ? ? <- /eval_JMP_invariant /=; rewrite mem_write_hwcs_invariant.
   - rewrite /eval_POP_HWCS; t_xrbindP => ? _.
     case: (asm_hwcs _) => // ? ? [<-].
     by case: decode_label => // ? /eval_JMP_invariant <-.

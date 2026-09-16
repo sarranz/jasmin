@@ -20,6 +20,7 @@ let pp_error fmt err =
   | ErrAddrUndef -> "undefined address"
   | ErrAddrInvalid -> "invalid address"
   | ErrStack -> "stack error"
+  | ErrHWCallStack -> "hardware call stack error"
   | ErrType  -> "type error"
   | ErrArith -> "arithmetic error"
   | ErrSemUndef -> "undefined semantics"

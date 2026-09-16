@@ -32,13 +32,6 @@ Local Open Scope seq_scope.
    TODO_ACC: this belongs to the architecture description (arch_decl). *)
 Class hw_call_stack_info := { hwcs_size : option nat }.
 
-(* TODO_ACC: Add new constructor *)
-Notation ErrHWCallStack := ErrStack.
-
-(* TODO_ACC: move utils *)
-Definition runcons {eT rT} (xs : seq rT) (e : eT) : result eT (rT * seq rT) :=
-  if xs is x :: xs' then ok (x, xs') else Error e.
-
 Section SEM.
 
 Context
