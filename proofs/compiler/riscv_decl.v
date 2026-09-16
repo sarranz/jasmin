@@ -177,6 +177,7 @@ Instance riscv_decl : arch_decl register register_ext xregister rflag condt :=
   ; toS_f     := empty_toS lbool
   ; reg_size_neq_xreg_size := refl_equal
   ; ad_rsp := SP
+  ; ad_hwcs_size := None
   ; ad_fcp := riscv_fcp
   ; caimm_cond := riscv_caimm_cond
   ; caimm_cond_eqC := eqTC_riscv_caimm_cond

@@ -23,6 +23,22 @@ Local Open Scope seq_scope.
 
 #[local] Existing Instance withsubword.
 
+(* Hardware call stack.
+   Some architectures (ACC) save return addresses in a dedicated, bounded
+   hardware stack, distinct from the data stack and from the registers.
+   [hwcs_size] is its number of entries, or [None] when the architecture has
+   no such stack; in that case [Lcall OnHWCallStack] and [Lret_hwcallstack]
+   have no semantics.
+   TODO_ACC: this belongs to the architecture description (arch_decl). *)
+Class hw_call_stack_info := { hwcs_size : option nat }.
+
+(* TODO_ACC: Add new constructor *)
+Notation ErrHWCallStack := ErrStack.
+
+(* TODO_ACC: move utils *)
+Definition runcons {eT rT} (xs : seq rT) (e : eT) : result eT (rT * seq rT) :=
+  if xs is x :: xs' then ok (x, xs') else Error e.
+
 Section SEM.
 
 Context
@@ -31,6 +47,7 @@ Context
   {spp : SemPexprParams}
   {sip : SemInstrParams asm_op syscall_state}
   {ovm_i : one_varmap_info}
+  {hwcs_i : hw_call_stack_info}
   (P : lprog).
 
 Definition get_label (i : linstr) : option label :=
@@ -47,20 +64,30 @@ Notation labels := label_in_lprog.
 (* --------------------------------------------------------------------------- *)
 (* Semantic                                                                    *)
 
+(* [lhwcs] is the hardware call stack (top of the stack first). It is only
+   used by [Lcall OnHWCallStack], [Lret_hwcallstack] and [Lsyscall]; it stays
+   empty on architectures without a hardware call stack. *)
 Record lstate := Lstate
   { lscs : syscall_state_t;
     lmem : mem;
     lvm  : Vm.t;
+    lhwcs : seq pointer;
     lfn : funname;
     lpc  : nat; }.
 
 Definition to_estate (s:lstate) : estate := Estate s.(lscs) s.(lmem) s.(lvm).
-Definition of_estate (s:estate) fn pc := Lstate s.(escs) s.(emem) s.(evm) fn pc.
-Definition setpc (s:lstate) pc :=  Lstate s.(lscs) s.(lmem) s.(lvm) s.(lfn) pc.
-Definition setc (s:lstate) fn := Lstate s.(lscs) s.(lmem) s.(lvm) fn s.(lpc).
-Definition setcpc (s:lstate) fn pc := Lstate s.(lscs) s.(lmem) s.(lvm) fn pc.
+Definition of_estate (s:estate) cs fn pc :=
+  Lstate s.(escs) s.(emem) s.(evm) cs fn pc.
+Definition setpc (s:lstate) pc :=
+  Lstate s.(lscs) s.(lmem) s.(lvm) s.(lhwcs) s.(lfn) pc.
+Definition setc (s:lstate) fn :=
+  Lstate s.(lscs) s.(lmem) s.(lvm) s.(lhwcs) fn s.(lpc).
+Definition setcpc (s:lstate) fn pc :=
+  Lstate s.(lscs) s.(lmem) s.(lvm) s.(lhwcs) fn pc.
+Definition lset_hwcs (s:lstate) cs :=
+  Lstate s.(lscs) s.(lmem) s.(lvm) cs s.(lfn) s.(lpc).
 Definition lset_estate' (ls : lstate) (s : estate) : lstate :=
-  Eval hnf in of_estate s ls.(lfn) ls.(lpc).
+  Eval hnf in of_estate s ls.(lhwcs) ls.(lfn) ls.(lpc).
 Definition lset_estate
   (ls : lstate) (scs : syscall_state) (m : mem) (vm : Vm.t) : lstate :=
   Eval hnf in lset_estate' ls {| escs := scs; emem := m; evm := vm; |}.
@@ -73,12 +100,12 @@ Definition lset_vm (ls : lstate) (vm : Vm.t) : lstate :=
 Definition lnext_pc (ls : lstate) : lstate :=
   Eval hnf in setpc ls (lpc ls).+1.
 
-Lemma to_estate_of_estate es fn pc:
-  to_estate (of_estate es fn pc) = es.
+Lemma to_estate_of_estate es cs fn pc:
+  to_estate (of_estate es cs fn pc) = es.
 Proof. by case: es. Qed.
 
 Lemma of_estate_to_estate ls :
-  of_estate (to_estate ls) (lfn ls) (lpc ls) = ls.
+  of_estate (to_estate ls) (lhwcs ls) (lfn ls) (lpc ls) = ls.
 Proof. by case: ls. Qed.
 
 
@@ -121,6 +148,22 @@ Definition sem_fopns_args := foldM sem_fopn_args.
 Definition fn_is_export (fn : funname) : bool :=
   if get_fundef P.(lp_funcs) fn is Some fd then fd.(lfd_export) else false.
 
+(* Hardware call stack operations. *)
+Definition hwcs_push (cs : seq pointer) (p : pointer) : exec (seq pointer) :=
+  Let n := o2r ErrSemUndef hwcs_size in
+  Let _ := assert (size cs < n) ErrHWCallStack in
+  ok (p :: cs).
+
+Definition hwcs_pop (cs : seq pointer) : exec (pointer * seq pointer) :=
+  Let _ := assert (isSome hwcs_size) ErrSemUndef in
+  runcons cs ErrHWCallStack.
+
+(* On architectures with a hardware call stack, a syscall is itself a call:
+   it needs one free entry while it runs, and leaves the stack unchanged. *)
+Definition hwcs_check_free (cs : seq pointer) : exec unit :=
+  if hwcs_size is Some n then assert (size cs < n) ErrHWCallStack
+  else ok tt.
+
 Definition eval_instr (i : linstr) (s1: lstate) : exec lstate :=
   match li_i i with
   | Lopn xs o es =>
@@ -131,6 +174,7 @@ Definition eval_instr (i : linstr) (s1: lstate) : exec lstate :=
     ok (lnext_pc (lset_estate' s1 s'))
   | Lsyscall o =>
     let sig := syscall_sig o in
+    Let _ := hwcs_check_free s1.(lhwcs) in
     Let ves := get_vars true s1.(lvm) sig.(scs_vin) in
     Let: (scs, m, vs) :=
       exec_syscall (semCallParams := sCP_stack) s1.(lscs) s1.(lmem) o ves
@@ -160,8 +204,16 @@ Definition eval_instr (i : linstr) (s1: lstate) : exec lstate :=
     Let p := rencode_label labels (lfn s1, lbl) in
     Let vm := set_var true s1.(lvm) r (Vword p) in
     eval_jump d (lset_vm s1 vm)
-  | Lcall OnHWCallStack _ => Error ErrSemUndef
-  | Lret_hwcallstack => Error ErrSemUndef
+  | Lcall OnHWCallStack d =>
+    Let _ := assert (~~ fn_is_export d.1) ErrSemUndef in
+    Let lbl := get_label_after_pc s1 in
+    Let p := rencode_label labels (lfn s1, lbl) in
+    Let cs := hwcs_push s1.(lhwcs) p in
+    eval_jump d (lset_hwcs s1 cs)
+  | Lret_hwcallstack =>
+    Let: (p, cs) := hwcs_pop s1.(lhwcs) in
+    Let d := rdecode_label labels p in
+    eval_jump d (lset_hwcs s1 cs)
   | Lret =>
     let vrsp := v_var (vid (lp_rsp P)) in
     Let sp := get_var true s1.(lvm) vrsp >>= to_pointer in
@@ -194,11 +246,15 @@ Definition step (s: lstate) : exec lstate :=
     eval_instr i s
   else type_error.
 
-Definition ls_export_initial scs m vm fn :=
+(* [cs] is the content of the hardware call stack on entry; it contains at
+   least the return address pushed by the caller of the export function, so
+   its size constrains how deep the export function may call. *)
+Definition ls_export_initial scs m vm cs fn :=
   {|
     lscs := scs;
     lmem := m;
     lvm := vm;
+    lhwcs := cs;
     lfn := fn;
     lpc := 0;
   |}.
@@ -288,13 +344,16 @@ Local Open Scope monad_scope.
 Definition ilsem (cond : lstate -> bool) (s:lstate) :=
   while cond istep s.
 
-Definition ilsem_exportcall (fn: funname) (es:estate) :=
-  let s := (ls_export_initial (escs es) (emem es) (evm es) fn) in
+(* The export function must leave the hardware call stack as it found it: the
+   caller's return address must be on top when the function returns. *)
+Definition ilsem_exportcall (fn: funname) (cs : seq pointer) (es:estate) :=
+  let s := (ls_export_initial (escs es) (emem es) (evm es) cs fn) in
   fd <-ioget ErrType (get_fundef P.(lp_funcs) fn);;
   _ <- iresult (assert (lfd_export fd) ErrSemUndef);;
   s' <- ilsem (endpc fn) s;;
   let vm' := s'.(lvm) in
   _ <- iresult (assert (all (fun x => value_eqb (evm es).[x] vm'.[x]) (Sv.elements callee_saved)) ErrSemUndef);;
+  _ <- iresult (assert (s'.(lhwcs) == cs) ErrSemUndef);;
   Ret (to_estate s').
 
 Lemma i_lsem_body cond s : while_body cond istep s ≅ iresult (lsem_body cond s).
@@ -401,13 +460,14 @@ Definition mix_ilsem_fun (fn : funname) (ls : lstate) : itree E lstate :=
 Definition mix_ilsem cond s :=
   interp_mrec handle_call (mix_ilsteps cond s).
 
-Definition mix_ilsem_exportcall (fn: funname) (es:estate) :=
-  let s := (ls_export_initial (escs es) (emem es) (evm es) fn) in
+Definition mix_ilsem_exportcall (fn: funname) (cs : seq pointer) (es:estate) :=
+  let s := ls_export_initial (escs es) (emem es) (evm es) cs fn in
   fd <-ioget ErrType (get_fundef P.(lp_funcs) fn);;
   _ <- iresult (assert (lfd_export fd) ErrSemUndef);;
   s' <- mix_ilsem_fun fn s;;
   let vm' := s'.(lvm) in
   _ <- iresult (assert (all (fun x => value_eqb (evm es).[x] vm'.[x]) (Sv.elements callee_saved)) ErrSemUndef);;
+  _ <- iresult (assert (s'.(lhwcs) == cs) ErrSemUndef);;
   Ret (to_estate s').
 
 Lemma mix_ilsteps_eq cond s : mix_ilsteps cond s ≈ mix_steps istep is_call check_call cond s.
@@ -462,12 +522,12 @@ Proof.
   apply eqit_Tau_l; reflexivity.
 Qed.
 
-Lemma mix_ilsem_exportcall_ilsem_exportcall fn s :
+Lemma mix_ilsem_exportcall_ilsem_exportcall fn cs s :
   xrutt.xrutt
     (core_logics.errcutoff (is_error wE)) core_logics.nocutoff
     rutt_extras.RPre_eq rutt_extras.RPost_eq
     eq
-    (mix_ilsem_exportcall fn s) (ilsem_exportcall fn s).
+    (mix_ilsem_exportcall fn cs s) (ilsem_exportcall fn cs s).
 Proof.
 rewrite /mix_ilsem_exportcall /ilsem_exportcall.
 apply (xrutt_bind (RR := (fun fd fd' => fd = fd' /\ get_fundef P.(lp_funcs) fn = Some fd))).
@@ -481,6 +541,9 @@ move=> [] [] hfn.
 apply: (xrutt_bind (RR := eq)); last first.
 - move=> s' _ <-; apply: (xrutt_bind (RR := eq)).
   - case: all => /=; first by apply xrutt_Ret.
+    apply: xrutt_Vis => //=; by exists erefl.
+  move=> [] [] _; apply: (xrutt_bind (RR := eq)).
+  - case: (_ == _) => /=; first by apply xrutt_Ret.
     apply: xrutt_Vis => //=; by exists erefl.
   by move=> [] [] _; apply xrutt_Ret.
 rewrite /mix_ilsem_fun /mrec /= /handle_call_cond /fn_is_export.

@@ -66,6 +66,10 @@ Class arch_decl (reg regx xreg rflag cond : Type) :=
   ; toS_f : ToString lbool rflag
   ; reg_size_neq_xreg_size : reg_size != xreg_size
   ; ad_rsp : reg
+  ; ad_hwcs_size : option nat
+      (* Number of entries of the hardware call stack, for architectures that
+         save return addresses in a dedicated bounded stack (ACC); [None] when
+         there is no such stack. *)
   ; ad_fcp : FlagCombinationParams
   ; caimm_cond : Type  (* architecture-specific immediate conditions *)
   ; caimm_cond_eqC : eqTypeC caimm_cond

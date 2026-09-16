@@ -92,6 +92,9 @@ Section SEM.
 
 Context {syscall_state : Type} {sc_sem : syscall_sem syscall_state} `{asm_d : asm} {call_conv: calling_convention}.
 
+(* [asm_hwcs] is the hardware call stack (top of the stack first), see
+   [ad_hwcs_size]. It is only used by [CALL_HWCS], [RET_HWCS] and [SysCall];
+   it stays empty on architectures without a hardware call stack. *)
 Record asmmem : Type := AsmMem {
   asm_rip  : pointer;
   asm_scs : syscall_state_t;
@@ -100,6 +103,7 @@ Record asmmem : Type := AsmMem {
   asm_regx : regxmap;
   asm_xreg : xregmap;
   asm_flag : rflagmap;
+  asm_hwcs : seq pointer;
 }.
 
 Record asm_state := AsmState {
@@ -141,7 +145,8 @@ Class asm_syscall_sem := {
       eval_syscall o s1 = ok s2 ->
       [/\ forall r, r \in callee_saved -> preserved_register r s1 s2
         , s1.(asm_rip) = s2.(asm_rip)
-        & stack_stable s1.(asm_mem) s2.(asm_mem)
+        , stack_stable s1.(asm_mem) s2.(asm_mem)
+        & s1.(asm_hwcs) = s2.(asm_hwcs)
       ];
 }.
 
@@ -292,6 +297,7 @@ Definition mem_write_rflag (s : asmmem) (f:rflag_t) (b:option bool) :=
      asm_rip  := s.(asm_rip);
      asm_xreg := s.(asm_xreg);
      asm_flag := RflagMap.set s.(asm_flag) f (o2rflagv b);
+     asm_hwcs := s.(asm_hwcs);
    |}.
 
 (* -------------------------------------------------------------------- *)
@@ -304,6 +310,7 @@ Definition mem_write_mem al (l : pointer) sz (w : word sz) (s : asmmem) :=
      asm_rip  := s.(asm_rip);
      asm_xreg := s.(asm_xreg);
      asm_flag := s.(asm_flag);
+     asm_hwcs := s.(asm_hwcs);
   |}.
 
 (* -------------------------------------------------------------------- *)
@@ -327,6 +334,7 @@ Definition mem_write_reg (f: msb_flag) (r: reg_t) sz (w: word sz) (m: asmmem) :=
     asm_rip  := m.(asm_rip);
     asm_xreg := m.(asm_xreg);
     asm_flag := m.(asm_flag);
+    asm_hwcs := m.(asm_hwcs);
   |}.
 
 (* -------------------------------------------------------------------- *)
@@ -339,6 +347,7 @@ Definition mem_write_regx (f: msb_flag) (r: regx_t) sz (w: word sz) (m: asmmem) 
     asm_rip  := m.(asm_rip);
     asm_xreg := m.(asm_xreg);
     asm_flag := m.(asm_flag);
+    asm_hwcs := m.(asm_hwcs);
   |}.
 
 (* -------------------------------------------------------------------- *)
@@ -351,6 +360,20 @@ Definition mem_write_xreg (f: msb_flag) (r: xreg_t) sz (w: word sz) (m: asmmem) 
     asm_rip  := m.(asm_rip);
     asm_xreg := XRegMap.set m.(asm_xreg) r (word_extend f (m.(asm_xreg) r) w);
     asm_flag := m.(asm_flag);
+    asm_hwcs := m.(asm_hwcs);
+  |}.
+
+(* -------------------------------------------------------------------- *)
+Definition mem_write_hwcs (cs : seq pointer) (m : asmmem) :=
+  {|
+    asm_mem  := m.(asm_mem);
+    asm_scs  := m.(asm_scs);
+    asm_reg  := m.(asm_reg);
+    asm_regx := m.(asm_regx);
+    asm_rip  := m.(asm_rip);
+    asm_xreg := m.(asm_xreg);
+    asm_flag := m.(asm_flag);
+    asm_hwcs := cs;
   |}.
 
 (* -------------------------------------------------------------------- *)
@@ -429,6 +452,31 @@ Definition eval_PUSH (w: wreg) (s: asm_state) : exec asm_state :=
   ok {| asm_m := m ; asm_f := s.(asm_f) ; asm_c := s.(asm_c) ; asm_ip := s.(asm_ip).+1 |}.
 
 (* -------------------------------------------------------------------- *)
+(* Hardware call stack (see [ad_hwcs_size]). Overflow and underflow are
+   hardware faults. *)
+
+(* TODO_ACC: use the constructor from utils once it exists. *)
+Local Notation ErrHWCallStack := ErrStack.
+
+Definition eval_PUSH_HWCS (w : wreg) (s : asm_state) : exec asm_state :=
+  Let n := o2r ErrSemUndef ad_hwcs_size in
+  Let _ := assert (size s.(asm_hwcs) < n) ErrHWCallStack in
+  ok (st_update_next (mem_write_hwcs (w :: s.(asm_hwcs)) s.(asm_m)) s).
+
+Definition eval_POP_HWCS (s : asm_state) : exec (asm_state * wreg) :=
+  Let _ := assert (isSome ad_hwcs_size) ErrSemUndef in
+  if s.(asm_hwcs) is w :: cs then
+    ok (st_update_next (mem_write_hwcs cs s.(asm_m)) s, w)
+  else Error ErrHWCallStack.
+
+(* On architectures with a hardware call stack, a syscall is itself a call:
+   it needs one free entry while it runs, and leaves the stack unchanged
+   (see [eval_syscall_preserves]). *)
+Definition check_HWCS_free (m : asmmem) : exec unit :=
+  if ad_hwcs_size is Some n then assert (size m.(asm_hwcs) < n) ErrHWCallStack
+  else ok tt.
+
+(* -------------------------------------------------------------------- *)
 Section PROG.
 
 
@@ -478,13 +526,20 @@ Definition eval_instr (i : asm_i_r) (s: asm_state) : exec asm_state :=
     if decode_label labels dst is Some lbl then
       eval_JMP p lbl s'
     else type_error
-  | CALL_HWCS _ => Error ErrSemUndef
-  | RET_HWCS    => Error ErrSemUndef
+  | CALL_HWCS lbl =>
+      Let ra := o2r ErrSemUndef (return_address_from s) in
+      Let s' := eval_PUSH_HWCS ra s in
+      eval_JMP p lbl s'
+  | RET_HWCS =>
+    Let: (s', dst) := eval_POP_HWCS s in
+    Let lbl := o2r ErrSemUndef (decode_label labels dst) in
+    eval_JMP p lbl s'
   | REPEATLOOP _ _ => Error ErrSemUndef
   | AsmOp o args =>
     Let m := eval_op o args s.(asm_m) in
     ok (st_update_next m s)
   | SysCall o =>
+    Let _ := check_HWCS_free s.(asm_m) in
     Let m := eval_syscall o s.(asm_m) in
     ok (st_update_next m s)
   | Declassify_val ty arg =>
@@ -531,6 +586,10 @@ Qed.
 
 Lemma mem_write_reg_invariant f r sz (w: word sz) (s: asmmem) :
   mem_write_reg f r w s ≡ s.
+Proof. by []. Qed.
+
+Lemma mem_write_hwcs_invariant cs (s: asmmem) :
+  mem_write_hwcs cs s ≡ s.
 Proof. by []. Qed.
 
 Lemma mem_write_mem_invariant al a sz (w: word sz) (s s': asmmem) :
@@ -583,12 +642,15 @@ Proof.
   - by case: return_address_from => // ra; rewrite /eval_PUSH; t_xrbindP => ? ? _ ? /mem_write_mem_invariant -> <- /eval_JMP_invariant /=; rewrite mem_write_reg_invariant.
   - rewrite /eval_POP; t_xrbindP => _ ? _ ? _ <-.
     by case: decode_label => // ? /eval_JMP_invariant <-.
-  - by [].
-  - by [].
+  - case: return_address_from => // ra; rewrite /eval_PUSH_HWCS.
+    by t_xrbindP => ? ? _ _ <- /eval_JMP_invariant /=; rewrite mem_write_hwcs_invariant.
+  - rewrite /eval_POP_HWCS; t_xrbindP => ? _.
+    case: (asm_hwcs _) => // ? ? [<-].
+    by case: decode_label => // ? /eval_JMP_invariant <-.
   - by [].
   - by rewrite /eval_op /exec_instr_op; t_xrbindP => ? ? ? /mem_write_vals_invariant -> <-.
-  - t_xrbindP => m hm <-.
-    have /= [_ hrip hss] := eval_syscall_preserves hm.
+  - t_xrbindP => _ m hm <-.
+    have /= [_ hrip hss _] := eval_syscall_preserves hm.
     by split.
   - by move=> [<-].
   by move=> _ [<-].
@@ -701,6 +763,9 @@ Definition iasmsem_exportcall (p : asm_prog) (fn : funname) (m : asmmem) :=
   let m' := s'.(asm_m) in
   _ <- iresult
          (assert (all (fun x => preserved_registerb x m m') callee_saved) ErrSemUndef);;
+  (* The export function must leave the hardware call stack as it found it:
+     the caller's return address must be on top when the function returns. *)
+  _ <- iresult (assert (m'.(asm_hwcs) == m.(asm_hwcs)) ErrSemUndef);;
   Ret m'.
 
 End ITREE.

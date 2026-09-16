@@ -308,6 +308,7 @@ Instance acc_decl : arch_decl register empty wide_register rflag condition :=
     toS_f := flag_toS;
     reg_size_neq_xreg_size := refl_equal;
     ad_rsp := X02;
+    ad_hwcs_size := Some 8;
     ad_fcp := acc_fcp;
     caimm_cond := acc_caimm_cond;
     caimm_cond_eqC := eqTC_acc_caimm_cond;

@@ -190,6 +190,7 @@ Instance arm_decl : arch_decl register register_ext xregister rflag condt :=
   ; toS_f     := rflag_toS
   ; reg_size_neq_xreg_size := refl_equal
   ; ad_rsp := SP
+  ; ad_hwcs_size := None
   ; ad_fcp := arm_fcp
   ; caimm_cond := arm_caimm_cond
   ; caimm_cond_eqC := eqTC_arm_caimm_cond
