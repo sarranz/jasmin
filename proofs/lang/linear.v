@@ -25,7 +25,7 @@ Inductive linstr_r :=
         OnHWCallStack: ra pushed to the hardware call stack. *)
   | Lret     : linstr_r
   | Lret_hwcallstack : linstr_r
-     (* return using the hardware call stack (OTBN: RET) *)
+     (* return using the hardware call stack (ACC: RET) *)
   | Lalign : linstr_r
   | Llabel : label_kind -> label -> linstr_r
   | Lgoto  : remote_label -> linstr_r

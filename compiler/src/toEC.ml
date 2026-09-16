@@ -2055,14 +2055,14 @@ struct
     | ARM_M4 -> "JModel_m4"
     | ARMv8A -> "JModel_armv8a"
     | RISCV  -> "JModel_riscv"
-    | OTBN -> "JModel_otbn"
+    | ACC -> "JModel_acc"
 
   let lib_slh env = match Env.arch env with
     | X86_64 -> "SLH64"
     | ARM_M4 -> "SLH32"
     | ARMv8A -> "SLH64"
     | RISCV  -> "SLH32"
-    | OTBN  -> "SLH32"
+    | ACC  -> "SLH32"
 
   let ec_glob_decl env global_options (x,d) =
     let gsign = Option.default global_options.gsign (gsign_of_annot x.v_annot) in

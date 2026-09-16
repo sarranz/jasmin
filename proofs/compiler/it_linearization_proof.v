@@ -30,7 +30,7 @@ Require Import fexpr fexpr_sem fexpr_facts.
 Require Export linearization linear_sem linear_facts core_logics relational_logic.
 Import Memory.
 
-Require Import otbn_admit.
+Require Import acc_admit.
 
 Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then remove the line when requiring MathComp >= 2.6 *)
 
@@ -2293,7 +2293,7 @@ Proof.
 move=> hc0 ii lbl lbli li P Q ls [hchecked _ _ _] _ _.
 move: hchecked => /checked_iE [] fd hget; rewrite /check_i /=.
 case: fi hget => [//|e] hget.
-exact: OTBN_ADMIT_PROOF. (* TODO_OTBN: no semantics for repeat loops. *)
+exact: ACC_ADMIT_PROOF. (* TODO_ACC: no semantics for repeat loops. *)
 Qed.
 
 Lemma mix_ilsteps_add_align P ii al lc Q ls :
@@ -3431,7 +3431,7 @@ End ILSTEPS_END.
   Lemma Hfor fi c : Pc c -> Pi_r (Cfor fi c).
   Proof.
   case: fi => [???? | cnt]; first by move=> _ > [/checked_iE[]].
-  exact: OTBN_ADMIT_PROOF. (* TODO_OTBN: no semantics for repeat loops. *)
+  exact: ACC_ADMIT_PROOF. (* TODO_ACC: no semantics for repeat loops. *)
   Qed.
 
   Lemma Hwhile : ∀ (a : expr.align) (c : cmd) (e : pexpr) (info : instr_info) (c' : cmd),
@@ -3642,7 +3642,7 @@ End ILSTEPS_END.
       case: sf_return_address ok_ret_addr vrsp_ne_aux => //=.
       + by move=> v [x|] //= /andP [] _.
       + by move=> ra_call ra_return z [x|] //= /and5P [_ _ + _ _].
-      exact: OTBN_ADMIT_PROOF. (* TODO_OTBN: no semantics for HW call stack *)
+      exact: ACC_ADMIT_PROOF. (* TODO_ACC: no semantics for HW call stack *)
     rewrite hsem_before bind_ret_l.
     set P' := (P ++ (before ++ [:: licall, lilabel & after]) ++ Q).
     set ra := sf_return_address (f_extra fd').
@@ -3764,7 +3764,7 @@ End ILSTEPS_END.
         (ts - wrepr Uptr sz)%R
         by ssrring.ssring.
       by rewrite f_not_export top_stack_after_aligned_alloc // wrepr_opp => ->.
-      exact: OTBN_ADMIT_PROOF. (* TODO_OTBN: no semantics for HW call stack *)
+      exact: ACC_ADMIT_PROOF. (* TODO_ACC: no semantics for HW call stack *)
 
     rewrite h2 /= !bind_trigger.
     have C' : is_linear_of f (lfd_body lfd'.2) by exists lfd'.2.
@@ -3823,7 +3823,7 @@ End ILSTEPS_END.
       + case: sf_return_address ok_ret_addr vrsp_ne_aux => //=.
         + by move=> v [x|] //= /andP [] _.
         + by move=> ?? z [x|] //= /and5P [_ _ + _ _].
-        exact: OTBN_ADMIT_PROOF. (* TODO_OTBN: no semantics for HW call stack *)
+        exact: ACC_ADMIT_PROOF. (* TODO_ACC: no semantics for HW call stack *)
       + by rewrite /get_var /with_vm /= vm2'_rsp.
       move => vm2'_b [H1 H2 H3]; exists vm2'_b; split => //.
       rewrite /sz0 H3 /ts /s /sz /sz0; f_equal.
@@ -5295,7 +5295,7 @@ Qed.
       + exact: mm_free M2.
       by transitivity mi.
     }
-    { exact: OTBN_ADMIT_PROOF. (* TODO_OTBN: no HW call stack semantics *) }
+    { exact: ACC_ADMIT_PROOF. (* TODO_ACC: no HW call stack semantics *) }
   Qed.
 
   End STACK.

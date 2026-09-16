@@ -16,7 +16,7 @@ CHECKCATS ?= \
 	x86-64-stack-zero-unrolled \
 	arm-m4-stack-zero-loop \
 	arm-m4-stack-zero-unrolled \
-	otbn \
+	acc \
 	armv8a-stack-zero-loop \
 	armv8a-stack-zero-unrolled \
 	risc-v-stack-zero-loop \

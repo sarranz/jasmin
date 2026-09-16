@@ -106,7 +106,7 @@ type architecture =
   | ARM_M4
   | ARMv8A
   | RISCV
-  | OTBN
+  | ACC
 
 val architecture_to_string : architecture -> string
 

@@ -52,8 +52,8 @@ Extract Constant ident.Cident.tag     => "CoreIdent.Cident.tag".
 Extract Constant ident.Cident.id_name => "CoreIdent.Cident.id_name".
 Extract Constant ident.Cident.id_kind => "CoreIdent.Cident.id_kind".
 
-Extract Constant otbn_admit.OTBN_ADMIT =>
-  "(fun msg -> failwith (""OTBN_ADMIT: "" ^ msg))".
+Extract Constant acc_admit.ACC_ADMIT =>
+  "(fun msg -> failwith (""ACC_ADMIT: "" ^ msg))".
 
 Set Extraction Output Directory "lang/ocaml".
 
@@ -85,10 +85,10 @@ Separate Extraction
   riscv_instr_decl
   riscv_extra
   riscv_params
-  otbn_decl
-  otbn_instr_decl
-  otbn_extra
-  otbn_params
+  acc_decl
+  acc_instr_decl
+  acc_extra
+  acc_params
   armv8a_decl
   armv8a_instr_decl
   armv8a_extra

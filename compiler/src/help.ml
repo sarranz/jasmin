@@ -12,14 +12,14 @@ let show_intrinsics asmOp fmt =
       | PVvv _ :: _ -> 5
       end
     | PrimARM _ -> 6
-    | PrimOTBN f ->
-      begin match allowed_prim_otbn_suffixes f with
-      | [PrimOTBNnone] -> 0
-      | PrimOTBNws _ :: _ -> 1
-      | PrimOTBNfg _ :: _ -> 7
-      | PrimOTBNwb _ :: _ -> 8
-      | PrimOTBNwreg _ :: _ -> 9
-      | _ -> failwith "Invalid OTBN suffix"
+    | PrimACC f ->
+      begin match allowed_prim_acc_suffixes f with
+      | [PrimACCnone] -> 0
+      | PrimACCws _ :: _ -> 1
+      | PrimACCfg _ :: _ -> 7
+      | PrimACCwb _ :: _ -> 8
+      | PrimACCwreg _ :: _ -> 9
+      | _ -> failwith "Invalid ACC suffix"
       end
   in
   let headers = [|
