@@ -812,7 +812,7 @@ Proof.
     + move: ho hspill => /is_spill_op_is_Odeclassify /= -> [??]; subst env' c'.
       rewrite /vars_I /read_I /= read_esE in hsub.
       apply wequiv_opn_rel_eq with (checker_st_ve S) env => //.
-      + exact: DeclassifyEvent_ind_recall. (* TODO why can't this be inferred? it is inferred properly in psem *)
+      + exact: declassifyEvent_ind_recCall. (* TODO why can't this be inferred? it is inferred properly in psem *)
       + split=> //; SvD.fsetdec.
       + split=> //; rewrite /vars_lvals; SvD.fsetdec.
     apply wequiv_opn_esem; first by rewrite ho.

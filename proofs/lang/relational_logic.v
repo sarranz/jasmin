@@ -667,16 +667,16 @@ Instance relEvent_recCall {rE0 : EventRels E0} : EventRels (recCall +' E0) :=
    ; EPostRel0_ := sum_postrelF (@RPostD) EPostRel0
   |}.
 
+#[global]
 Instance declassifyEvent_ind_recCall
   {wD : with_Declassify E0}
   {rE0 : EventRels E0}
   {DEind : DeclassifyEvent_ind} :
   DeclassifyEvent_ind (rE0 := relEvent_recCall).
 Proof using.
-split.
-- move=> v1 v2 /DEind_pre_val. admit.
-move=> b1 b2. admit.
-Admitted.
+constructor; rewrite /EPostRel0_ /= /resum;
+  [exact: DEind_pre_val|exact: DEind_pre_mem].
+Qed.
 
 End TR_MutualRec.
 
@@ -771,14 +771,6 @@ Lemma event_of_opn_eq d m :
   wrequiv eq (event_of_opn d m) (event_of_opn d m) preRelDeclassify.
 Proof.
 apply/wrequiv_weaken/event_of_opn_uincl => // ?? ->; exact: values_uincl_refl.
-Qed.
-
-#[global]
-Instance DeclassifyEvent_ind_recall eS :
-  DeclassifyEvent_ind (rE0 := relEvent_recCall eS).
-Proof.
-constructor; rewrite /EPostRel0_ /= /resum;
-  [exact: DEind_pre_val|exact: DEind_pre_mem].
 Qed.
 
 End DECLASSIFY.

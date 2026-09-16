@@ -1675,7 +1675,7 @@ Proof.
 apply wequiv_fun_ind => {}fn _ fs1 fs2 [<-] hu fd ->.
 exists fd => // s /(fs_uincl_initialize erefl erefl erefl erefl hu) [t] -> {}hu.
 exists t => //; exists (st_uincl tt), (st_uincl tt); split=> //.
-+ apply it_sem_uincl_aux => //; first exact: DeclassifyEvent_ind_recall.
++ apply it_sem_uincl_aux => //; first exact: declassifyEvent_ind_recCall.
   move=> > h; exact/wequiv_fun_rec.
 exact/fs_uincl_finalize.
 Qed.
