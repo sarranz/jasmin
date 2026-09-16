@@ -1,20 +1,30 @@
 export fn bn_gfmul(reg u256 x y) -> reg u256 {
-    reg u256 acc acch r;
+    reg u32 idx mod_32;
+    reg u256 acc acch mod r z;
 
-    r = #BN_GFMUL8(x, y);
-    r = #BN_GFMUL8_VV(r, y);
+    ?{}, z = #set0_256();
+    mod = #BN_MODW(z); // BN.WSRW
 
-    r, acc = #BN_GFMUL8_ACC(r, y, acc);
-    r, acch = #BN_GFMUL8_ACCH(r, y, acch);
+    /*mod_32 = 0x11d; // li x31, 0x11d
+    mod = #MOD0W(mod, mod_32); // csrrw x0, mod0, x31
 
-    r, acc = #BN_GFMUL8_ACC_VV(r, y, acc);
-    r, acch = #BN_GFMUL8_ACCH_VV(r, y, acch);
+    idx = 0;  // li x31, 0
+    mod = #MOD1W(mod, idx);  // csrrw x0, mod1, x31*/
 
-    r, acc = #BN_GFMUL8_ACC_Z(r, y);
-    r, acch = #BN_GFMUL8_ACCH_Z(r, y);
+    r = #BN_GFMUL8(x, y, mod);
+    r = #BN_GFMUL8_VV(r, y, mod);
 
-    r, acc = #BN_GFMUL8_ACC_VV_Z(r, y);
-    r, acch = #BN_GFMUL8_ACCH_VV_Z(r, y);
+    r, acc = #BN_GFMUL8_ACC_Z(r, y, mod);
+    r, acch = #BN_GFMUL8_ACCH_Z(r, y, mod);
+
+    r, acc = #BN_GFMUL8_ACC_VV_Z(r, y, mod);
+    r, acch = #BN_GFMUL8_ACCH_VV_Z(r, y, mod);
+
+    r, acc = #BN_GFMUL8_ACC(r, y, mod, acc);
+    /*r, acch = #BN_GFMUL8_ACCH(r, y, mod, acch);
+
+    r, acc = #BN_GFMUL8_ACC_VV(r, y, mod, acc);
+    r, acch = #BN_GFMUL8_ACCH_VV(r, y, mod, acch);*/
 
     return r;
 }
