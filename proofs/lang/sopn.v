@@ -4,10 +4,11 @@ From mathcomp Require Import ssreflect ssrfun ssrbool seq eqtype ssralg.
 
 Require Import
   pseudo_operator
-  sem_type
   shift_kind
+  slh_ops.
+Require Import
+  sem_type
   strings
-  slh_ops
   type
   values
   var.
@@ -108,6 +109,8 @@ Existing Instance _eqT.
 
 Definition asm_op_t {asm_op} {asmop : asmOp asm_op} := asm_op.
 
+Notation declassify_args := (atype + positive)%type (only parsing).
+
 Section WITH_PARAMS.
 
 Context
@@ -158,6 +161,31 @@ Lemma is_spill_opP o s tys :
   is_spill_op o = Some (s, tys) ->
   o = Opseudo_op (Ospill s tys).
 Proof. by case: o => // -[] // ?? [-> ->]. Qed.
+
+Section DECLASSIFY.
+
+Definition is_Odeclassify (o : sopn) : option declassify_args :=
+  match o with
+  | Opseudo_op (Odeclassify ty) => Some (inl ty)
+  | Opseudo_op (Odeclassify_mem len) => Some (inr len)
+  | _ => None
+  end.
+
+Let mk x :=
+  match x with
+  | inl ty => Opseudo_op (Odeclassify ty)
+  | inr n => Opseudo_op (Odeclassify_mem n)
+  end.
+
+Lemma is_OdeclassifyP op : is_reflect mk op (is_Odeclassify op).
+Proof.
+case: op => [[]||] >;
+  rewrite -?[_ (Odeclassify _)]/(mk (inl _))
+    -?[_ (Odeclassify_mem _)]/(mk (inr _));
+  by constructor.
+Qed.
+
+End DECLASSIFY.
 
 (* ------------------------------------------------------------- *)
 (* Descriptors for speudo operators                              *)
@@ -253,7 +281,7 @@ Definition Odeclassify_instr ty :=
     tout     := [:: ];
     i_out    := [:: ];
     conflicts:= [::];
-    semi     := fun=> ok tt;
+    semi     := declassify_semi cty;
     semu     := @declassify_semu cty;
     i_safe   := [:: ];
     i_valid  := true;
@@ -271,7 +299,7 @@ Definition Odeclassify_mem_instr len :=
     tout     := [:: ];
     i_out    := [:: ];
     conflicts:= [::];
-    semi     := fun=> ok tt;
+    semi     := declassify_semi cty;
     semu     := @declassify_semu cty;
     i_safe   := [:: ];
     i_valid  := true;
@@ -593,4 +621,3 @@ Instance asmOp_sopn : asmOp sopn :=
     prim_string := sopn_prim_string }.
 
 End WITH_PARAMS.
-
