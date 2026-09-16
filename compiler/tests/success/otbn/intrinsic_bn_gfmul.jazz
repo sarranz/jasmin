@@ -1,20 +1,20 @@
 export fn bn_gfmul(reg u256 x y) -> reg u256 {
-    reg u256 r;
+    reg u256 acc acch r;
 
     r = #BN_GFMUL8(x, y);
     r = #BN_GFMUL8_VV(r, y);
 
-    r = #BN_GFMUL8_ACC(r, y);
-    r = #BN_GFMUL8_ACCH(r, y);
+    r, acc = #BN_GFMUL8_ACC(r, y, acc);
+    r, acch = #BN_GFMUL8_ACCH(r, y, acch);
 
-    r = #BN_GFMUL8_ACC_VV(r, y);
-    r = #BN_GFMUL8_ACCH_VV(r, y);
+    r, acc = #BN_GFMUL8_ACC_VV(r, y, acc);
+    r, acch = #BN_GFMUL8_ACCH_VV(r, y, acch);
 
-    r = #BN_GFMUL8_ACC_Z(r, y);
-    r = #BN_GFMUL8_ACCH_Z(r, y);
+    r, acc = #BN_GFMUL8_ACC_Z(r, y);
+    r, acch = #BN_GFMUL8_ACCH_Z(r, y);
 
-    r = #BN_GFMUL8_ACC_VV_Z(r, y);
-    r = #BN_GFMUL8_ACCH_VV_Z(r, y);
+    r, acc = #BN_GFMUL8_ACC_VV_Z(r, y);
+    r, acch = #BN_GFMUL8_ACCH_VV_Z(r, y);
 
     return r;
 }
