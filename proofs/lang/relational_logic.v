@@ -2379,12 +2379,17 @@ Context
   {scP : semCallParams (wsw:= wsw) (pT := pT)}
   {dc: DirectCall}.
 
+Section SYSCALL_ERR.
+
 Context
-  {E E0 : Type -> Type}
-  {wE : with_Error E E0}
-  {rE : with_RndEvent syscall_state E0}
-  {rE0 : EventRels E0}
-  {rndE : RndRels_refl rE0}
+  {E_l E0_l : Type -> Type}
+  {wE_l : with_Error E_l E0_l}
+  {rE_l : with_RndEvent syscall_state E0_l}
+  {E_r E0_r : Type -> Type}
+  {wE_r : with_Error E_r E0_r}
+  {rE_r : with_RndEvent syscall_state E0_r}
+  {rE0 : EventRels2 E0_l E0_r}
+  {rndE : RndRels2 (rE0 := rE0)}
 .
 
 (* TODO where does this go? *)
@@ -2392,27 +2397,29 @@ Lemma lxeutt_lrutt_RndRels_refl {R1 R2} (RR : R1 -> R2 -> Prop)
   (t1 : itree (ErrEvent +' RndEvent syscall_state) R1)
   (t2 : itree (ErrEvent +' RndEvent syscall_state) R2) :
   lxeutt RR t1 t2 ->
-  lxrutt EPreRel EPostRel RR (translate subevent t1) (translate subevent t2).
+  lxrutt EPreRel EPostRel RR
+    (translate subevent t1 : itree E_l R1) (translate subevent t2 : itree E_r R2).
 Proof using rndE.
+case: rndE => RndPreRel RndPostRel.
 move=> h; apply: xrutt_translate h.
 - by move=> X [e|e] //= _; rewrite /errcutoff /is_error /= mid12.
 - done.
 - move=> A B e1 e2 [heq heqe]; move: e2 heqe.
   case: B / heq => e2 /= ->.
   case: e1 => [err | rnd].
-  + by rewrite /EPreRel /= mid12.
-  by rewrite /EPreRel /= mid12; apply: RndPreRel.
+  + by rewrite /EPreRel /= !mid12.
+  by rewrite /EPreRel /= !mid12; apply: RndPreRel.
 move=> A B e1 a e2 b [heq heqe]; move: b e2 heqe.
 case: B / heq => b e2 /= ->.
 case: e1 => [err | rnd].
 - by move=> _; clear e2; move: a b; case: A / err.
 move=> hpost h; rewrite (UIP_refl _ _ h) /=.
-move: hpost; rewrite /EPostRel /= mid12 /= => hpost.
-exact: (esym (RndPostRel hpost)).
+move: hpost; rewrite /EPostRel /= !mid12 /= => hpost.
+exact: (esym (RndPostRel _ _ _ _ hpost)).
 Qed.
 
 Lemma fs_uincl_syscall o :
-  wkequiv fs_uincl (fexec_syscall o) (fexec_syscall o) fs_uincl.
+  wkequiv fs_uincl (fexec_syscall (E:=E_l) o) (fexec_syscall (E:=E_r) o) fs_uincl.
 Proof using rndE.
 move=> fs1 fs2 [hscs hmem hu]; rewrite /fexec_syscall hscs hmem.
 apply xrutt_bind with sc_res_uincl.
@@ -2422,7 +2429,7 @@ by move=> [[scs m] vs] [[scs' m'] vs'] [/= h1 h2 h3]; apply: xrutt_Ret.
 Qed.
 
 Lemma fs_eq_syscall o :
-  wkequiv eq (fexec_syscall o) (fexec_syscall o) eq.
+  wkequiv eq (fexec_syscall (E:=E_l) o) (fexec_syscall (E:=E_r) o) eq.
 Proof using rndE.
 move=> fs _ <-; rewrite /fexec_syscall.
 apply xrutt_bind with eq; last by move=> [[scs m] vs] _ <-; apply: xrutt_Ret.
@@ -2430,6 +2437,16 @@ rewrite /exec_syscall; apply/lxeutt_lrutt_RndRels_refl/xrutt_refl.
 - by move=> T ev _ _; apply: RPre_eq_refl.
 by move=> T ev t1 t2 _ _ h; apply/RPost_eqI/h.
 Qed.
+
+End SYSCALL_ERR.
+
+Context
+  {E E0 : Type -> Type}
+  {wE : with_Error E E0}
+  {rE : with_RndEvent syscall_state E0}
+  {rE0 : EventRels E0}
+  {rndE : RndRels_refl rE0}
+.
 
 Context {sem_F1 sem_F2 : sem_Fun E}.
 

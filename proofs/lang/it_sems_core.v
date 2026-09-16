@@ -9,7 +9,7 @@ Import Basics.Monads.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
 
-Require Import expr psem_defs psem_core it_exec rec_facts.
+Require Import expr psem_defs psem_core it_exec rec_facts core_logics.
 Require Export it_sems_core_defs.
 
 Import MonadNotation ITreeNotations.
@@ -821,6 +821,15 @@ apply: eutt_eq_bind'; last first.
 rewrite /exec_syscall -translate_cmpE.
 apply: eutt_translate; first by move=> ? [] ?; reflexivity.
 reflexivity.
+Qed.
+
+Lemma fexec_syscallS o fs :
+  lutt (fun _ _ => True) (fun _ _ _ => True)
+    (fun fs' => mem_equiv fs.(fmem) fs'.(fmem))
+    (fexec_syscall o fs).
+Proof.
+apply: lutt_bind; first exact: exec_syscallS.
+by move=> [[scs m] vs] h; apply/lutt_Ret'/h.
 Qed.
 
 End WSW.
