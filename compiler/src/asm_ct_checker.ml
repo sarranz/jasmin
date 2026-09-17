@@ -337,14 +337,13 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
         post_updates caller
 
     let slot_bindings callee_sig inst =
-      let is_array slot = not (SS.mem callee_slot Arch_utils.arch_slots_set) in
+      let is_array slot = not (SS.mem slot Arch_utils.arch_slots_set) in
       List.map
         (fun callee_slot ->
-          if is_array then
-            callee_slot,
-            Option.value ~default:[] (SM.find_opt callee_slot inst))
-          else
-            callee_slot, [ callee_slot ]
+          if is_array callee_slot then
+            (callee_slot,
+             Option.value ~default:[] (SM.find_opt callee_slot inst))
+          else (callee_slot, [ callee_slot ]))
         callee_sig.slots
 
     let call_env caller callee inst =
