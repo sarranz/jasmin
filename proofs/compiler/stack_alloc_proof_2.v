@@ -2484,8 +2484,8 @@ Proof.
   t_xrbindP=> _ -[{}rmap2 i2] halloc [<- <-] _.
   move=> [hvars1 hvarsz1 hvarss1].
   move: halloc; rewrite /alloc_call.
-  t_xrbindP=> inst_es _ inst_lvs _ -[rmap1' l] hargs.
-  t_xrbindP => -[{}rmap2 ?] hres _ _ _ /= <-.
+  t_xrbindP=> -[rmap1' l] hargs.
+  t_xrbindP=> callee_fd _ inst _ -[{}rmap2 ?] hres _ _ _ /= <-.
   have [{}hargs _] := alloc_call_argsE hargs.
   rewrite /wf_table_vars remove_binding_lvals_vars.
   do 2 split=> //.
@@ -3793,8 +3793,8 @@ Proof using P'_globs hshparams hsaparams is_move_opP Halloc_fd hwf_pmap hwf_Slot
   case hfd1: get_fundef => [fd1|] //=.
   t_xrbindP=> -[{}rmap2 i2] halloc [<- <- <-] {c}.
   move: halloc; rewrite /alloc_call /assert_check.
-  t_xrbindP=> inst_es _ inst_lvs _ -[rmap1 es] hcargs.
-  t_xrbindP=> -[{}rmap2 rs2] hcres ra_none /ZleP hsize hle /= <- <- hvarst.
+  t_xrbindP=> -[rmap1 es] hcargs.
+  t_xrbindP=> callee_fd _ inst _ -[{}rmap2 rs2] hcres ra_none /ZleP hsize hle /= <- <- hvarst.
   apply wkequiv_eq_pred => s1 s2 /[dup] hpre [hvs hstable hext hvalw hvalw'].
   pose Rv := fun vargs1 vargs2 =>
     [ /\ wf_args (emem s1) (emem s2) fn vargs1 vargs2,
