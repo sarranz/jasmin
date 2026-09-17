@@ -1511,67 +1511,50 @@ Context (local_alloc: funname -> stk_alloc_oracle_t) (P:_uprog).
 (* --------------------------------------- *)
 (* Get the slot accessed by an instruction *)
 
-Definition slot_of_ptr_kind (p : ptr_kind) : slot :=
-  match p with
-  | Pdirect s _ _ _ _ | Pregptr s | Pstkptr s _ _ _ _ => s
+(* Offsets accumulate and the length is the last element. *)
+Fixpoint concrete_zone_aux (ofs : Z) (z : symbolic_zone) : option (Z * Z) :=
+  match z with
+  | [::] => None
+  | [:: sl] =>
+      let%opt o := is_const sl.(ss_ofs) in
+      let%opt l := is_const sl.(ss_len) in
+      Some (ofs + o, l)%Z
+  | sl :: z =>
+      let%opt o := is_const sl.(ss_ofs) in
+      concrete_zone_aux (ofs + o) z
   end.
 
-(* The slot accessed by [a[e]] when [a] is allocated as [pk], together with
-   the byte range [ofs, ofs + len) the access uses within it: the word at a
-   constant index when the index is known, everything otherwise
-   (conservative). *)
-Definition slot_range_get
-    (aa : arr_access) (ws : wsize) (a : var) (pk : ptr_kind) (e : pexpr) :
-    slot * (Z * Z) :=
-  match pk with
-  | Pdirect s _ _ cs _ =>
-      let '(ofs, len) :=
-        if expr.is_const e is Some i then
-          ((cs.(cs_ofs) + i * mk_scale aa ws)%Z, wsize_size ws)
-        else (0%Z, size_slot s)
-      in
-      (s, (ofs, len))
-  | Pregptr p =>
-      let '(ofs, len) :=
-        if expr.is_const e is Some i then
-          ((i * mk_scale aa ws)%Z, wsize_size ws)
-        else (0%Z, size_slot a)
-      in
-      (p, (ofs, len))
-  | Pstkptr s _ _ _ _ => (s, (0%Z, size_slot s))
-  end.
+Definition concrete_zone (s : slot) (z : symbolic_zone) : Z * Z :=
+  odflt (0%Z, size_slot s) (concrete_zone_aux 0 z).
 
-Definition slot_e (e : pexpr) : option (var * (Z * Z)) :=
-  match e with
-  | Pvar x =>
-      match get_local x.(gv).(v_var) with
-      | Some (Pdirect s _ _ cs _) | Some (Pstkptr s _ _ cs _) =>
-        Some (s, (cs.(cs_ofs), cs.(cs_len)))
-      | _ => None (* ignore assignments to reg ptr *)
-      end
-  | Pget _ aa ws a e =>
-      let%opt pk := get_local a.(gv).(v_var) in
-      Some (slot_range_get aa ws a.(gv).(v_var) pk e)
-  | _ => None
-  end.
+Definition slot_of_sr (rm : region_map) (x : var_i) : option (slot * (Z * Z)) :=
+  let%opt sr := Mvar.get rm.(var_region) x.(v_var) in
+  let s := sr.(sr_region).(r_slot) in
+  let z := sr.(sr_zone) in
+  Some (s, concrete_zone s z).
 
-Definition slot_lv (lv : lval) : option (slot * (Z * Z)) :=
-  match lv with
-  | Lvar x =>
-      match get_local x.(v_var) with
-      | Some (Pdirect s _ _ cs _) | Some (Pstkptr s _ _ cs _) =>
-          Some (s, (cs.(cs_ofs), cs.(cs_len)))
-      | None | Some (Pregptr _) => None (* ignore assignments to reg ptr *)
-      end
-  | Laset _ aa ws a e =>
-      let%opt pk := get_local a.(v_var) in
-      Some (slot_range_get aa ws a.(v_var) pk e)
-  | _ => None
-  end.
+Definition slot_e (rm : region_map) (e : pexpr) : option (slot * (Z * Z)) :=
+  let%opt x :=
+    match e with
+    | Pvar x | Pget _ _ _ x _ => Some x.(gv)
+    | _ => None
+    end
+  in
+  slot_of_sr rm x.
+
+Definition slot_lv (rm : region_map) (lv : lval) : option (slot * (Z * Z)) :=
+  let%opt x :=
+    match lv with
+    | Lvar x | Laset _ _ _ x _ => Some x
+    | _ => None
+    end
+  in
+  slot_of_sr rm x.
 
 (* ------------------------------------------------------------- *)
 (* DEBUG Find all slots in expression to check there is only one *)
 
+(*
 Definition Sv_unions : seq Sv.t -> Sv.t := foldl Sv.union Sv.empty.
 
 Fixpoint slot_chk_e (e : pexpr) : Sv.t :=
@@ -1613,7 +1596,7 @@ Definition slot_chk_lv (lv : lval) : Sv.t :=
 
 Definition slot_chk_lvs (lvs : lvals) : Sv.t :=
   Sv_unions [seq slot_chk_lv lv | lv <- lvs].
-
+*)
 (* End DEBUG *)
 
 Definition seq_of_opt {T : Type} (ox : option T) : seq T :=
@@ -1621,27 +1604,32 @@ Definition seq_of_opt {T : Type} (ox : option T) : seq T :=
 
 (* Split into bytes *)
 Definition split_slot_info (p : var * (Z * Z)) : seq ii_slot_info :=
-  [seq {| si_name := p.1; si_ofs := i; |} | i <- ziota p.2.1 p.2.2].
+  let '(x, (ofs, len)) := p in
+  [seq {| si_name := x; si_ofs := i; |} | i <- ziota ofs len].
 
 Definition add_arr_annot
-  (lvs : lvals) (es : pexprs) (ii : instr_info) : cexec instr_info :=
+  (rm : region_map) (lvs : lvals) (es : pexprs) (ii : instr_info) :
+  cexec instr_info :=
   if ~~ region_annot then ok ii
   else
-    let ors := [seq slot_e e | e <- es] ++ [seq slot_lv lv | lv <- lvs] in
+    let ors := [seq slot_e rm e | e <- es] ++ [seq slot_lv rm lv | lv <- lvs] in
     let rs := seq.pmap id ors in
     let ss := sv_of_list fst rs in (* dedup, remove offsets *)
-    let xs := Sv.elements ss in
+    (*let xs := Sv.elements ss in
     Let _ := (* DEBUG *)
       let chk := Sv.union (slot_chk_lvs lvs) (slot_chk_es es) in
       assert (Sv.subset chk ss) (too_many_slots xs (Sv.elements chk))
-    in
-    match xs with
-    | [::] => ok ii
-    | [:: _ ] =>
+    in*)
+    match Sv.cardinal ss with
+    | 0 => ok ii
+    | 1 =>
         (* TODO is undup necessary? *)
         let sis := undup (conc_map split_slot_info rs) in
         ok (ii_add_array_annot sis ii)
-    | [:: s & ss ] => Error (too_many_slots [:: s] ss)
+    | _ =>
+        let x := seq_of_opt (Sv.choose ss) in
+        let xs := Sv.elements ss in (* still has x *)
+        Error (too_many_slots x xs)
     end.
 
 Definition get_Pvar e :=
@@ -1770,66 +1758,49 @@ Definition alloc_lval_call (srs:seq (option (bool * sub_region) * pexpr)) rmap (
 Definition alloc_call_res rmap srs ret_pos rs :=
   fmapM2 bad_lval_number (alloc_lval_call srs) rmap rs ret_pos.
 
+(* TODO when we don't know the concrete size of an argument we use the entire
+   slot. This means that the parameter needs to have the same size. *)
 Definition get_inst
-  (sao_param : option param_info) (x : var_i) : cexec (seq ii_inst_info) :=
-  match sao_param, get_local x with
-  | None, None => ok [::]
-  | Some pi, Some (Pregptr p) =>
-      if x.(v_var).(vtype) is aarr ws len then
-        let mk a b i :=
-          {|
-            inst_caller := {| si_name := a; si_ofs := i; |};
-            inst_callee := {| si_name := b; si_ofs := i; |};
-          |}
-        in
-        ok [seq mk pi.(pp_ptr) p i | i <- ziota 0 (arr_size ws len)]
-      else Error (stk_ierror_basic x "inst 3")
-  | _, _ => Error (stk_ierror_basic x "inst 1")
-  end.
-
-Let get_inst_pexpr p e :=
-  Let x := get_Pvar e in
-  get_inst p x.(gv).
-
-Let get_inst_lval params oi lv :=
-  if oi is Some i then
-    match lv with
-    | Lnone _ _ => ok [::]
-    | Lvar x =>
-        if oseq.onth params i is Some p then get_inst p x
-        else Error (stk_ierror_basic_lv lv "inst 6")
-    | _ => Error (stk_ierror_basic_lv lv "inst 5")
-    end
+  (param : var_i)
+  (osr : option sub_region) :
+  cexec (seq ii_inst_info) :=
+  if osr is Some sr then
+    let a := sr.(sr_region).(r_slot) in
+    let mk i :=
+      {|
+        inst_caller := {| si_name := a; si_ofs := i; |};
+        inst_callee := {| si_name := param.(v_var); si_ofs := i; |};
+      |}
+    in
+    let '(ofs, len) := concrete_zone a sr.(sr_zone) in
+    ok [seq mk i | i <- ziota ofs len]
   else ok [::].
+
+Definition get_inst_arg
+  (param : var_i)
+  (oarg : option (bool * sub_region) * pexpr) :
+  cexec (seq ii_inst_info) :=
+  get_inst param (omap snd oarg.1).
 
 Definition alloc_call (ii : instr_info) (sao_caller:stk_alloc_oracle_t) rmap rs fn es : cexec (region_map * instr) :=
   let sao_callee := local_alloc fn in
+  Let es  := alloc_call_args rmap fn sao_callee.(sao_params) es in
+  let '(rmap, es) := es in
 
   (* annotations*)
   (* We don't produce instantiations for the stack frame because they are not
      needed for type checking. We will need to extract these from [sao_slots]
      when we need to prove stuff. *)
-  Let inst_es :=
-    mapM2 (stk_ierror_no_var "inst 2") get_inst_pexpr sao_callee.(sao_params) es
+  Let callee_fd :=
+    o2r (stk_ierror_no_var "inst callee_fd") (get_fundef P.(p_funcs) fn)
   in
-  Let inst_lvs := ok [::]
-  (* TODO when we rename an array
-        b = foo(a);
-     we instantiate [foo]'s parameter with both [a] and [b] ([get_local] will
-     give two different answers for variables [a] and [b]).
-     For now we don't check left values, and we should avoid renaming.
-    mapM2
-      (stk_ierror_no_var "inst 2")
-      (get_inst_lval sao_callee.(sao_params))
-      sao_callee.(sao_return)
-      rs
-  *)
+  Let inst :=
+    mapM2 (stk_ierror_no_var "inst 2") get_inst_arg callee_fd.(f_params) es
   in
-  let ii := ii_add_instantiation_annot (flatten (inst_es ++ inst_lvs)) ii in
+  (* TODO is checking lvs really not necessary? *)
+  let ii := ii_add_instantiation_annot (flatten inst) ii in
   (* annotations *)
 
-  Let es  := alloc_call_args rmap fn sao_callee.(sao_params) es in
-  let '(rmap, es) := es in
   Let rs  := alloc_call_res rmap es sao_callee.(sao_return) rs in
   Let _   := assert_check (~~ is_RAnone sao_callee.(sao_return_address))
                (stk_ierror_no_var "cannot call export function")
@@ -1937,7 +1908,7 @@ Fixpoint alloc_i sao (trmap:table*region_map) (i: instr) : cexec (table * region
       let table := remove_binding_lval table r in
       ok (table, rmap, [:: MkI ii ir])
     else
-      Let ii := add_iinfo ii (add_arr_annot [:: r] [:: e] ii) in
+      Let ii := add_iinfo ii (add_arr_annot rmap [:: r] [:: e] ii) in
       Let ote := symbolic_of_pexpr table e in
       let (table, oe) :=
         match ote with
@@ -1952,7 +1923,7 @@ Fixpoint alloc_i sao (trmap:table*region_map) (i: instr) : cexec (table * region
       ok (table, r.1, [:: MkI ii (Cassgn r.2 t ty e)])
 
   | Copn rs t o e =>
-    Let ii := add_iinfo ii (add_arr_annot rs e ii) in
+    Let ii := add_iinfo ii (add_arr_annot rmap rs e ii) in
     if is_protect_ptr_fail rs o e is Some (r, e, msf) then
        let table := remove_binding_lval table r in
        Let rs := alloc_protect_ptr rmap ii r t e msf in
@@ -1989,7 +1960,7 @@ Fixpoint alloc_i sao (trmap:table*region_map) (i: instr) : cexec (table * region
     ok (table, rs.1, [:: MkI ii (Copn rs.2 t o e)])
 
   | Csyscall rs o es =>
-    Let ii := add_iinfo ii (add_arr_annot rs es ii) in
+    Let ii := add_iinfo ii (add_arr_annot rmap rs es ii) in
     let table := remove_binding_lvals table rs in
     Let: (rmap, c) := alloc_syscall ii rmap rs o es in
     ok (table, rmap, c)

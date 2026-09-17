@@ -1,3 +1,49 @@
+/*
+fn foo(reg ptr u64[1] a, reg u64 v) -> reg ptr u64[1] {
+  a[0] = v;
+  return a;
+}
+
+export
+fn caller1(reg u64 v) -> reg u64 {
+  stack u64[1] p;
+  p[0] = 0;
+  p[0:1] = foo(p[0:1], v);
+  reg u64 r = p[0];
+  return r;
+}
+
+export
+fn caller2(reg u64 v) -> reg u64 {
+  stack u64[4] p;
+  p[0] = 0;
+  p[0:1] = foo(p[0:1], v);
+  reg u64 r = p[0];
+  return r;
+}
+
+export
+fn caller3(reg u64 v) -> reg u64 {
+  stack u64[4] p;
+  p[0] = 0;
+  reg u64 r = 0;
+  p[r:1] = foo(p[r:1], v);
+  r = p[0];
+  return r;
+}
+
+export
+fn caller4(reg u64 v) -> reg u64 {
+  stack u64[4] p;
+  p[0] = 0;
+  reg u64 r = 0;
+  p[r:1] = foo(p[0:2][r:1], v);
+  r = p[0];
+  return r;
+}
+
+*/
+
 fn foo(reg ptr u64[2] a1, reg u64 x1) -> reg ptr u64[2] {
   stack u64 s1 = x1;
   x1 = s1;
@@ -8,13 +54,22 @@ fn foo(reg ptr u64[2] a1, reg u64 x1) -> reg ptr u64[2] {
 
 export fn main(reg ptr u64[2] a) -> reg ptr u64[2] {
   reg u64 x = a[0];
-  stack u64 s = x;
-  x = s;
-  a = foo(a, x);
+  reg ptr u64[2] b = foo(a, x);
+  b[0] = 0;
+  a = b;
   return a;
 }
 
 /*
+TODO stack pointers
+
+export
+fn stackvar(reg u64 x) -> reg u64 {
+  stack u64 s = x;
+  x = s;
+  return x;
+}
+
 export fn main(reg ptr u64[2] a) -> reg ptr u64[2] {
   reg u64 x;
   x = a[0];

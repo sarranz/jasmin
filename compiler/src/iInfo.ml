@@ -30,7 +30,7 @@ let slot_name : Var0.Var.var -> string =
       s
 
 let process_si si = (slot_name si.si_name, CoreConv.z_of_cz si.si_ofs)
-let process_inst i = (process_si i.inst_caller, process_si i.inst_callee)
+let process_inst i = (process_si i.inst_callee, process_si i.inst_caller)
 
 let string_of_si (n, o) = Format.sprintf "%s[%s]" n (Z.to_string o)
 
