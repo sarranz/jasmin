@@ -3,18 +3,16 @@ fn foo(reg ptr u64[1] a, reg u64 v) -> reg ptr u64[1] {
   return a;
 }
 
+/*
 export
 fn caller1(reg u64 v) -> reg u64 {
-  stack u64[1] p;
+  stack u64[4] p;
   p[0] = 0; // p from 0 to 8
-  a = p[0:1];
-  a = foo(a, v); // a[i] is p[i] of i = 0..8
-  p[0:1] = a;
+  p[0:1] = foo(p[0:1], v); // a[i] is p[i] of i = 0..8
   reg u64 r = p[0]; // p from 0 to 8
   return r;
 }
 
-/*
 export
 fn caller2(reg u64 v) -> reg u64 {
   stack u64[4] p;
@@ -23,24 +21,38 @@ fn caller2(reg u64 v) -> reg u64 {
   reg u64 r = p[1];
   return r;
 }
+*/
 
 export
 fn caller3(reg u64 v) -> reg u64 {
   stack u64[4] p;
-  p[0] = 0;
   reg u64 r = 0;
+  p[r] = 0;
   p[r:1] = foo(p[r:1], v);
-  r = p[0];
+  r = p[r];
   return r;
 }
 
+/*
 export
 fn caller4(reg u64 v) -> reg u64 {
   stack u64[4] p;
   p[0] = 0;
+  reg ptr u64[2] aux = p[1:2];
+  p[1:1] = foo(aux[0:1], v);
+  reg u64 r = p[0];
+  return r;
+}
+
+export
+fn caller5(reg u64 v) -> reg u64 {
+  stack u64[4] p;
   reg u64 r = 0;
-  p[r:1] = foo(p[0:2][r:1], v);
-  r = p[0];
+  p[r] = 0;
+  reg ptr u64[2] aux = p[1:2];
+  aux[r:1] = foo(aux[r:1], v);
+  p[1:2] = aux;
+  r = p[r];
   return r;
 }
 

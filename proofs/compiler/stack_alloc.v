@@ -1512,6 +1512,8 @@ Context (local_alloc: funname -> stk_alloc_oracle_t) (P:_uprog).
 (* Get the slot accessed by an instruction *)
 
 (* Offsets accumulate and the length is the last element. *)
+(* TODO go until the first run time expr in the slice list and take that sum
+   plus **THAT** size (not the last) *)
 Fixpoint concrete_zone_aux (ofs : Z) (z : symbolic_zone) : option (Z * Z) :=
   match z with
   | [::] => None
@@ -1532,25 +1534,9 @@ Definition concrete_zone (s : slot) (z : symbolic_zone) : Z * Z :=
    constant index when the index is known, everything otherwise
    (conservative). *)
 Definition slot_range_get
-  (aa : arr_access) (ws : wsize) (a : var) (pk : ptr_kind) (e : pexpr) :
-  (Z * Z) :=
-  match pk with
-  | Pdirect s _ _ cs _ =>
-      let '(ofs, len) :=
-        if expr.is_const e is Some i then
-          ((cs.(cs_ofs) + i * mk_scale aa ws), wsize_size ws)
-        else (0, size_slot s)
-      in
-      (ofs, len)
-  | Pregptr p =>
-      let '(ofs, len) :=
-        if expr.is_const e is Some i then
-          ((i * mk_scale aa ws), wsize_size ws)
-        else (0, size_slot a)
-      in
-      (ofs, len)
-  | Pstkptr s _ _ _ _ => (0, size_slot s)
-  end%Z.
+  (aa : arr_access) (ws : wsize) (a : var) (e : pexpr) : (Z * Z) :=
+  if expr.is_const e is Some i then (i * mk_scale aa ws, wsize_size ws)%Z
+  else (0, size_slot a)%Z.
 
 Definition slot_of_sr
   (rm : region_map) (x : var_i) (ofs len : Z) : option (slot * (Z * Z)) :=
@@ -1563,16 +1549,9 @@ Definition slot_of_sr
 Definition slot_e (rm : region_map) (e : pexpr) : option (slot * (Z * Z)) :=
   let%opt (x, ofs, len) :=
     match e with
-    | Pvar x =>
-        let%opt pk := get_local x.(gv).(v_var) in
-        match pk with
-        | Pdirect _ _ _ cs _ | Pstkptr _ _ _ cs _ =>
-          Some (x.(gv), cs.(cs_ofs), cs.(cs_len))
-        | _ => None (* ignore assignments to reg ptr *)
-        end
+    | Pvar x => Some (x.(gv), 0, size_slot x.(gv))%Z
     | Pget _ aa ws a e =>
-        let%opt pk := get_local a.(gv).(v_var) in
-        let '(ofs, len) := slot_range_get aa ws a.(gv).(v_var) pk e in
+        let '(ofs, len) := slot_range_get aa ws a.(gv).(v_var) e in
         Some (a.(gv), ofs, len)
     | _ => None
     end
@@ -1582,16 +1561,9 @@ Definition slot_e (rm : region_map) (e : pexpr) : option (slot * (Z * Z)) :=
 Definition slot_lv (rm : region_map) (lv : lval) : option (slot * (Z * Z)) :=
   let%opt (x, ofs, len) :=
     match lv with
-    | Lvar x =>
-        let%opt pk := get_local x.(v_var) in
-        match pk with
-        | Pdirect _ _ _ cs _ | Pstkptr _ _ _ cs _ =>
-          Some (x, cs.(cs_ofs), cs.(cs_len))
-        | _ => None (* ignore assignments to reg ptr *)
-        end
+    | Lvar x => Some (x, 0, size_slot x)%Z
     | Laset _ aa ws a e =>
-        let%opt pk := get_local a.(v_var) in
-        let '(ofs, len) := slot_range_get aa ws a.(v_var) pk e in
+        let '(ofs, len) := slot_range_get aa ws a.(v_var) e in
         Some (a, ofs, len)
     | _ => None
     end
@@ -1814,13 +1786,18 @@ Definition get_inst
   if osr is Some sr then
     let a := sr.(sr_region).(r_slot) in
     let '(ofs, len) := concrete_zone a sr.(sr_zone) in
+    let param_len := size_slot param.(v_var) in
+    let caller_si i :=
+      if param_len == len then [:: {| si_name := a; si_ofs := ofs + i; |}]
+      else [seq {| si_name := a; si_ofs := i; |} | i <- ziota ofs len]
+    in
     let mk i :=
       {|
-        inst_caller := {| si_name := a; si_ofs := i; |};
-        inst_callee := {| si_name := param.(v_var); si_ofs := i - ofs; |};
+        inst_caller := caller_si i;
+        inst_callee := {| si_name := param.(v_var); si_ofs := i; |};
       |}
     in
-    ok [seq mk i | i <- ziota ofs len]
+    ok [seq mk i | i <- ziota 0 param_len]
   else ok [::].
 
 Definition get_inst_arg
