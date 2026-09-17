@@ -336,7 +336,8 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
       SM.fold (fun slot level env -> Env.set env slot level)
         post_updates caller
 
-    let slot_bindings callee_sig inst =
+    let slot_bindings _callee_sig _inst = []
+    (*
       let is_array slot = not (SS.mem callee_slot Arch_utils.arch_slots_set) in
       List.map
         (fun callee_slot ->
@@ -346,6 +347,7 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
           else
             callee_slot, [ callee_slot ]
         callee_sig.slots
+    *)
 
     let call_env caller callee inst =
       let bindings = slot_bindings callee inst in

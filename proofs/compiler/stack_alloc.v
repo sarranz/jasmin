@@ -1527,29 +1527,76 @@ Fixpoint concrete_zone_aux (ofs : Z) (z : symbolic_zone) : option (Z * Z) :=
 Definition concrete_zone (s : slot) (z : symbolic_zone) : Z * Z :=
   odflt (0%Z, size_slot s) (concrete_zone_aux 0 z).
 
-Definition slot_of_sr (rm : region_map) (x : var_i) : option (slot * (Z * Z)) :=
+(* The slot accessed by [a[e]] when [a] is allocated as [pk], together with
+   the byte range [ofs, ofs + len) the access uses within it: the word at a
+   constant index when the index is known, everything otherwise
+   (conservative). *)
+Definition slot_range_get
+  (aa : arr_access) (ws : wsize) (a : var) (pk : ptr_kind) (e : pexpr) :
+  (Z * Z) :=
+  match pk with
+  | Pdirect s _ _ cs _ =>
+      let '(ofs, len) :=
+        if expr.is_const e is Some i then
+          ((cs.(cs_ofs) + i * mk_scale aa ws), wsize_size ws)
+        else (0, size_slot s)
+      in
+      (ofs, len)
+  | Pregptr p =>
+      let '(ofs, len) :=
+        if expr.is_const e is Some i then
+          ((i * mk_scale aa ws), wsize_size ws)
+        else (0, size_slot a)
+      in
+      (ofs, len)
+  | Pstkptr s _ _ _ _ => (0, size_slot s)
+  end%Z.
+
+Definition slot_of_sr
+  (rm : region_map) (x : var_i) (ofs len : Z) : option (slot * (Z * Z)) :=
   let%opt sr := Mvar.get rm.(var_region) x.(v_var) in
   let s := sr.(sr_region).(r_slot) in
   let z := sr.(sr_zone) in
-  Some (s, concrete_zone s z).
+  let '(ofs', _) := concrete_zone s z in
+  Some (s, (ofs + ofs', len))%Z.
 
 Definition slot_e (rm : region_map) (e : pexpr) : option (slot * (Z * Z)) :=
-  let%opt x :=
+  let%opt (x, ofs, len) :=
     match e with
-    | Pvar x | Pget _ _ _ x _ => Some x.(gv)
+    | Pvar x =>
+        let%opt pk := get_local x.(gv).(v_var) in
+        match pk with
+        | Pdirect _ _ _ cs _ | Pstkptr _ _ _ cs _ =>
+          Some (x.(gv), cs.(cs_ofs), cs.(cs_len))
+        | _ => None (* ignore assignments to reg ptr *)
+        end
+    | Pget _ aa ws a e =>
+        let%opt pk := get_local a.(gv).(v_var) in
+        let '(ofs, len) := slot_range_get aa ws a.(gv).(v_var) pk e in
+        Some (a.(gv), ofs, len)
     | _ => None
     end
   in
-  slot_of_sr rm x.
+  slot_of_sr rm x ofs len.
 
 Definition slot_lv (rm : region_map) (lv : lval) : option (slot * (Z * Z)) :=
-  let%opt x :=
+  let%opt (x, ofs, len) :=
     match lv with
-    | Lvar x | Laset _ _ _ x _ => Some x
+    | Lvar x =>
+        let%opt pk := get_local x.(v_var) in
+        match pk with
+        | Pdirect _ _ _ cs _ | Pstkptr _ _ _ cs _ =>
+          Some (x, cs.(cs_ofs), cs.(cs_len))
+        | _ => None (* ignore assignments to reg ptr *)
+        end
+    | Laset _ aa ws a e =>
+        let%opt pk := get_local a.(v_var) in
+        let '(ofs, len) := slot_range_get aa ws a.(v_var) pk e in
+        Some (a, ofs, len)
     | _ => None
     end
   in
-  slot_of_sr rm x.
+  slot_of_sr rm x ofs len.
 
 (* ------------------------------------------------------------- *)
 (* DEBUG Find all slots in expression to check there is only one *)
@@ -1766,13 +1813,13 @@ Definition get_inst
   cexec (seq ii_inst_info) :=
   if osr is Some sr then
     let a := sr.(sr_region).(r_slot) in
+    let '(ofs, len) := concrete_zone a sr.(sr_zone) in
     let mk i :=
       {|
         inst_caller := {| si_name := a; si_ofs := i; |};
-        inst_callee := {| si_name := param.(v_var); si_ofs := i; |};
+        inst_callee := {| si_name := param.(v_var); si_ofs := i - ofs; |};
       |}
     in
-    let '(ofs, len) := concrete_zone a sr.(sr_zone) in
     ok [seq mk i | i <- ziota ofs len]
   else ok [::].
 

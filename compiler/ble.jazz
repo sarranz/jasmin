@@ -1,24 +1,26 @@
-/*
 fn foo(reg ptr u64[1] a, reg u64 v) -> reg ptr u64[1] {
-  a[0] = v;
+  a[0] = v; // a from 0 to 8
   return a;
 }
 
 export
 fn caller1(reg u64 v) -> reg u64 {
   stack u64[1] p;
-  p[0] = 0;
-  p[0:1] = foo(p[0:1], v);
-  reg u64 r = p[0];
+  p[0] = 0; // p from 0 to 8
+  a = p[0:1];
+  a = foo(a, v); // a[i] is p[i] of i = 0..8
+  p[0:1] = a;
+  reg u64 r = p[0]; // p from 0 to 8
   return r;
 }
 
+/*
 export
 fn caller2(reg u64 v) -> reg u64 {
   stack u64[4] p;
-  p[0] = 0;
-  p[0:1] = foo(p[0:1], v);
-  reg u64 r = p[0];
+  p[1] = 0;
+  p[1:1] = foo(p[1:1], v);
+  reg u64 r = p[1];
   return r;
 }
 
@@ -42,8 +44,6 @@ fn caller4(reg u64 v) -> reg u64 {
   return r;
 }
 
-*/
-
 fn foo(reg ptr u64[2] a1, reg u64 x1) -> reg ptr u64[2] {
   stack u64 s1 = x1;
   x1 = s1;
@@ -60,7 +60,6 @@ export fn main(reg ptr u64[2] a) -> reg ptr u64[2] {
   return a;
 }
 
-/*
 TODO stack pointers
 
 export
