@@ -30,7 +30,8 @@ let slot_name : Var0.Var.var -> string =
       s
 
 let process_si si = (slot_name si.si_name, CoreConv.z_of_cz si.si_ofs)
-let process_inst i = (process_si i.inst_caller, process_si i.inst_callee)
+let process_inst i =
+  (process_si i.inst_callee, List.map process_si i.inst_caller)
 
 let string_of_si (n, o) = Format.sprintf "%s[%s]" n (Z.to_string o)
 
@@ -42,7 +43,7 @@ let add_array_annot (rs : ii_mem_annot) ((l, annot) : t) : t =
 let add_instantiation_annot (inst : ii_inst_annot) ((l, annot) : t) : t =
   let inst =
     List.map process_inst inst
-    |> List.map (fun (no1, no2) -> (string_of_si no1, string_of_si no2))
+    |> List.map (fun (no1, es) -> (string_of_si no1, List.map string_of_si es))
   in
   let annot =
     Annotations.add_instantiation_annot ~loc:Location.(l.base_loc) inst annot

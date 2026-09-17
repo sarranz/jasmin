@@ -115,10 +115,13 @@ let get_stack_frame_annot (annot : annotations) :
 
 let instantiation_annot = "Internal::instantiation"
 
-let add_instantiation_annot ~loc (inst : (string * string) list) annot =
+let add_instantiation_annot ~loc (inst : (string * string list) list) annot =
   let mk d = Location.mk_loc loc d in
-  let mk_inst (name, value) = (mk name, Some (mk (Astring value))) in
-  let inst_annot = (mk instantiation_annot, Some (mk (Astruct (List.map mk_inst inst)))) in
+  let mk_one i v = (mk (string_of_int i), Some (mk (Astring v))) in
+  let mk_list v = mk (Astruct (List.mapi mk_one v)) in
+  let mk_inst (name, value) = (mk name, Some (mk_list value)) in
+  let body = mk (Astruct (List.map mk_inst inst)) in
+  let inst_annot = (mk instantiation_annot, Some body) in
   inst_annot :: annot
 
 let has_instantiation_annot annot = has_symbol instantiation_annot annot
