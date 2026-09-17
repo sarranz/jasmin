@@ -248,6 +248,42 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
                  | _ -> None)
              | _ -> None)
 
+    let size_of_ltype = function
+      | Type.Coq_lword ws -> Prog.size_of_ws ws
+      | Type.Coq_lbool -> 1
+
+    let declassify_slots env slots =
+      List.fold_left (fun env slot -> Env.set env slot Level.Public) env slots
+
+    let declassify_region env instr size =
+      let mem_annotation = Arch_utils.get_mem_annotation instr in
+      if mem_annotation <> [] && List.length mem_annotation = size then
+        declassify_slots env mem_annotation
+      else begin
+        let loc = fst instr.asmi_ii in
+        if mem_annotation = [] then
+          Utils.warning Utils.Always loc
+            "asmCtChecker: ignore declassify of an unannotated memory region"
+        else
+          Utils.warning Utils.Always loc
+            "asmCtChecker: ignore declassify of %d byte(s), the annotation \
+             only locates them within a region of %d byte(s)"
+            size (List.length mem_annotation);
+        env
+      end
+
+    let ty_declassify_val env instr lty arg =
+      match arg with
+      | Reg r -> declassify_slots env [ Arch_utils.reg_name r ]
+      | Regx r -> declassify_slots env [ Arch_utils.regx_name r ]
+      | XReg r -> declassify_slots env [ Arch_utils.xreg_name r ]
+      | Condt c -> declassify_slots env (Arch_utils.condt_slots c)
+      | Addr _ -> declassify_region env instr (size_of_ltype lty)
+      | Imm _ -> env
+
+    let ty_declassify_mem env instr len =
+      declassify_region env instr (Conv.int_of_cz len)
+
     let ty_asmop env instr op args =
       let op_desc = Arch_utils.instr_desc op in
       let mem_annotation = Arch_utils.get_mem_annotation instr in
@@ -269,6 +305,10 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
       | ALIGN | LABEL _ -> [ (i + 1, env) ]
       | AsmOp (op, args) ->
           [ (i + 1, ty_asmop env instr op args) ]
+      | Declassify_val (lty, arg) ->
+          [ (i + 1, ty_declassify_val env instr lty arg) ]
+      | Declassify_mem (len, _) ->
+          [ (i + 1, ty_declassify_mem env instr len) ]
       | JMP (fn, lbl) ->
           if fn.CoreIdent.fn_name <> fn_name then
             error "jump to another function is not supported"
