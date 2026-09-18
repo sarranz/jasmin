@@ -389,6 +389,12 @@ Variant acc_op : Type :=
 | BN_GFMUL_8_ACC_Z    (* Set to zero and write to accumulator. *)
 | BN_GFMUL_8_ACCH_Z   (* Set to zero and write to accumulator. *)
 
+| BN_GFMUL_8_INC          (* Multiply by scalar. *)
+| BN_GFMUL_8_ACC_INC      (* Write to accumulator. *)
+| BN_GFMUL_8_ACCH_INC     (* Write to accumulator. *)
+| BN_GFMUL_8_ACC_Z_INC    (* Set to zero and write to accumulator. *)
+| BN_GFMUL_8_ACCH_Z_INC   (* Set to zero and write to accumulator. *)
+
 | BN_GFMUL_8_VV        (* Multiply pointwise. *)
 | BN_GFMUL_8_ACC_VV    (* Write to accumulator. *)
 | BN_GFMUL_8_ACCH_VV   (* Write to accumulator. *)
@@ -457,6 +463,12 @@ Definition acc_op_to_string (op : acc_op) : string :=
   | BN_GFMUL_8_ACCH => "BN.GFMUL.8.ACCH"
   | BN_GFMUL_8_ACC_Z => "BN.GFMUL.8.ACC.Z"
   | BN_GFMUL_8_ACCH_Z => "BN.GFMUL.8.ACCH.Z"
+
+  | BN_GFMUL_8_INC => "BN.GFMUL.8.INC"
+  | BN_GFMUL_8_ACC_INC => "BN.GFMUL.8.ACC.INC"
+  | BN_GFMUL_8_ACCH_INC => "BN.GFMUL.8.ACCH.INC"
+  | BN_GFMUL_8_ACC_Z_INC => "BN.GFMUL.8.ACC.Z.INC"
+  | BN_GFMUL_8_ACCH_Z_INC => "BN.GFMUL.8.ACCH.Z.INC"
 
   | BN_GFMUL_8_VV => "BN.GFMUL.8.VV"
   | BN_GFMUL_8_ACC_VV => "BN.GFMUL.8.ACC.VV"
@@ -1697,6 +1709,116 @@ Definition desc_BN_GFMUL_8_ACCH_Z : instr_desc_t :=
     id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
   |}.
 
+Definition desc_BN_GFMUL_8_INC : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := base_gfmul_tin;
+    id_in := [:: EXa 1; EXa 2; Xreg MOD ];
+    id_tout := [:: lword256; lword256 ];
+    id_out := [:: EXa 0; Xreg MOD ];
+    id_semi := fun _ _ _ => ok (ACC_ADMIT "BN_GFMUL_8_INC semi");
+    id_args_kinds := ak_xreg_xreg_xreg;
+    id_nargs := 3;
+    id_str_jas := pp_s "BN_GFMUL8_INC";
+    id_pp_asm := pp_acc_op BN_GFMUL_8_INC;
+    id_valid := true;
+    id_safe := [::];
+    id_doit := DOIT; (* TODO_OTBN: check *)
+    id_eq_size := refl_equal;
+    id_check_dest := refl_equal;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+  |}.
+
+Definition desc_BN_GFMUL_8_ACC_INC : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := base_gfmul_acc_tin;
+    id_in := [:: EXa 1; EXa 2; Xreg MOD; Xreg ACC];
+    id_tout := [:: lword256; lword256; lword256 ];
+    id_out := [:: EXa 0; Xreg ACC; Xreg MOD ];
+    id_semi := fun _ _ _ _ => ok (ACC_ADMIT "BN_GFMUL_8_ACC_INC semi");
+    id_args_kinds := ak_xreg_xreg_xreg;
+    id_nargs := 3;
+    id_str_jas := pp_s "BN_GFMUL8_ACC_INC";
+    id_pp_asm := pp_acc_op BN_GFMUL_8_ACC_INC;
+    id_valid := true;
+    id_safe := [::];
+    id_doit := DOIT; (* TODO_OTBN: check *)
+    id_eq_size := refl_equal;
+    id_check_dest := refl_equal;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+  |}.
+
+Definition desc_BN_GFMUL_8_ACCH_INC : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := base_gfmul_acc_tin;
+    id_in := [:: EXa 1; EXa 2; Xreg MOD; Xreg ACCH ];
+    id_tout := [:: lword256; lword256; lword256 ];
+    id_out := [:: EXa 0; Xreg ACCH; Xreg MOD ];
+    id_semi := fun _ _ _ _ => ok (ACC_ADMIT "BN_GFMUL_8_ACCH_INC semi");
+    id_args_kinds := ak_xreg_xreg_xreg;
+    id_nargs := 3;
+    id_str_jas := pp_s "BN_GFMUL8_ACCH_INC";
+    id_pp_asm := pp_acc_op BN_GFMUL_8_ACCH_INC;
+    id_valid := true;
+    id_safe := [::];
+    id_doit := DOIT; (* TODO_OTBN: check *)
+    id_eq_size := refl_equal;
+    id_check_dest := refl_equal;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+  |}.
+
+Definition desc_BN_GFMUL_8_ACC_Z_INC : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := base_gfmul_tin;
+    id_in := [:: EXa 1; EXa 2; Xreg MOD ];
+    id_tout := [:: lword256; lword256; lword256 ];
+    id_out := [:: EXa 0; Xreg ACC; Xreg MOD ];
+    id_semi := fun _ _ _ => ok (ACC_ADMIT "BN_GFMUL_8_ACC_Z_INC semi");
+    id_args_kinds := ak_xreg_xreg_xreg;
+    id_nargs := 3;
+    id_str_jas := pp_s "BN_GFMUL8_ACC_Z_INC";
+    id_pp_asm := pp_acc_op BN_GFMUL_8_ACC_Z_INC;
+    id_valid := true;
+    id_safe := [::];
+    id_doit := DOIT; (* TODO_OTBN: check *)
+    id_eq_size := refl_equal;
+    id_check_dest := refl_equal;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+  |}.
+
+Definition desc_BN_GFMUL_8_ACCH_Z_INC : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := base_gfmul_tin;
+    id_in := [:: EXa 1; EXa 2; Xreg MOD ];
+    id_tout := [:: lword256; lword256; lword256 ];
+    id_out := [:: EXa 0; Xreg ACCH; Xreg MOD ];
+    id_semi := fun _ _ _ => ok (ACC_ADMIT "BN_GFMUL_8_ACCH_Z_INC semi");
+    id_args_kinds := ak_xreg_xreg_xreg;
+    id_nargs := 3;
+    id_str_jas := pp_s "BN_GFMUL8_ACCH_Z_INC";
+    id_pp_asm := pp_acc_op BN_GFMUL_8_ACCH_Z_INC;
+    id_valid := true;
+    id_safe := [::];
+    id_doit := DOIT; (* TODO_OTBN: check *)
+    id_eq_size := refl_equal;
+    id_check_dest := refl_equal;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+  |}.
+
 Definition desc_BN_GFMUL_8_VV : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
@@ -2050,6 +2172,12 @@ Definition desc_acc_op (op : acc_op) : instr_desc_t :=
   | BN_GFMUL_8_ACC_Z => desc_BN_GFMUL_8_ACC_Z
   | BN_GFMUL_8_ACCH_Z => desc_BN_GFMUL_8_ACCH_Z
 
+  | BN_GFMUL_8_INC => desc_BN_GFMUL_8_INC
+  | BN_GFMUL_8_ACC_INC => desc_BN_GFMUL_8_ACC_INC
+  | BN_GFMUL_8_ACCH_INC => desc_BN_GFMUL_8_ACCH_INC
+  | BN_GFMUL_8_ACC_Z_INC => desc_BN_GFMUL_8_ACC_Z_INC
+  | BN_GFMUL_8_ACCH_Z_INC => desc_BN_GFMUL_8_ACCH_Z_INC
+
   | BN_GFMUL_8_VV => desc_BN_GFMUL_8_VV
   | BN_GFMUL_8_ACC_VV => desc_BN_GFMUL_8_ACC_VV
   | BN_GFMUL_8_ACCH_VV => desc_BN_GFMUL_8_ACCH_VV
@@ -2156,6 +2284,11 @@ Section PRIM_STRING.
       ; (get_name BN_GFMUL_8_ACCH, prim_acc_none BN_GFMUL_8_ACCH)
       ; (get_name BN_GFMUL_8_ACC_Z, prim_acc_none BN_GFMUL_8_ACC_Z)
       ; (get_name BN_GFMUL_8_ACCH_Z, prim_acc_none BN_GFMUL_8_ACCH_Z)
+      ; (get_name BN_GFMUL_8_INC, prim_acc_none BN_GFMUL_8_INC)
+      ; (get_name BN_GFMUL_8_ACC_INC, prim_acc_none BN_GFMUL_8_ACC_INC)
+      ; (get_name BN_GFMUL_8_ACCH_INC, prim_acc_none BN_GFMUL_8_ACCH_INC)
+      ; (get_name BN_GFMUL_8_ACC_Z_INC, prim_acc_none BN_GFMUL_8_ACC_Z_INC)
+      ; (get_name BN_GFMUL_8_ACCH_Z_INC, prim_acc_none BN_GFMUL_8_ACCH_Z_INC)
       ; (get_name BN_GFMUL_8_VV, prim_acc_none BN_GFMUL_8_VV)
       ; (get_name BN_GFMUL_8_ACC_VV, prim_acc_none BN_GFMUL_8_ACC_VV)
       ; (get_name BN_GFMUL_8_ACCH_VV, prim_acc_none BN_GFMUL_8_ACCH_VV)
