@@ -28,7 +28,7 @@ Definition ii_mem_annot : Type := seq ii_slot_info.
 
 Record ii_inst_info := mk_inst
   {
-    inst_caller : ii_slot_info;
+    inst_caller : seq ii_slot_info;
     inst_callee : ii_slot_info;
   }.
 
