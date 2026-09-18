@@ -2134,8 +2134,9 @@ Local Lemma Wasgn r t ty e: Pi_r (Cassgn r t ty e).
 Proof.
   move=> table1 rmap1 table2 rmap2 ii c2 /=.
   case: is_aarr.
-  + t_xrbindP=> -[[{}table2 {}rmap2] i] hinit [<- <- _] [hvars1 hvarsz1 hvarss1].
-    suff: wf_table_vars table2 rmap2 /\ Sv.Subset table1.(vars) table2.(vars).
+  + t_xrbindP=> -[[table0 rmap0] i] hinit.
+    t_xrbindP=> ii2 _ <- <- _ [hvars1 hvarsz1 hvarss1].
+    suff: wf_table_vars table0 rmap0 /\ Sv.Subset table1.(vars) table0.(vars).
     + move=> [[hvars2 hvarsz2 hvarss2] hsubset].
       rewrite /wf_table_vars remove_binding_lval_vars.
       do 2!split=> //.
@@ -3417,8 +3418,8 @@ Local Lemma Hassgn_aux : sem_Ind_assgn P ePi_r.
 Proof using P'_globs hsaparams.
   move=> s1 s1' r tag ty e v v' hv htr hw pmap rsp Slots Addr Writable Align table1 rmap1 table2 rmap2 ii1 c2 hpmap hwf sao /=.
   case: ifPn => [/is_aarrP [ws [n ?]]| _ ]; t_xrbindP.
-  + move=> -[[{}table2 {}rmap2] i2'] halloc /=
-      [<- <- <-] {c2} vme m0 s2 hvs hext hsao; subst ty.
+  + move=> -[[table0 rmap0] i2'] halloc.
+    t_xrbindP=> ii2 _ <- <- <- {c2} vme m0 s2 hvs hext hsao; subst ty.
     have [s2' [vme' [hs2' hvs' vme_eq]]] :=
       alloc_array_move_initP hwf.(wfsl_no_overflow) hwf.(wfsl_disjoint) hwf.(wfsl_align)
         hpmap P'_globs hsaparams ii1 hvs hv htr hw halloc.
