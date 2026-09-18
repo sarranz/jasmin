@@ -432,9 +432,14 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
             match envs.(i) with
             | None -> ()
             | Some env ->
-                List.iter flow
-                  (Instruction.step fn_name labels ~exit env i instr
-                     signatures Calls.call_env))
+                let next =
+                  try
+                    Instruction.step fn_name labels ~exit env i instr
+                      signatures Calls.call_env
+                  with CtTypeError msg ->
+                    error "%a:@ %t" Location.pp_iloc (fst instr.asmi_ii) msg
+                in
+                List.iter flow next)
           body
       done;
 
@@ -521,7 +526,10 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
     let status =
       match
         List.iter
-          (fun (name, def) -> ignore (ty_fundef analysis (name, def)))
+          (fun ((name : CoreIdent.funname), def) ->
+            try ignore (ty_fundef analysis (name, def))
+            with CtTypeError msg ->
+              error "@[<v>in function %s:@,%t@]" name.CoreIdent.fn_name msg)
           (callees_first prog.asm_funcs)
       with
       | () -> None
