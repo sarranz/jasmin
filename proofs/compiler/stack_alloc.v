@@ -1127,6 +1127,9 @@ Definition alloc_lval (rmap: region_map) (r:lval) (ty:atype) :=
 
 Definition nop := Copn [::] AT_none sopn_nop [::].
 
+Definition is_nop_op (ir : instr_r) : bool :=
+  if ir is Copn _ _ (Opseudo_op Onop) _ then true else false.
+
 (* If a stack pointer already contains the right pointer, there is no need to
    assign it again, and a nop is issued. *)
 Definition is_nop rmap x (sry:sub_region) s ws cs f : bool :=
@@ -1626,19 +1629,21 @@ Definition split_slot_info (p : var * (Z * Z)) : seq ii_slot_info :=
   let '(x, (ofs, len)) := p in
   [seq {| si_name := x; si_ofs := i; |} | i <- ziota ofs len].
 
-Definition add_arr_annot
-  (rm : region_map) (lvs : lvals) (es : pexprs) (ii : instr_info) :
-  cexec instr_info :=
+Definition annot_of_slots
+  (os : seq (option (slot * (Z * Z)))) (ii : instr_info) : cexec instr_info :=
   if ~~ region_annot then ok ii
   else
-    let ors := [seq slot_e rm e | e <- es] ++ [seq slot_lv rm lv | lv <- lvs] in
-    let rs := seq.pmap id ors in
-    let ss := sv_of_list fst rs in (* dedup, remove offsets *)
-    (*let xs := Sv.elements ss in
+    let rs := seq.pmap id os in
+    (* undup, remove offsets. TODO: is this necessary? *)
+    let ss := sv_of_list fst rs in
+    (*
+    let xs := Sv.elements ss in
     Let _ := (* DEBUG *)
-      let chk := Sv.union (slot_chk_lvs lvs) (slot_chk_es es) in
+    let chk := Sv.union (slot_chk_lvs lvs) (slot_chk_es es) in
       assert (Sv.subset chk ss) (too_many_slots xs (Sv.elements chk))
-    in*)
+
+    in
+    *)
     match Sv.cardinal ss with
     | 0 => ok ii
     | 1 =>
@@ -1650,6 +1655,28 @@ Definition add_arr_annot
         let xs := Sv.elements ss in (* still has x *)
         Error (too_many_slots x xs)
     end.
+
+Definition add_arr_annot
+  (rm : region_map) (lvs : lvals) (es : pexprs) (ii : instr_info) :
+  cexec instr_info :=
+  let os := [seq slot_e rm e | e <- es] ++ [seq slot_lv rm lv | lv <- lvs] in
+  annot_of_slots os ii.
+
+Definition is_Pstkptr
+  (pk : ptr_kind) : option (slot * Z * wsize * concrete_slice * var) :=
+  if pk is Pstkptr s ofs ws z f then Some (s, ofs, ws, z, f)
+  else None.
+
+Definition stkptr_cell (x : var) : option (slot * (Z * Z)) :=
+  let%opt s := get_local x in
+  let%opt (s, _, _, cs, _) := is_Pstkptr s in
+  Some (s, (cs.(cs_ofs), cs.(cs_len))).
+
+Definition add_stkptr_annot
+  (lv : lval) (e : pexpr) (ii : instr_info) : cexec instr_info :=
+  let ox := if lv is Lvar x then stkptr_cell x.(v_var) else None in
+  let oy := if e is Pvar x then stkptr_cell x.(gv).(v_var) else None in
+  annot_of_slots [:: ox; oy] ii.
 
 Definition get_Pvar e :=
   match e with
@@ -1929,6 +1956,9 @@ Fixpoint alloc_i sao (trmap:table*region_map) (i: instr) : cexec (table * region
   | Cassgn r t ty e =>
     if is_aarr ty then
       Let: (table, rmap, ir) := add_iinfo ii (alloc_array_move_init table rmap r t e) in
+      Let ii :=
+        if is_nop_op ir then ok ii else add_iinfo ii (add_stkptr_annot r e ii)
+      in
       let table := remove_binding_lval table r in
       ok (table, rmap, [:: MkI ii ir])
     else
