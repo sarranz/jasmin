@@ -121,31 +121,31 @@ type analysis = {
 let create () : analysis =
   { signatures = Hashtbl.create 17; fresh_var_counter = 0 }
 
-let fresh an prefix =
+let fresh an prefix : Level.t =
   an.fresh_var_counter <- an.fresh_var_counter + 1;
   Level.Poly (SS.singleton (Printf.sprintf "%s%d" prefix an.fresh_var_counter))
 
-let string_of_level = function
+let string_of_level : Level.t -> string = function
   | Level.Public -> "public"
   | Level.Secret -> "secret"
   | Level.Poly s -> "poly{" ^ String.concat "," (SS.elements s) ^ "}"
 
-let pp_slot s fmt slot =
+let pp_slot s fmt slot : unit =
   Format.fprintf fmt "%-5s %-12s -> %s" slot
     (string_of_level (Env.get s.pre slot))
     (string_of_level (Env.get s.post slot))
 
-let pp_signature fmt ((name : string), (s : signature)) =
+let pp_signature fmt ((name : string), (s : signature)) : unit =
   Format.fprintf fmt "@[<v2>%s:@,%a@]" name
     (Utils.pp_list "@," (pp_slot s))
     s.slots
 
-let pp_result fmt (name, r) =
+let pp_result fmt (name, r) : unit =
   match r with
   | Some s -> pp_signature fmt (name, s)
   | None -> Format.fprintf fmt "%s: skipped" name
 
-let pp_signatures fmt results =
+let pp_signatures fmt results : unit =
   Format.fprintf fmt "@[<v>==== asmCtChecker: signatures ====@,%a@,%s@]@."
     (Utils.pp_list "@," pp_result)
     results "==== end signatures ===="
@@ -156,10 +156,10 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
     let arch = Arch.asm_e._asm
     let arch_decl = arch._arch_decl
 
-    let reg_name r = arch_decl.toS_r.to_string r
-    let regx_name r = arch_decl.toS_rx.to_string r
-    let xreg_name r = arch_decl.toS_x.to_string r
-    let flag_name f = arch_decl.toS_f.to_string f
+    let reg_name r : string = arch_decl.toS_r.to_string r
+    let regx_name r : string = arch_decl.toS_rx.to_string r
+    let xreg_name r : string = arch_decl.toS_x.to_string r
+    let flag_name f : string = arch_decl.toS_f.to_string f
     let rsp = reg_name arch_decl.ad_rsp
 
     let condt_slots c : string list =
@@ -173,13 +173,14 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
 
     let arch_slots_set = SS.of_list arch_slots
 
-    let instr_desc op = arch._asm_op_decl.instr_desc_op op
+    let instr_desc op : _ Arch_decl.instr_desc_t =
+      arch._asm_op_decl.instr_desc_op op
 
     let get_mem_annotation instr : string list =
       Option.value ~default:[] (Annot.has_array_annot (snd instr.asmi_ii))
 
     let get_instr_annotation instr : memory_instantiation =
-      let add_instantiation m (callee, caller) =
+      let add_instantiation m (callee, caller) : memory_instantiation =
         SM.update callee
           (fun xs -> Some (caller :: Option.value ~default:[] xs)) m
       in
@@ -202,11 +203,11 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
   end
 
   module Instruction = struct
-    let implicit_slot = function
+    let implicit_slot : _ Arch_decl.implicit_arg -> string = function
       | IArflag f -> Arch_utils.flag_name f
       | IAreg r -> Arch_utils.reg_name r
 
-    let process_address env mem_annotation kind address =
+    let process_address env mem_annotation kind address : Env.t * string list =
       let address_slots = Arch_utils.regs_of_address address in
       match kind with
       | AK_compute -> env, address_slots
@@ -215,7 +216,8 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
           if mem_annotation = [] then env, [ unknown_mem_slot ]
           else env, mem_annotation
 
-    let process_explicit_arg args mem_annotation env kind n =
+    let process_explicit_arg args mem_annotation env kind n :
+        Env.t * string list =
       match List.nth_opt args (Conv.int_of_nat n) with
       | Some (Reg r) -> env, [ Arch_utils.reg_name r ]
       | Some (Regx r) -> env, [ Arch_utils.regx_name r ]
@@ -226,7 +228,7 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
 
     (* Get the slots the operand descriptors (id_in or id_out) read / write to.
        Addresses must be public, so the env is passed to record that requirement. *)
-    let process_op_descs args mem_annotation env op_descs =
+    let process_op_descs args mem_annotation env op_descs : Env.t * string list =
       List.fold_left
         (fun (env, slots) op_desc ->
           match op_desc with
@@ -238,7 +240,7 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
               env, new_slots @ slots)
         (env, []) op_descs
 
-    let mem_write_size args op_desc =
+    let mem_write_size args op_desc : int option =
       List.combine op_desc.id_out op_desc.id_tout
       |> List.find_map (fun (od, ty) ->
              match (od, ty) with
@@ -248,14 +250,14 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
                  | _ -> None)
              | _ -> None)
 
-    let size_of_ltype = function
+    let size_of_ltype : Type.ltype -> int = function
       | Type.Coq_lword ws -> Prog.size_of_ws ws
       | Type.Coq_lbool -> 1
 
-    let declassify_slots env slots =
+    let declassify_slots env slots : Env.t =
       List.fold_left (fun env slot -> Env.set env slot Level.Public) env slots
 
-    let declassify_region env instr size =
+    let declassify_region env instr size : Env.t =
       let mem_annotation = Arch_utils.get_mem_annotation instr in
       if mem_annotation <> [] && List.length mem_annotation = size then
         declassify_slots env mem_annotation
@@ -272,7 +274,7 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
         env
       end
 
-    let ty_declassify_val env instr lty arg =
+    let ty_declassify_val env instr lty arg : Env.t =
       match arg with
       | Reg r -> declassify_slots env [ Arch_utils.reg_name r ]
       | Regx r -> declassify_slots env [ Arch_utils.regx_name r ]
@@ -281,10 +283,10 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
       | Addr _ -> declassify_region env instr (size_of_ltype lty)
       | Imm _ -> env
 
-    let ty_declassify_mem env instr len =
+    let ty_declassify_mem env instr len : Env.t =
       declassify_region env instr (Conv.int_of_cz len)
 
-    let ty_asmop env instr op args =
+    let ty_asmop env instr op args : Env.t =
       let op_desc = Arch_utils.instr_desc op in
       let mem_annotation = Arch_utils.get_mem_annotation instr in
       let memory_slots = SS.of_list mem_annotation in
@@ -299,8 +301,9 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
         (fun env x -> Env.write env ~strong_write memory_slots x level)
         env out_slots
 
-    let step fn_name labels ~exit env i instr signatures call_env =
-      let target lbl = LM.find lbl labels in
+    let step fn_name labels ~exit env i instr signatures call_env :
+        (int * Env.t) list =
+      let target lbl : int = LM.find lbl labels in
       match instr.asmi_i with
       | ALIGN | LABEL _ -> [ (i + 1, env) ]
       | AsmOp (op, args) ->
@@ -334,13 +337,14 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
   end
 
   module Calls = struct
-    let join_into map key level =
+    let join_into map key level : Level.t SM.t =
       SM.update key
         (function None -> Some level | Some prev -> Some (Level.join level prev))
         map
 
-    let infer_type_substitution caller callee bindings =
-      let infer (env, substitution) (callee_slot, caller_slots) =
+    let infer_type_substitution caller callee bindings : Env.t * Level.t SM.t =
+      let infer (env, substitution) (callee_slot, caller_slots) :
+          Env.t * Level.t SM.t =
         match Env.get callee.pre callee_slot with
         | Level.Public ->
             if caller_slots = [] then
@@ -363,8 +367,8 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
       in
       List.fold_left infer (caller, SM.empty) bindings
 
-    let apply_postconditions caller callee substitution bindings =
-      let apply posts (callee_slot, caller_slots) =
+    let apply_postconditions caller callee substitution bindings : Env.t =
+      let apply posts (callee_slot, caller_slots) : Level.t SM.t =
         let return_level =
           Level.subst substitution (Env.get callee.post callee_slot)
         in
@@ -376,8 +380,8 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
       SM.fold (fun slot level env -> Env.set env slot level)
         post_updates caller
 
-    let slot_bindings callee_sig inst =
-      let is_array slot = not (SS.mem slot Arch_utils.arch_slots_set) in
+    let slot_bindings callee_sig inst : (string * string list) list =
+      let is_array slot : bool = not (SS.mem slot Arch_utils.arch_slots_set) in
       List.map
         (fun callee_slot ->
           if is_array callee_slot then
@@ -386,7 +390,7 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
           else (callee_slot, [ callee_slot ]))
         callee_sig.slots
 
-    let call_env caller callee inst =
+    let call_env caller callee inst : Env.t =
       let bindings = slot_bindings callee inst in
       let caller, substitution =
         infer_type_substitution caller callee bindings
@@ -395,7 +399,7 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
   end
 
   module Dataflow = struct
-    let label_map body =
+    let label_map body : int LM.t =
       let m = ref LM.empty in
       Array.iteri
         (fun i instr ->
@@ -405,13 +409,13 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
         body;
       !m
 
-    let fixpoint fn_name body pre signatures =
+    let fixpoint fn_name body pre signatures : SS.t * Env.t option =
       let labels = label_map body in
       let exit = Array.length body in
       let envs : Env.t option array = Array.make (exit + 1) None in
       let changed = ref false in
 
-      let flow (instr_i, new_env) =
+      let flow (instr_i, new_env) : unit =
         match envs.(instr_i) with
         | None ->
             envs.(instr_i) <- Some new_env;
@@ -454,7 +458,7 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
       (public_levels, envs.(exit))
   end
 
-  let collect_slots body inst_images =
+  let collect_slots body inst_images : string list =
     let mem_slots =
       List.concat_map Arch_utils.get_mem_annotation body @ inst_images
       |> List.sort_uniq String.compare
@@ -462,7 +466,7 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
     in
     Arch_utils.arch_slots @ mem_slots
 
-  let init_pre_env analysis slots =
+  let init_pre_env analysis slots : Env.t =
     let env =
       List.fold_left
         (fun env s -> Env.set env s (fresh analysis (s ^ "_")))
@@ -471,7 +475,7 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
     in
     Env.set env unknown_mem_slot Level.Secret
 
-  let ty_fundef analysis (f_name, f_def) =
+  let ty_fundef analysis (f_name, f_def) : signature option =
     let name = f_name.CoreIdent.fn_name in
     let inst_images = List.concat_map Arch_utils.inst_image f_def.asm_fd_body in
     let slots = collect_slots f_def.asm_fd_body inst_images in
@@ -501,7 +505,8 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
 
   (* Post-order DFS of the call graph, so that every callee
      is typed before its callers. *)
-  let callees_first funcs =
+  let callees_first funcs :
+      (CoreIdent.funname * (_, _, _, _, _, _) Arch_decl.asm_fundef) list =
     let by_name = Hashtbl.create 17 in
     List.iter
       (fun ((f_name : CoreIdent.funname), f_def) ->
@@ -509,7 +514,7 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
       funcs;
     let seen = Hashtbl.create 17 in
     let acc = ref [] in
-    let rec visit ((f_name : CoreIdent.funname), f_def) =
+    let rec visit ((f_name : CoreIdent.funname), f_def) : unit =
       if not (Hashtbl.mem seen f_name.CoreIdent.fn_name) then begin
         Hashtbl.replace seen f_name.CoreIdent.fn_name ();
         List.iter
@@ -521,7 +526,8 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
     List.iter visit funcs;
     List.rev !acc
 
-  let signatures prog =
+  let signatures prog :
+      (string * signature option) list * (Format.formatter -> unit) option =
     let analysis = create () in
     let status =
       match
