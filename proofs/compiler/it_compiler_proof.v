@@ -10,6 +10,7 @@ From ITree Require Import
 Require Import
   arch_params_proof
   compiler
+  call_depth
   compiler_util
   psem
   psem_facts
@@ -58,7 +59,7 @@ Require Import
   asm_gen_proof
   sem_params_of_arch_extra.
 
-Require Import asm_invariant hoare_valid.
+Require Import asm_invariant hoare_valid acc_admit.
 Require Import xrutt xrutt_facts.
 Import Utf8.
 
@@ -291,7 +292,7 @@ Lemma compiler_back_end_meta entries (p: sprog) (tp: lprog) :
      lp_globs tp = p.(p_extra).(sp_globs)
   ].
 Proof using sc_sem print_linearP.
-  rewrite /compiler_back_end; t_xrbindP => _ _ lp ok_lp.
+  rewrite /compiler_back_end; t_xrbindP => _ _ _ lp ok_lp.
   rewrite print_linearP => zp ok_zp.
   rewrite print_linearP => tp' ok_tp.
   rewrite print_linearP => ?; subst tp'.
@@ -333,7 +334,7 @@ Lemma enough_stack_space_alloc_ok
   -> alloc_ok sp fn m.
 Proof using print_linearP.
   rewrite /compiler_back_end_to_asm /compiler_back_end.
-  t_xrbindP => ? /allMP ok_export _ lp ok_lp.
+  t_xrbindP => ? /allMP ok_export _ _ lp ok_lp.
   rewrite print_linearP => zp ok_zp.
   rewrite print_linearP => tp ok_tp.
   rewrite print_linearP => <- ok_xp /InP ok_fn M S.
@@ -384,7 +385,7 @@ Proof using sc_sem print_linearP.
   move: ok_xp; rewrite /compiler_back_end_to_asm.
   t_xrbindP=> lp ok_lp ok_xp.
   move: ok_lp; rewrite /compiler_back_end.
-  t_xrbindP=> hcheck _ lp1 ok_lp1 lp2.
+  t_xrbindP=> hcheck _ _ lp1 ok_lp1 lp2.
   rewrite print_linearP => ok_lp2 lp3.
   rewrite print_linearP => ok_lp3.
   rewrite print_linearP => ?; subst lp.
@@ -408,7 +409,7 @@ Proof using sc_sem print_linearP.
 
   exists sfd, xd.
   move/assemble_fdI: ok_xd => [_ _ [_ [_ [_ [_ _ _ {-2}-> _]]]]] /=.
-  move/stack_zeroization_lfd_invariants: ok_lfd2 => [_ _ _ _ _ _ <- _ _ [_ <-]] /=.
+  move/stack_zeroization_lfd_invariants: ok_lfd2 => [_ _ _ _ _ _ <- _ _ [_ [<- _]]] /=.
   by split.
 Qed.
 
@@ -496,8 +497,17 @@ Definition isem_stack
     (pT := progStack)
     sp rip fn fs.
 
-Definition isem_linear (lp : lprog) :=
-  ilsem_exportcall lp (wE := with_Error0).
+(* TODO_ACC: Phase G.1 minimal fix: [isem_linear] now takes the hardware call
+   stack as part of its input pair, so that [wkequiv_io_trans] can compose
+   the back end with a fixed middle program regardless of the call stack
+   value. The composition proofs below ([it_compiler_back_endP] and its
+   helpers) have not been redone for this shape and are admitted. *)
+Definition isem_linear (lp : lprog) (fn : funname) (i : seq pointer * estate)
+  : itree ErrEvent estate :=
+  ilsem_exportcall
+    (ep := ep_of_asm_e) (spp := spp_of_asm_e) (sip := sip_of_asm_e)
+    (wE := with_Error0)
+    lp fn i.1 i.2.
 
 Definition isem_asm (xp : asm_prog) :=
   iasmsem_exportcall
@@ -989,7 +999,9 @@ Definition lget_vars (xs : seq var_i) (vm : Vm.t) : seq value :=
 Definition lget_args (lfd : lfundef) := lget_vars lfd.(lfd_arg).
 Definition lget_res  (lfd : lfundef) := lget_vars lfd.(lfd_res).
 
-Definition back_end_pre lfd s t :=
+Definition back_end_pre lfd s (i : seq pointer * estate) :=
+  let: cs := i.1 in
+  let: t := i.2 in
   let: args := s.(fvals) in
   let: ms := s.(fmem) in
   let: vmt := t.(evm) in
@@ -1001,9 +1013,13 @@ Definition back_end_pre lfd s t :=
     , match_mem ms mt
     , s.(fscs) = t.(escs)
     , vm_initialized_on vmt lfd.(lfd_callee_saved)
-    & allocatable_stack ms (lfd_total_stack lfd) ].
+    , allocatable_stack ms (lfd_total_stack lfd)
+    & if hwcs_size is Some n then
+        (Z.of_nat (size cs) + lfd_max_call_depth lfd <= Z.of_nat n)%Z
+      else True ].
 
-Definition back_end_post fn lfd s t s' t' :=
+Definition back_end_post fn lfd s (i : seq pointer * estate) s' (t' : estate) :=
+  let: t := i.2 in
   let: ms := s.(fmem) in
   let: mt := t.(emem) in
   let: ress := s'.(fvals) in
@@ -1021,14 +1037,14 @@ Definition ovm_post'
   [/\ ovm_post sp fn o1 o2
     & validw i2.(emem) =3 validw o2.(emem) ].
 
-Definition lin_sz_pre lp fn lfd i2 i3 :=
-  [/\ lin_pre sp lp rip fn i2 i3
+Definition lin_sz_pre lp fn lfd cs i2 i3 :=
+  [/\ lin_pre sp lp rip fn cs i2 i3
     & allocatable_stack i2.(emem) (lfd_total_stack lfd) ].
 
 Definition lin_sz_post szi sp lp fn zfd i1 i3 :=
   rcompose (lin_post sp lp fn i1 i3) (sz_post szi lp fn zfd i3 i3).
 
-Lemma trans_pre_ovm_lin_sz lp fn sfd lfd tfd i1 i3 :
+Lemma trans_pre_ovm_lin_sz lp fn sfd lfd tfd i1 cs i3 :
   tp.(lp_rsp) = sp.(p_extra).(sp_rsp) ->
   tp.(lp_rip) = sp.(p_extra).(sp_rip) ->
   tp.(lp_rsp) = lp.(lp_rsp) ->
@@ -1041,14 +1057,16 @@ Lemma trans_pre_ovm_lin_sz lp fn sfd lfd tfd i1 i3 :
   tfd.(lfd_stk_max) = sfd.(f_extra).(sf_stk_max) ->
   tfd.(lfd_stk_max) = lfd.(lfd_stk_max) ->
   tfd.(lfd_arg) = sfd.(f_params) ->
+  tfd.(lfd_max_call_depth) = lfd.(lfd_max_call_depth) ->
   get_fundef (p_funcs sp) fn = Some sfd ->
   get_fundef (lp_funcs lp) fn = Some lfd ->
-  back_end_pre tfd i1 i3 ->
-  exists2 i2, ovm_pre sp rip fn i1 i2 & lin_sz_pre lp fn lfd i2 i3.
+  back_end_pre tfd i1 (cs, i3) ->
+  exists2 i2, ovm_pre sp rip fn i1 i2 & lin_sz_pre lp fn lfd cs i2 i3.
 Proof.
 move=> rsp_tp_sp rip_tp_sp rsp_tp_lp rip_tp_lp al_tfd_sfd al_tfd_lfd exp_tfd
-  exp_tfd_lfd cs_tfd_lfd stkmax_tfd_sfd stkmax_tfd_lfd args_tfd_sfd get_sfd
-  get_lfd [hrsp hrip] uvals mmem hscs init alloc.
+  exp_tfd_lfd cs_tfd_lfd stkmax_tfd_sfd stkmax_tfd_lfd args_tfd_sfd
+  depth_tfd_lfd get_sfd get_lfd
+  [hrsp hrip uvals mmem hscs init alloc hcs_bound].
 set vs' := lget_args tfd i3.(evm) in uvals.
 set i2 := with_vm (estate0 i1) i3.(evm).
 exists i2.
@@ -1065,6 +1083,7 @@ rewrite /lin_sz_pre /lin_pre get_sfd get_lfd; split; first split=> //.
   rewrite /lfd_total_stack exp_tfd stkmax_tfd_sfd al_tfd_sfd.
   have /= := wunsigned_range [elaborate stack_limit i2.(emem)].
   by t_lia.
+- by rewrite -depth_tfd_lfd.
 rewrite /lfd_total_stack -stkmax_tfd_lfd -al_tfd_lfd -exp_tfd_lfd; exact: alloc.
 Qed.
 
@@ -1151,7 +1170,7 @@ have /= := [elaborate align_word_range lfd.(lfd_align) (top_stack i2.(emem))].
 by t_lia.
 Qed.
 
-Lemma trans_post_ovm_lin szi lp fn sfd lfd zfd tfd i1 i2 i3 o1 o4 :
+Lemma trans_post_ovm_lin szi lp fn sfd lfd zfd tfd i1 i2 i3 cs o1 o4 :
   linear_prog (ap_lip aparams) sp = ok lp ->
   stack_zeroization_lfd aparams.(ap_szp) szi lp.(lp_rsp) fn lfd = ok zfd ->
   isSome (szi fn) = isSome (cparams.(stack_zero_info) fn) ->
@@ -1166,9 +1185,9 @@ Lemma trans_post_ovm_lin szi lp fn sfd lfd zfd tfd i1 i2 i3 o1 o4 :
   tfd.(lfd_res) = lfd.(lfd_res) ->
   tfd.(lfd_stk_max) = lfd.(lfd_stk_max) ->
   ovm_pre sp rip fn i1 i2 ->
-  lin_sz_pre lp fn lfd i2 i3 ->
+  lin_sz_pre lp fn lfd cs i2 i3 ->
   rcompose (ovm_post' fn i1 i2) (lin_sz_post szi sp lp fn tfd i2 i3) o1 o4 ->
-  back_end_post fn tfd i1 i3 o1 o4.
+  back_end_post fn tfd i1 (cs, i3) o1 o4.
 Proof.
 move=> ok_lp ok_zfd hszi get_sfd get_lfd exp_sfd al_lfd_sfd exp_lfd
   stkmax_lfd_sfd fs_lfd_sfd al_tfd_lfd res_tfd_lfd stkmax_tfd_lfd.
@@ -1176,7 +1195,7 @@ move=> ++ [o2 [+ valid] [o3 ++]].
 rewrite /ovm_pre /lin_sz_pre /lin_pre /ovm_post /lin_post /sz_post get_sfd
   get_lfd.
 move=> [scs_i12 mem_i12 -[vargs [rsp_sp rip_sp hvargs uvargs]]].
-move=> [[rsp_i3 rip_lp init _ vm_i23 scs_i23 mem_i23] alloc].
+move=> [[rsp_i3 rip_lp init _ vm_i23 scs_i23 mem_i23 _] alloc].
 move=> [scs_o12 mem_o12 [vres [ok_vres uvres]]].
 move=> [rsp_o3 mmem_o23 tmu scs_o23 stkstbl].
 move=> /(_ _ ok_vres) [vres' ok_vres' uvres'].
@@ -1271,20 +1290,20 @@ rewrite wunsigned_sub; last exact: alloc'''.
 by rewrite Z.sub_add_distr Z.sub_diag Z.sub_0_l Z.opp_involutive.
 Qed.
 
-Lemma trans_pre_lin_sz_lin_sz lp fn sfd lfd i1 i3 :
+Lemma trans_pre_lin_sz_lin_sz lp fn sfd lfd cs i1 i3 :
   linear_prog aparams.(ap_lip) sp = ok lp ->
   lfd.(lfd_align) = sfd.(f_extra).(sf_align) ->
   lfd.(lfd_export) ->
   lfd.(lfd_stk_max) = sfd.(f_extra).(sf_stk_max) ->
   get_fundef (p_funcs sp) fn = Some sfd ->
   get_fundef (lp_funcs lp) fn = Some lfd ->
-  lin_sz_pre lp fn lfd i1 i3 ->
-  exists2 i2, lin_pre sp lp rip fn i1 i2 & sz_pre lp lfd i2 i3.
+  lin_sz_pre lp fn lfd cs i1 i3 ->
+  exists2 i2, lin_pre sp lp rip fn cs i1 i2 & sz_pre lp lfd i2 i3.
 Proof.
 move=> ok_lp al_lfd_sfd exp_lfd  stkmax_lfd_sfd get_sfd get_lfd [h alloc].
 exists i3; first exact: h.
 move: h; rewrite /lin_pre get_sfd get_lfd.
-move=> [hrsp hrip init alloc' uvm hscs mmem].
+move=> [hrsp hrip init alloc' uvm hscs mmem hcs_bound].
 exists (top_stack (emem i1)); split=> //.
 - by rewrite stkmax_lfd_sfd al_lfd_sfd; apply: alloc'.
 have {}alloc := trans_post_ovm_lin_alloc exp_lfd alloc.
@@ -1298,11 +1317,11 @@ apply/mmem.(valid_stk)/pointer_rangeP/(pointer_range_incl_r _ hpr).
 exact/top_stack_below_root.
 Qed.
 
-Lemma trans_post_lin_sz szi lp fn lfd tfd i1 i2 i4 o1 o3 :
+Lemma trans_post_lin_sz szi lp fn lfd tfd cs i1 i2 i4 o1 o3 :
   tfd.(lfd_align) = lfd.(lfd_align) ->
   tfd.(lfd_stk_max) = lfd.(lfd_stk_max) ->
   tfd.(lfd_res) = lfd.(lfd_res) ->
-  lin_pre sp lp rip fn i1 i2 ->
+  lin_pre sp lp rip fn cs i1 i2 ->
   sz_pre lp lfd i2 i4 ->
   rcompose (lin_post sp lp fn i1 i2) (sz_post szi lp fn lfd i2 i4) o1 o3 ->
   lin_sz_post szi sp lp fn tfd i1 i4 o1 o3.
@@ -1332,7 +1351,7 @@ Lemma it_compiler_back_endP {fn} :
 Proof using haparams print_linearP rsp_in_callee_saved.
 move=> /[dup] /(compiler_back_end_meta print_linearP)
   [rip_tp_sp rsp_tp_sp gd_tp_sp].
-rewrite /compiler_back_end; t_xrbindP => ok_export checked_p lp ok_lp.
+rewrite /compiler_back_end; t_xrbindP => ok_export hwcs_usage_ok checked_p lp ok_lp.
 rewrite print_linearP => zp ok_zp.
 rewrite print_linearP => tp' ok_tp.
 rewrite print_linearP => ?; subst tp'.
@@ -1385,9 +1404,17 @@ have {}wovm : [elaborate
 have cs_not_arr :
   forall x, Sv.In x one_varmap.callee_saved -> ~ is_aarr (vtype x).
 + by move=> x /sv_of_listP /mapP [/= r _ ->]; case: r.
+have hwcs_present : forall fn0 fd0, get_fundef (p_funcs sp) fn0 = Some fd0 ->
+    is_RAhwstack (sf_return_address (f_extra fd0)) -> isSome hwcs_size.
+- move=> fn0 fd0 ok_fd0 hra.
+  rewrite /hwcs_size /=.
+  case E: ad_hwcs_size => [n|] //.
+  move: hwcs_usage_ok; rewrite /check_hwcs_usage E => hall.
+  have := allMP (get_fundef_in' ok_fd0) hall.
+  by rewrite /= hra.
 have wlin := [elaborate
   linear_exportcallP
-    (hap_hlip haparams) vtmp_not_magic ok_lp cs_not_arr
+    (hap_hlip haparams) vtmp_not_magic ok_lp cs_not_arr hwcs_present
     (gd := rip) (fn := fn) ].
 
 (* Stack zeroization *)
@@ -1395,12 +1422,12 @@ have [zfd ok_zfd get_zfd] :=
   [elaborate stack_zeroization_lprog_get_fundef ok_zp get_lfd ].
 have [rip_lp_zp rsp_lp_zp _] := [elaborate
   stack_zeroization_lprog_invariants ok_zp].
-have [_ al_zfd _ arg_zfd _ res_zfd exp_zfd cs_zfd stkmax_zfd _] :=
+have [_ al_zfd _ arg_zfd _ res_zfd exp_zfd cs_zfd stkmax_zfd [_ [_ depth_zfd]]] :=
   [elaborate stack_zeroization_lfd_invariants ok_zfd].
 
 have := istack_zeroization_lprogP
-  (wE := with_Error0) (hap_hszp haparams) _ ok_zp get_lfd.
-rewrite ([elaborate lp_rspE ok_lp]) -/szi => /(_ _ rsp_in_callee_saved) wsz.
+  (wE := with_Error0) (hap_hszp haparams) _ _ ok_zp get_lfd.
+rewrite ([elaborate lp_rspE ok_lp]) -/szi => /(_ _ _ rsp_in_callee_saved) wsz.
 
 (* Tunneling *)
 have get_tfd := [elaborate get_fundef_tunnel_program ok_tp get_zfd].
@@ -1411,58 +1438,55 @@ set tfd := (X in _ = Some X) in get_tfd.
 exists tfd; split.
 - exact: get_tfd.
 - by rewrite /= -exp_zfd /= exp_sfd.
-
-(* Tunneling first because it's equality. *)
-apply: wkequiv_io_eutt_r (tunnel_funcs ok_tp fn) _.
-
-(* OVM *)
-apply: (wkequiv_io_trans
-  (P12 := ovm_pre sp rip fn) (Q12 := ovm_post' fn)
-  (P23 := lin_sz_pre lp fn lfd) (Q23 := lin_sz_post szi sp lp fn tfd)
-  _ _ wovm).
-- move=> >.
-  (* Avoid [=> //] to track hypotheses more easily. *)
-  apply: (trans_pre_ovm_lin_sz rsp_tp_sp rip_tp_sp) get_sfd get_lfd.
-  + by rewrite rsp_lp_zp rsp_zp_tp.
-  + by rewrite rip_lp_zp rip_zp_tp.
-  + by rewrite -al_zfd.
-  + by rewrite -al_zfd.
-  + by rewrite -exp_zfd.
-  + by rewrite -exp_zfd.
-  + by rewrite -cs_zfd.
-  + by rewrite -stkmax_zfd.
-  + by rewrite -stkmax_zfd.
-  by rewrite -arg_zfd.
-  (* Avoid [=> //] to track hypotheses more easily. *)
-- move=> >; apply: (trans_post_ovm_lin ok_lp ok_zfd _ get_sfd get_lfd).
-  + by rewrite /szi; case: stack_zero_info => [[]|].
-  + by rewrite exp_sfd.
-  + reflexivity.
-  + reflexivity.
-  + reflexivity.
-  + reflexivity.
-  + by rewrite -al_zfd.
-  + by rewrite -res_zfd.
-  by rewrite -stkmax_zfd.
-
-(* Linearization *)
-apply: (wkequiv_io_trans
-  (P12 := lin_pre sp lp rip fn) (Q12 := lin_post sp lp fn)
-  (P23 := sz_pre lp lfd) (Q23 := sz_post szi lp fn lfd)
-  _ _ wlin).
-  (* Avoid [=> //] to track hypotheses more easily. *)
-- move=> >; apply: (trans_pre_lin_sz_lin_sz ok_lp) get_sfd get_lfd.
-  + reflexivity.
-  + by rewrite /= exp_sfd.
-  + reflexivity.
-  (* Avoid [=> //] to track hypotheses more easily. *)
-- move=> >; apply: trans_post_lin_sz.
-  + by rewrite al_zfd.
-  + by rewrite stkmax_zfd.
-  by rewrite res_zfd.
-
-(* Stack zeroization *)
-exact: wsz.
+have wcombined : forall cs, wkequiv_io
+    (fun i1 i3 => back_end_pre tfd i1 (cs, i3))
+    (isem_stack sp rip fn)
+    (ilsem_exportcall (ep := ep_of_asm_e) (spp := spp_of_asm_e) (sip := sip_of_asm_e) (wE := with_Error0) tp fn cs)
+    (fun i1 i3 => back_end_post fn tfd i1 (cs, i3)).
+- move=> cs.
+  apply: wkequiv_io_eutt_r (tunnel_funcs ok_tp fn cs) _.
+  apply: (wkequiv_io_trans
+    (P12 := ovm_pre sp rip fn) (Q12 := ovm_post' fn)
+    (P23 := lin_sz_pre lp fn lfd cs) (Q23 := lin_sz_post szi sp lp fn tfd)
+    _ _ wovm).
+  - move=> >.
+    apply: (trans_pre_ovm_lin_sz rsp_tp_sp rip_tp_sp) get_sfd get_lfd.
+    + by rewrite rsp_lp_zp rsp_zp_tp.
+    + by rewrite rip_lp_zp rip_zp_tp.
+    + by rewrite -al_zfd.
+    + by rewrite -al_zfd.
+    + by rewrite -exp_zfd.
+    + by rewrite -exp_zfd.
+    + by rewrite -cs_zfd.
+    + by rewrite -stkmax_zfd.
+    + by rewrite -stkmax_zfd.
+    by rewrite -arg_zfd.
+    by rewrite -depth_zfd.
+  - move=> >; apply: (trans_post_ovm_lin ok_lp ok_zfd _ get_sfd get_lfd).
+    + by rewrite /szi; case: stack_zero_info => [[]|].
+    + by rewrite exp_sfd.
+    + reflexivity.
+    + reflexivity.
+    + reflexivity.
+    + reflexivity.
+    + by rewrite -al_zfd.
+    + by rewrite -res_zfd.
+    by rewrite -stkmax_zfd.
+  apply: (wkequiv_io_trans
+    (P12 := lin_pre sp lp rip fn cs) (Q12 := lin_post sp lp fn)
+    (P23 := sz_pre lp lfd) (Q23 := sz_post szi lp fn lfd)
+    _ _ (wlin cs)).
+  - move=> >; apply: (trans_pre_lin_sz_lin_sz ok_lp) get_sfd get_lfd.
+    + reflexivity.
+    + by rewrite /= exp_sfd.
+    + reflexivity.
+  - move=> >; apply: trans_post_lin_sz.
+    + by rewrite al_zfd.
+    + by rewrite stkmax_zfd.
+    by rewrite res_zfd.
+  exact: wsz cs.
+move=> i1 [cs i3] pre.
+exact: wcombined cs i1 i3 pre.
 Qed.
 
 End BACK_END.
@@ -1548,7 +1572,10 @@ Definition back_end_to_asm_pre xfd (s : fstate) (t : asmmem) :=
     , values_uincl args argt
     , match_mem ms mt
     , s.(fscs) = t.(asm_scs)
-    & allocatable_stack ms xfd.(asm_fd_total_stack)
+    , allocatable_stack ms xfd.(asm_fd_total_stack)
+    & if ad_hwcs_size is Some n then
+        (Z.of_nat (size t.(asm_hwcs)) + asm_fd_max_call_depth xfd <= Z.of_nat n)%Z
+      else True
   ].
 
 Definition back_end_to_asm_post fn xfd (s : fstate) (t : asmmem) (s' : fstate) (t' : asmmem) :=
@@ -1602,19 +1629,20 @@ exists xfd; split => //.
 set rip_id := mk_ptr (lp_rip lp).
 apply: (
   wkequiv_io_trans
-    (P23 := fun (ls : estate) (xm : asmmem) =>
-      vm_initialized_on (evm ls)
+    (P23 := fun (i : seq pointer * estate) (xm : asmmem) =>
+      i.1 = asm_hwcs xm /\
+      vm_initialized_on (evm i.2)
         [seq var_of_asm_typed_reg i | i <- arch_decl.callee_saved]
-      /\ lom_eqv rip_id ls xm)
+      /\ lom_eqv rip_id i.2 xm)
     (Q23 := fun _ _ ls' xm' => lom_eqv rip_id ls' xm')
     _ _
     w_be
     _
 ).
-- move=> fs xm [hrsp hrip hargs hmm hscs hstk].
+- move=> fs xm [hrsp hrip hargs hmm hscs hstk hhwcs].
   have Meq :=
     lom_eqv_estate_of_asm_mem (top_stack (fmem fs)) (lp_rsp lp) xm disj_rip.
-  exists (estate_of_asm_mem (top_stack (fmem fs)) (lp_rip lp) (lp_rsp lp) xm)
+  exists (asm_hwcs xm, estate_of_asm_mem (top_stack (fmem fs)) (lp_rip lp) (lp_rsp lp) xm)
     => /=.
   + split => /=.
     * rewrite -hrsp -ok_lp_rsp.
@@ -1631,13 +1659,16 @@ apply: (
         (top_stack (fmem fs)) (lp_rip lp) (lp_rsp lp) xm
         ok_callee_saved_lfd).
     * by move: hstk; rewrite hxfd /=.
+    * move: hhwcs; rewrite hxfd /=.
+      by case: ad_hwcs_size => //= n.
+  split; first split => //=.
   split.
   + exact:
       (vm_init_vmap_of_asm_mem_callee_saved
          (top_stack (fmem fs)) (lp_rip lp) (lp_rsp lp) xm
          callee_saved_not_bool).
   exact: Meq.
-- move=> fs ls xm fs' xm' _ [_ Meq] [ls' [hvals hmm' hscs' hzero] Meq'].
+- move=> fs ls xm fs' xm' _ [_ [_ Meq]] [ls' [hvals hmm' hscs' hzero] Meq'].
   split.
   + rewrite hxfd /=.
     apply: (values_uincl_trans hvals).
@@ -1648,7 +1679,9 @@ apply: (
   case: Meq  => /= _ heq_mem  _ _ _ _ _ _.
   case: Meq' => /= _ heq_mem' _ _ _ _ _ _.
   by rewrite -heq_mem -heq_mem'.
-move=> ls xm [hvm_init Meq].
+move=> [cs ls] xm [heq [hvm_init Meq]].
+move: heq hvm_init Meq => /= -> hvm_init Meq.
+rewrite /isem_linear /=.
 exact: (iasm_gen_exportcall (hap_hagp haparams) ok_xp fn hvm_init Meq).
 Qed.
 
@@ -1677,6 +1710,10 @@ Definition wf_args_x rip fn ms mi args argt :=
   let al := get_asm_align_args xp fn in
   wf_args n rip ms mi ws al args argt.
 
+Definition enough_hwcs_space (fn : funname) (t : asmmem) : Prop :=
+  if ad_hwcs_size is Some n then (Z.of_nat (size t.(asm_hwcs)) + Z.of_nat (call_depth up fn) <= Z.of_nat n)%Z
+  else True.
+
 Definition full_pre fn xfd (s : fstate) (t : asmmem) :=
   let: args := s.(fvals) in
   let: ms := s.(fmem) in
@@ -1686,6 +1723,7 @@ Definition full_pre fn xfd (s : fstate) (t : asmmem) :=
   exists mi : @mem _pd,
     [/\ mem_agreement_with_ghost ms mt t.(asm_rip) xp.(asm_globs) mi
       , enough_stack_space xp fn (top_stack ms) mt
+      , enough_hwcs_space fn t
       , t.(asm_scs) = s.(fscs)
       , rm ad_rsp = top_stack ms
       , wf_args_x t.(asm_rip) fn ms mi args argt
@@ -1720,12 +1758,13 @@ Lemma it_compile_prog_to_asmP {fn} :
           (full_post fn xfd)
    ].
 Proof using haparams print_uprogP print_sprogP print_linearP.
-rewrite /compile_prog_to_asm; t_xrbindP => sp ok_sp ok_xp ok_fn.
+rewrite /compile_prog_to_asm; t_xrbindP => asp sp ok_sp ok_xp ok_hwcs ?; subst asp.
+move=> ok_fn.
 have [sfd [xfd [get_sfd get_xfd xfd_export align_args_eq]]] :=
   compiler_back_end_to_asm_get_fundef print_linearP ok_xp ok_fn.
 exists xfd; split => //.
 move=> fs xm hpre.
-case: hpre => mi [hmga hesp hscs_eq hrsp_eq hwfa hfuim].
+case: hpre => mi [hmga hesp hhwcs_sp hscs_eq hrsp_eq hwfa hfuim].
 have FE := it_compiler_front_endP ok_sp ok_fn.
 
 have [xfd2 [get_xfd2 _ BE]] :=
@@ -1846,6 +1885,12 @@ have hvalidw :=
 have {}h_fe := lutt_xrutt_trans_r hvalidw h_fe.
 clear hvalidw.
 
+have hdepth : (asm_fd_max_call_depth xfd <= Z.of_nat (call_depth up fn))%Z.
+- have ok_fn_in : List.In fn entries by apply/InP.
+  move: ok_hwcs; rewrite /check_hwcs_depth => hall.
+  have := allMP ok_fn_in hall.
+  by rewrite get_xfd => /assertP /ZleP.
+
 have /BE h_be : back_end_to_asm_pre (asm_rip xm) xfd fs_sp xm.
 - split.
   - by rewrite -(ss_top_stack hmga.(ma_stack_stable)).
@@ -1853,13 +1898,15 @@ have /BE h_be : back_end_to_asm_pre (asm_rip xm) xfd fs_sp xm.
   - exact: hsp_uincl. (* values_uincl (fvals fs_sp) argt — STEP 1 output *)
   - exact hmga.(ma_match_mem).
   - by rewrite hsp_scs hscs_eq.
-  rewrite /allocatable_stack.
-  have hrange := hmga.(ma_stack_range).
-  have hstk /= := hesp xfd get_xfd.
-  rewrite (ss_top_stack hmga.(ma_stack_stable)) in hstk.
-  split; first by apply: hstk.1.
-  apply: Z.le_trans; first exact: hstk.2.
-  apply Z.sub_le_mono_l; exact: hrange.
+  - rewrite /allocatable_stack.
+    have hrange := hmga.(ma_stack_range).
+    have hstk /= := hesp xfd get_xfd.
+    rewrite (ss_top_stack hmga.(ma_stack_stable)) in hstk.
+    split; first by apply: hstk.1.
+    apply: Z.le_trans; first exact: hstk.2.
+    apply Z.sub_le_mono_l; exact: hrange.
+  move: hhwcs_sp; rewrite /enough_hwcs_space; case: ad_hwcs_size hdepth => [n|] //= hdepth hb.
+  by lia.
 
 have hinv := [elaborate
   iasmsem_exportcall_invariantP

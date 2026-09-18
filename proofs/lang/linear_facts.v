@@ -41,6 +41,7 @@ Context
   {spp : SemPexprParams}
   {sip : SemInstrParams asm_op syscall_state}
   {ovm_i : one_varmap_info}
+  {hwcs_i : hw_call_stack_info}
 .
 
 Lemma setpc_id ls :
@@ -179,7 +180,7 @@ Opaque eval_jump.
     split.
     + exact: write_lexprs_stack_stable hw.
     exact: write_lexprs_validw hw.
-    + t_xrbindP=> ?? _ [[??]?] /(exec_syscallSs (rscs := _)) heq1.
+    + t_xrbindP=> ??? _ [[??]?] /(exec_syscallSs (rscs := _)) heq1.
     t_xrbindP=> ? hw <- /=.
     apply (mem_equiv_trans heq1).
     split.
@@ -187,12 +188,13 @@ Opaque eval_jump.
     exact: write_lvals_validw hw.
   + move=> [|p|//]; last first.
     + by t_xrbindP=> _ _ _ _ _ _ _ _ /eval_jump_mem_eq /= <-.
+    + by t_xrbindP=> _ _ _ _ _ _ _ _ /eval_jump_mem_eq /= <-.
     t_xrbindP=> ??? _ _ _ _ _ w _ ? hw /eval_jump_mem_eq /= <-.
     split.
     + exact: Memory.write_mem_stable hw.
     by move=> ???; rewrite (write_validw_eq hw).
   + by t_xrbindP=> _ _ _ _ _ _ _ _ /eval_jump_mem_eq /= <-.
-  + by [].
+  + by case: hwcs_pop => // -[p cs] /=; t_xrbindP=> ? _ /eval_jump_mem_eq /= <-.
   + by move=> [<-] /=.
   + by move=> _ _ [<-] /=.
   + by move=> _ /eval_jump_mem_eq /= <-.
@@ -451,7 +453,7 @@ Lemma sem_fopns_args_mix_ilsteps fn P Q ii lc pcs pce ls :
   pce = size P + size lc ->
   mix_ilsteps lp (pc_between fn pcs pce) ls ≈
     match sem_fopns_args (to_estate ls) lc with
-    | Ok s' => Ret (of_estate s' fn pce)
+    | Ok s' => Ret (of_estate s' (lhwcs ls) fn pce)
     | Error err => Exception.throw err
     end.
 Proof.

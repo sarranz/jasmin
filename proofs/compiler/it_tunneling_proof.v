@@ -29,7 +29,8 @@ Context
   {ep : EstateParams syscall_state}
   {spp : SemPexprParams}
   {sip : SemInstrParams asm_op syscall_state}
-  {ovm_i : one_varmap.one_varmap_info}.
+  {ovm_i : one_varmap.one_varmap_info}
+  {hwcs_i : hw_call_stack_info}.
 
 Context (p:lprog).
 Context (p' : lprog).
@@ -59,15 +60,16 @@ Definition path_to0 fn endpc l l' :=
 
 Lemma to_estate_eq_eval_jump s1 s2 l :
   to_estate s1 = to_estate s2 ->
+  lhwcs s1 = lhwcs s2 ->
   eval_jump p l s1 = eval_jump p l s2.
 Proof.
   case: l => /= fn l; case: get_fundef => //= fd.
   case: find_label => //= l'.
-  by rewrite -(of_estate_to_estate s1) -(of_estate_to_estate s2) /to_estate /of_estate /= => -[-> -> ->].
+  by rewrite -(of_estate_to_estate s1) -(of_estate_to_estate s2) /to_estate /of_estate /= => -[-> -> ->] ->.
 Qed.
 
 Lemma eval_jump_to_estate l s1 s2 :
-  eval_jump p l s1 = ok s2 -> to_estate s1 = to_estate s2.
+  eval_jump p l s1 = ok s2 -> to_estate s1 = to_estate s2 /\ lhwcs s1 = lhwcs s2.
 Proof.
   case: l => /= fn l; case: get_fundef => //= fd.
   by t_xrbindP => l' _ <-; rewrite -(of_estate_to_estate s1).
@@ -80,12 +82,13 @@ Lemma path_to_trans l2 l1 l3 fn endpc :
 Proof.
   move=> h12 h23 s1 s2 hj1.
   have [n1 [s3 hsem1 hj2]] := h12 s1 s2 hj1.
-  rewrite (to_estate_eq_eval_jump (fn, l2) (eval_jump_to_estate hj1)) in hj2.
+  have [he hh] := eval_jump_to_estate hj1.
+  rewrite (to_estate_eq_eval_jump (fn, l2) he hh) in hj2.
   have [n2 [s4 hsem2 hj3]] := h23 s2 s3 hj2.
   exists (n1 + n2.+1); exists s4.
   + by rewrite -addSn lsem_body_n_add hsem1.
   rewrite -hj3.
-  apply/to_estate_eq_eval_jump/(eval_jump_to_estate hj1).
+  by apply/to_estate_eq_eval_jump/hh/he.
 Qed.
 
 Lemma path_to0_trans l2 l1 l3 fn endpc :
@@ -388,6 +391,7 @@ Proof using pp'.
   rewrite get_label_after_pcE label_in_lprogE lp_rspE.
   case: (li_i i) => //.
   1: move=> [|?|] r; rewrite ?fn_is_exportE //.
+  5: case: (hwcs_pop (lhwcs s)) => [[p0 cs]|e] //=; repeat (apply bind_eq => // ?); rewrite eval_jumpE.
   all: by move=> >; try done; repeat (apply bind_eq => // ?); rewrite eval_jumpE.
 Qed.
 
@@ -468,8 +472,8 @@ Proof using pp'.
   rewrite /= in hsem; rewrite hsem /=; reflexivity.
 Qed.
 
-Lemma tunnel_funcs fn s :
-  eqit eq true true (ilsem_exportcall p fn s) (ilsem_exportcall p' fn s).
+Lemma tunnel_funcs fn cs s :
+  eqit eq true true (ilsem_exportcall p fn cs s) (ilsem_exportcall p' fn cs s).
 Proof using pp'.
   symmetry.
   rewrite /ilsem_exportcall /endpc.
