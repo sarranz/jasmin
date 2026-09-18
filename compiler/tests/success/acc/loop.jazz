@@ -1,5 +1,7 @@
 param int N = 43;
 
+u32[4] g = { 0x1, 0x2, 0x3, 0x4 };
+
 fn body(reg u32 x) -> reg u32 {
     x += 1;
     return x;
@@ -180,4 +182,24 @@ fn nested_with_cond(reg u32 x) -> reg u32 {
         }
     }
     return x;
+}
+
+// LA at the end of the loop body: LA assembles to two real instructions, so
+// the body's true instruction count is 4 (lw, add, and the two halves of
+// la), not 3. This does not fail to compile or assemble but without counting
+// LA as 2, the count would be off by one and the second half of LA
+// (the loop's actual last instruction) would fall outside the hardware loop's
+// repeated window.
+export
+fn la_last_in_loop(reg u32 n) -> reg u32 {
+    reg ptr u32[4] p;
+    reg u32 res tmp;
+    res = 0;
+    p = g;
+    repeat n {
+        tmp = p[#aligned 0];
+        res += tmp;
+        p = g;
+    }
+    return res;
 }

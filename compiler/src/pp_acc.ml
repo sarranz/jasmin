@@ -247,7 +247,13 @@ let need_nop_i = function
       false
 
 let need_nop c = try need_nop_i (List.last c).asmi_i with Failure _ -> true
-let notlbl = function Label _ -> false | _ -> true
+
+(* [la] is a pseudo-instruction that assembles to two real instructions,
+   so it must count as 2 in a loop body. *)
+let loop_instr_count = function
+  | Label _ -> 0
+  | Instr ("la", _) -> 2
+  | _ -> 1
 
 module ACCTarget :
   AsmTarget
@@ -318,7 +324,10 @@ module ACCTarget :
         in
         let c' = pp_cmd fn c in
         let c' = if need_nop c then c' @ [ Instr ("nop", []) ] else c' in
-        let num_c' = Format.sprintf "%i" (List.count_matching notlbl c') in
+        let num_c' =
+          Format.sprintf "%i"
+            (List.fold_left (fun acc i -> acc + loop_instr_count i) 0 c')
+        in
         Instr (name, [ count; num_c' ]) :: c'
     | POPPC -> E.invalid_poppc ()
     | CALL_HWCS lbl -> [ Instr ("jal", [ ra; pp_remote_label lbl ]) ]
