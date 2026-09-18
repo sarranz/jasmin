@@ -50,6 +50,7 @@ Section STACK_ZEROIZATION.
 
 Context {atoI : arch_toIdent} {syscall_state : Type} {sc_sem : syscall_sem syscall_state}.
 Context {call_conv : calling_convention}.
+Context {hwcs_i : hw_call_stack_info}.
 
 Section RSP.
 
@@ -1264,7 +1265,7 @@ Proof.
     + move=> [hcmd].
       rewrite -(cats0 cmd) in hbody.
       have [s2 [hsem hsr]] :=
-        loopP (cs := lhwcs ls) lt_0_stk_max halign le_ws_ws_align hstack hlabel hcmd
+        loopP (lhwcs ls) lt_0_stk_max halign le_ws_ws_align hstack hlabel hcmd
           hbody rsp_nin (s1 := to_estate _) hvalid hrsp.
       exists s2; split=> //.
       + by move: hsem; rewrite -hfn -hpc of_estate_to_estate.
@@ -1274,7 +1275,7 @@ Proof.
       case hcmd: (x86_stack_zero_loop rspn lbl ws_align ws stk_max)
         => [cmd' vars'] [??]; subst cmd vars.
       have [s2 [hsem hsr]] :=
-        loopP (cs := lhwcs ls) lt_0_stk_max halign le_ws_ws_align hstack hlabel hcmd
+        loopP (lhwcs ls) lt_0_stk_max halign le_ws_ws_align hstack hlabel hcmd
           hbody rsp_nin (s1 := to_estate _) hvalid hrsp.
       exists s2; split; last by case: hsr.
       rewrite -{2}hfn -{1}hpc of_estate_to_estate in hsem.
@@ -1285,7 +1286,7 @@ Proof.
       by rewrite !size_cat /= addnA addnS.
     move=> [hcmd].
     have :=
-      unrolledP (cs := lhwcs ls) lt_0_stk_max halign le_ws_ws_align hstack hcmd
+      unrolledP (lhwcs ls) lt_0_stk_max halign le_ws_ws_align hstack hcmd
         hbody rsp_nin (s1 := to_estate _) hvalid hrsp.
     by rewrite -{2}hfn -{1}hpc of_estate_to_estate.
 

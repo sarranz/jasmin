@@ -34,6 +34,7 @@ Section STACK_ZEROIZATION.
 
 Context {atoI : arch_toIdent} {syscall_state : Type} {sc_sem : syscall_sem syscall_state}.
 Context {call_conv : calling_convention}.
+Context {hwcs_i : hw_call_stack_info}.
 
 Section RSP.
 
@@ -784,13 +785,13 @@ Proof.
     case: szs => //.
     + move=> [??]; subst cmd vars.
       rewrite -(cats0 (stack_zero_loop _ _ _ _ _)) in hbody.
-      have := stack_zero_loopP (cs := lhwcs ls)
+      have := stack_zero_loopP (lhwcs ls)
           lt_0_stk_max halign le_ws_ws_align hstack ws_small hbody rsp_nin
           hlabel (s1 := to_estate _) hvalid hrsp.
       by rewrite -hfn -hpc of_estate_to_estate.
     move=> [??]; subst cmd vars.
     rewrite -(cats0 (stack_zero_unrolled _ _ _ _)) in hbody.
-    have := stack_zero_unrolledP (cs := lhwcs ls)
+    have := stack_zero_unrolledP (lhwcs ls)
         lt_0_stk_max halign le_ws_ws_align hstack ws_small hbody rsp_nin
         (s1 := to_estate _) hvalid hrsp.
     by rewrite -hfn -hpc of_estate_to_estate.
