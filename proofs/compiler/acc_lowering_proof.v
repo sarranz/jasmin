@@ -623,10 +623,11 @@ case: eqP => [?|_].
 case: eqP => [?|//]; subst; exact: lower_Papp2_largeP.
 Qed.
 
-(* [BN_SEL FG0], [es = [:: e0; e1; econd]], [lvs = [::]], [ws = xreg_size].
-   [econd] is the [Pvar] flag returned by [lower_condition].  Hardest leaf:
+(* [ExtOp SELECT], [es = [:: e0; e1; econd]], [lvs = [::]], [ws = xreg_size].
+   [econd] is passed through unchanged; the flag group and any negation are
+   resolved later, at assembly time, by [assemble_SELECT]. Hardest leaf:
    relate the source [sem_pexpr (Pif (aword ws) econd e0 e1)]
-   ([to_bool] / [sem_cond] then select [e0]/[e1]) to [BN_SEL]'s [exec_sopn]
+   ([to_bool] / [sem_cond] then select [e0]/[e1]) to [SELECT]'s [exec_sopn]
    reading the same flag and selecting the corresponding wide operand. *)
 Lemma lower_PifP ii ws econd e0 e1 lv v v' s0 s1 lvs op es :
   lower_Pif ii ws econd e0 e1 = ok (Some (lvs, op, es)) ->
@@ -711,15 +712,10 @@ Proof.
       move: he hlow.
       case: ty => [| | ? | ws'] he hlow //=.
       case: eqP he hlow => [<- | ] he hlow //=.
-      case h_cond: (lower_condition ii econd) => [[pre_c econd'] | ] //= in hlow.
-      case h_pif: (lower_Pif ii ws econd' e0 e1) => [ [[[lvs_i op_i] es_i] | ] | ] //= in hlow.
-      case: econd he hlow h_cond => //= [f] he hlow h_cond.
+      case h_pif: (lower_Pif ii ws econd e0 e1) => [ [[[lvs_i op_i] es_i] | ] | ] //= in hlow.
       move: hlow => [] <- hlvs <- <-.
-      move: h_cond => [] <- heq_cond.
-      rewrite -heq_cond in h_pif.
       split; first by [].
-      rewrite -hlvs; apply: lower_PifP h_pif _ htr hw.
-      exact: he.
+      rewrite -hlvs; apply: lower_PifP h_pif he htr hw.
 Qed.
 
 (* -------------------------------------------------------------------- *)

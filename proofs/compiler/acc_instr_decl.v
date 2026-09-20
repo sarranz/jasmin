@@ -720,6 +720,12 @@ Definition ad_cmlz : seq arg_desc := map F current_cmlz.
 
 End CURRENT_FLAG_GROUP.
 
+Definition bn_flag_group_of_rflag (f : rflag) : bn_flag_group :=
+  match f with
+  | CF0 | MF0 | LF0 | ZF0 => FG0
+  | CF1 | MF1 | LF1 | ZF1 => FG1
+  end.
+
 Definition CF_of_Z (z : Z) : option bool :=
   Some (Z.land (Z.shiftr z 256) 1 == 1).
 Definition MF_of_word (res : u256) : option bool := Some (msb res).
@@ -1826,7 +1832,7 @@ Section PRIM_STRING.
     map_prim_string
       (fun mn => acc_op_to_string (mn FG0))
       prim_acc_fg
-      [:: BN_ADDI; BN_SUBI; BN_SEL ].
+      [:: BN_ADDI; BN_SUBI ].
 
   Let bn_no_opt_prim_string :=
     map_prim_string

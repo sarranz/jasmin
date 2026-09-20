@@ -1790,9 +1790,9 @@ let tt_lvalues (arch_info : 'asm P.arch_info) env loc (pimp, pls) implicit tys =
         ; ">s" , CF_GT Wsize.Signed
         ; ">u" , CF_GT Wsize.Unsigned ] in
 
-  let pls, pimp_c, implicits =
+  let pls, pimp_c, implicits, flagnames =
     match pimp, implicit with
-    | None, _ -> pls, [], []
+    | None, _ -> pls, [], [], []
     | Some pimp, None -> rs_tyerror ~loc:(L.loc pimp) (string_error "no implicit argument expected");
     | Some pimp, Some implicit ->
       let pimp = L.unloc pimp in
@@ -1805,7 +1805,10 @@ let tt_lvalues (arch_info : 'asm P.arch_info) env loc (pimp, pls) implicit tys =
            | ADImplicit v -> Some (Var0.Var.vname v).v_name)
           implicit in
 
-      let iargs = List.pmap (Option.map String.uppercase_ascii) arguments in
+      (* the flags actually set by this instruction, e.g. just one ACC
+         flag group (4 flags) rather than the whole architecture's flags *)
+      let flagnames = List.pmap (fun x -> x) arguments in
+      let iargs = List.map String.uppercase_ascii flagnames in
 
       let check (id, _) =
         let loc = L.loc id in
@@ -1843,7 +1846,7 @@ let tt_lvalues (arch_info : 'asm P.arch_info) env loc (pimp, pls) implicit tys =
         | None :: arguments, x :: pls -> x :: aux arguments pls
         | Some i :: arguments, pls    -> get_implicit i :: aux arguments pls in
       let a = aux arguments pls in
-      a, pimp_c, !implicits
+      a, pimp_c, !implicits, flagnames
   in
 
   let ls = List.map (tt_lvalue arch_info.pd env) pls in
@@ -1857,7 +1860,12 @@ let tt_lvalues (arch_info : 'asm P.arch_info) env loc (pimp, pls) implicit tys =
         try List.assoc i implicits
         with Not_found ->
           rs_tyerror ~loc (string_error "implicit label %s need to be defined" i) in
-      let pargs = List.map get_implicit arch_info.flagnames in
+      (* restrict to the flags this instruction actually sets (e.g. a
+         single ACC flag group), in the architecture's canonical order,
+         since an instruction may also set untracked flags (e.g. x86's PF)
+         that are not part of [arch_info.flagnames] *)
+      let pargs = List.map get_implicit
+          (List.filter (fun i -> List.mem i flagnames) arch_info.flagnames) in
       let args = List.map (tt_expr_bool arch_info.pd env) pargs in
       let doc (c, s) =
         let error loc = rs_tyerror ~loc (string_error " = ident is expected after %s" (L.unloc c)) in
