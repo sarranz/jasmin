@@ -329,19 +329,6 @@ End LOWER_OPN.
 
 
 (* -------------------------------------------------------------------------- *)
-(* Compute a condition (e.g. with [CMP]). *)
-
-Section LOWER_CONDITION.
-
-  Context (ii : instr_info).
-
-  Definition lower_condition (econd : pexpr) : cexec (seq acc_args * pexpr) :=
-    if econd is Pvar f then ok ([::], econd) else Error (E.not_implemented ii).
-
-End LOWER_CONDITION.
-
-
-(* -------------------------------------------------------------------------- *)
 (* Convert an assignment into an architecture-specific operation. *)
 Section LOWER_ASSIGN.
 
@@ -545,17 +532,18 @@ Section LOWER_ASSIGN.
     | _ => skip
     end.
 
-  (* TODO_ACC: This should be an extra_op without flag group and we issue
-     [BN_SEL] once we know which flag group we need. *)
+  (* The flag group and the sign of the condition are resolved at assembly
+     time, by [assemble_SELECT] (compiler/acc_extra.v), once
+     [propagate_inline] has substituted the combine-flags label by the
+     underlying flag (possibly negated). *)
   Definition lower_Pif (ws : wsize) (econd e0 e1 : pexpr) : low_instr :=
     Let _ := chk_xreg_ws ii ws in
-    li_simple (BN_SEL FG0) [:: e0; e1; econd ].
+    li_xissue [::] SELECT [:: e0; e1; econd ].
 
   Definition lower_pexpr (ws : wsize) (e : pexpr) : low_cmd :=
     if e is Pif (aword ws') econd e0 e1 then
       Let _ := assert (ws == ws') (E.invalid_wsize ii) in
-      Let: (pre, econd') := lower_condition ii econd in
-      with_pre pre (lower_Pif ws econd' e0 e1)
+      no_pre (lower_Pif ws econd e0 e1)
     else no_pre (lower_pexpr_aux ws e).
 
   Definition destruct_Lmem (e : pexpr) : option (var_i * wreg) :=

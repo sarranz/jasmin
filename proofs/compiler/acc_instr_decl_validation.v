@@ -55,7 +55,7 @@ Section VALIDATION_PRIM.
   Goal all [predC bad_suffix] strings.
   done. Qed.
 
-  Let hidden := [:: "LA" ]%string.
+  Let hidden := [:: "LA"; "BN_SEL" ]%string.
 
   Goal
     forall op,

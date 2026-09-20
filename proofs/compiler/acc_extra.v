@@ -20,6 +20,7 @@ Require Import
   acc_params_core
 .
 Require arm_extra.
+Require asm_gen.
 
 Module E.
 
@@ -57,6 +58,15 @@ Module E.
   Definition bad_swap_ty :=
     internal_error "bad swap: operands must be a register or a wide register".
 
+  (* [assemble_SELECT] error: a user-facing error, not an internal one, since
+     it can be triggered by a legitimate but unsupported source program (a
+     composite combine-flags label used as a [BN.SEL] condition). *)
+  Definition bad_select_cond (ii : instr_info) (fe : fexpr) : pp_error_loc :=
+    asm_gen.E.berror ii fe
+      ("the BN.SEL condition must be a single flag or its negation; " ++
+       "the composite labels <=u, >u, <=s, >s are not supported here, " ++
+       "use the opposite label or swap the compared operands").
+
 End E.
 
 Definition asm_args_of_opn_args
@@ -85,6 +95,8 @@ Variant extra_op :=
                       registers *)
 | ZEROIZE_MASKED of wsize (* [set0] forcing first argument to be allocated to
                              output register *)
+| SELECT (* [BN_SEL fg] with the flag group taken from the condition flag; a
+            negated condition swaps the sources. *)
 .
 
 HB.instance Definition _ := hasDecEq.Build extra_op extra_op_eqb_OK.
@@ -102,6 +114,7 @@ Definition string_of_extra_op (eo : extra_op) : string :=
   | SWAP _ => "swap"
   | BN_SELECT_MASKED => "BN_SELECT_MASKED"
   | ZEROIZE_MASKED _ => "ZEROIZE_MASKED"
+  | SELECT => "BN_SEL"
   end.
 
 Definition desc_set0_small : instruction_desc :=
@@ -252,6 +265,17 @@ Definition desc_zeroize_masked_large : instruction_desc :=
    ; i_semi_safe := fun _ => values.sem_prod_ok_safe (tin := ctin) semi
    |}.
 
+(* [BN.SEL]'s condition (the third source) picks the flag group at
+   assembly time ([assemble_SELECT]); as an extra op it is a plain flag
+   argument, with no flag group of its own. *)
+Definition desc_SELECT : instruction_desc :=
+  mk_instr_desc_safe
+    (pp_s (string_of_extra_op SELECT))
+    [:: aword U256; aword U256; abool ] [:: E 1; E 2; ADExplicit 3 ACR_any ]
+    [:: aword U256 ] [:: E 0 ]
+    (fun a b c => if c then a else b)
+    true DOIT.
+
 Definition get_instr_desc (eo : extra_op) : instruction_desc :=
   match eo with
   | set0 ws => if (ws <= reg_size)%CMP then desc_set0_small else desc_set0_large
@@ -264,6 +288,7 @@ Definition get_instr_desc (eo : extra_op) : instruction_desc :=
   | ZEROIZE_MASKED ws =>
       if (ws <= reg_size)%CMP then desc_zeroize_masked_small
       else desc_zeroize_masked_large
+  | SELECT => desc_SELECT
   end.
 
 Definition prim_string : seq (string * prim_constructor extra_op) :=
@@ -273,6 +298,7 @@ Definition prim_string : seq (string * prim_constructor extra_op) :=
     ; (string_of_extra_op SUBI, prim_acc_none SUBI)
     ; (string_of_extra_op BN_SELECT_MASKED, prim_acc_none BN_SELECT_MASKED)
     ; (string_of_extra_op (ZEROIZE_MASKED U8), prim_acc_ws ZEROIZE_MASKED)
+    ; (string_of_extra_op SELECT, prim_acc_none SELECT)
   ].
 
 #[global]
@@ -455,6 +481,36 @@ Definition assemble_zeroize_masked
   in
   assemble_self_xor ws les y2.
 
+(* [x = a if c] / [x = #BN_SEL(a, b, c)]: the condition [c] is either a bare
+   flag [f] or its negation [!f]; a negated condition swaps the two sources
+   so the base op [BN_SEL fg] always tests the non-negated flag [f], with
+   [fg] the flag group of [f]. *)
+Definition assemble_SELECT
+  (les : seq lexpr)
+  (res : seq rexpr) :
+  cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
+  Let: (a, b, c) :=
+    if res is [:: a; b; Rexpr c ] then ok (a, b, c)
+    else Error (E.invalid_rexprs ii)
+  in
+  Let: (fv, negated) :=
+    match c with
+    | Fvar fv => ok (fv, false)
+    | Fapp1 Onot (Fvar fv) => ok (fv, true)
+    | _ => Error (E.bad_select_cond ii c)
+    end
+  in
+  Let flag :=
+    o2r
+      (E.internal_error "select: condition variable is not a flag" ii)
+      (of_var (v_var fv) : option rflag)
+  in
+  let fg := bn_flag_group_of_rflag flag in
+  let res' :=
+    if negated then [:: b; a; Rexpr (Fvar fv) ] else [:: a; b; Rexpr (Fvar fv) ]
+  in
+  ok [:: ((None, BN_SEL fg), les, res') ].
+
 Definition assemble_extra
   (eo : extra_op)
   (les : seq lexpr)
@@ -469,6 +525,7 @@ Definition assemble_extra
   | SWAP ws => assemble_swap ws les res
   | BN_SELECT_MASKED => assemble_bn_select_masked les res
   | ZEROIZE_MASKED ws => assemble_zeroize_masked ws les res
+  | SELECT => assemble_SELECT les res
   end.
 
 End ASSEMBLE.

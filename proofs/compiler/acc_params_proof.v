@@ -1614,6 +1614,83 @@ case: (h m') => {h}.
 by move=> s' hfold hlom'; exists s'.
 Qed.
 
+(* [ExtOp SELECT] assembles to [BN_SEL fg], [fg] the flag group of the
+   condition's flag; a negated condition swaps the two sources so the base
+   op always tests the un-negated flag. Both ops share the same
+   [aword U256; aword U256; abool] argument shape and select-function, so
+   once the condition and (for the negated case) the operand order are
+   accounted for, the two [exec_sopn] computations agree pointwise. *)
+Lemma acc_assemble_SELECT_correct :
+  assemble_extra_correct (ap_agp acc_params) SELECT.
+Proof.
+move=> rip ii lvs args m xs ys m' s ops ops' hrex hexec hwle hops hmap hlom.
+move: hops hrex hmap; rewrite /to_asm /= /assemble_extra /assemble_SELECT.
+case: args => [|a [|b [|c [|? ?]]]] //=; last by case: c.
+case: c => [al ws e|fc] //=.
+case: fc => [z|fv|o e|o e1 e2|e1 e2 e3] //=.
+- (* [Fvar fv]: non-negated. *)
+  case: (of_var fv : option rflag) => [flag|] //=.
+  set fg := bn_flag_group_of_rflag flag.
+  move=> [<-] hrex hmap.
+  move: hrex; rewrite /sem_rexprs /=.
+  case Eha: (sem_rexpr (emem m) (evm m) a) => [va|] //=.
+  case Ehb: (sem_rexpr (emem m) (evm m) b) => [vb|] //=.
+  case Ehfv: (get_var true (evm m) fv) => [vfv|] //=.
+  move=> [hxs]; subst xs.
+  move: hexec hwle; rewrite /exec_sopn /sopn_sem /sopn_sem_ /=.
+  case Ewa: (to_word U256 va) => [wa|] //=.
+  case Ewb: (to_word U256 vb) => [wb|] //=.
+  case Ebc: (to_bool vfv) => [bc|] //=.
+  move=> [<-] hwle.
+  have hvs : sem_rexprs m [:: a; b; Rexpr (Fvar fv)] = ok [:: va; vb; vfv].
+  - by rewrite /sem_rexprs /= Eha Ehb Ehfv.
+  have hys :
+    exec_sopn (Oasm (BaseOp (None, BN_SEL fg))) [:: va; vb; vfv]
+    = ok [:: Vword (if bc then wa else wb)].
+  - by rewrite /exec_sopn /sopn_sem /sopn_sem_ /= Ewa Ewb Ebc.
+  have hsopns :
+    sem_sopns m [:: ((None, BN_SEL fg), lvs, [:: a; b; Rexpr (Fvar fv)])]
+    = ok m'.
+  - by rewrite /sem_sopns /sem_sopn_t /foldM hvs /= hys /= hwle.
+  have [s' hfold hlom'] :=
+    assemble_opsP acc_eval_assemble_cond hmap erefl hsopns hlom.
+  by exists s'.
+(* [Fapp1 o e]: keep only [Onot], and within it only [Fvar fv]. *)
+case: o e => // e.
+case: e => [z|fv|o' e'|o' e1' e2'|e1' e2' e3'] //=.
+case: (of_var fv : option rflag) => [flag|] //=.
+set fg := bn_flag_group_of_rflag flag.
+move=> [<-] hrex hmap.
+move: hrex.
+case Eha: (sem_rexpr (emem m) (evm m) a) => [va|] //=.
+case Ehb: (sem_rexpr (emem m) (evm m) b) => [vb|] //=.
+case Ehfv: (get_var true (evm m) fv) => [vfv|] //=.
+case Ebfv: (sem_sop1 Onot vfv) => [vc|] //=.
+move=> [hxs]; subst xs.
+move: Ebfv hexec; rewrite /sem_sop1 /=.
+case Ebfv: (to_bool vfv) => [bfv|] //=.
+move=> [<-] hexec.
+move: hexec hwle; rewrite /exec_sopn /sopn_sem /sopn_sem_ /=.
+case Ewa: (to_word U256 va) => [wa|] //=.
+case Ewb: (to_word U256 vb) => [wb|] //=.
+case Ebc: (to_bool (~~ bfv : value)) => [bc|] //=.
+move=> [<-] hwle.
+have hvs : sem_rexprs m [:: b; a; Rexpr (Fvar fv)] = ok [:: vb; va; vfv].
+- by rewrite /sem_rexprs /= Ehb Eha Ehfv.
+have hys :
+  exec_sopn (Oasm (BaseOp (None, BN_SEL fg))) [:: vb; va; vfv]
+  = ok [:: Vword (if ~~ bfv then wa else wb)].
+- rewrite /exec_sopn /sopn_sem /sopn_sem_ /= Ewb Ewa Ebfv /=.
+  move: Ebfv Ebc hwle; case: bfv => _ _ _; done.
+have hsopns :
+  sem_sopns m [:: ((None, BN_SEL fg), lvs, [:: b; a; Rexpr (Fvar fv)])]
+  = ok m'.
+- by rewrite /sem_sopns /sem_sopn_t /foldM hvs /= hys /= hwle.
+have [s' hfold hlom'] :=
+  assemble_opsP acc_eval_assemble_cond hmap erefl hsopns hlom.
+by exists s'.
+Qed.
+
 Lemma acc_assemble_extra_op op :
   assemble_extra_correct (ap_agp acc_params) op.
 Proof using atoI call_conv sc_sem syscall_state.
@@ -1626,6 +1703,7 @@ Proof using atoI call_conv sc_sem syscall_state.
   + exact: acc_assemble_swap_correct.
   + exact: acc_assemble_BN_SELECT_MASKED_correct.
   exact: acc_assemble_ZEROIZE_MASKED_correct.
+  exact: acc_assemble_SELECT_correct.
 Qed.
 
 Lemma acc_assemble_extra_sz ii op lvs args ops :
@@ -1702,6 +1780,14 @@ Proof.
     simpl; t_xrbindP => _ _ _ _ _.
     rewrite /assemble_self_xor /=.
     by move=> [<-].
+  rewrite /assemble_SELECT.
+  case: args => [|a [|b [|c [|? ?]]]] //=; last by case: c.
+  case: c => [al ws e|fc] //=.
+  case: fc => [z|fv|o e|o e1 e2|e1 e2 e3] //=.
+  - by case: (of_var fv : option rflag) => [flag|] //= [<-].
+  case: o e => // e.
+  case: e => [z|fv|o' e'|o' e1' e2'|e1' e2' e3'] //=.
+  by case: (of_var fv : option rflag) => [flag|] //= [<-].
 Qed.
 
 Definition acc_hagparams : h_asm_gen_params (ap_agp acc_params) :=

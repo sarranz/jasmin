@@ -38,6 +38,58 @@ fn fg0_sel(reg u256 a, reg u256 b) -> reg u256 {
 }
 
 export
+fn fg0_cmp_combine(reg u256 a, reg u256 b) -> reg u256 {
+    reg u256 x = b;
+    reg bool eq ne lts ltu ges geu;
+    ?{ "==" = eq, "!=" = ne, "<s" = lts, "<u" = ltu, ">=s" = ges, ">=u" = geu }
+      = #BN_CMP(a, b);
+    x = a if eq;
+    x = #BN_SEL(a, x, eq);
+    x = a if ne;
+    x = #BN_SEL(a, x, ne);
+    x = a if lts;
+    x = #BN_SEL(a, x, lts);
+    x = a if ltu;
+    x = #BN_SEL(a, x, ltu);
+    x = a if ges;
+    x = #BN_SEL(a, x, ges);
+    x = a if geu;
+    x = #BN_SEL(a, x, geu);
+    // PENDING: composite conditions need two BN.SEL (flag disjunction);
+    // lowering/asm_gen only accept a single flag or its negation.
+    // reg bool les leu gts gtu;
+    // ?{ "<=s" = les, "<=u" = leu, ">s" = gts, ">u" = gtu } = #BN_CMP(a, b);
+    // x = a if les; x = #BN_SEL(a, x, les);   (and leu, gts, gtu)
+    return x;
+}
+
+export
+fn fg1_cmp_combine(reg u256 a, reg u256 b) -> reg u256 {
+    reg u256 x = b;
+    reg bool eq ne lts ltu ges geu;
+    ?{ "==" = eq, "!=" = ne, "<s" = lts, "<u" = ltu, ">=s" = ges, ">=u" = geu }
+      = #BN_CMP_FG1(a, b);
+    x = a if eq;
+    x = #BN_SEL(a, x, eq);
+    x = a if ne;
+    x = #BN_SEL(a, x, ne);
+    x = a if lts;
+    x = #BN_SEL(a, x, lts);
+    x = a if ltu;
+    x = #BN_SEL(a, x, ltu);
+    x = a if ges;
+    x = #BN_SEL(a, x, ges);
+    x = a if geu;
+    x = #BN_SEL(a, x, geu);
+    // PENDING: composite conditions need two BN.SEL (flag disjunction);
+    // lowering/asm_gen only accept a single flag or its negation.
+    // reg bool les leu gts gtu;
+    // ?{ "<=s" = les, "<=u" = leu, ">s" = gts, ">u" = gtu } = #BN_CMP_FG1(a, b);
+    // x = a if les; x = #BN_SEL(a, x, les);   (and leu, gts, gtu)
+    return x;
+}
+
+export
 fn fg1_sel(reg u256 a, reg u256 b) -> reg u256 {
     reg u256 x;
     reg bool cf zf mf lf;
