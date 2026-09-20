@@ -1,13 +1,14 @@
 (* Lowering pass for ACC.
-   TODO_ACC: we always use FG1 for dummies, such that if the source uses FG0
-   (the default), we get fewer conflicts. Maybe we should check and insert
-   according to whatever is not being used. *)
+   Compiler-introduced flags (the fresh comparison flags of [lower_cmp],
+   dummy flag destinations) always use FG1, so that they rarely collide
+   with user flags, which default to FG0. This choice is fixed. *)
 
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssralg.
 From mathcomp Require Import word_ssrZ.
 
 Require Import
   compiler_util
+  constant_prop
   expr
   lowering
   acc_options
@@ -92,6 +93,27 @@ Module E.
       let err := pp_box (pp_s "invalid argumens" :: map pp_e es ) in
       user_error err ii.
 
+    Definition signed_comparison (e : pexpr) : pp_error_loc :=
+      let err := pp_box
+        [:: pp_s
+              "signed comparison of wide registers is not supported (ACC has no overflow flag):"
+         ; pp_e e
+         ; pp_s
+             ". Use the signed labels of #BN_CMP if the difference cannot overflow."
+        ]
+      in
+      user_error err ii.
+
+    Definition shifted_operand_side (e : pexpr) : pp_error_loc :=
+      let err := pp_box
+        [:: pp_s "shifted operand on the wrong side of the comparison:"
+         ; pp_e e
+         ; pp_s
+             ". Only the second BN.CMP operand can be shifted: the right operand of <u and >=u, the left operand of <=u and >u, either operand of == and !=."
+        ]
+      in
+      user_error err ii.
+
   End ERRORS.
 
 End E.
@@ -100,6 +122,33 @@ End E.
 Section WITH_PARAMS.
 
 Context {atoI : arch_toIdent}.
+Context (fv : fresh_vars).
+
+(* -------------------------------------------------------------------------- *)
+(* Fresh variables for the four flags (C, M, L, Z) of the flag group FG1 left
+   by [lower_cmp] (Section LOWER_CONDITION below). *)
+
+Definition fv_CF1 : Ident.ident := fv "__cf1__"%string abool.
+Definition fv_MF1 : Ident.ident := fv "__mf1__"%string abool.
+Definition fv_LF1 : Ident.ident := fv "__lf1__"%string abool.
+Definition fv_ZF1 : Ident.ident := fv "__zf1__"%string abool.
+
+Definition all_fresh_vars : seq Ident.ident :=
+  [:: fv_CF1; fv_MF1; fv_LF1; fv_ZF1 ].
+
+Definition fvCF1 : var := vbool fv_CF1.
+Definition fvMF1 : var := vbool fv_MF1.
+Definition fvLF1 : var := vbool fv_LF1.
+Definition fvZF1 : var := vbool fv_ZF1.
+
+(* In C, M, L, Z order, matching [ad_cmlz] and the [FCVar0..3] contract of
+   [acc_decl.v]. *)
+Definition fresh_flags : seq var := [:: fvCF1; fvMF1; fvLF1; fvZF1 ].
+
+Definition fvars : Sv.t := sv_of_list id fresh_flags.
+
+Definition fvars_correct {pT : progT} (fds : seq fun_decl) : bool :=
+  lowering.fvars_correct all_fresh_vars fvars fds.
 
 (* -------------------------------------------------------------------------- *)
 (* Lowering a Jasmin instruction can lead to:
@@ -223,6 +272,101 @@ End UTILS.
 
 
 (* -------------------------------------------------------------------------- *)
+(* Lower a comparison condition on [U256] operands to a [BN.CMP] on FG1 plus
+   the combine-flags [pexpr] left for [assemble_SELECT] to resolve, after
+   [propagate_inline] has reduced it. See Section 0 of
+   PLAN-acc-lower-bn-comparisons.md for the rationale of each step below. *)
+Section LOWER_CONDITION.
+
+  Context (ii : instr_info).
+
+  (* [==] with [!=], [<u] with [>=u], [<=u] with [>u] (any signedness). *)
+  Definition negate_cf (cf : combine_flags) : combine_flags :=
+    match cf with
+    | CF_EQ => CF_NEQ
+    | CF_NEQ => CF_EQ
+    | CF_LT s => CF_GE s
+    | CF_GE s => CF_LT s
+    | CF_LE s => CF_GT s
+    | CF_GT s => CF_LE s
+    end.
+
+  Definition is_signed_cf (cf : combine_flags) : bool :=
+    match cf with
+    | CF_LT Signed | CF_LE Signed | CF_GE Signed | CF_GT Signed => true
+    | _ => false
+    end.
+
+  (* Composite labels ([<=], [>]) are traded for their mirror ([>=], [<]) on
+     the swapped operands, so that the residual condition is always a single
+     flag or its negation (Decision 2). *)
+  Definition swap_cf (cf : combine_flags) : option combine_flags :=
+    match cf with
+    | CF_LE s => Some (CF_GE s)
+    | CF_GT s => Some (CF_LT s)
+    | _ => None
+    end.
+
+  Definition is_symmetric_cf (cf : combine_flags) : bool :=
+    match cf with
+    | CF_EQ | CF_NEQ => true
+    | _ => false
+    end.
+
+  (* Lower a [U256] comparison condition. [skip] leaves the condition alone
+     (not a supported comparison, or not on [U256] operands); an [Error] is
+     a user error (signed comparison, shifted operand on the wrong side) or
+     an existing [get_arg_shift] error (bad shift amount). On success, the
+     result is a one-instruction [BN.CMP] prefix and the combine-flags
+     [pexpr] to substitute for the original condition. *)
+  Definition lower_cmp (e : pexpr) : lresult (seq acc_args * pexpr) :=
+    let vi := var_info_of_ii ii in
+    let lflags := [seq Lvar {| v_var := x; v_info := vi |} | x <- fresh_flags ] in
+    (* [acc_fcp] is pinned explicitly: [empty_const_prop_e]'s [{fcp}] is a
+       bare, unqualified [FlagCombinationParams] implicit, and [acc_extra]
+       transitively [Require]s [arm_extra], making [arm_common.arm_fcp] a
+       second candidate instance for the same slot with no way for
+       typeclass search to prefer the architecture actually in scope.
+       [fcp]'s value never affects this call in practice (it is only
+       exercised by [const_prop_e]'s folding of an already-built
+       [Ocombine_flags] node, and [e] is always a source-level condition,
+       never one of those), but the proof needs the pin to be explicit
+       and correct, not incidentally whichever instance search finds
+       first. *)
+    let e := @empty_const_prop_e acc_fcp e in
+    let '(neg, e) := if e is Papp1 Onot e' then (true, e') else (false, e) in
+    if e is Papp2 op e0 e1 then
+      if cf_of_condition op is Some (cf, ws) then
+        if ws != U256 then skip
+        else
+          let cf := if neg then negate_cf cf else cf in
+          Let _ := assert (~~ is_signed_cf cf) (E.signed_comparison ii e) in
+          let '(cf, e0, e1) :=
+            if swap_cf cf is Some cf' then (cf', e1, e0) else (cf, e0, e1)
+          in
+          Let osh0 := get_arg_shift ii xreg_size e0 in
+          Let osh1 := get_arg_shift ii xreg_size e1 in
+          let '(e0, e1, osh0, osh1) :=
+            if [&& isSome osh0, ~~ isSome osh1 & is_symmetric_cf cf]
+            then (e1, e0, osh1, osh0)
+            else (e0, e1, osh0, osh1)
+          in
+          Let _ := assert (~~ isSome osh0) (E.shifted_operand_side ii e) in
+          let '(cmp_op, cmp_args) :=
+            if osh1 is Some (base, sh, sham) then
+              (BN_basic_shift BN_CMP FG1 sh, [:: e0; base; sham ])
+            else (BN_basic BN_CMP FG1, [:: e0; e1 ])
+          in
+          issue
+            ([:: (lflags, BaseOp (None, cmp_op), cmp_args) ],
+             pexpr_of_cf cf vi fresh_flags)
+      else skip
+    else skip.
+
+End LOWER_CONDITION.
+
+
+(* -------------------------------------------------------------------------- *)
 (* Lower [Copn] arguments and pseudo-operators. *)
 Section LOWER_OPN.
 
@@ -317,11 +461,18 @@ Section LOWER_OPN.
     in
     li_sissue lvs' op' es'.
 
+  (* The third argument of [#BN_SEL] ([ExtOp SELECT]) goes through
+     [lower_cmp] exactly like a [Pif] condition (Section LOWER_CONDITION). *)
   Definition lower_copn
-    (lvs : seq lval) (op : sopn) (es : seq pexpr) : low_instr :=
+    (lvs : seq lval) (op : sopn) (es : seq pexpr) : low_cmd :=
     match op with
-    | Opseudo_op pop => lower_pseudo_operator lvs pop es
-    | Oasm (BaseOp (None, op)) => lower_base_op lvs op es
+    | Opseudo_op pop => no_pre (lower_pseudo_operator lvs pop es)
+    | Oasm (BaseOp (None, op)) => no_pre (lower_base_op lvs op es)
+    | Oasm (ExtOp SELECT) =>
+        if es is [:: e0; e1; econd ] then
+          let%lr (pre, econd') := lower_cmp ii econd in
+          lc_xissue pre lvs SELECT [:: e0; e1; econd' ]
+        else skip
     | _ => skip
     end.
 
@@ -532,18 +683,26 @@ Section LOWER_ASSIGN.
     | _ => skip
     end.
 
-  (* The flag group and the sign of the condition are resolved at assembly
-     time, by [assemble_SELECT] (compiler/acc_extra.v), once
+  (* A comparison condition on [U256] operands is first lowered to a
+     [BN.CMP] by [lower_cmp] (Section LOWER_CONDITION); the flag group and
+     the sign of the (possibly rewritten) residual condition are resolved
+     at assembly time, by [assemble_SELECT] (compiler/acc_extra.v), once
      [propagate_inline] has substituted the combine-flags label by the
-     underlying flag (possibly negated). *)
-  Definition lower_Pif (ws : wsize) (econd e0 e1 : pexpr) : low_instr :=
+     underlying flag (possibly negated). A condition [lower_cmp] leaves
+     alone (already a flag, or not a [U256] comparison) reaches
+     [assemble_SELECT] unchanged, as before. *)
+  Definition lower_Pif (ws : wsize) (econd e0 e1 : pexpr) : low_cmd :=
     Let _ := chk_xreg_ws ii ws in
-    li_xissue [::] SELECT [:: e0; e1; econd ].
+    Let ocmp := lower_cmp ii econd in
+    if ocmp is Some (pre, econd') then
+      lc_xissue pre [::] SELECT [:: e0; e1; econd' ]
+    else
+      lc_xissue [::] [::] SELECT [:: e0; e1; econd ].
 
   Definition lower_pexpr (ws : wsize) (e : pexpr) : low_cmd :=
     if e is Pif (aword ws') econd e0 e1 then
       Let _ := assert (ws == ws') (E.invalid_wsize ii) in
-      no_pre (lower_Pif ws econd e0 e1)
+      lower_Pif ws econd e0 e1
     else no_pre (lower_pexpr_aux ws e).
 
   Definition destruct_Lmem (e : pexpr) : option (var_i * wreg) :=
@@ -601,6 +760,21 @@ Let i_of_low_instr ii tag '(lvs, op, es) :=
 Let c_of_low_cmd ii tag '(pre, lvs, op, es) :=
   map (i_of_low_instr ii tag) (rcons pre (lvs, op, es)).
 
+(* A [reg bool] assignment whose right-hand side is a [U256] comparison is
+   rewritten to a [BN.CMP] prefix and a residual bool assignment; the tag of
+   the latter is forced to [AT_inline] so that [propagate_inline] (which
+   runs right after lowering) substitutes it at every use. A condition
+   [lower_cmp] leaves alone keeps the instruction as is. *)
+Definition lower_cassgn_bool
+  (ii : instr_info) (tag : assgn_tag) (lv : lval) (e : pexpr) (i : instr) :
+  cexec cmd :=
+  Let oe := lower_cmp ii e in
+  if oe is Some (pre, e') then
+    ok
+      (map (i_of_low_instr ii tag) pre
+       ++ [:: MkI ii (Cassgn lv AT_inline abool e') ])
+  else ok [:: i ].
+
 Fixpoint lower_i (i : instr) : cexec cmd :=
   let '(MkI ii ir) := i in
   match ir with
@@ -608,11 +782,12 @@ Fixpoint lower_i (i : instr) : cexec cmd :=
       if is_word_type ty is Some ws then
         Let oargs := lower_cassgn_word ii lv ws e in
         ok (oapp (c_of_low_cmd ii tag) [:: i ] oargs)
+      else if ty is abool then lower_cassgn_bool ii tag lv e i
       else ok [:: i ]
 
   | Copn lvs tag op es =>
       Let oargs := lower_copn ii lvs op es in
-      ok [:: oapp (i_of_low_instr ii tag) i oargs ]
+      ok (oapp (c_of_low_cmd ii tag) [:: i ] oargs)
 
   | Cif e c1 c2  =>
       Let c1' := conc_mapM lower_i c1 in

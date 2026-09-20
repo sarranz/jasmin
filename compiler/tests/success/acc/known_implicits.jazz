@@ -55,11 +55,17 @@ fn fg0_cmp_combine(reg u256 a, reg u256 b) -> reg u256 {
     x = #BN_SEL(a, x, ges);
     x = a if geu;
     x = #BN_SEL(a, x, geu);
-    // PENDING: composite conditions need two BN.SEL (flag disjunction);
-    // lowering/asm_gen only accept a single flag or its negation.
-    // reg bool les leu gts gtu;
-    // ?{ "<=s" = les, "<=u" = leu, ">s" = gts, ">u" = gtu } = #BN_CMP(a, b);
-    // x = a if les; x = #BN_SEL(a, x, les);   (and leu, gts, gtu)
+    // The composite labels <=u, >u, <=s, >s are a disjunction of two flags
+    // and cannot be a BN.SEL condition. The unsigned ones are reached by
+    // writing the comparison inline: lowering swaps the compared operands and
+    // emits BN.CMP on FG1, which leaves the FG0 flags above untouched (the
+    // uses of eq..geu below still see them). The signed ones stay
+    // unsupported: without an overflow flag a signed comparison is only
+    // sound through the #BN_CMP labels, under the no-overflow assumption.
+    x = a if (a <=u b);
+    x = #BN_SEL(a, x, a >u b);
+    x = a if eq;
+    x = a if geu;
     return x;
 }
 
@@ -81,11 +87,10 @@ fn fg1_cmp_combine(reg u256 a, reg u256 b) -> reg u256 {
     x = #BN_SEL(a, x, ges);
     x = a if geu;
     x = #BN_SEL(a, x, geu);
-    // PENDING: composite conditions need two BN.SEL (flag disjunction);
-    // lowering/asm_gen only accept a single flag or its negation.
-    // reg bool les leu gts gtu;
-    // ?{ "<=s" = les, "<=u" = leu, ">s" = gts, ">u" = gtu } = #BN_CMP_FG1(a, b);
-    // x = a if les; x = #BN_SEL(a, x, les);   (and leu, gts, gtu)
+    // Inline comparisons also use FG1, so they must come after the last use
+    // of the FG1 flags bound above (see fail/acc/bn_cmp_fg1_conflict.jazz).
+    x = a if (a <=u b);
+    x = #BN_SEL(a, x, a >u b);
     return x;
 }
 

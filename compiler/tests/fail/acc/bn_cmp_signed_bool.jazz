@@ -1,0 +1,8 @@
+// Signed comparisons of wide registers are rejected by lowering, also when
+// assigned to a reg bool.
+export
+fn signed_bool(reg u256 a, reg u256 b) -> reg u256 {
+    reg bool c = a >=s b;
+    b = a if c;
+    return b;
+}

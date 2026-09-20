@@ -642,8 +642,8 @@ Proof. exists X29; exact: to_identK. Qed.
 
 Definition acc_hloparams : h_lowering_params (ap_lop acc_params).
 Proof.
-  split=> *; exact: it_lower_callP.
-  Unshelve. all: done.
+  split=> pT sCP E E0 wE rE p ev warning fv lp fn heq hfv.
+  exact: (it_lower_callP ev hfv heq).
 Qed.
 
 (* -------------------------------------------------------------------------- *)

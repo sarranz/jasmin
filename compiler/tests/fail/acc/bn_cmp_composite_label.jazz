@@ -1,0 +1,10 @@
+// The composite combine-flags labels (<=u, >u, <=s, >s) of #BN_CMP are a
+// disjunction of two flags and cannot be a BN.SEL condition (user error in
+// assemble_SELECT). Write the comparison inline instead: x = a if (a <=u b).
+export
+fn composite_label(reg u256 a, reg u256 b) -> reg u256 {
+    reg bool leu;
+    ?{ "<=u" = leu } = #BN_CMP(a, b);
+    b = a if leu;
+    return b;
+}

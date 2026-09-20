@@ -1,0 +1,71 @@
+// The #BN_SEL intrinsic with an inline u256 comparison as its condition.
+//
+// Lowering emits BN.CMP on FG1 before the intrinsic, exactly as for the
+// ternary form; the comparisons <=u and >u swap the compared operands.
+
+export
+fn sel_eq(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.cmp a, b, FG1 ; bn.sel b, a, b, FG1.Z
+    b = #BN_SEL(a, b, a == b);
+    return b;
+}
+
+export
+fn sel_neq(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.cmp a, b, FG1 ; bn.sel b, b, a, FG1.Z
+    b = #BN_SEL(a, b, a != b);
+    return b;
+}
+
+export
+fn sel_ltu(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.cmp a, b, FG1 ; bn.sel b, a, b, FG1.C
+    b = #BN_SEL(a, b, a <u b);
+    return b;
+}
+
+export
+fn sel_geu(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.cmp a, b, FG1 ; bn.sel b, b, a, FG1.C
+    b = #BN_SEL(a, b, a >=u b);
+    return b;
+}
+
+export
+fn sel_leu(reg u256 a, reg u256 b) -> reg u256 {
+    // operands swapped: bn.cmp b, a, FG1 ; bn.sel b, b, a, FG1.C
+    b = #BN_SEL(a, b, a <=u b);
+    return b;
+}
+
+export
+fn sel_gtu(reg u256 a, reg u256 b) -> reg u256 {
+    // operands swapped: bn.cmp b, a, FG1 ; bn.sel b, a, b, FG1.C
+    b = #BN_SEL(a, b, a >u b);
+    return b;
+}
+
+export
+fn sel_not_geu(reg u256 a, reg u256 b) -> reg u256 {
+    // !(a >=u b) is a <u b: bn.cmp a, b, FG1 ; bn.sel b, a, b, FG1.C
+    b = #BN_SEL(a, b, !(a >=u b));
+    return b;
+}
+
+// The selected values are independent from the compared operands.
+export
+fn sel_three(reg u256 a, reg u256 b, reg u256 c) -> reg u256 {
+    // bn.cmp a, b, FG1 ; bn.sel c, b, c, FG1.Z
+    c = #BN_SEL(b, c, a == b);
+    return c;
+}
+
+// A plain flag condition is left alone by the new lowering.
+export
+fn sel_flag_unchanged(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.cmp a, b, FG0 ; bn.sel b, a, b, FG0.C
+    reg bool cf;
+    ?{ CF0 = cf } = #BN_CMP(a, b);
+    b = #BN_SEL(a, b, cf);
+    return b;
+}

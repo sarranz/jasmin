@@ -1,0 +1,7 @@
+// Signed comparisons of wide registers are rejected by lowering: ACC has no
+// overflow flag, so the M flag of a - b is not a sound signed comparison.
+export
+fn signed_ternary(reg u256 a, reg u256 b) -> reg u256 {
+    b = a if (a <s b);
+    return b;
+}
