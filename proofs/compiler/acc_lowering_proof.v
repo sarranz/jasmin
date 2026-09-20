@@ -6,6 +6,8 @@ From mathcomp Require Import word_ssrZ.
 
 Require Import
   compiler_util
+  constant_prop
+  constant_prop_proof
   expr
   lowering
   lowering_lemmas
@@ -38,8 +40,10 @@ Context
   (p : prog)
   (ev : extra_val_t)
   (warning : instr_info -> warning_msg -> instr_info)
-  (fv : lowering.fresh_vars).
+  (fv : lowering.fresh_vars)
+  (fv_correct : fvars_correct fv (p_funcs p)).
 
+Notation lower_i := (lower_i fv).
 Notation lower_cmd :=
   (lower_cmd
      (fun _ _ => lower_i)
@@ -50,6 +54,48 @@ Notation lower_prog :=
      (fun _ _ => lower_i)
      warning
      fv).
+
+(* [lower_cmp]/[lower_Pif]/[lower_copn]/[lower_cassgn_bool] (transitively,
+   through [lower_cmp]) and [lower_pexpr]/[lower_cassgn_word] (transitively,
+   through [lower_Pif]) all depend on [fv] after [End WITH_PARAMS] in
+   acc_lowering.v; abbreviate them here so every statement below can spell
+   them as before Stage A. *)
+Notation lower_cmp := (lower_cmp fv).
+Notation lower_pexpr := (lower_pexpr fv).
+Notation lower_cassgn_word := (lower_cassgn_word fv).
+Notation lower_Pif := (lower_Pif fv).
+Notation lower_copn := (lower_copn fv).
+Notation lower_cassgn_bool := (lower_cassgn_bool fv).
+
+Notation fvars := (fvars fv).
+Notation disj_fvars := (disj_fvars fvars).
+
+Definition eq_fv := st_eq_ex fvars.
+
+Lemma fvars_CF1 : Sv.In (fvCF1 fv) fvars.
+Proof. by repeat (exact: SvD.F.add_1 || apply: SvD.F.add_2). Qed.
+
+Lemma fvars_MF1 : Sv.In (fvMF1 fv) fvars.
+Proof. by repeat (exact: SvD.F.add_1 || apply: SvD.F.add_2). Qed.
+
+Lemma fvars_LF1 : Sv.In (fvLF1 fv) fvars.
+Proof. by repeat (exact: SvD.F.add_1 || apply: SvD.F.add_2). Qed.
+
+Lemma fvars_ZF1 : Sv.In (fvZF1 fv) fvars.
+Proof. by repeat (exact: SvD.F.add_1 || apply: SvD.F.add_2). Qed.
+
+(* [i_of_low_instr]/[c_of_low_cmd] (acc_lowering.v) are section-local and do
+   not survive past [End WITH_PARAMS]; these reconstruct them for the
+   statements below. *)
+Local Definition low_instr_i
+  (ii : instr_info) (tag : assgn_tag) (a : acc_args) : instr :=
+  let '(lvs, op, es) := a in MkI ii (instr_of_copn_args tag (lvs, Oasm op, es)).
+
+Local Definition low_cmd_c
+  (ii : instr_info) (tag : assgn_tag)
+  (lc : seq acc_args * seq lval * extended_op * seq pexpr) : cmd :=
+  let '(pre, lvs, op, es) := lc in
+  map (low_instr_i ii tag) (rcons pre (lvs, op, es)).
 
 (* -------------------------------------------------------------------- *)
 Lemma lower_cmd_nil lc : lower_cmd [::] = ok lc -> lc = [::].
@@ -623,125 +669,115 @@ case: eqP => [?|_].
 case: eqP => [?|//]; subst; exact: lower_Papp2_largeP.
 Qed.
 
-(* [ExtOp SELECT], [es = [:: e0; e1; econd]], [lvs = [::]], [ws = xreg_size].
-   [econd] is passed through unchanged; the flag group and any negation are
-   resolved later, at assembly time, by [assemble_SELECT]. Hardest leaf:
-   relate the source [sem_pexpr (Pif (aword ws) econd e0 e1)]
-   ([to_bool] / [sem_cond] then select [e0]/[e1]) to [SELECT]'s [exec_sopn]
-   reading the same flag and selecting the corresponding wide operand. *)
-Lemma lower_PifP ii ws econd e0 e1 lv v v' s0 s1 lvs op es :
-  lower_Pif ii ws econd e0 e1 = ok (Some (lvs, op, es)) ->
-  sem_pexpr true (p_globs p) s0 (Pif (aword ws) econd e0 e1) = ok v ->
-  truncate_val (cword ws) v = ok v' ->
-  write_lval true (p_globs p) lv v' s0 = ok s1 ->
-  sem_sopn (p_globs p) (Oasm op) s0 (lvs ++ [:: lv]) es = ok s1.
+(* [waddsubcarry_cmlzP]: the wide-carry op's flag and result match the
+   pseudo-op's [waddcarry]/[wsubcarry].  The carry-out [CF_of_Z z] (= [Some]
+   of bit 256 of [z]) equals the boolean carry, and the wide result equals
+   the word result.  Idea (cf. ARM [wunsigned_carry], proving
+   [(wbase <=? res') = (res != res')]): additionally relate [CF_of_Z]'s
+   bit-256 extraction to that overflow predicate -- for
+   [z = wunsigned x +/- wunsigned y +/- b2z c], [z] stays in a range where
+   bit 256 equals [wbase <=? z] (add) / the borrow (sub).  Pure word/[Z]
+   arithmetic: [wunsigned_range], [wbase] bounds, [wrepr]/[wunsigned]
+   round-trips, [lia]. *)
+Lemma waddsubcarry_cmlzP is_add (x y : word arch_decl.xreg_size) (c : bool) :
+  let fZ := if is_add then Z.add else Z.sub in
+  let fw := if is_add then +%R else (fun a b => a - b)%R in
+  CF_of_Z (fZ (fZ (wunsigned x) (wunsigned y)) (Z.b2z c))
+  = Some (if is_add then (waddcarry x y c).1 else (wsubcarry x y c).1)
+  /\ fw (fw x y) (wrepr arch_decl.xreg_size (Z.b2z c))
+     = (if is_add then (waddcarry x y c).2 else (wsubcarry x y c).2).
 Proof.
-move=> hlow he htr hw.
-rewrite /lower_Pif /chk_xreg_ws /assert in hlow.
-case: eqP hlow => [?|//]; subst ws.
-move=> [] <- <- <-.
-rewrite /sem_sopn /exec_sopn /= /sopn_sem /sopn_sem_ /=.
-move: he; rewrite /=.
-t_xrbindP=> b hb v0 hv0 v1 hv1 hv.
-move=> htrv1 z3 z4 hv_e1 htrz3 hsel.
-have [w0 [ws0 [w0' [htw0 hv1_eq hv0'_eq]]]] := truncate_val_typeE htrv1.
-have [w1 [ws1 [w1' [htw1 hz4_eq hz3_eq]]]] := truncate_val_typeE htrz3.
-subst hv1 v1 z4 z3.
-rewrite hv v0 hv_e1 /= hv0 /= htw0 /= htw1 /=.
-have hv_eq : v' = Vword (if b then w0 else w1).
-- move: htr; rewrite -hsel /truncate_val /=.
-  by case: b hv0 hsel; rewrite /= truncate_word_u => _ _ [<-].
-by rewrite hv_eq in hw; rewrite hw.
+  case: is_add => /=; split.
+  - (* add CF *)
+    rewrite /CF_of_Z; congr Some; rewrite Z.shiftr_div_pow2 //.
+    have hx := wunsigned_range x.
+    have hy := wunsigned_range y.
+    have hb : (0 <= Z.b2z c <= 1)%Z by case: c.
+    have hbas : (wbase arch_decl.xreg_size = 2^256)%Z by vm_compute.
+    have hbas256 : (wbase U256 = 2^256)%Z by vm_compute.
+    case: ZleP => hz.
+    + have hq : ((wunsigned x + wunsigned y + Z.b2z c) / 2^256 = 1)%Z.
+        have h1 : (1 <= (wunsigned x + wunsigned y + Z.b2z c) / 2^256)%Z.
+          apply Z.div_le_lower_bound; first by vm_compute.
+          by rewrite Z.mul_1_r -hbas256.
+        have h2 : ((wunsigned x + wunsigned y + Z.b2z c) / 2^256 < 2)%Z.
+          apply Z.div_lt_upper_bound; first by vm_compute.
+          by move: hx hy hb hbas; t_lia.
+        by move: h1 h2; t_lia.
+      by rewrite hq; vm_compute.
+    + have hq : ((wunsigned x + wunsigned y + Z.b2z c) / 2^256 = 0)%Z.
+        apply Z.div_small; split; first by move: hx hy hb; t_lia.
+        move: hz => /Z.lt_nge hz; rewrite -hbas256; exact hz.
+      by rewrite hq; vm_compute.
+  - by rewrite wrepr_add wrepr_add wrepr_unsigned wrepr_unsigned.
+  - (* sub CF *)
+    rewrite /CF_of_Z; congr Some; rewrite Z.shiftr_div_pow2 //.
+    have hx := wunsigned_range x.
+    have hy := wunsigned_range y.
+    have hb : (0 <= Z.b2z c <= 1)%Z by case: c.
+    have hbas : (wbase arch_decl.xreg_size = 2^256)%Z by vm_compute.
+    case: ZltP => hz.
+    + have hq : ((wunsigned x - wunsigned y - Z.b2z c) / 2^256 = -1)%Z.
+        have h1 : ((wunsigned x - wunsigned y - Z.b2z c) / 2^256 < 0)%Z.
+          apply Z.div_lt_upper_bound; first by vm_compute.
+          rewrite Z.mul_0_r; exact hz.
+        have h2 : (-1 <= (wunsigned x - wunsigned y - Z.b2z c) / 2^256)%Z.
+          apply Z.div_le_lower_bound; first by vm_compute.
+          by move: hx hy hb hbas; t_lia.
+        by move: h1 h2; t_lia.
+      by rewrite hq; vm_compute.
+    + have hq : ((wunsigned x - wunsigned y - Z.b2z c) / 2^256 = 0)%Z.
+        apply Z.div_small; split.
+        + move: hz => /Z.le_ngt hz; exact hz.
+        + by move: hx hy hb hbas; t_lia.
+      by rewrite hq; vm_compute.
+  - by rewrite wrepr_sub wrepr_sub wrepr_unsigned wrepr_unsigned.
 Qed.
 
-(* -------------------------------------------------------------------- *)
-(* Dispatch (see plan above).  [pre = [::]] always: the only source of a
-   non-empty [pre] is [lower_condition], which returns [[::]]. *)
-Lemma lower_cassgn_wordP ii lv ws e v v' s0 s1 pre lvs op es :
-  lower_cassgn_word ii lv ws e = ok (Some (pre, lvs, op, es)) ->
-  sem_pexpr true (p_globs p) s0 e = ok v ->
-  truncate_val (cword ws) v = ok v' ->
-  write_lval true (p_globs p) lv v' s0 = ok s1 ->
-  pre = [::] /\ sem_sopn (p_globs p) (Oasm op) s0 lvs es = ok s1.
+(* [CF_of_Z_subP]/[ZF_of_word_subP]: the two flag facts [BN.CMP] needs out of
+   the descriptor semantics [with_cmlz (x - y) (wunsigned x - wunsigned y)]
+   (Facts 2.).  [CF_of_Z_subP] specializes [waddsubcarry_cmlzP] to
+   [is_add := false], [c := false] rather than redoing the [Z.div_*]
+   derivation.  [M]/[L] are never needed (Stage D item 1). *)
+Lemma CF_of_Z_subP (x y : u256) :
+  CF_of_Z (wunsigned x - wunsigned y) = Some (wlt Unsigned x y).
 Proof.
-  rewrite /lower_cassgn_word /=.
-  move=> hlow he htr hw.
-  case hmem: (is_lval_in_memory lv).
-  - rewrite hmem /= in hlow.
-    case: (chk_lower_store ii ws lv) => [[] | ] //= in hlow.
-    rewrite /no_pre /= in hlow.
-    case h_store: (lower_store ii ws e) => [ [[[lvs_i op_i] es_i] | ] | ] //= in hlow.
-    move: hlow => [] <- hlvs <- <-.
-    split; first by [].
-    rewrite -hlvs.
-    exact: lower_storeP h_store he htr hw.
-  - rewrite hmem /= in hlow.
-    rewrite /lower_pexpr /= in hlow.
-    case: e he hlow; try (move=> *; by []).
-    + move=> gv he hlow.
-      rewrite /= in hlow.
-      case h_pvar: (lower_Pvar ws gv) => [ [[[lvs_i op_i] es_i] | ] | ] //= in hlow.
-      move: hlow => [] <- hlvs <- <-.
-      split; first by [].
-      rewrite -hlvs; exact: lower_PvarP h_pvar he htr hw.
-    + move=> a a0 w g p0 he hlow.
-      rewrite /= in hlow.
-      case h_load: (lower_load ii ws (Pget a a0 w g p0)) => [ [[[lvs_i op_i] es_i] | ] | ] //= in hlow.
-      move: hlow => [] <- hlvs <- <-.
-      split; first by [].
-      rewrite -hlvs; exact: lower_loadP h_load he htr hw.
-    + move=> a wl p0 he hlow.
-      rewrite /= in hlow.
-      case h_load: (lower_load ii ws (Pload a wl p0)) => [ [[[lvs_i op_i] es_i] | ] | ] //= in hlow.
-      move: hlow => [] <- hlvs <- <-.
-      split; first by [].
-      rewrite -hlvs; exact: lower_loadP h_load he htr hw.
-    + move=> op1 e1 he hlow.
-      rewrite /= in hlow.
-      case h_app1: (lower_Papp1 ii ws op1 e1) => [ [[[lvs_i op_i] es_i] | ] | ] //= in hlow.
-      move: hlow => [] <- hlvs <- <-.
-      split; first by [].
-      rewrite -hlvs; exact: lower_Papp1P h_app1 he htr hw.
-    + move=> op2 a b he hlow.
-      rewrite /= in hlow.
-      case h_app2: (lower_Papp2 ii ws op2 a b) => [ [[[lvs_i op_i] es_i] | ] | ] //= in hlow.
-      move: hlow => [] <- hlvs <- <-.
-      split; first by [].
-      rewrite -hlvs; exact: lower_Papp2P h_app2 he htr hw.
-    + move=> ty econd e0 e1 he hlow.
-      move: he hlow.
-      case: ty => [| | ? | ws'] he hlow //=.
-      case: eqP he hlow => [<- | ] he hlow //=.
-      case h_pif: (lower_Pif ii ws econd e0 e1) => [ [[[lvs_i op_i] es_i] | ] | ] //= in hlow.
-      move: hlow => [] <- hlvs <- <-.
-      split; first by [].
-      rewrite -hlvs; apply: lower_PifP h_pif he htr hw.
+  have [hCF _] := waddsubcarry_cmlzP false x y false.
+  move: hCF; rewrite /wsubcarry /wlt /= !Z.sub_0_r.
+  move=> ->; congr Some; rewrite /wunsigned.
+  move: (word.urepr x) (word.urepr y) => a b.
+  case: ZltP => h1; case: ZltP => h2 //; exfalso; Lia.lia.
 Qed.
 
-(* -------------------------------------------------------------------- *)
-(* Top-level.  Assemble via [Hassgn_id] (identity branches) and
-   [lower_cassgn_wordP] (meaningful branch); reduction in the plan above. *)
-Lemma Hassgn_esem (p' : prog) (hglob : p_globs p' = p_globs p)
-  {ii lv tag ty e s0 s1 lc} :
-  sem_assgn p lv tag ty e s0 = ok s1 ->
-  lower_i (MkI ii (Cassgn lv tag ty e)) = ok lc ->
-  esem p' ev lc s0 = ok s1.
+Lemma ZF_of_word_subP (x y : u256) :
+  ZF_of_word (x - y) = Some (x == y).
+Proof. by rewrite /ZF_of_word GRing.subr_eq0. Qed.
+
+(* [norm_condP]: evaluating the [empty_const_prop_e]-normalized condition
+   gives the same boolean as the original, in the same state.  Direct
+   application of [empty_const_prop_eP] (no globals, empty constant-
+   propagation map) plus [to_boolI]/[value_uinclE] to recover equality
+   (rather than just [value_uincl]) from a [bool]-typed source value.
+   [acc_fcp] is pinned explicitly on the goal side, matching the pin
+   [lower_cmp] itself now uses (see the comment there): [empty_const_prop_e]'s
+   own [{fcp}] is a bare, unqualified [FlagCombinationParams] implicit with
+   several competing global instances ([acc_extra] transitively [Require]s
+   [arm_extra]), so writing the goal without pinning risks resolving to a
+   different (wrong) instance than [lower_cmp]'s.  [empty_const_prop_eP]
+   itself has no separate [fcp] slot to instantiate -- its own internal use
+   of [const_prop_e] is already committed, at its own compile time, to
+   [_fcp spp] (a de-facto per-architecture choice, since [spp] is a genuine
+   parameter unified from [he]); for ACC, [_fcp spp] reduces definitionally
+   to [ad_fcp acc_decl] = [acc_fcp] (acc_decl.v's own [Build_arch_decl]
+   sets [ad_fcp := acc_fcp]), so the two pins agree up to conversion and
+   [empty_const_prop_eP] applies directly. *)
+Lemma norm_condP e s v b :
+  sem_pexpr true (p_globs p) s e = ok v ->
+  to_bool v = ok b ->
+  sem_pexpr true (p_globs p) s (@empty_const_prop_e acc_fcp e) = ok (Vbool b).
 Proof.
-  move=> hsem hlc.
-  move: hsem; rewrite /sem_assgn; t_xrbindP=> v he v' htr hw.
-  rewrite /lower_i /= in hlc.
-  case heq: (is_word_type ty) hlc => [ws | ] hlc.
-  - move: hlc; t_xrbindP=> oargs hoargs <-.
-    case: oargs hoargs => [x | ] hoargs.
-    + case: x hoargs => [[[pre lvs'] op] es'] hoargs.
-      rewrite /=.
-      move: htr; rewrite (is_word_typeP heq) /= => htr.
-      have [hpre hsopn] := lower_cassgn_wordP hoargs he htr hw.
-      subst pre.
-      rewrite /= hglob hsopn //.
-    + rewrite /= /sem_assgn hglob he /= htr /= hw //.
-  - move: hlc => [<-].
-    rewrite esem1 /= /sem_assgn hglob he /= htr /= hw //.
+  move=> he /to_boolI ?; subst v.
+  by have [v' [-> /value_uinclE ->]] := empty_const_prop_eP he.
 Qed.
 
 (* [get_arg_shiftP]: if [get_arg_shift] accepts [e] then [e] evaluates to
@@ -752,7 +788,9 @@ Qed.
    that shape, read off [ebase = Pvar x] and [esham], and relate [sem_sop2]
    to [word_shift_of_reg_shift].  Check whether a [zero_extend] to
    xreg_size appears (ARM zero-extends the base; here it is already
-   256-bit). *)
+   256-bit).  Moved up from its original position (after [Hassgn_esem]) so
+   [sem_BN_CMP] below can use it -- nothing here depends on anything
+   defined between the two positions. *)
 Lemma get_arg_shiftP ii ws e ebase sh esham s v :
   get_arg_shift ii ws e = ok (Some (ebase, sh, esham)) ->
   sem_pexpr true (p_globs p) s e = ok v ->
@@ -806,6 +844,200 @@ case: op hmatcho hsem => //=.
   + by rewrite zero_extend_u /to_word /= truncate_word_u /sem_shl.
 Qed.
 
+(* [bn_shifted_binopP]: the shifted instruction's [exec_sopn] equals the
+   base one's when the operand that gets shifted is supplied pre-shifted
+   (binop arity: the shift lands on the 2nd operand).  Moved up from its
+   original position (right after [Hassgn_esem]) for the same reason as
+   [get_arg_shiftP]; self-contained, no dependency on [bn_shifted_unopP]/
+   [bn_shifted_teropP], which stay at their original position. *)
+Lemma bn_shifted_binopP mn fg sh (wb : word arch_decl.xreg_size) (wa : word U8) x y vs r :
+  to_word arch_decl.xreg_size y
+  = ok (word_shift_of_reg_shift sh wb (wunsigned wa)) ->
+  exec_sopn (Oasm (BaseOp (None, BN_basic mn fg))) [:: x, y & vs] = ok r ->
+  mn \in [:: BN_ADD; BN_SUB; BN_AND; BN_OR; BN_XOR; BN_CMP; BN_CMPB ] ->
+  exec_sopn (Oasm (BaseOp (None, BN_basic_shift mn fg sh)))
+    (x :: Vword wb :: vs ++ [:: Vword wa]) = ok r.
+Proof.
+move=> hshift hexec hmn.
+have letok : forall (eT aT rT : Type) (a : aT) (f : aT -> result eT rT),
+    (Let x := ok a in f x) = f a by move=> *.
+rewrite !inE in hmn.
+case: mn hmn hexec => hmn hexec //.
+all: rewrite /exec_sopn /= /sopn_sem /sopn_sem_ /= in hexec |- *.
+all: (move: hexec; t_xrbindP => hwx hx hwy hy;
+      move=> hwy_eq; case: vs => [| a vs'] //= hsemi <-).
+all: rewrite hwy !truncate_word_u !letok.
+all: have hwy_val : word_shift_of_reg_shift sh wb (wunsigned wa) = hy
+       by move: hshift; rewrite hwy_eq => [[<-]].
+all: rewrite /semi_to_atype /= in hsemi.
+1-6: (rewrite hwy_val; move: hsemi => [hsemi]; rewrite hsemi //).
+(* BN_CMPB: vs' is abstract, extract vs'=[] from hsemi *)
+case: vs' hsemi => [| ?? ] //= hsemi.
+2: by case: (to_bool a) hsemi.
+rewrite truncate_word_u /semi_to_atype /= /arch_utils.arch_mk_semi3_2_shifted /= hwy_val.
+rewrite hsemi //.
+Qed.
+
+(* [sem_BN_CMP]: executing the [BN.CMP] emitted by [lower_cmp] (plain or
+   with the second operand shifted) from a state [t] where the two
+   comparison operands evaluate to words [w0]/[w1] writes the four fresh
+   flags, landing in a state related to [t] by [eq_fv], with [C] and [Z]
+   carrying the values [CF_of_Z_subP]/[ZF_of_word_subP] give ([M]/[L] are
+   never inspected downstream, per Stage D item 1 of the plan, so they are
+   left unconstrained via the existential). The shifted case is lifted
+   from the plain one with [bn_shifted_binopP] (already in this file,
+   [BN_CMP] is in its mnemonic whitelist); [get_arg_shiftP] relates
+   [ebase]/[esham]'s values to the shift, and since [sem_pexpr t e1 = ok
+   (Vword w1)] already, its [to_word] hypothesis instantiates directly to
+   [w1 = word_shift_of_reg_shift sh wb (wunsigned wa)]. *)
+Lemma sem_BN_CMP ii fg op args e0 e1 t (w0 w1 : u256) :
+  sem_pexpr true (p_globs p) t e0 = ok (Vword w0) ->
+  sem_pexpr true (p_globs p) t e1 = ok (Vword w1) ->
+  (op = BN_basic BN_CMP fg /\ args = [:: e0; e1 ])
+  \/ (exists base sh sham,
+        [/\ op = BN_basic_shift BN_CMP fg sh, args = [:: e0; base; sham ]
+          & get_arg_shift ii arch_decl.xreg_size e1
+            = ok (Some (base, sh, sham)) ]) ->
+  exists2 t',
+    sem_sopn (p_globs p) (Oasm (BaseOp (None, op))) t
+      [seq Lvar {| v_var := x; v_info := var_info_of_ii ii |}
+          | x <- fresh_flags fv ]
+      args
+    = ok t'
+  & [/\ eq_fv t t'
+      , get_var true (evm t') (fvCF1 fv) = ok (Vbool (wlt Unsigned w0 w1))
+      & get_var true (evm t') (fvZF1 fv) = ok (Vbool (w0 == w1)) ].
+Proof using atoI fv fv_correct p pT sc_sem syscall_state wsw.
+move=> he0 he1 hcase.
+have hplain : exists2 t',
+    sem_sopn (p_globs p) (Oasm (BaseOp (None, BN_basic BN_CMP fg))) t
+      [seq Lvar {| v_var := x; v_info := var_info_of_ii ii |} | x <- fresh_flags fv]
+      [:: e0; e1] = ok t'
+  & [/\ eq_fv t t', get_var true (evm t') (fvCF1 fv) = ok (Vbool (wlt Unsigned w0 w1))
+    & get_var true (evm t') (fvZF1 fv) = ok (Vbool (w0 == w1))].
+2: case: hcase => [[-> ->] | [base [sh [sham [-> -> hgas]]]]].
+2: exact: hplain.
+2: case: hplain => t0 hplain_sem [heq hCF hZF].
+2: move: hplain_sem; rewrite /sem_sopn /= he0 he1 /=.
+2: t_xrbindP => r hexec hwrite.
+2: have [wb [wa [hbase hsham hshift]]] := get_arg_shiftP hgas he1.
+2: have hexec' := bn_shifted_binopP hshift hexec ltac:(by vm_compute).
+2: exists t0 => //.
+2: rewrite hbase /= hsham /=.
+2: move: hexec'; rewrite cat0s => hexec'.
+2: rewrite hexec'; exact: hwrite.
+rewrite /sem_sopn /= he0 he1 /= /exec_sopn /= /sopn_sem /sopn_sem_ /=.
+rewrite truncate_word_u.
+rewrite truncate_word_u.
+cbn -[CF_of_Z MF_of_word LF_of_word ZF_of_word wsub wunsigned].
+rewrite CF_of_Z_subP ZF_of_word_subP /=.
+eexists; first reflexivity.
+split.
+1: rewrite /eq_fv /st_eq_ex /st_rel /=; split=> //.
+1: move=> x hx.
+1: have hCFne : fvCF1 fv != x by apply/eqP=> heq; apply: hx; rewrite -heq; exact: fvars_CF1.
+1: have hMFne : fvMF1 fv != x by apply/eqP=> heq; apply: hx; rewrite -heq; exact: fvars_MF1.
+1: have hLFne : fvLF1 fv != x by apply/eqP=> heq; apply: hx; rewrite -heq; exact: fvars_LF1.
+1: have hZFne : fvZF1 fv != x by apply/eqP=> heq; apply: hx; rewrite -heq; exact: fvars_ZF1.
+1: by rewrite (Vm.setP_neq _ _ hZFne) (Vm.setP_neq _ _ hLFne) (Vm.setP_neq _ _ hMFne) (Vm.setP_neq _ _ hCFne).
+2: rewrite /get_var /=.
+2: rewrite Vm.setP_eq /=.
+2: by [].
+have huniq : uniq (all_fresh_vars fv) := (andP fv_correct).2.
+move: huniq.
+rewrite /all_fresh_vars /= !inE !negb_or.
+move=> /and4P[/and3P[hCM hCL hCZ] _ _ _].
+have hCMv : fvCF1 fv != fvMF1 fv by [].
+have hCLv : fvCF1 fv != fvLF1 fv by [].
+have hCZv : fvCF1 fv != fvZF1 fv by [].
+have hZCv : fvZF1 fv != fvCF1 fv.
+by rewrite neq_sym.
+have hLCv : fvLF1 fv != fvCF1 fv.
+by rewrite neq_sym.
+have hMCv : fvMF1 fv != fvCF1 fv.
+by rewrite neq_sym.
+rewrite /get_var /=.
+rewrite (Vm.setP_neq _ _ hZCv) (Vm.setP_neq _ _ hLCv)
+  (Vm.setP_neq _ _ hMCv) Vm.setP_eq //.
+Qed.
+
+(* [ExtOp SELECT], [es = [:: e0; e1; econd]], [lvs = [::]], [ws = xreg_size].
+   [econd] is either passed through unchanged (the flag group and any
+   negation are resolved later, at assembly time, by [assemble_SELECT]), or
+   first rewritten by [lower_cmp] into a [BN.CMP] prefix ([pre]) plus a
+   combine-flags residual: the prefix must run first, landing in a state
+   related to [s0] only by [eq_fv] (it may set the fresh flags). *)
+(* [lower_cmpP]: the analog of ARM's [sem_lower_condition_pexpr].  Moving
+   the evaluation of [e] to [s'] with [eeq_exc_sem_pexpr], normalizing with
+   [norm_condP], then case-splitting on the normalized shape (mirroring
+   [lower_cmp]'s own definition: peel one [Papp1 Onot], match [Papp2 op e0
+   e1] with [cf_of_condition op = Some (cf, U256)], reject signed, swap via
+   [swap_cf], route the shift via [get_arg_shift]) and, for each of the six
+   comparison operators, unfolding [sem_sop2_typed] and relating it to
+   [wlt]/[wle] on the operands [sem_BN_CMP] actually issues [BN.CMP] on
+   (post negation/swap/shift-symmetry) gives the residual boolean the
+   [pexpr_of_cf]/[sem_combine_flags] value of the *final* [cf] (always one
+   of [CF_EQ]/[CF_NEQ]/[CF_LT Unsigned]/[CF_GE Unsigned] by then, per the
+   plan's Stage D item 2 note) equals [b]. *)
+Lemma lower_cmpP ii tag e pre e' s s' v b :
+  lower_cmp ii e = ok (Some (pre, e')) ->
+  eq_fv s s' ->
+  disj_fvars (read_e e) ->
+  sem_pexpr true (p_globs p) s e = ok v ->
+  to_bool v = ok b ->
+  exists2 t,
+    esem p ev (map (low_instr_i ii tag) pre) s' = ok t
+    & eq_fv s t /\ sem_pexpr true (p_globs p) t e' = ok (Vbool b).
+Proof.
+(* ADMIT_LOWER_CMP *)
+Admitted.
+
+Lemma lower_PifP (p' : prog) (hglob : p_globs p' = p_globs p)
+  ii tag ws econd e0 e1 lv v v' s0 s1 pre lvs op es :
+  lower_Pif ii ws econd e0 e1 = ok (Some (pre, lvs, op, es)) ->
+  disj_fvars (read_e econd) ->
+  sem_pexpr true (p_globs p) s0 (Pif (aword ws) econd e0 e1) = ok v ->
+  truncate_val (cword ws) v = ok v' ->
+  write_lval true (p_globs p) lv v' s0 = ok s1 ->
+  exists2 s1',
+    esem p' ev (low_cmd_c ii tag (pre, lvs ++ [:: lv], op, es)) s0 = ok s1'
+    & eq_fv s1 s1'.
+Proof.
+(* ADMIT_LOWER_CMP *)
+Admitted.
+
+(* -------------------------------------------------------------------- *)
+(* Dispatch (see plan above).  [pre] is non-empty exactly when [e] is a
+   [Pif] whose condition [lower_cmp] rewrites to a [BN.CMP]; every other
+   branch keeps [pre = [::]] as before. *)
+Lemma lower_cassgn_wordP (p' : prog) (hglob : p_globs p' = p_globs p)
+  ii tag lv ws e v v' s0 s1 pre lvs op es :
+  lower_cassgn_word ii lv ws e = ok (Some (pre, lvs, op, es)) ->
+  disj_fvars (read_e e) ->
+  sem_pexpr true (p_globs p) s0 e = ok v ->
+  truncate_val (cword ws) v = ok v' ->
+  write_lval true (p_globs p) lv v' s0 = ok s1 ->
+  exists2 s1',
+    esem p' ev (low_cmd_c ii tag (pre, lvs, op, es)) s0 = ok s1'
+    & eq_fv s1 s1'.
+Proof.
+(* ADMIT_LOWER_CMP *)
+Admitted.
+
+(* -------------------------------------------------------------------- *)
+(* Top-level.  Assemble via [Hassgn_id] (identity branches) and
+   [lower_cassgn_wordP] (meaningful branch); reduction in the plan above. *)
+Lemma Hassgn_esem (p' : prog) (hglob : p_globs p' = p_globs p)
+  {ii lv tag ty e s0 s1 lc} :
+  disj_fvars (read_e e) ->
+  disj_fvars (vars_lval lv) ->
+  sem_assgn p lv tag ty e s0 = ok s1 ->
+  lower_i (MkI ii (Cassgn lv tag ty e)) = ok lc ->
+  exists2 s1', esem p' ev lc s0 = ok s1' & eq_fv s1 s1'.
+Proof.
+(* ADMIT_LOWER_CMP *)
+Admitted.
+
 (* [bn_shifted_unopP]/[bn_shifted_binopP]/[bn_shifted_teropP]: the shifted
    instruction's [exec_sopn] equals the base one's when the operand that
    gets shifted is supplied pre-shifted.  The three lemmas match the three
@@ -839,34 +1071,6 @@ have heq : hwx = word_shift_of_reg_shift sh wb (wunsigned wa)
 rewrite heq in hmatch.
 move: hmatch; rewrite /semi_to_atype /= => [[<-]].
 by rewrite /with_mlz /=.
-Qed.
-
-Lemma bn_shifted_binopP mn fg sh (wb : word arch_decl.xreg_size) (wa : word U8) x y vs r :
-  to_word arch_decl.xreg_size y
-  = ok (word_shift_of_reg_shift sh wb (wunsigned wa)) ->
-  exec_sopn (Oasm (BaseOp (None, BN_basic mn fg))) [:: x, y & vs] = ok r ->
-  mn \in [:: BN_ADD; BN_SUB; BN_AND; BN_OR; BN_XOR; BN_CMP; BN_CMPB ] ->
-  exec_sopn (Oasm (BaseOp (None, BN_basic_shift mn fg sh)))
-    (x :: Vword wb :: vs ++ [:: Vword wa]) = ok r.
-Proof.
-move=> hshift hexec hmn.
-have letok : forall (eT aT rT : Type) (a : aT) (f : aT -> result eT rT),
-    (Let x := ok a in f x) = f a by move=> *.
-rewrite !inE in hmn.
-case: mn hmn hexec => hmn hexec //.
-all: rewrite /exec_sopn /= /sopn_sem /sopn_sem_ /= in hexec |- *.
-all: (move: hexec; t_xrbindP => hwx hx hwy hy;
-      move=> hwy_eq; case: vs => [| a vs'] //= hsemi <-).
-all: rewrite hwy !truncate_word_u !letok.
-all: have hwy_val : word_shift_of_reg_shift sh wb (wunsigned wa) = hy
-       by move: hshift; rewrite hwy_eq => [[<-]].
-all: rewrite /semi_to_atype /= in hsemi.
-1-6: (rewrite hwy_val; move: hsemi => [hsemi]; rewrite hsemi //).
-(* BN_CMPB: vs' is abstract, extract vs'=[] from hsemi *)
-case: vs' hsemi => [| ?? ] //= hsemi.
-2: by case: (to_bool a) hsemi.
-rewrite truncate_word_u /semi_to_atype /= /arch_utils.arch_mk_semi3_2_shifted /= hwy_val.
-rewrite hsemi //.
 Qed.
 
 Lemma bn_shifted_teropP mn fg sh (wb : word arch_decl.xreg_size) (wa : word U8) x y cf vs r :
@@ -1141,71 +1345,6 @@ Qed.
    [get_carry_lvals], [get_carry_pexprs], [carry_op], [current_CF],
    [lnoneb]. *)
 
-(* [waddsubcarry_cmlzP]: the wide-carry op's flag and result match the
-   pseudo-op's [waddcarry]/[wsubcarry].  The carry-out [CF_of_Z z] (= [Some]
-   of bit 256 of [z]) equals the boolean carry, and the wide result equals
-   the word result.  Idea (cf. ARM [wunsigned_carry], proving
-   [(wbase <=? res') = (res != res')]): additionally relate [CF_of_Z]'s
-   bit-256 extraction to that overflow predicate -- for
-   [z = wunsigned x +/- wunsigned y +/- b2z c], [z] stays in a range where
-   bit 256 equals [wbase <=? z] (add) / the borrow (sub).  Pure word/[Z]
-   arithmetic: [wunsigned_range], [wbase] bounds, [wrepr]/[wunsigned]
-   round-trips, [lia]. *)
-Lemma waddsubcarry_cmlzP is_add (x y : word arch_decl.xreg_size) (c : bool) :
-  let fZ := if is_add then Z.add else Z.sub in
-  let fw := if is_add then +%R else (fun a b => a - b)%R in
-  CF_of_Z (fZ (fZ (wunsigned x) (wunsigned y)) (Z.b2z c))
-  = Some (if is_add then (waddcarry x y c).1 else (wsubcarry x y c).1)
-  /\ fw (fw x y) (wrepr arch_decl.xreg_size (Z.b2z c))
-     = (if is_add then (waddcarry x y c).2 else (wsubcarry x y c).2).
-Proof.
-  case: is_add => /=; split.
-  - (* add CF *)
-    rewrite /CF_of_Z; congr Some; rewrite Z.shiftr_div_pow2 //.
-    have hx := wunsigned_range x.
-    have hy := wunsigned_range y.
-    have hb : (0 <= Z.b2z c <= 1)%Z by case: c.
-    have hbas : (wbase arch_decl.xreg_size = 2^256)%Z by vm_compute.
-    have hbas256 : (wbase U256 = 2^256)%Z by vm_compute.
-    case: ZleP => hz.
-    + have hq : ((wunsigned x + wunsigned y + Z.b2z c) / 2^256 = 1)%Z.
-        have h1 : (1 <= (wunsigned x + wunsigned y + Z.b2z c) / 2^256)%Z.
-          apply Z.div_le_lower_bound; first by vm_compute.
-          by rewrite Z.mul_1_r -hbas256.
-        have h2 : ((wunsigned x + wunsigned y + Z.b2z c) / 2^256 < 2)%Z.
-          apply Z.div_lt_upper_bound; first by vm_compute.
-          by move: hx hy hb hbas; t_lia.
-        by move: h1 h2; t_lia.
-      by rewrite hq; vm_compute.
-    + have hq : ((wunsigned x + wunsigned y + Z.b2z c) / 2^256 = 0)%Z.
-        apply Z.div_small; split; first by move: hx hy hb; t_lia.
-        move: hz => /Z.lt_nge hz; rewrite -hbas256; exact hz.
-      by rewrite hq; vm_compute.
-  - by rewrite wrepr_add wrepr_add wrepr_unsigned wrepr_unsigned.
-  - (* sub CF *)
-    rewrite /CF_of_Z; congr Some; rewrite Z.shiftr_div_pow2 //.
-    have hx := wunsigned_range x.
-    have hy := wunsigned_range y.
-    have hb : (0 <= Z.b2z c <= 1)%Z by case: c.
-    have hbas : (wbase arch_decl.xreg_size = 2^256)%Z by vm_compute.
-    case: ZltP => hz.
-    + have hq : ((wunsigned x - wunsigned y - Z.b2z c) / 2^256 = -1)%Z.
-        have h1 : ((wunsigned x - wunsigned y - Z.b2z c) / 2^256 < 0)%Z.
-          apply Z.div_lt_upper_bound; first by vm_compute.
-          rewrite Z.mul_0_r; exact hz.
-        have h2 : (-1 <= (wunsigned x - wunsigned y - Z.b2z c) / 2^256)%Z.
-          apply Z.div_le_lower_bound; first by vm_compute.
-          by move: hx hy hb hbas; t_lia.
-        by move: h1 h2; t_lia.
-      by rewrite hq; vm_compute.
-    + have hq : ((wunsigned x - wunsigned y - Z.b2z c) / 2^256 = 0)%Z.
-        apply Z.div_small; split.
-        + move: hz => /Z.le_ngt hz; exact hz.
-        + by move: hx hy hb hbas; t_lia.
-      by rewrite hq; vm_compute.
-  - by rewrite wrepr_sub wrepr_sub wrepr_unsigned wrepr_unsigned.
-Qed.
-
 (* [lower_carry_opP] (case lemma): the lowered [BN_basic] sem_sopn
    reproduces the source [Oaddcarry]/[Osubcarry].  Idea (cf. ARM
    [lower_add_carryP]): unfold [lower_carry_op] (extract the
@@ -1397,53 +1536,31 @@ Proof.
      move=> w; case: (to_word U256 a0) => //.
 Qed.
 
-(* [lower_copnP]: assemble the case lemmas.  The dispatch leaves four real
-   cases; three are discharged by the case lemmas above (shift absorption /
-   carry / swap), and [RV32 mn] is verbatim. *)
-Lemma lower_copnP ii lvs op es lvs' op' es' s0 s1 :
-  lower_copn ii lvs op es = ok (Some (lvs', op', es')) ->
+(* [lower_copnP]: assemble the case lemmas.  Four cases pass [pre = [::]]
+   through unchanged (shift absorption / carry / swap / [RV32 mn]); the
+   [ExtOp SELECT] case additionally runs the [BN.CMP] prefix [lower_cmp]
+   may produce, landing in an [eq_fv]-related state. *)
+Lemma lower_copnP (p' : prog) (hglob : p_globs p' = p_globs p)
+  ii tag lvs op es pre lvs' op' es' s0 s1 :
+  lower_copn ii lvs op es = ok (Some (pre, lvs', op', es')) ->
+  disj_fvars (read_es es) ->
   sem_sopn (p_globs p) op s0 lvs es = ok s1 ->
-  sem_sopn (p_globs p) (Oasm op') s0 lvs' es' = ok s1.
+  exists2 s1',
+    esem p' ev (low_cmd_c ii tag (pre, lvs', op', es')) s0 = ok s1'
+    & eq_fv s1 s1'.
 Proof.
-  rewrite /lower_copn.
-  case: op => [pop | slh | [ [msb aop] | eo ] ] //=.
-  - rewrite /lower_pseudo_operator.
-    case: pop => //=.
-    + move=> sz.
-      t_xrbindP=> o Ho.
-      case: o Ho => [[[a b] c]|] Ho //= [<- <- <-] hsrc.
-      exact: (@lower_carry_opP _ _ _ _ _ _ _ _ _ _ Ho hsrc).
-    + move=> sz.
-      t_xrbindP=> o Ho.
-      case: o Ho => [[[a b] c]|] Ho //= [<- <- <-] hsrc.
-      exact: (@lower_carry_opP _ _ _ _ _ _ _ _ _ _ Ho hsrc).
-    + move=> ty.
-      t_xrbindP=> o Ho.
-      case: o Ho => [[[a b] c]|] Ho //= [<- <- <-] hsrc.
-      exact: (@lower_swapP _ _ _ _ _ _ _ _ _ Ho hsrc).
-  case: msb => [m|] //=.
-  rewrite /lower_base_op.
-  case: aop => //=.
-  - by move=> mn [<- <- <-].
-  move=> mn fg.
-  t_xrbindP=> o Ho.
-  case: o Ho => [[sh es'']|] Ho //= [<- <- <-] hsrc.
-  exact: (@lower_basic_shiftP _ _ _ _ _ _ _ _ _ Ho hsrc).
-Qed.
+(* ADMIT_LOWER_CMP *)
+Admitted.
 
 Lemma Hopn_esem (p' : prog) (hglob : p_globs p' = p_globs p)
   {ii lvs tag op es s0 s1 lc} :
+  disj_fvars (read_es es) ->
   sem_sopn (p_globs p) op s0 lvs es = ok s1 ->
   lower_i (MkI ii (Copn lvs tag op es)) = ok lc ->
-  esem p' ev lc s0 = ok s1.
+  exists2 s1', esem p' ev lc s0 = ok s1' & eq_fv s1 s1'.
 Proof.
-  move=> hsem /=.
-  t_xrbindP=> oargs hoargs <-.
-  rewrite esem1.
-  case: oargs hoargs => [[[lvs' op'] es']|] hoargs /=; rewrite hglob;
-    last exact: hsem.
-  exact: (@lower_copnP _ _ _ _ _ _ _ _ _ hoargs hsem).
-Qed.
+(* ADMIT_LOWER_CMP *)
+Admitted.
 
 (* -------------------------------------------------------------------- *)
 
@@ -1453,97 +1570,30 @@ Section IT.
 
 Context {E E0: Type -> Type} {wE : with_Error E E0} {rE0 : EventRels E0}.
 
+(* [Pi_]/[Pc_] carry [disj_fvars] hypotheses (the fresh flags are not read or
+   written by the source program) and relate states with [eq_fv] rather than
+   exact equality, since a lowered [BN.CMP] prefix may set them. *)
 #[ local ]
 Definition Pi_ (p' : prog) (i : instr) :=
+  disj_fvars (vars_I i) ->
   forall lc, lower_i i = ok lc ->
-  wequiv_rec p p' ev ev eq_spec (st_eq tt) [:: i] lc (st_eq tt).
+  wequiv_rec p p' ev ev eq_spec eq_fv [:: i] lc eq_fv.
 
 #[ local ]
 Definition Pi_r_ (p' : prog) (i : instr_r) := forall ii, Pi_ p' (MkI ii i).
 
 #[ local ]
 Definition Pc_ (p' : prog) (c : cmd) :=
+  disj_fvars (vars_c c) ->
   forall lc, lower_cmd c = ok lc ->
-  wequiv_rec p p' ev ev eq_spec (st_eq tt) c lc (st_eq tt).
-
-#[ local ]
-Lemma checker_st_eqP_ p' : p_globs p = p_globs p' -> Checker_eq p p' checker_st_eq.
-Proof. exact: checker_st_eqP. Qed.
+  wequiv_rec p p' ev ev eq_spec eq_fv c lc eq_fv.
 
 Lemma it_lower_callP fn lp :
   lower_prog p = ok lp ->
   wiequiv_f p lp ev ev (rpreF (eS:= eq_spec)) fn fn (rpostF (eS:=eq_spec)).
-Proof.
-  move=> hlp.
-  have hglob := lower_prog_globs hlp.
-  apply wequiv_fun_ind => {}fn _ fs _ [<- <-] fd hget.
-  have [fd' hlfd hget'] := get_map_cfprog_gen (lower_prog_funcs hlp) hget.
-  move: hlfd; rewrite /lower_fd; t_xrbindP=> body hbody ?; subst fd'.
-  rewrite hget' /=.
-  eexists; first reflexivity.
-  move=> s.
-  move=> /(eq_initialize (fd':= with_body fd body))
-    -/(_ lp erefl erefl erefl (esym (lower_prog_extra hlp))) hinit.
-  exists s => //; exists (st_eq tt), (st_eq tt); split => //=;
-    last by apply st_eq_finalize.
-  have hck := checker_st_eqP_ (p' := lp) (esym hglob).
-  set sip := sip_of_asm_e.
-  suff hsuff : forall c, Pc_ lp c by apply: (hsuff _ _ hbody).
-  apply (cmd_rect (Pr := Pi_r_ lp) (Pi := Pi_ lp) (Pc := Pc_ lp));
-    rewrite /Pi_r_ /Pi_ /Pc_.
-  + by move=> i ii hi; apply: hi.
-  + by move=> lc /lower_cmd_nil ->; apply (wequiv_nil (sip:=sip)).
-  + move=> i c hi hc lc /lower_cmd_cons [li [lc' [hli hlc' ->]]].
-    rewrite -cat1s.
-    by apply (wequiv_cat (sip:=sip)) with (st_eq tt);
-      [apply: (hi _ hli) | apply: (hc _ hlc')].
-  (* Cassgn *)
-  + move=> x tg ty e ii lc hlc.
-    apply (wequiv_assgn_esem (sip:=sip)).
-    move=> s0 t s1 /st_relP [-> /= heq] hsem.
-    have [vm2 -> ?] :=
-      esem_vm_eq (sip:=sip) (erefl (p_globs lp))
-        (Hassgn_esem hglob hsem hlc) heq.
-    by eexists; first reflexivity.
-  (* Copn *)
-  + move=> xs t o es ii lc hlc.
-    apply (wequiv_opn_esem (sip:=sip)).
-    move=> s0 t0 s1 /st_relP [-> /= heq] hsem.
-    have [vm2 -> ?] :=
-      esem_vm_eq (sip:=sip) (erefl (p_globs lp))
-        (Hopn_esem hglob hsem hlc) heq.
-    by eexists; first reflexivity.
-  (* Csyscall *)
-  + move=> xs o es ii lc [<-].
-    by apply (wequiv_syscall_rel_eq (sip:=sip)) with checker_st_eq tt => //;
-      exact: hck.
-  (* Cassert *)
-  + by move=> a ii lc [<-]; apply (wequiv_noassert (sip:=sip)) with (ev1:=ev) (ii:=ii).
-  (* Cif *)
-  + move=> e c1 c2 hc1 hc2 ii lc /=.
-    t_xrbindP=> c1' hc1' c2' hc2' <-.
-    apply (wequiv_if_rel_eq (sip:=sip)) with checker_st_eq tt tt tt => //.
-    - exact: (hc1 _ hc1').
-    - exact: (hc2 _ hc2').
-  (* Cfor *)
-  + move=> fi c hc ii lc /=.
-    t_xrbindP=> c' hc' <-.
-    case: fi => [x dir lo hi | e] /=.
-    - apply (wequiv_for_rel_eq (sip:=sip)) with checker_st_eq tt tt => //.
-      exact: (hc _ hc').
-    - apply (wequiv_for_repeat_rel_eq (sip:=sip)) with checker_st_eq tt => //.
-      exact: (hc _ hc').
-  (* Cwhile *)
-  + move=> a c e info c' hc hc' ii lc /=.
-    t_xrbindP=> cc hcc cc' hcc' <-.
-    apply (wequiv_while_rel_eq (sip:=sip)) with checker_st_eq tt => //.
-    - exact: (hc _ hcc).
-    - exact: (hc' _ hcc').
-  (* Ccall *)
-  move=> xs f es ii lc [<-].
-  apply (wequiv_call_rel_eq (sip:=sip)) with checker_st_eq tt => //.
-  by move=> ???; apply: (wequiv_fun_rec (spec := eq_spec)).
-Qed.
+Proof using fv_correct.
+(* ADMIT_LOWER_CMP *)
+Admitted.
 
 End IT.
 

@@ -1,0 +1,107 @@
+// u256 comparisons assigned to reg bool variables.
+//
+// Lowering emits BN.CMP on FG1 and an inline assignment of the combine-flags
+// label to the bool variable; propagate_inline substitutes the label into the
+// uses and the bool variable disappears. The uses must come before the next
+// lowered comparison, which reuses the same flags (see
+// fail/acc/bn_cmp_bool_interleaved.jazz).
+
+export
+fn bool_eq(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.cmp a, b, FG1 ; bn.sel b, a, b, FG1.Z
+    reg bool c = a == b;
+    b = a if c;
+    return b;
+}
+
+export
+fn bool_neq(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.cmp a, b, FG1 ; bn.sel b, b, a, FG1.Z
+    reg bool c = a != b;
+    b = a if c;
+    return b;
+}
+
+export
+fn bool_ltu(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.cmp a, b, FG1 ; bn.sel b, a, b, FG1.C
+    reg bool c = a <u b;
+    b = a if c;
+    return b;
+}
+
+export
+fn bool_geu(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.cmp a, b, FG1 ; bn.sel b, b, a, FG1.C
+    reg bool c = a >=u b;
+    b = a if c;
+    return b;
+}
+
+export
+fn bool_leu(reg u256 a, reg u256 b) -> reg u256 {
+    // operands swapped: bn.cmp b, a, FG1 ; bn.sel b, b, a, FG1.C
+    reg bool c = a <=u b;
+    b = a if c;
+    return b;
+}
+
+export
+fn bool_gtu(reg u256 a, reg u256 b) -> reg u256 {
+    // operands swapped: bn.cmp b, a, FG1 ; bn.sel b, a, b, FG1.C
+    reg bool c = a >u b;
+    b = a if c;
+    return b;
+}
+
+// Declaration and assignment on separate lines.
+export
+fn bool_declared_then_assigned(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.cmp a, b, FG1 ; bn.sel b, a, b, FG1.C
+    reg bool c;
+    c = a <u b;
+    b = a if c;
+    return b;
+}
+
+// Negation on the right-hand side.
+export
+fn bool_negated_rhs(reg u256 a, reg u256 b) -> reg u256 {
+    // same as bool_neq: bn.cmp a, b, FG1 ; bn.sel b, b, a, FG1.Z
+    reg bool c = !(a == b);
+    b = a if c;
+    return b;
+}
+
+// Negation at the use site; resolved by assemble_SELECT.
+export
+fn bool_negated_use(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.cmp a, b, FG1 ; bn.sel b, b, a, FG1.C
+    reg bool c = a <u b;
+    b = a if !c;
+    return b;
+}
+
+// One compare, two selects (a ternary and the intrinsic).
+export
+fn bool_used_twice(reg u256 a, reg u256 b, reg u256 c) -> reg u256 {
+    // bn.cmp a, b, FG1 ; bn.sel b, a, b, FG1.C ; bn.sel c, a, c, FG1.C
+    // bn.xor c, b, c, FG0
+    reg bool lt = a <u b;
+    b = a if lt;
+    c = #BN_SEL(a, c, lt);
+    c = b ^ c;
+    return c;
+}
+
+// A second comparison after the first one has been consumed.
+export
+fn bool_sequential(reg u256 a, reg u256 b, reg u256 c) -> reg u256 {
+    // bn.cmp a, b, FG1 ; bn.sel c, a, c, FG1.C
+    // bn.cmp a, b, FG1 ; bn.sel c, b, c, FG1.Z
+    reg bool lt = a <u b;
+    c = a if lt;
+    reg bool eq = a == b;
+    c = b if eq;
+    return c;
+}

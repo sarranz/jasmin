@@ -1,0 +1,7 @@
+// Only one operand of BN.CMP can be shifted, even for == where either side is
+// otherwise accepted.
+export
+fn shift_both(reg u256 a, reg u256 b) -> reg u256 {
+    b = a if ((a << 8) == (b << 16));
+    return b;
+}
