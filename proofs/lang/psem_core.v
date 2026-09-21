@@ -39,18 +39,22 @@ Context
 Class semCallParams := SemCallParams
   {
   init_state : extra_fun_t -> extra_prog_t -> extra_val_t -> estate -> exec estate;
+
   finalize   : extra_fun_t -> mem -> mem;
+
   exec_syscall_core :
       syscall_state ->
       mem ->
       syscall_t ->
       values ->
       itree (ErrEvent +' RndEvent syscall_state) (syscall_state * mem * values);
+
   exec_syscall_coreP : forall scs m o vargs vargs',
       values_uincl vargs vargs' ->
       lxeutt sc_res_uincl
         (exec_syscall_core scs m o vargs)
         (exec_syscall_core scs m o vargs');
+
   exec_syscall_coreS : forall scs m o vargs,
       lutt (fun _ _ => True) (fun _ _ _ => True)
         (fun '(_, m', _) => mem_equiv m m')

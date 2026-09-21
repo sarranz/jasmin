@@ -277,3 +277,53 @@ End StackSyscall.
 
 Arguments sem_syscall {pd} {syscall_state} o _ _.
 Arguments sem_syscall_store {pd} {syscall_state} o _ _ _.
+
+Section StackSyscallU.
+
+Context
+  {pd : PointerData}
+  {syscall_state : Type}
+  {sc_sem : syscall_sem syscall_state}
+.
+
+Notation E := (ErrEvent +' RndEvent syscall_state).
+
+Lemma exec_getrandom_u_s scs m1 m2 ws n v p :
+  0 <= arr_size ws n < wbase Uptr ->
+  (forall (ag : WArray.array (arr_size ws n)) bs a,
+     to_arr (arr_size ws n) v = ok ag ->
+     WArray.fill (arr_size ws n) bs = ok a ->
+     exists m2', fill_mem m2 p bs = ok m2') ->
+  lxeutt
+    (fun (r1 r2 : syscall_state * mem * values) =>
+       exists ag bs a,
+         [/\ to_arr (arr_size ws n) v = ok ag
+           , WArray.fill (arr_size ws n) bs = ok a
+           , r1 = (r2.1.1, m1, [:: Varr a])
+           , fill_mem m2 p bs = ok r2.1.2
+           & r2.2 = [:: Vword p] ])
+    (exec_syscall_u scs m1 (RandomBytes ws n) [:: v])
+    (exec_syscall_s scs m2 (RandomBytes ws n)
+       [:: Vword p; Vword (wrepr Uptr (arr_size ws n))]).
+Proof.
+move=> hlen hfillm.
+rewrite /exec_syscall_u /exec_getrandom_u /exec_syscall_s
+        /sem_syscall_cast /sem_tuple_of_values /= !truncate_word_u /=.
+rewrite /iassert /=; case hto: (to_arr _ v) => [ag | e] /=.
+- rewrite bind_ret_l bind_ret_l /exec_getrandom_s_core /=.
+  rewrite wunsigned_repr_small; last exact: hlen.
+  rewrite !bind_bind.
+  apply: (xrutt_bind (RR := eq)); first apply: xrutt_trigger.
+  + exact: RPre_eq_refl.
+  + by move=> t1 t2 h; exact: RPost_eqI h.
+  move=> [scs' bs] r2 <-; rewrite !bind_bind.
+  case hfill: (WArray.fill (arr_size ws n) bs) => [a | e] /=; last first.
+  + rewrite bind_throw; exact: lxrutt_throw.
+  have [m2' hm2'] := hfillm _ _ _ hto hfill.
+  rewrite bind_ret_l bind_ret_l /exec_getrandom_s_store /= hm2' /= bind_ret_l.
+  apply: xrutt_Ret.
+  by exists ag, bs, a.
+- rewrite !bind_throw; exact: lxrutt_throw.
+Qed.
+
+End StackSyscallU.
