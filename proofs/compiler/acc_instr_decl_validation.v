@@ -61,7 +61,7 @@ Section VALIDATION_PRIM.
     forall op,
       let: s := replace_dot (acc_op_to_string op) in
       xorb (s \in hidden) (s \in strings).
-  by move=> [] // [] // [] //. Qed.
+  by move=> [] // [] // [] // [] // [] //. Qed.
 
 End VALIDATION_PRIM.
 
@@ -88,13 +88,13 @@ Section VALIDATION_ARGS.
       all
         (fun x => size x == count_explicit_arguments (id_in t ++ id_out t))
         (id_args_kinds t).
-  by move=> [] // [] // []. Qed.
+  by move=> [] // [] // [] // [] // []. Qed.
 
   Goal
     forall op,
       let t := instr_desc_op op in
       id_nargs t = count_explicit_arguments (id_in t ++ id_out t).
-  by move=> [] // [] // []. Qed.
+  by move=> [] // [] // [] // [] // []. Qed.
 
 End VALIDATION_ARGS.
 

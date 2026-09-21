@@ -236,8 +236,25 @@ let pp_args_mulqacc_selectors op args =
     end
   | _ -> args
 
+(* [BN.MULV.L] multiplies by one lane of [w16] ([sw0]) or [w17] ([sw1]). The
+   lane register is an explicit operand (forced to that register) and the lane
+   index an immediate; the assembly syntax merges them as [sw0.<index>]. *)
+let pp_args_mulv_lane op args =
+  match op with
+  | Acc_instr_decl.BN_MULV_L (_, _, lr) -> begin
+      let sw = match lr with Acc_instr_decl.SW0 -> "sw0" | SW1 -> "sw1" in
+      match args with
+      | wrd :: wrs1 :: _lane_reg :: idx :: rest ->
+          wrd :: wrs1 :: Format.sprintf "%s.%s" sw idx :: rest
+      | _ -> E.invalid_args ()
+    end
+  | _ -> args
+
 let pp_args op args =
-  pp_args_shift op args |> pp_args_flag_group op |> pp_args_mulqacc_selectors op
+  pp_args_shift op args
+  |> pp_args_flag_group op
+  |> pp_args_mulqacc_selectors op
+  |> pp_args_mulv_lane op
 
 let need_nop_i = function
   | LABEL _ | REPEATLOOP _ | JMP _ | JMPI _ | Jcc _ | JAL _ | CALL _

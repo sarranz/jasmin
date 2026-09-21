@@ -10,6 +10,7 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype fintype.
 From mathcomp Require Import ssralg word_ssrZ.
 
 Require Import
+  acc_admit
   acc_options
   sem_type
   shift_kind
@@ -320,6 +321,123 @@ Instance eqTC_trn_mode : eqTypeC trn_mode := { ceqP := trn_mode_eqb_OK; }.
 
 Canonical trn_mode_eqType := ceqT_eqType (ceqT := eqTC_trn_mode).
 
+(* -------------------------------------------------------------------------- *)
+(* Vector multiply [BN.MULV] and [BN.MULV.L].
+   Their [type] operand is glued to the mnemonic, e.g. [bn.mulv.8S.even.acc.lo].
+   It selects the lane width ([.16H] or [.8S]), which lanes are multiplied
+   ([.even], [.odd], or all of them), how the [2n]-bit products of the [n]-bit
+   lanes are written back (in full to a lane pair, or only their low ([.lo]) or
+   high ([.hi]) half), and whether they are accumulated ([.acc], [.acc.z]) into
+   the 512-bit accumulator [ACC:ACCH]. We split it into a [mulv_shape] (lanes
+   and write-back), which only allows the combinations that exist, and a
+   [mulv_acc]. *)
+
+#[only(eqbOK)] derive
+Variant lane_parity :=
+| LPeven  (* [.even]: the even-indexed lanes. *)
+| LPodd   (* [.odd]: the odd-indexed lanes. *)
+.
+
+#[export]
+Instance eqTC_lane_parity : eqTypeC lane_parity :=
+  { ceqP := lane_parity_eqb_OK; }.
+
+Canonical lane_parity_eqType := ceqT_eqType (ceqT := eqTC_lane_parity).
+
+Definition lane_parity_to_string (par : lane_parity) : string :=
+  match par with
+  | LPeven => ".EVEN"
+  | LPodd => ".ODD"
+  end.
+
+#[only(eqbOK)] derive
+Variant mulv_half :=
+| MVlo  (* [.lo]: the low half of each product. *)
+| MVhi  (* [.hi]: the high half of each product. *)
+.
+
+#[export]
+Instance eqTC_mulv_half : eqTypeC mulv_half := { ceqP := mulv_half_eqb_OK; }.
+
+Canonical mulv_half_eqType := ceqT_eqType (ceqT := eqTC_mulv_half).
+
+Definition mulv_half_to_string (h : mulv_half) : string :=
+  match h with
+  | MVlo => ".LO"
+  | MVhi => ".HI"
+  end.
+
+#[only(eqbOK)] derive
+Variant mulv_shape :=
+| MVfull of vec_size & lane_parity
+  (* [.16H.even], [.16H.odd], [.8S.even], [.8S.odd]: multiply the even (odd)
+     lanes and write each full product to its lane pair, low half in the even
+     lane. *)
+| MVhalf16 of mulv_half
+  (* [.16H.lo], [.16H.hi]: multiply all 16 lanes and write the selected half of
+     each product to its lane. *)
+| MVhalf32 of lane_parity & mulv_half
+  (* [.8S.even.lo], [.8S.odd.hi], ...: multiply the even (odd) lanes and write
+     the selected half of each product to its lane; the other lanes are copied
+     from the first source. *)
+.
+
+#[export]
+Instance eqTC_mulv_shape : eqTypeC mulv_shape := { ceqP := mulv_shape_eqb_OK; }.
+
+Canonical mulv_shape_eqType := ceqT_eqType (ceqT := eqTC_mulv_shape).
+
+#[only(eqbOK)] derive
+Variant mulv_acc :=
+| MVAnone  (* The destination gets the products. *)
+| MVAacc   (* [.acc]: the products are added to the accumulator lanes, and the
+              destination gets the sums. *)
+| MVAaccz  (* [.acc.z]: as [.acc], with the accumulator zeroed first. *)
+.
+
+#[export]
+Instance eqTC_mulv_acc : eqTypeC mulv_acc := { ceqP := mulv_acc_eqb_OK; }.
+
+Canonical mulv_acc_eqType := ceqT_eqType (ceqT := eqTC_mulv_acc).
+
+Definition mulv_acc_to_string (am : mulv_acc) : string :=
+  match am with
+  | MVAnone => ""
+  | MVAacc => ".ACC"
+  | MVAaccz => ".ACC.Z"
+  end.
+
+(* The [type] operand, in the order of the assembly syntax. *)
+Definition mulv_type_to_string (sh : mulv_shape) (am : mulv_acc) : string :=
+  let acc := mulv_acc_to_string am in
+  match sh with
+  | MVfull vs par => vec_size_to_string vs ++ lane_parity_to_string par ++ acc
+  | MVhalf16 h => vec_size_to_string V16H ++ acc ++ mulv_half_to_string h
+  | MVhalf32 par h =>
+      vec_size_to_string V8S ++ lane_parity_to_string par ++ acc
+        ++ mulv_half_to_string h
+  end%string.
+
+(* The second source of [BN.MULV.L] is a single lane of one of two fixed wide
+   registers, [sw0] ([w16]) or [sw1] ([w17]). *)
+#[only(eqbOK)] derive
+Variant mulv_lane_reg :=
+| SW0  (* [w16]. *)
+| SW1  (* [w17]. *)
+.
+
+#[export]
+Instance eqTC_mulv_lane_reg : eqTypeC mulv_lane_reg :=
+  { ceqP := mulv_lane_reg_eqb_OK; }.
+
+Canonical mulv_lane_reg_eqType := ceqT_eqType (ceqT := eqTC_mulv_lane_reg).
+
+Definition wreg_of_mulv_lane_reg (lr : mulv_lane_reg) : wide_register :=
+  match lr with
+  | SW0 => W16
+  | SW1 => W17
+  end.
+
 Definition wide_reg_index_strings : seq string :=
   [:: "00"; "01"; "02"; "03"; "04"; "05"; "06"; "07"; "08"; "09"
     ; "10"; "11"; "12"; "13"; "14"; "15"; "16"; "17"; "18"; "19"
@@ -362,6 +480,13 @@ Variant acc_op : Type :=
 (* Transpose. *)
 | BN_TRN of trn_size & trn_mode
 
+(* Vector multiply, optionally accumulating into [ACC:ACCH]. *)
+| BN_MULV of mulv_shape & mulv_acc
+
+(* Vector multiply by a single lane of [w16] ([SW0]) or [w17] ([SW1]), given
+   by an immediate lane index. *)
+| BN_MULV_L of mulv_shape & mulv_acc & mulv_lane_reg
+
 (* Quarter-word multiply and accumulate. *)
 (* TODO_ACC we should parameterize these by the quarterword selectors, such
    that they take two arguments fewer. We should then add an operator that takes
@@ -385,6 +510,8 @@ Variant acc_op : Type :=
 | BN_ACCW  (* Write from wide register to ACC register. *)
 | BN_MODR  (* Read from MOD register to wide register. *)
 | BN_MODW  (* Write from wide register to MOD register. *)
+| BN_ACCHR (* Read from ACCH register to wide register. *)
+| BN_ACCHW (* Write from wide register to ACCH register. *)
 
 (* Write a 32-bit word into the low ([MOD0W]) or next ([MOD1W]) word of
    [MOD], via a CSR write whose read result is discarded.
@@ -431,6 +558,8 @@ Definition acc_op_to_string (op : acc_op) : string :=
   | BN_SHV vs RS_right => ("BN.SHV" ++ vec_size_to_string vs ++ ".SHR")%string
   | BN_TRN ts TRNMeven => ("BN.TRN1" ++ trn_size_to_string ts)%string
   | BN_TRN ts TRNModd => ("BN.TRN2" ++ trn_size_to_string ts)%string
+  | BN_MULV sh am => ("BN.MULV" ++ mulv_type_to_string sh am)%string
+  | BN_MULV_L sh am _ => ("BN.MULV.L" ++ mulv_type_to_string sh am)%string
   | BN_MULQACC => "BN.MULQACC"
   | BN_MULQACC_Z => "BN.MULQACC.Z"
   | BN_MULQACC_WO _ => "BN.MULQACC.WO"
@@ -441,6 +570,8 @@ Definition acc_op_to_string (op : acc_op) : string :=
   | BN_ACCW => "BN.ACCW"
   | BN_MODR => "BN.MODR"
   | BN_MODW => "BN.MODW"
+  | BN_ACCHR => "BN.ACCHR"
+  | BN_ACCHW => "BN.ACCHW"
   | MOD0W => "MOD0W"
   | MOD0Wzero => "MOD0Wzero"
   | MOD1W => "MOD1W"
@@ -473,6 +604,10 @@ Section I_ARGS_KINDS.
   Let imm_bn_shift := [:: ak_bn_shift ].
   Let imm_mulqacc_shift := [:: CAimm (Some CAimmC_acc_mulqacc_shift) U8 ].
 
+  (* Lane index of [BN.MULV.L]: 0..7 for [.8S] and 0..15 for [.16H]. *)
+  Let imm_u3 := [:: CAimm (Some (CAimmC_acc_nbits Unsigned 3)) U8 ].
+  Let imm_u4 := [:: CAimm (Some (CAimmC_acc_nbits Unsigned 4)) U8 ].
+
   Definition ak_xreg : i_args_kinds :=
     [:: [:: xreg ] ].
 
@@ -490,6 +625,12 @@ Section I_ARGS_KINDS.
 
   Definition ak_xreg_xreg_imm5 : i_args_kinds :=
     [:: [:: xreg; xreg; imm_u5 ] ].
+
+  Definition ak_xreg_xreg_xreg_imm3 : i_args_kinds :=
+    [:: [:: xreg; xreg; xreg; imm_u3 ] ].
+
+  Definition ak_xreg_xreg_xreg_imm4 : i_args_kinds :=
+    [:: [:: xreg; xreg; xreg; imm_u4 ] ].
 
   Definition ak_xreg_xreg_xreg_bool : i_args_kinds :=
     [:: [:: xreg; xreg; xreg; [:: CAcond ] ] ].
@@ -514,7 +655,7 @@ End I_ARGS_KINDS.
 
 Section PP_ASM_OP.
   (* We need to catch the pseudo-instructions [BN_ACCR], [BN_ACCW],
-     [BN_MODR], and [BN_MODW]. *)
+     [BN_ACCHR], [BN_ACCHW], [BN_MODR], and [BN_MODW]. *)
   Let mk name args :=
     {|
       pp_aop_name := name;
@@ -524,6 +665,7 @@ Section PP_ASM_OP.
 
   Let wsr_code_MOD : asm_arg := Imm (wrepr U8 0x0).
   Let wsr_code_ACC : asm_arg := Imm (wrepr U8 0x3).
+  Let wsr_code_ACCH : asm_arg := Imm (wrepr U8 0xB).
 
   Definition pp_acc_op (op : acc_op) (args : seq asm_arg) : pp_asm_op :=
     match op with
@@ -531,6 +673,8 @@ Section PP_ASM_OP.
     | BN_MODW => mk "bn.wsrw" (wsr_code_MOD :: args)
     | BN_ACCR => mk "bn.wsrr" (rcons args wsr_code_ACC)
     | BN_ACCW => mk "bn.wsrw" (wsr_code_ACC :: args)
+    | BN_ACCHR => mk "bn.wsrr" (rcons args wsr_code_ACCH)
+    | BN_ACCHW => mk "bn.wsrw" (wsr_code_ACCH :: args)
     (* The shift direction is rendered as a [<<]/[>>] operand (see [pp_acc.ml]),
        so the assembly mnemonic only carries the element size. *)
     | BN_SHV vs _ => mk ("BN.SHV" ++ vec_size_to_string vs)%string args
@@ -550,7 +694,9 @@ Proof. by case: adout. Qed.
    These instructions are unary or binary word operations, so we define generic
    instruction descriptions [desc_rv_unop] and [desc_rv_binop]. *)
 
-Definition acc_mod := [:: ACC; MOD ].
+(* The wide special registers, which explicit wide register operands must
+   avoid. *)
+Definition acc_mod := [:: ACC; ACCH; MOD ].
 Definition EXa n := ADExplicit (AK_mem Aligned) n (ACR_avoid_xreg acc_mod).
 Definition EXc n := ADExplicit AK_compute n (ACR_avoid_xreg acc_mod).
 
@@ -1554,7 +1700,122 @@ Definition desc_BN_MULQACC_SO_Z : instr_desc_t :=
 
 End MULQACC.
 
-(* This is used to read and write [MOD] and [ACC].
+(* -------------------------------------------------------------------------- *)
+(* [BN.MULV] and [BN.MULV.L]: lanewise multiply with optional accumulation
+   into the 512-bit accumulator [ACC:ACCH]. These instructions do not touch
+   the flags.
+   TODO_ACC The semantics are admitted. A candidate definition, mirroring the
+   reference simulator, is in a comment at the end of this file. *)
+
+Section MULV.
+
+Definition vec_size_of_mulv_shape (sh : mulv_shape) : vec_size :=
+  match sh with
+  | MVfull vs _ => vs
+  | MVhalf16 _ => V16H
+  | MVhalf32 _ _ => V8S
+  end.
+
+(* The destination and, when accumulating, [ACC] and [ACCH]. *)
+Definition mulv_tout (am : mulv_acc) : seq ltype :=
+  if am is MVAnone then [:: lword256 ] else [:: lword256; lword256; lword256 ].
+
+(* Types and descriptions of the accumulator arguments. Only [.acc] reads the
+   accumulator. *)
+Definition mulv_acc_tin (am : mulv_acc) : seq ltype :=
+  if am is MVAacc then [:: lword256; lword256 ] else [::].
+
+Definition mulv_acc_in (am : mulv_acc) : seq arg_desc :=
+  if am is MVAacc then [:: Xreg ACC; Xreg ACCH ] else [::].
+
+Definition mulv_out (am : mulv_acc) : seq arg_desc :=
+  if am is MVAnone then [:: EXa 0 ] else [:: EXa 0; Xreg ACC; Xreg ACCH ].
+
+(* [BN.MULV] sources: [wrs1] and [wrs2]. *)
+Definition mulv_src_tin : seq ltype := [:: lword256; lword256 ].
+
+Definition semi_BN_MULV (sh : mulv_shape) (am : mulv_acc) :
+  semi_type (mulv_src_tin ++ mulv_acc_tin am) (mulv_tout am) :=
+  match am
+    return semi_type (mulv_src_tin ++ mulv_acc_tin am) (mulv_tout am)
+  with
+  | MVAnone => fun _ _ => ok (ACC_ADMIT "mulv semantics")
+  | MVAacc => fun _ _ _ _ => ok (ACC_ADMIT "mulv semantics")
+  | MVAaccz => fun _ _ => ok (ACC_ADMIT "mulv semantics")
+  end.
+
+Definition desc_BN_MULV (sh : mulv_shape) (am : mulv_acc) : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := mulv_src_tin ++ mulv_acc_tin am;
+    id_in := [:: EXa 1; EXa 2 ] ++ mulv_acc_in am;
+    id_tout := mulv_tout am;
+    id_out := mulv_out am;
+    id_semi := semi_BN_MULV sh am;
+    id_args_kinds := ak_xreg_xreg_xreg;
+    id_nargs := 3;
+    id_str_jas := pp_s (acc_op_to_string (BN_MULV sh am));
+    id_pp_asm := pp_acc_op (BN_MULV sh am);
+    id_valid := true;
+    id_safe := [::];
+    id_doit := DOIT; (* TODO_ACC: check *)
+    id_eq_size := ltac:(by case: am);
+    id_check_dest := ltac:(by case: am);
+    id_safe_wf := refl_equal;
+    id_semi_errty := ltac:(by case: am => _; exact: (sem_lprod_ok_error _ _));
+    id_semi_safe := ltac:(by case: am => _; exact: (sem_lprod_ok_safe _ _));
+  |}.
+
+(* [BN.MULV.L] sources: [wrs1], the lane register and the lane index (smaller
+   than the number of lanes, which is enforced by the argument kinds). *)
+Definition mulv_l_src_tin : seq ltype := [:: lword256; lword256; lword8 ].
+
+Definition semi_BN_MULV_L (sh : mulv_shape) (am : mulv_acc) :
+  semi_type (mulv_l_src_tin ++ mulv_acc_tin am) (mulv_tout am) :=
+  match am
+    return semi_type (mulv_l_src_tin ++ mulv_acc_tin am) (mulv_tout am)
+  with
+  | MVAnone => fun _ _ _ => ok (ACC_ADMIT "mulv semantics")
+  | MVAacc => fun _ _ _ _ _ => ok (ACC_ADMIT "mulv semantics")
+  | MVAaccz => fun _ _ _ => ok (ACC_ADMIT "mulv semantics")
+  end.
+
+(* The lane register operand must be in [w16] or [w17]. *)
+Definition EXlane n (lr : mulv_lane_reg) :=
+  ADExplicit (AK_mem Aligned) n (ACR_vector (wreg_of_mulv_lane_reg lr)).
+
+Definition ak_mulv_l (sh : mulv_shape) : i_args_kinds :=
+  match vec_size_of_mulv_shape sh with
+  | V8S => ak_xreg_xreg_xreg_imm3
+  | V16H => ak_xreg_xreg_xreg_imm4
+  end.
+
+Definition desc_BN_MULV_L
+  (sh : mulv_shape) (am : mulv_acc) (lr : mulv_lane_reg) : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := mulv_l_src_tin ++ mulv_acc_tin am;
+    id_in := [:: EXa 1; EXlane 2 lr; Ea 3 ] ++ mulv_acc_in am;
+    id_tout := mulv_tout am;
+    id_out := mulv_out am;
+    id_semi := semi_BN_MULV_L sh am;
+    id_args_kinds := ak_mulv_l sh;
+    id_nargs := 4;
+    id_str_jas := pp_s (acc_op_to_string (BN_MULV_L sh am lr));
+    id_pp_asm := pp_acc_op (BN_MULV_L sh am lr);
+    id_valid := true;
+    id_safe := [::];
+    id_doit := DOIT; (* TODO_ACC: check *)
+    id_eq_size := ltac:(by case: am);
+    id_check_dest := ltac:(by case: am);
+    id_safe_wf := refl_equal;
+    id_semi_errty := ltac:(by case: am => _; exact: (sem_lprod_ok_error _ _));
+    id_semi_safe := ltac:(by case: am => _; exact: (sem_lprod_ok_safe _ _));
+  |}.
+
+End MULV.
+
+(* This is used to read and write [MOD], [ACC] and [ACCH].
    In both reads and writes, there is only one explicit argument (which is an
    input or an output, respectively). *)
 Definition desc_BN_WSR op xr is_read : instr_desc_t :=
@@ -1784,6 +2045,8 @@ Definition desc_acc_op (op : acc_op) : instr_desc_t :=
   | BN_SUBV vs modular => desc_BN_SUBV vs modular
   | BN_SHV vs sh => desc_BN_SHV vs sh
   | BN_TRN ts m => desc_BN_TRN ts m
+  | BN_MULV sh am => desc_BN_MULV sh am
+  | BN_MULV_L sh am lr => desc_BN_MULV_L sh am lr
   | BN_MULQACC => desc_BN_MULQACC
   | BN_MULQACC_Z => desc_BN_MULQACC_Z
   | BN_MULQACC_WO fg => desc_BN_MULQACC_WO fg
@@ -1794,6 +2057,8 @@ Definition desc_acc_op (op : acc_op) : instr_desc_t :=
   | BN_ACCW => desc_BN_WSR BN_ACCW ACC false
   | BN_MODR => desc_BN_WSR BN_MODR MOD true
   | BN_MODW => desc_BN_WSR BN_MODW MOD false
+  | BN_ACCHR => desc_BN_WSR BN_ACCHR ACCH true
+  | BN_ACCHW => desc_BN_WSR BN_ACCHW ACCH false
   | MOD0W => desc_MOD_word32W MOD0W 0
   | MOD0Wzero => desc_MOD_word32Wzero MOD0Wzero 0
   | MOD1W => desc_MOD_word32W MOD1W 32
@@ -1839,6 +2104,7 @@ Section PRIM_STRING.
       acc_op_to_string
       prim_acc_none
       [:: BN_MOV; BN_RSHI; BN_ADDM; BN_SUBM; BN_ACCR; BN_ACCW; BN_MODR; BN_MODW
+        ; BN_ACCHR; BN_ACCHW
         ; MOD0W; MOD0Wzero; MOD1W; MOD1Wzero
         ; BN_LD; BN_SD ].
 
@@ -1858,6 +2124,36 @@ Section PRIM_STRING.
         ; BN_TRN T4D TRNMeven; BN_TRN T2Q TRNMeven
         ; BN_TRN T16H TRNModd; BN_TRN T8S TRNModd
         ; BN_TRN T4D TRNModd; BN_TRN T2Q TRNModd ].
+
+  (* All the lane selections and write-back modes of [BN.MULV]. *)
+  Let mulv_shapes : seq mulv_shape :=
+    [:: MVfull V16H LPeven; MVfull V16H LPodd
+      ; MVfull V8S LPeven; MVfull V8S LPodd
+      ; MVhalf16 MVlo; MVhalf16 MVhi
+      ; MVhalf32 LPeven MVlo; MVhalf32 LPodd MVlo
+      ; MVhalf32 LPeven MVhi; MVhalf32 LPodd MVhi ].
+
+  Let mulv_accs : seq mulv_acc := [:: MVAnone; MVAacc; MVAaccz ].
+
+  (* [BN.MULV.L] takes the lane register as a wide register index suffix,
+     [_w16] ([SW0]) or [_w17] ([SW1]). *)
+  Let prim_acc_lane_reg
+    (f : mulv_lane_reg -> acc_op) : prim_constructor acc_op :=
+    PrimACC (fun s =>
+      match omap val (is_prim_acc_suff_wreg s) with
+      | Some 16%nat => ok (f SW0)
+      | Some 17%nat => ok (f SW1)
+      | _ => Error "invalid ACC suffix, expected _w16 or _w17"%string
+      end).
+
+  (* The [type] is part of the mnemonic. The lane register of [BN.MULV.L] does
+     not change the string. *)
+  Let bn_mulv_prim_string :=
+    [seq (acc_op_to_string (BN_MULV sh am), prim_acc_none (BN_MULV sh am))
+    | sh <- mulv_shapes, am <- mulv_accs ]
+    ++ [seq (acc_op_to_string (BN_MULV_L sh am SW0),
+             prim_acc_lane_reg (BN_MULV_L sh am))
+       | sh <- mulv_shapes, am <- mulv_accs ].
 
   (* BN_LID is indexed by wide register; the _wXX suffix is stripped by the
      parser which produces a PrimACCwreg suffix. *)
@@ -1892,6 +2188,7 @@ Section PRIM_STRING.
         ++ bn_fg_prim_string
         ++ bn_no_opt_prim_string
         ++ bn_vec_prim_string
+        ++ bn_mulv_prim_string
         ++ bn_mulqacc_prim_string
         ++ bn_lid_prim_string
         ++ bn_sid_prim_string ].
@@ -1906,3 +2203,157 @@ Instance acc_op_decl : asm_op_decl acc_op :=
   |}.
 
 Definition acc_prog := asm_prog (asm_op_d := acc_op_decl).
+
+(* -------------------------------------------------------------------------- *)
+(* TODO_ACC Candidate semantics of [BN.MULV] and [BN.MULV.L].
+
+   With [n]-bit lanes there are [N = 256 / n] lanes. Lane [i] of the first
+   source is multiplied by lane [i] of the second source ([BN.MULV]) or by one
+   fixed lane of the lane register ([BN.MULV.L]), giving a [2n]-bit product.
+   The accumulator [ACC:ACCH] holds [N] lanes of [2n] bits, lanes [0..N/2-1] in
+   [ACC] and lanes [N/2..N-1] in [ACCH]. When accumulating, the accumulator lane
+   is added to the product, the sum is written back to the accumulator lane, and
+   the destination gets the sum instead of the product. Lanes that are not
+   multiplied get the value of the first source in the destination, and are
+   unchanged in the accumulator.
+
+(* Lane width. *)
+Definition mulv_ve (sh : mulv_shape) : wsize :=
+  ve_of_vec_size (vec_size_of_mulv_shape sh).
+
+(* Accumulator lane width: twice the lane width. *)
+Definition mulv_acc_ve (sh : mulv_shape) : wsize :=
+  match vec_size_of_mulv_shape sh with
+  | V8S => U64
+  | V16H => U32
+  end.
+
+(* Number of lanes. *)
+Definition mulv_nlanes (sh : mulv_shape) : nat :=
+  match vec_size_of_mulv_shape sh with
+  | V8S => 8
+  | V16H => 16
+  end.
+
+Definition has_lane_parity (par : lane_parity) (i : nat) : bool :=
+  if par is LPodd then odd i else ~~ odd i.
+
+(* Whether lane [i] is multiplied. *)
+Definition is_mulv_lane (sh : mulv_shape) (i : nat) : bool :=
+  match sh with
+  | MVfull _ par | MVhalf32 par _ => has_lane_parity par i
+  | MVhalf16 _ => true
+  end.
+
+(* The lanes of a wide register as integers, lane [0] first. *)
+Definition lanes_Z (ve : wsize) (w : u256) : seq Z :=
+  map wunsigned (split_vec ve w).
+
+(* Product of lane [i], including the accumulator lane ([0] when not
+   accumulating). *)
+Definition mulv_prod (xs ys accs : seq Z) (i : nat) : Z :=
+  (nth 0 xs i * nth 0 ys i + nth 0 accs i)%Z.
+
+Definition mulv_half_Z (h : mulv_half) (n z : Z) : Z :=
+  if h is MVlo then z else Z.shiftr z n.
+
+(* Lane [i] of the destination, before truncation to the lane width, given the
+   lanes [xs] of the first source and the products [p]. *)
+Definition mulv_dest_lane
+  (sh : mulv_shape) (xs : seq Z) (p : nat -> Z) (i : nat) : Z :=
+  let n := wsize_bits (mulv_ve sh) in
+  match sh with
+  | MVfull _ par =>
+      (* The pair of lane [i] is [{2k, 2k+1}], and the multiplied lane of the
+         pair is [2k + parity]. The low half goes to the even lane. *)
+      let s := (2 * i./2 + (if par is LPodd then 1 else 0))%nat in
+      if odd i then Z.shiftr (p s) n else p s
+  | MVhalf16 h => mulv_half_Z h n (p i)
+  | MVhalf32 par h =>
+      if has_lane_parity par i then mulv_half_Z h n (p i) else nth 0%Z xs i
+  end.
+
+Definition mulv_wrd (sh : mulv_shape) (xs ys accs : seq Z) : u256 :=
+  let ve := mulv_ve sh in
+  let p := mulv_prod xs ys accs in
+  make_vec U256
+    [seq wrepr ve (mulv_dest_lane sh xs p i) | i <- iota 0 (mulv_nlanes sh)].
+
+(* The accumulator lanes after the instruction. *)
+Definition mulv_acc_lanes (sh : mulv_shape) (xs ys accs : seq Z) : seq Z :=
+  let p := mulv_prod xs ys accs in
+  [seq (if is_mulv_lane sh i then p i else nth 0%Z accs i)
+  | i <- iota 0 (mulv_nlanes sh)].
+
+(* The accumulator lanes of [ACC] (low half) and [ACCH] (high half). *)
+Definition mulv_accs (sh : mulv_shape) (acc acch : u256) : seq Z :=
+  lanes_Z (mulv_acc_ve sh) acc ++ lanes_Z (mulv_acc_ve sh) acch.
+
+Definition mulv_zero_accs (sh : mulv_shape) : seq Z :=
+  nseq (mulv_nlanes sh) 0%Z.
+
+(* Pack accumulator lanes back into [ACC] and [ACCH]. *)
+Definition mulv_acc_regs (sh : mulv_shape) (accs : seq Z) : u256 * u256 :=
+  let ws := [seq wrepr (mulv_acc_ve sh) z | z <- accs] in
+  let half := (mulv_nlanes sh)./2 in
+  (make_vec U256 (take half ws), make_vec U256 (drop half ws)).
+
+(* Result of a multiply: the destination and, when accumulating, [ACC] and
+   [ACCH]. *)
+Definition mulv_result (sh : mulv_shape) (am : mulv_acc) (xs ys accs : seq Z) :
+  sem_ltuple (mulv_tout am) :=
+  let wrd := mulv_wrd sh xs ys accs in
+  match am return sem_ltuple (mulv_tout am) with
+  | MVAnone => wrd
+  | MVAacc | MVAaccz =>
+      let: (acc, acch) := mulv_acc_regs sh (mulv_acc_lanes sh xs ys accs) in
+      (:: wrd, acc & acch )
+  end.
+
+Definition semi_BN_MULV (sh : mulv_shape) (am : mulv_acc) :
+  semi_type (mulv_src_tin ++ mulv_acc_tin am) (mulv_tout am) :=
+  let ve := mulv_ve sh in
+  match am
+    return semi_type (mulv_src_tin ++ mulv_acc_tin am) (mulv_tout am)
+  with
+  | MVAnone =>
+      fun a b =>
+        ok (mulv_result sh MVAnone (lanes_Z ve a) (lanes_Z ve b)
+              (mulv_zero_accs sh))
+  | MVAacc =>
+      fun a b acc acch =>
+        ok (mulv_result sh MVAacc (lanes_Z ve a) (lanes_Z ve b)
+              (mulv_accs sh acc acch))
+  | MVAaccz =>
+      fun a b =>
+        ok (mulv_result sh MVAaccz (lanes_Z ve a) (lanes_Z ve b)
+              (mulv_zero_accs sh))
+  end.
+
+(* The lane of the lane register, broadcast to all lanes.
+   Precondition: the lane index is smaller than the number of lanes. *)
+Definition mulv_lane (sh : mulv_shape) (b : u256) (idx : u8) : seq Z :=
+  nseq
+    (mulv_nlanes sh)
+    (nth 0%Z (lanes_Z (mulv_ve sh) b) (Z.to_nat (wunsigned idx))).
+
+Definition semi_BN_MULV_L (sh : mulv_shape) (am : mulv_acc) :
+  semi_type (mulv_l_src_tin ++ mulv_acc_tin am) (mulv_tout am) :=
+  let ve := mulv_ve sh in
+  match am
+    return semi_type (mulv_l_src_tin ++ mulv_acc_tin am) (mulv_tout am)
+  with
+  | MVAnone =>
+      fun a b idx =>
+        ok (mulv_result sh MVAnone (lanes_Z ve a) (mulv_lane sh b idx)
+              (mulv_zero_accs sh))
+  | MVAacc =>
+      fun a b idx acc acch =>
+        ok (mulv_result sh MVAacc (lanes_Z ve a) (mulv_lane sh b idx)
+              (mulv_accs sh acc acch))
+  | MVAaccz =>
+      fun a b idx =>
+        ok (mulv_result sh MVAaccz (lanes_Z ve a) (mulv_lane sh b idx)
+              (mulv_zero_accs sh))
+  end.
+*)

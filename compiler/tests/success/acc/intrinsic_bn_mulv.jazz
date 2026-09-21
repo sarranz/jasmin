@@ -1,0 +1,83 @@
+/* BN.MULV: lanewise multiply of two wide registers.
+   The type is part of the intrinsic name:
+   - the lane width, 16H (16 lanes of 16 bits) or 8S (8 lanes of 32 bits);
+   - the multiplied lanes, EVEN or ODD (all of them for 16H_LO/16H_HI);
+   - the accumulation mode, none, ACC (add to ACC:ACCH) or ACC_Z (zero the
+     accumulator first);
+   - the write-back, full products to the lane pairs, or only their LO or HI
+     halves.
+   The accumulating variants write ACC and ACCH, and the ACC variants also read
+   them. */
+
+export
+fn bn_mulv_16h(reg u256 x y) -> reg u256 {
+    reg u256 r acc acch;
+
+    // Full products of the even (odd) lanes, written to the lane pairs.
+    r = #BN_MULV_16H_EVEN(x, y);
+    r = #BN_MULV_16H_ODD(r, y);
+
+    // Low (high) halves of the products of all the lanes.
+    r = #BN_MULV_16H_LO(r, y);
+    r = #BN_MULV_16H_HI(r, y);
+
+    // Accumulate: ACC_Z zeroes the accumulator first, ACC adds to it.
+    r, acc, acch = #BN_MULV_16H_EVEN_ACC_Z(r, y);
+    r, acc, acch = #BN_MULV_16H_EVEN_ACC(r, y, acc, acch);
+    r, acc, acch = #BN_MULV_16H_ODD_ACC_Z(r, y);
+    r, acc, acch = #BN_MULV_16H_ODD_ACC(r, y, acc, acch);
+    r, acc, acch = #BN_MULV_16H_ACC_Z_LO(r, y);
+    r, acc, acch = #BN_MULV_16H_ACC_LO(r, y, acc, acch);
+    r, acc, acch = #BN_MULV_16H_ACC_Z_HI(r, y);
+    r, acc, acch = #BN_MULV_16H_ACC_HI(r, y, acc, acch);
+
+    // The accumulator outputs can also be given as implicits, or ignored.
+    ?{}, r = #BN_MULV_16H_EVEN_ACC_Z(r, y);
+    ?{ acc, acch }, r = #BN_MULV_16H_ODD_ACC_Z(r, y);
+
+    // Read back the accumulator.
+    x = #BN_ACCR(acc);
+    y = #BN_ACCHR(acch);
+    r += x;
+    r += y;
+
+    return r;
+}
+
+export
+fn bn_mulv_8s(reg u256 x y) -> reg u256 {
+    reg u256 r acc acch;
+
+    // Full products of the even (odd) lanes, written to the lane pairs.
+    r = #BN_MULV_8S_EVEN(x, y);
+    r = #BN_MULV_8S_ODD(r, y);
+
+    // Low (high) halves of the products of the even (odd) lanes; the other
+    // lanes are copied from the first source.
+    r = #BN_MULV_8S_EVEN_LO(r, y);
+    r = #BN_MULV_8S_ODD_LO(r, y);
+    r = #BN_MULV_8S_EVEN_HI(r, y);
+    r = #BN_MULV_8S_ODD_HI(r, y);
+
+    // Accumulate: ACC_Z zeroes the accumulator first, ACC adds to it.
+    r, acc, acch = #BN_MULV_8S_EVEN_ACC_Z(r, y);
+    r, acc, acch = #BN_MULV_8S_EVEN_ACC(r, y, acc, acch);
+    r, acc, acch = #BN_MULV_8S_ODD_ACC_Z(r, y);
+    r, acc, acch = #BN_MULV_8S_ODD_ACC(r, y, acc, acch);
+    r, acc, acch = #BN_MULV_8S_EVEN_ACC_Z_LO(r, y);
+    r, acc, acch = #BN_MULV_8S_EVEN_ACC_LO(r, y, acc, acch);
+    r, acc, acch = #BN_MULV_8S_ODD_ACC_Z_LO(r, y);
+    r, acc, acch = #BN_MULV_8S_ODD_ACC_LO(r, y, acc, acch);
+    r, acc, acch = #BN_MULV_8S_EVEN_ACC_Z_HI(r, y);
+    r, acc, acch = #BN_MULV_8S_EVEN_ACC_HI(r, y, acc, acch);
+    r, acc, acch = #BN_MULV_8S_ODD_ACC_Z_HI(r, y);
+    r, acc, acch = #BN_MULV_8S_ODD_ACC_HI(r, y, acc, acch);
+
+    // Read back the accumulator.
+    x = #BN_ACCR(acc);
+    y = #BN_ACCHR(acch);
+    r += x;
+    r += y;
+
+    return r;
+}
