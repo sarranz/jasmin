@@ -5,3 +5,12 @@ fn wsr(reg u256 x) -> reg u256 {
     x = #BN_ACCR(acc);
     return x;
 }
+
+// ACCH is the high half of the 512-bit accumulator of BN.MULV.
+export
+fn wsr_acch(reg u256 x) -> reg u256 {
+    reg u256 acch;
+    acch = #BN_ACCHW(x);
+    x = #BN_ACCHR(acch);
+    return x;
+}
