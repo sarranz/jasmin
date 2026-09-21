@@ -69,7 +69,7 @@ Definition sem_assgn  (x : lval) (tg : assgn_tag) (ty : atype) (e : pexpr)
   write_lval true (p_globs p) x v' s.
 
 Definition fexec_syscall (o : syscall_t) (fs : fstate) : itree E fstate :=
-  '(scs, m, vs) <- exec_syscall fs.(fscs) fs.(fmem) o fs.(fvals) ;;
+  '(scs, m, vs) <- exec_syscall fs.(fscs) fs.(fmem) o fs.(fvals);;
   Ret {| fscs := scs; fmem := m; fvals := vs; |}.
 
 Definition mk_fstate (vs:values) (s:estate) :=

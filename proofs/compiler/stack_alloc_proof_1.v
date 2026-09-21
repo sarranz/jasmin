@@ -2,7 +2,6 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype fintype.
 From mathcomp Require Import div ssralg.
 From mathcomp Require Import word_ssrZ.
-From ITree Require Import ITreeFacts.
 Require Import seq_extra psem psem_facts compiler_util low_memory.
 Require Export stack_alloc stack_alloc_params_proof.
 Require slh_lowering_proof.
@@ -7115,61 +7114,5 @@ Proof.
   apply wfr_VARS_STATUS_set_clear_status => //.
   by apply (hvarsz1 _ _ hsrg).
 Qed.
-
-(* TODO: in the long term, try to merge with what is proved about calls *)
-(* TODO_RndEvent: this lemma's target code ([c], from [alloc_syscall]) still
-   genuinely contains a [Csyscall] (only the array argument/result gets
-   turned into a pointer + an explicit length register); it does not get
-   compiled away. Since this branch's ITree-events refactor, syscalls are
-   itree-valued/non-deterministic (see git history: commit 2f0e2678 turned
-   [syscall_sem.exec_syscall_u]/[exec_syscall_s] itree-typed, and in the same
-   commit [it_sems_core.esem_i]'s [Csyscall] case became an unconditional
-   [Error ErrSemUndef] instead of calling [sem_syscall]), so this lemma can
-   no longer be phrased as a plain [exec]-level Hoare triple ("if the source
-   syscall deterministically returns (scs, m, vs), then ...") the way it was
-   before -- [exec_syscall_u (escs s1) (emem s1) o ves = ok (scs, m, vs)] no
-   longer type-checks ([exec_syscall_u] returns an [itree], not a [result]),
-   and the old proof script below it is equally stale (it unfolds
-   [sem_syscall]/[fexec_syscall]/[exec_syscall_s] as if they were still
-   [exec]-typed, and rewrites with an [esem P' rip c s2 = ok s2'] equality
-   that can never hold now that [esem]'s own [Csyscall] case always errors).
-   The statement below is the itree-level replacement: it compares the
-   *source*'s one-instruction [Csyscall] step (using [exec_syscall_u],
-   array-shaped) against the *target*'s two-instruction sequence's step
-   (using [exec_syscall_s], pointer-shaped) via [eutt], up to [valid_state]
-   on the final states. Both sides trigger literally the same
-   [Rnd (escs s1) (arr_size ws len)] event once the target's length register
-   is shown to hold [wrepr Uptr (arr_size ws len)] and [wunsigned] of that
-   equals [arr_size ws len] (both already established by the surrounding
-   development, exactly as in the old proof's "write [arr_size ws len] in
-   register [vxlen]" step) -- so this does NOT need the missing cross-[scP]
-   [RndRels2] instance that PROGRESS.md items 1 ([it_linearization_proof.v]'s
-   Hsyscall cluster, which has the exact same [exec_syscall_s ... = ok (...)]
-   stale-hypothesis symptom) and 20 ([it_merge_varmaps_proof.v]'s Csyscall
-   bridge) are blocked on: since we never go through [wequiv]/[wkequiv]/
-   [xrutt] here (only raw [eutt]/[ITree.bind]/[Vis] congruence, via e.g. the
-   library's [eutt_translate_gen]), this should be provable independently of
-   that shared gap. Left [Admitted]: completing it is a genuine, non-
-   mechanical itree proof (comparable in size to those two), not attempted
-   in this pass. Most of the old proof's [valid_state]/memory reasoning
-   (everything from "write [arr_size ws len] in register [vxlen]" through
-   "write the result" above, about 90 lines, untouched by this issue) should
-   carry over essentially unchanged, now universally quantified over the
-   syscall's actual random answer (a [bs : seq u8] such that
-   [WArray.fill (arr_size ws len) bs = ok a2], playing the role the erstwhile
-   hypothesis's destructured [a2]/[hfill] used to play) instead of being
-   derived from destructuring a since-removed concrete-result hypothesis. *)
-Lemma alloc_syscallP ii rmap rs o es rmap2 c table vme m0 s1 s2 ves
-    {E E0 : Type -> Type} {wE : with_Error E E0}
-    {rE : with_RndEvent syscall_state E0} :
-  alloc_syscall saparams pmap ii rmap rs o es = ok (rmap2, c) ->
-  valid_state table rmap vme m0 s1 s2 ->
-  sem_pexprs true gd s1 es = ok ves ->
-  eutt
-    (fun s1' s2' =>
-       valid_state (foldl remove_binding_lval table rs) rmap2 vme m0 s1' s2')
-    (isem_cmd_ P ev [:: MkI ii (Csyscall rs o es)] s1)
-    (isem_cmd_ P' rip c s2).
-Admitted.
 
 End WITH_PARAMS.
