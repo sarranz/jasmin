@@ -1,0 +1,27 @@
+export
+fn zeroize_masked_u32(reg u32 a b) -> reg u32 {
+    reg u32 x;
+
+    x = #ZEROIZE_MASKED(a, b);
+
+    return x;
+}
+
+export
+fn zeroize_masked_u256(reg u256 a b) -> reg u256 {
+    reg u256 x;
+
+    ?{}, x = #ZEROIZE_MASKED_256(a, b);
+
+    return x;
+}
+
+export
+fn zeroize_masked_chain(reg u32 a b c) -> reg u32 {
+    reg u32 x y;
+
+    x = #ZEROIZE_MASKED(a, b);
+    y = #ZEROIZE_MASKED(x, c);
+
+    return y;
+}
