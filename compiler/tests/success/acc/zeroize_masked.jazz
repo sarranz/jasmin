@@ -1,9 +1,10 @@
+// ZEROIZE_MASKED forces the first input to be allocated as a destination, and
+// performs an XOR of the second input with itself (i.e., writing zero).
+// The first and second inputs are guaranteed to be different.
+
 export
 fn zeroize_masked_u32(reg u32 a b) -> reg u32 {
-    reg u32 x;
-
-    x = #ZEROIZE_MASKED(a, b);
-
+    reg u32 x = #ZEROIZE_MASKED(a, b);
     return x;
 }
 
@@ -18,10 +19,36 @@ fn zeroize_masked_u256(reg u256 a b) -> reg u256 {
 
 export
 fn zeroize_masked_chain(reg u32 a b c) -> reg u32 {
-    reg u32 x y;
+    reg u32 x = 0; // whatever
+    reg u32 y = 0; // whatever
 
+    // some computation with x and y
+
+    // batched whitening
     x = #ZEROIZE_MASKED(a, b);
     y = #ZEROIZE_MASKED(x, c);
 
     return y;
+}
+
+/* ********** IMPORTANT **********
+   ZEROIZE_MASKED DOES NOT MEAN THAT THE DESTINATION OF THE SECOND COMPUTATION
+   CONTAINS ZERO
+   It means that IF THE COMPILER DECIDES to reuse the same register where
+   [x] was before, it will contain zero.
+   BUT the compiler can also choose A DIFFERENT REGISTER, and then there are
+   no guarantees about the value of [x] in the second computation. */
+export
+fn zeroize_masked_u256_example(reg u256 a1 a2 b1 b2) -> reg u256, reg u256 {
+    reg u256 x = a1 + b1;
+    reg u256 r1 = x; // first computation
+
+    reg u256 z;
+    ?{}, z = #set0_256(); // will XOR z with itself
+    ?{}, x = #ZEROIZE_MASKED_256(x, z); // whitening before next computation
+
+    x = a2 + b2;
+    reg u256 r2 = x; // second computation
+
+    return r1, r2;
 }
