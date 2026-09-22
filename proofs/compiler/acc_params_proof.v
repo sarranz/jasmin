@@ -1363,26 +1363,184 @@ Proof.
     first by rewrite ?(negbTE hyx) ?(negbTE hyfz) ?(negbTE hyfl) ?(negbTE hyfm)).
 Qed.
 
-(* TODO_ACC: [BN_SELECT_MASKED] assembles unchanged as [BN_SEL FG0]; its
-   descriptor's [conflicts] already force the destination and the two
-   wide-register arguments into three pairwise distinct registers (now also
-   re-checked as a sanity assert in [assemble_bn_select_masked]), so the
-   assembled [BN_SEL FG0] behaves exactly as declared. Proof left for later
-   (same shape as [acc_assemble_swap_correct] / [BN_SEL]'s own correctness
-   lemma). *)
+(* Proof plan (BN_SELECT_MASKED) -- unlike set0/SWAP, every operand
+   here is a genuine, already-defined jasmin value (no undefined scratch or
+   self register), so this should go through the [assemble_opsP] "common
+   skeleton" (as MOV/SUBI/SWAP do below), NOT the asm-side/[compile_lvals]
+   route used by [acc_assemble_set0_correct].
+
+   [assemble_bn_select_masked] is a pure pass-through: [les]/[res] reach the
+   assembled op completely unchanged, just retagged from the extra_op to the
+   real [BN_SEL FG0] acc_op.
+
+   Steps:
+   1. Unfold [to_asm]/[assemble_extra]/[assemble_bn_select_masked] in [hops]
+      and peel with [t_xrbindP], destructuring each pair inline (as in
+      [acc_assemble_extra_sz]'s bullet for this op): [-[x le] hx] for the
+      [uncons_LLvar] step, [-[wn wm] hwm] for the [res] match, then the
+      [uniq [:: v_var x; v_var wn; v_var wm]] assert. This leaves
+      [ops = [:: ((None, BN_SEL FG0), lvs, args)]] with [lvs]/[args] the
+      lemma's own [les]/[res] (unrenamed).
+   2. Apply [assemble_opsP acc_eval_assemble_cond] to [hmap]. The all-None
+      side condition is trivial ([erefl], one literal op with msb [None]).
+      This reduces the goal to
+      [sem_sopns m [:: ((None, BN_SEL FG0), lvs, args)] = ok m'].
+   3. Unfold [sem_sopns]/[sem_sopn_t] (asm_gen_proof.v, just above
+      [assemble_opsP]) to
+      [sem_rexprs m args >>= exec_sopn (Oasm (BaseOp (None, BN_SEL FG0)))
+        >>= write_lexprs lvs].
+      The first component is exactly [ho]; the last is exactly [hwle] once
+      [ys] is pinned. The middle component needs
+      [exec_sopn (Oasm (BaseOp (None, BN_SEL FG0))) xs = ok ys] derived from
+      [hexec : exec_sopn (Oasm (ExtOp BN_SELECT_MASKED)) xs = ok ys].
+   4. This is NOT definitional: the [BaseOp] path goes through
+      [arch_extra.v]'s [get_instr_desc]/[semi_to_atype] (an [ecast] via
+      [computational_eq_refl], not [erefl]), while the [ExtOp] path uses
+      [desc_BN_SELECT_MASKED]'s own [sem_prod_ok]. Both sides ultimately
+      compute [ok (if b then wn else wm)] on the same [wn]/[wm]/[b] from
+      [xs], but getting there needs unfolding both. [lower_PifP] in
+      acc_lowering_proof.v (the [Pif]-lowering correctness proof, the only
+      other place in the tree that unfolds [BN_SEL FG0]'s own
+      [exec_sopn]/[sopn_sem]/[sopn_sem_] from scratch) is the recipe to
+      mirror here for the [BaseOp] side rather than re-deriving it.
+   5. Conclude with the [s']/[hfold]/[hlom'] that [assemble_opsP] returns.
+
+   Key lemmas: [assemble_opsP] (asm_gen_proof.v), [acc_eval_assemble_cond],
+     [arch_extra.v]'s [semi_to_atype]/[computational_eq_refl] for the
+     [BaseOp]-side cast, [lower_PifP] (acc_lowering_proof.v) as the existing
+     unfolding of [BN_SEL FG0]'s semantics to reuse.
+   Pitfalls: the [uniq] assert and the descriptor's [conflicts] are
+     register-allocation-time artifacts only; this value-level proof gets
+     them for free from [hops] succeeding and never needs to use them
+     (the extra_op's own [semi] does not depend on registers being
+     distinct). Do not reach for [xreg_of_var]/[compile_lvals]-style asm-side
+     reasoning here -- that machinery exists to handle registers with no
+     jasmin-level value, which is not the situation for this op. *)
 Lemma acc_assemble_BN_SELECT_MASKED_correct :
   assemble_extra_correct (ap_agp acc_params) BN_SELECT_MASKED.
-Admitted.
+Proof.
+move=> rip ii lvs args m xs ys m' s ops ops'.
+move=> ho hexec hwle hops hmap hlom.
+rewrite /to_asm /= /assemble_extra /assemble_bn_select_masked in hops.
+move: hops; t_xrbindP => -[x le] hx.
+t_xrbindP => -[wn wm] hwm.
+t_xrbindP => huniq ?; subst ops.
+have h := assemble_opsP acc_eval_assemble_cond hmap erefl _ hlom.
+case: (h m') => {h}.
+(* [sem_sopns] on the single assembled [BN_SEL FG0]: the [sem_rexprs] part is
+   [ho], the [write_lexprs] part is [hwle], and the [exec_sopn] in between is
+   convertible to the extra op's own [exec_sopn] ([semi_to_atype]'s
+   [computational_eq] cast reduces, both descriptors being concrete). *)
+- rewrite /sem_sopns /= /sem_sopn_t ho /=.
+  have hbase :
+    exec_sopn (Oasm (BaseOp (None, BN_SEL acc_options.FG0))) xs = ok ys
+    by exact: hexec.
+  by rewrite hbase /= hwle.
+by move=> s' hfold hlom'; exists s'.
+Qed.
 
-(* TODO_ACC: [ZEROIZE_MASKED] assembles as a self-XOR ([RV32 XOR] /
-   [BN_basic BN_XOR FG0]) of its second argument, via the same
-   [assemble_self_xor] helper as [set0]; its descriptor's shared [E 0] tag
-   already forces its first argument into the destination's register
-   (re-checked here as a sanity assert). Proof left for later (same shape as
-   the wide case of [acc_assemble_set0_correct]). *)
+(* Proof plan (ZEROIZE_MASKED ws) -- despite reusing
+   [assemble_self_xor], this is structurally closer to the MOV/SUBI/SWAP
+   "common skeleton" than to [acc_assemble_set0_correct]: [set0] needed the
+   asm-side/[compile_lvals] route specifically because its scratch (X03/W01)
+   is NOT a jasmin variable, so [assemble_opsP]'s [sem_sopns] premise
+   couldn't be established for it. Here [y1]/[y2] ARE genuine jasmin
+   variables with values governed by [m] (via [ho]), so [assemble_opsP] is
+   directly usable.
+
+   Steps:
+   1. Unfold [to_asm]/[assemble_extra]/[assemble_zeroize_masked] in [hops]
+      and peel with [t_xrbindP]: [y1] via [uncons_rvar] (2 items), [y2] via
+      [uncons_rvar] (2 items), [x] via the same generic
+      if/[uncons_LLvar]-branch peel used in [acc_assemble_set0_correct] (2
+      items, one [x hx]), the [convertible] assert (1 item), and the
+      [v_var x == v_var y1] assert (1 item, name it [hxy1]). Then unfold
+      [assemble_self_xor] to expose
+      [ops = [:: ((None, op), lvs, [:: rvar y2; rvar y2])]] with
+      [op := if (ws <= reg_size)%CMP then RV32 XOR else BN_basic BN_XOR FG0].
+   2. As in [acc_assemble_set0_correct], [case hws: (ws <= reg_size)%CMP] to
+      fix [op] and, via [hexec] (unfold [exec_sopn]/[sopn_sem]/[sopn_sem_]),
+      the shape of [ys]: [[:: Vword 0]] (small) or
+      [[:: false; false; true; Vword 0]] (wide).
+   3. Apply [assemble_opsP acc_eval_assemble_cond] to [hmap] (all-None side
+      condition trivial, one literal op), reducing to
+      [sem_sopns m [:: ((None, op), lvs, [:: rvar y2; rvar y2])] = ok m'].
+   4. Unfold [sem_sopns]/[sem_sopn_t]:
+      [sem_rexprs m [:: rvar y2; rvar y2] >>= exec_sopn (Oasm (BaseOp (None, op)))
+        >>= write_lexprs lvs].
+      Recover [y2]'s value [wy2] from [ho] (which reads the lemma's own
+      2-element [args], i.e. [y1] then [y2]) via [get_var]/[sem_rexprs]
+      projection, then show [sem_rexprs m [:: rvar y2; rvar y2] =
+      ok [:: Vword wy2; Vword wy2]].
+   5. [exec_sopn (Oasm (BaseOp (None, op))) [:: Vword wy2; Vword wy2]]
+      collapses via [wxor_xx] to the zero word (small case), or to
+      [(MF_of_word 0, LF_of_word 0, ZF_of_word 0, 0) = (false, false, true,
+      0)] (wide case) -- the exact same [wxor_xx]/flag constants already
+      used in the wide case of [acc_assemble_set0_correct]. Match this
+      against [ys] from step 2 (definitionally the same tuple).
+   6. [write_lexprs lvs ys m = ok m'] is exactly [hwle]. Conclude with the
+      [s']/[hfold]/[hlom'] that [assemble_opsP] returns.
+
+   Key lemmas: [assemble_opsP], [acc_eval_assemble_cond], [wxor_xx],
+     [MF_of_word]/[LF_of_word]/[ZF_of_word] at [0] (reuse verbatim from
+     [acc_assemble_set0_correct]'s wide case), [get_var]/[sem_rexprs]
+     projection for reading [y2] twice from one [ho].
+   Pitfalls: do NOT reach for [xreg_of_var]/[compile_lvals] here -- that was
+     [set0]'s answer to a problem ("this register has no jasmin value")
+     that does not exist for [y1]/[y2]. The [convertible] and
+     [v_var x == v_var y1] asserts, like [BN_SELECT_MASKED]'s [uniq] check,
+     are register-allocation-time artifacts the value-level proof does not
+     need to exploit: [x] is never read by the assembled instruction (only
+     [y2], twice), and [y1]'s value (read once by [ho], since it is still
+     part of the original [args]) is likewise never otherwise used. Keep the
+     small/wide case split consistent between [hexec] (which fixes [ys])
+     and [assemble_self_xor]'s own [(ws <= reg_size)%CMP] test for [op]. *)
 Lemma acc_assemble_ZEROIZE_MASKED_correct ws :
   assemble_extra_correct (ap_agp acc_params) (ZEROIZE_MASKED ws).
-Admitted.
+Proof.
+move=> rip ii lvs args m xs ys m' s ops ops'.
+move=> ho hexec hwle hops hmap hlom.
+rewrite /to_asm /= /assemble_extra /assemble_zeroize_masked in hops.
+move: hops; t_xrbindP => -[y1 res1] hy1.
+t_xrbindP => -[y2 res2] hy2.
+t_xrbindP => x hx hcv hxy1.
+rewrite /assemble_self_xor => -[?]; subst ops.
+(* [args] is literally [[:: rvar y1; rvar y2 & res2]]. *)
+have huncons : forall ii' (r : seq rexpr) z zs,
+    arm_extra.uncons_rvar ii' r = ok (z, zs) -> r = Rexpr (Fvar z) :: zs
+  by move=> ii' [|[|[]]] //= ???? [<- <-].
+have ? := huncons _ _ _ _ hy1; subst args.
+have ? := huncons _ _ _ _ hy2; subst res1.
+case hws: (ws <= U32)%CMP in hmap.
+(* Small case: [op = RV32 XOR], [ys = [:: Vword 0]]. [hexec] also pins [xs]
+   to exactly two values (the descriptor's [tin] has length two). *)
+- move: hexec; rewrite /exec_sopn /sopn_sem /sopn_sem_ /= hws /=.
+  case: xs ho => [|v1 [|v2 [|v3 xs3]]] ho //=; [by t_xrbindP | | by t_xrbindP].
+  t_xrbindP => t w1 hw1 w2 hw2 ? ?; subst t ys.
+  move: ho => /=; t_xrbindP => u1 hgy1 zz u2 hgy2 zs hzs hzz hu1 hzz2.
+  subst zz u1; case: hzz2 => ??; subst u2 zs.
+  have h := assemble_opsP acc_eval_assemble_cond hmap erefl _ hlom.
+  case: (h m') => {h}.
+  (* [y2] is read twice and yields the same value, so the self-XOR collapses
+     to the zero word and [write_lexprs] is exactly [hwle]. *)
+  + rewrite /sem_sopns /= /sem_sopn_t /= hgy2 /=.
+    by rewrite /exec_sopn /sopn_sem /sopn_sem_ /= hw2 /= wxor_xx /= hwle.
+  by move=> s' hfold hlom'; exists s'.
+(* Wide case: [op = BN_basic BN_XOR FG0], three flag outputs before the word;
+   at [0] they are [(false, false, true)]. *)
+move: hexec; rewrite /exec_sopn /sopn_sem /sopn_sem_ /= hws /=.
+case: xs ho => [|v1 [|v2 [|v3 xs3]]] ho //=; [by t_xrbindP | | by t_xrbindP].
+t_xrbindP => t w1 hw1 w2 hw2 ? ?; subst t ys.
+rewrite /= in hwle.
+move: ho => /=; t_xrbindP => u1 hgy1 zz u2 hgy2 zs hzs hzz hu1 hzz2.
+subst zz u1; case: hzz2 => ??; subst u2 zs.
+have h := assemble_opsP acc_eval_assemble_cond hmap erefl _ hlom.
+case: (h m') => {h}.
+- rewrite /sem_sopns /= /sem_sopn_t /= hgy2 /=.
+  by rewrite /exec_sopn /sopn_sem /sopn_sem_ /= hw2 /= wxor_xx
+    /lsb w0E msb0 eqxx /= hwle.
+by move=> s' hfold hlom'; exists s'.
+Qed.
 
 Lemma acc_assemble_extra_op op :
   assemble_extra_correct (ap_agp acc_params) op.
