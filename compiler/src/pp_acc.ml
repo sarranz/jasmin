@@ -21,6 +21,7 @@ module E = struct
   let invalid_call = err "invalid CALL"
   let invalid_poppc = err "invalid POPPC"
   let invalid_args = err "invalid arguments"
+  let invalid_loop_body = err "invalid loop body"
   let pp_error = err "found PP_error"
   let invalid_pp_aop_ext = err "invalid pp_aop_ext"
   let not_implemented = hierror ~loc ~kind ~internal "not implemented: %s"
@@ -265,12 +266,25 @@ let need_nop_i = function
 
 let need_nop c = try need_nop_i (List.last c).asmi_i with Failure _ -> true
 
-(* [la] is a pseudo-instruction that assembles to two real instructions,
-   so it must count as 2 in a loop body. *)
+(* Number of real instructions an assembly element assembles to, for the size
+   field of [loop]/[loopi].
+   - [la] is a pseudo-instruction that assembles to two real instructions.
+   - [li] assembles to a single [addi] when its immediate fits in 12 signed
+     bits, to a single [lui] when its low 12 bits are zero, and to [lui] +
+     [addi] otherwise. *)
+let li_instr_count imm =
+  let imm = Z.of_string imm in
+  if Acc_params_core.is_arith_small (Conv.cz_of_z imm)
+     || Z.equal (Z.logand imm (Z.of_int 0xfff)) Z.zero
+  then 1
+  else 2
+
 let loop_instr_count = function
-  | Label _ -> 0
+  | Header _ | Label _ | Dwarf _ | Comment _ -> 0
   | Instr ("la", _) -> 2
-  | _ -> 1
+  | Instr ("li", [ _; imm ]) -> li_instr_count imm
+  | Instr _ -> 1
+  | Bytes _ -> E.invalid_loop_body ()
 
 module ACCTarget :
   AsmTarget

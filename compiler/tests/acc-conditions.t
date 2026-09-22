@@ -263,7 +263,7 @@ are overwritten, the first bool is not substituted and cannot be allocated.
   $ ../jasminc -arch acc -o out.s fail/acc/bn_cmp_bool_interleaved.jazz
   warning: support of the ACC architecture is VERY experimental. The loop instruction is not part of the verified compiler. The compiler does NOT check whether the loop stack overflow/underflows. The compiler does NOT check that memory accesses are aligned.
   compilation error:
-  register allocation: variables { lt.348 } remain unallocated
+  register allocation: variables { lt.349 } remain unallocated
   [1]
 
 A user FG1 flag live across a lowered compare conflicts in register allocation.
@@ -272,7 +272,7 @@ A user FG1 flag live across a lowered compare conflicts in register allocation.
   warning: support of the ACC architecture is VERY experimental. The loop instruction is not part of the verified compiler. The compiler does NOT check whether the loop stack overflow/underflows. The compiler does NOT check that memory accesses are aligned.
   "fail/acc/bn_cmp_fg1_conflict.jazz", line 8 (4-23):
   compilation error:
-  register allocation: variable __cf1__.343 must be allocated to register CF1 due to architectural constraints; this register already holds conflicting variable: cf.339
+  register allocation: variable __cf1__.344 must be allocated to register CF1 due to architectural constraints; this register already holds conflicting variable: cf.340
   [1]
 
 32-bit comparisons are not lowered (unchanged behavior).
@@ -280,7 +280,7 @@ A user FG1 flag live across a lowered compare conflicts in register allocation.
   $ ../jasminc -arch acc -o out.s fail/acc/bn_cmp_u32_bool.jazz
   warning: support of the ACC architecture is VERY experimental. The loop instruction is not part of the verified compiler. The compiler does NOT check whether the loop stack overflow/underflows. The compiler does NOT check that memory accesses are aligned.
   compilation error:
-  register allocation: variables { c.330 } remain unallocated
+  register allocation: variables { c.331 } remain unallocated
   [1]
 
   $ ../jasminc -arch acc -o out.s fail/acc/bn_cmp_u32_ternary.jazz
