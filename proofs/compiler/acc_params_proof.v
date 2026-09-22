@@ -1363,6 +1363,44 @@ Proof.
     first by rewrite ?(negbTE hyx) ?(negbTE hyfz) ?(negbTE hyfl) ?(negbTE hyfm)).
 Qed.
 
+(* [assemble_bn_select_masked] only succeeds when its own [uniq] check on
+   the destination [x] and the two selected inputs [wn]/[wm] holds. This
+   states that fact directly against the assembled [ops]: whatever
+   destination lexpr and pair of leading source rexprs [ops] carries (the
+   registers at the register-allocation conflict positions declared by
+   [desc_BN_SELECT_MASKED], namely [(APout 0, APin 0); (APout 0, APin 1);
+   (APin 0, APin 1)]) are pairwise distinct. The list-length of [les]/[res]
+   is deliberately left open (only their heads are matched), since
+   [assemble_bn_select_masked] itself never checks it -- that invariant
+   (exactly one destination, three arguments) is enforced by the caller
+   ([asm_gen]'s [check_sopn_args]), not by this function. *)
+Lemma assemble_bn_select_masked_conflicts ii les res ops :
+  assemble_bn_select_masked ii les res = ok ops ->
+  if ops is [:: (_, LLvar x :: _, Rexpr (Fvar wn) :: Rexpr (Fvar wm) :: _)]
+  then [&& v_var x != v_var wn, v_var x != v_var wm & v_var wn != v_var wm]
+  else false.
+Proof.
+  have huncons_LLvar : forall ii' (l : seq lexpr) z zs,
+      arm_extra.uncons_LLvar ii' l = ok (z, zs) -> l = LLvar z :: zs
+    by move=> ii' [|[al ws f|x]] //= l0 z zs [-> ->].
+  have huncons_rvar : forall ii' (r : seq rexpr) z zs,
+      arm_extra.uncons_rvar ii' r = ok (z, zs) -> r = Rexpr (Fvar z) :: zs
+    by move=> ii' [|[|[]]] //= ???? [<- <-].
+  rewrite /assemble_bn_select_masked.
+  t_xrbindP => -[x le] hx.
+  t_xrbindP => -[wn res1] hwn.
+  t_xrbindP => -[wm res'] hwm.
+  t_xrbindP => huniq ?; subst ops.
+  have ? := huncons_LLvar _ _ _ _ hx; subst les.
+  have ? := huncons_rvar _ _ _ _ hwn; subst res.
+  have ? := huncons_rvar _ _ _ _ hwm; subst res1.
+  simpl.
+  move: huniq => /=; rewrite negb_or => /andP [/andP [hxwn hxwm] hwnwm].
+  rewrite orbF in hxwm.
+  rewrite andbT inE in hwnwm.
+  by apply/and3P.
+Qed.
+
 (* Proof plan (BN_SELECT_MASKED) -- unlike set0/SWAP, every operand
    here is a genuine, already-defined jasmin value (no undefined scratch or
    self register), so this should go through the [assemble_opsP] "common
@@ -1377,7 +1415,8 @@ Qed.
    1. Unfold [to_asm]/[assemble_extra]/[assemble_bn_select_masked] in [hops]
       and peel with [t_xrbindP], destructuring each pair inline (as in
       [acc_assemble_extra_sz]'s bullet for this op): [-[x le] hx] for the
-      [uncons_LLvar] step, [-[wn wm] hwm] for the [res] match, then the
+      [uncons_LLvar] step, then [-[wn res1] hwn] and [-[wm le'] hwm] for the
+      two [uncons_rvar] steps on [res], then the
       [uniq [:: v_var x; v_var wn; v_var wm]] assert. This leaves
       [ops = [:: ((None, BN_SEL FG0), lvs, args)]] with [lvs]/[args] the
       lemma's own [les]/[res] (unrenamed).
@@ -1423,7 +1462,8 @@ move=> rip ii lvs args m xs ys m' s ops ops'.
 move=> ho hexec hwle hops hmap hlom.
 rewrite /to_asm /= /assemble_extra /assemble_bn_select_masked in hops.
 move: hops; t_xrbindP => -[x le] hx.
-t_xrbindP => -[wn wm] hwm.
+t_xrbindP => -[wn res1] hwn.
+t_xrbindP => -[wm le'] hwm.
 t_xrbindP => huniq ?; subst ops.
 have h := assemble_opsP acc_eval_assemble_cond hmap erefl _ hlom.
 case: (h m') => {h}.
@@ -1437,6 +1477,38 @@ case: (h m') => {h}.
     by exact: hexec.
   by rewrite hbase /= hwle.
 by move=> s' hfold hlom'; exists s'.
+Qed.
+
+(* [assemble_zeroize_masked] only succeeds when its own assert that the two
+   inputs [y1]/[y2] are different registers holds, matching
+   [desc_zeroize_masked_small]/[desc_zeroize_masked_large]'s declared
+   conflict [(APin 0, APin 1)]. Unlike [x], the destination register, [y1]
+   itself never survives into the assembled [ops] (it is only checked to
+   alias [x], then discarded); [y2] does, twice over (the self-XOR). So this
+   states the fact against both the pre-assembly [res] (source of [y1]) and
+   the assembled [ops] (source of [y2]), tying them together via [y2]'s
+   coincidence between the two. *)
+Lemma assemble_zeroize_masked_conflicts ii ws les res ops :
+  assemble_zeroize_masked ii ws les res = ok ops ->
+  if res is Rexpr (Fvar y1) :: Rexpr (Fvar y2) :: _ then
+    if ops is [:: (_, _, [:: Rexpr (Fvar y2'); _])] then
+      [&& v_var y2 == v_var y2' & v_var y1 != v_var y2]
+    else false
+  else false.
+Proof.
+  rewrite /assemble_zeroize_masked.
+  t_xrbindP => -[y1 res1] hy1.
+  t_xrbindP => -[y2 res2] hy2.
+  t_xrbindP => x hx hcv hxy1 hxy2.
+  rewrite /assemble_self_xor => -[?]; subst ops.
+  simpl.
+  have huncons_rvar : forall ii' (r : seq rexpr) z zs,
+      arm_extra.uncons_rvar ii' r = ok (z, zs) -> r = Rexpr (Fvar z) :: zs
+    by move=> ii' [|[|[]]] //= ???? [<- <-].
+  have ? := huncons_rvar _ _ _ _ hy1; subst res.
+  have ? := huncons_rvar _ _ _ _ hy2; subst res1.
+  simpl.
+  by rewrite eqxx hxy2.
 Qed.
 
 (* Proof plan (ZEROIZE_MASKED ws) -- despite reusing
@@ -1503,7 +1575,7 @@ move=> ho hexec hwle hops hmap hlom.
 rewrite /to_asm /= /assemble_extra /assemble_zeroize_masked in hops.
 move: hops; t_xrbindP => -[y1 res1] hy1.
 t_xrbindP => -[y2 res2] hy2.
-t_xrbindP => x hx hcv hxy1.
+t_xrbindP => x hx hcv hxy1 hxy2.
 rewrite /assemble_self_xor => -[?]; subst ops.
 (* [args] is literally [[:: rvar y1; rvar y2 & res2]]. *)
 have huncons : forall ii' (r : seq rexpr) z zs,
@@ -1621,12 +1693,13 @@ Proof.
       + done.
   + rewrite /assemble_bn_select_masked.
     t_xrbindP => -[x le] hx.
-    t_xrbindP => -[wn wm] hwm.
+    t_xrbindP => -[wn res1] hwn.
+    t_xrbindP => -[wm le'] hwm.
     by t_xrbindP => _ <-.
   + move=> ws; rewrite /assemble_zeroize_masked.
     case: (arm_extra.uncons_rvar ii args) => // -[y1 args1].
     simpl; case: (arm_extra.uncons_rvar ii args1) => // -[y2 ?].
-    simpl; t_xrbindP => _ _ _ _.
+    simpl; t_xrbindP => _ _ _ _ _.
     rewrite /assemble_self_xor /=.
     by move=> [<-].
 Qed.

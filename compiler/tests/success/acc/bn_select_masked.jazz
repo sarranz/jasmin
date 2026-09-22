@@ -1,3 +1,6 @@
+// The destination and source registers of `BN_SELECT_MASKED` are forced to
+// different registers.
+
 export
 fn bn_select_masked(reg u256 arg0 arg1) -> reg u256 {
     reg bool b;
@@ -12,12 +15,12 @@ fn bn_select_masked(reg u256 arg0 arg1) -> reg u256 {
     return x;
 }
 
-// Here the destination (arg0) is already the same variable as the first
-// argument, which is the common usage pattern for this intrinsic.
 export
 fn bn_select_masked_same_dest(reg u256 arg0 arg1) -> reg u256 {
     reg bool b;
 
+    // Even when the name of the variable is the same, this code will always
+    // use a different register for the destination.
     ?{ "CF0" = b } = #BN_CMP(arg0, arg1);
     arg0 = #BN_SELECT_MASKED(arg0, arg1, b);
 

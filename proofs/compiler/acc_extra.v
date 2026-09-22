@@ -201,25 +201,56 @@ Definition desc_BN_SELECT_MASKED : instruction_desc :=
     i_semi_safe := fun _ => values.sem_prod_ok_safe (tin := ctin) semi;
   |}.
 
+(* [conflicts] forces the two inputs into different registers:
+   [assemble_zeroize_masked] requires the destination to alias the first
+   input, while the second input is XOR-ed with itself to produce the zero
+   value; letting the allocator merge the two inputs would corrupt that
+   XOR. *)
 Definition desc_zeroize_masked_small : instruction_desc :=
   let ty := aword U32 in
-  mk_instr_desc_safe
-    (pp_s (string_of_extra_op (ZEROIZE_MASKED U8)))
-    [:: ty; ty ] [:: E 0; E 1 ]
-    [:: ty ] [:: E 0 ]
-    (fun (_ _ : word U32) => 0%R)
-    true DOIT.
+  let cty := eval_atype ty in
+  let ctin := [:: cty; cty ] in
+  let semi := fun (_ _ : word U32) => 0%R in
+  {| str := pp_s (string_of_extra_op (ZEROIZE_MASKED U8))
+   ; tin := [:: ty; ty ]
+   ; i_in := [:: E 0; E 1 ]
+   ; tout := [:: ty ]
+   ; i_out := [:: E 0 ]
+   ; conflicts := [:: (APin 0, APin 1) ]
+   ; semi := sem_prod_ok ctin semi
+   ; semu := @values.vuincl_app_sopn_v ctin [:: cty ] (sem_prod_ok ctin semi) refl_equal
+   ; i_safe := [::]
+   ; i_valid := true
+   ; i_doit := DOIT
+   ; i_safe_wf := refl_equal
+   ; i_semi_errty := fun _ => sem_prod_ok_error (tin := ctin) semi _
+   ; i_semi_safe := fun _ => values.sem_prod_ok_safe (tin := ctin) semi
+   |}.
 
 Definition desc_zeroize_masked_large : instruction_desc :=
   let vf := Some false in
   let vt := Some true in
   let ty := aword U256 in
-  mk_instr_desc_safe
-    (pp_s (string_of_extra_op (ZEROIZE_MASKED U8)))
-    [:: ty; ty ] [:: E 0; E 1 ]
-    [:: abool; abool; abool; ty ] [:: F MF0; F LF0; F ZF0; E 0 ]
-    (fun (_ _ : word U256) => (:: vf, vf, vt & 0%R))
-    true DOIT.
+  let cty := eval_atype ty in
+  let ctin := [:: cty; cty ] in
+  let semi := fun (_ _ : word U256) => (:: vf, vf, vt & 0%R) in
+  {| str := pp_s (string_of_extra_op (ZEROIZE_MASKED U8))
+   ; tin := [:: ty; ty ]
+   ; i_in := [:: E 0; E 1 ]
+   ; tout := [:: abool; abool; abool; ty ]
+   ; i_out := [:: F MF0; F LF0; F ZF0; E 0 ]
+   ; conflicts := [:: (APin 0, APin 1) ]
+   ; semi := sem_prod_ok ctin semi
+   ; semu :=
+       @values.vuincl_app_sopn_v ctin [:: cbool; cbool; cbool; cty ]
+         (sem_prod_ok ctin semi) refl_equal
+   ; i_safe := [::]
+   ; i_valid := true
+   ; i_doit := DOIT
+   ; i_safe_wf := refl_equal
+   ; i_semi_errty := fun _ => sem_prod_ok_error (tin := ctin) semi _
+   ; i_semi_safe := fun _ => values.sem_prod_ok_safe (tin := ctin) semi
+   |}.
 
 Definition get_instr_desc (eo : extra_op) : instruction_desc :=
   match eo with
@@ -385,10 +416,8 @@ Definition assemble_bn_select_masked
   (res : seq rexpr) :
   cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
   Let: (x, _) := uncons_LLvar les in
-  Let: (wn, wm) :=
-    if res is [:: Rexpr (Fvar wn); Rexpr (Fvar wm); _ ] then ok (wn, wm)
-    else Error (E.invalid_rexprs ii)
-  in
+  Let: (wn, res1) := uncons_rvar res in
+  Let: (wm, _) := uncons_rvar res1 in
   Let _ :=
     assert
       (uniq [:: v_var x; v_var wn; v_var wm ])
@@ -418,6 +447,11 @@ Definition assemble_zeroize_masked
     assert (v_var x == v_var y1)
       (E.internal_error
          "zeroize_masked: destination must alias first argument" ii)
+  in
+  Let _ :=
+    assert (v_var y1 != v_var y2)
+      (E.internal_error
+         "zeroize_masked: arguments must be different registers" ii)
   in
   assemble_self_xor ws les y2.
 
