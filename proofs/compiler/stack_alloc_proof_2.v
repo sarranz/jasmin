@@ -1981,6 +1981,7 @@ Context
   (saparams : stack_alloc_params)
   (hsaparams : h_stack_alloc_params saparams)
   (region_annot : bool)
+  (is_fine_grained : var_i -> bool)
 .
 
 Context
@@ -1998,9 +1999,9 @@ Context
 Local Lemma clone_ty : forall x n, vtype (clone fresh_var_ident x n) = vtype x.
 Proof. by []. Qed.
 
-Notation alloc_fd   := (alloc_fd shparams saparams region_annot is_move_op fresh_var_ident pp_sr P).
-Notation alloc_i    := (alloc_i shparams saparams region_annot is_move_op fresh_var_ident pp_sr).
-Notation alloc_prog := (alloc_prog shparams saparams region_annot is_move_op fresh_var_ident pp_sr).
+Notation alloc_fd   := (alloc_fd shparams saparams region_annot is_fine_grained is_move_op fresh_var_ident pp_sr P).
+Notation alloc_i    := (alloc_i shparams saparams region_annot is_fine_grained is_move_op fresh_var_ident pp_sr).
+Notation alloc_prog := (alloc_prog shparams saparams region_annot is_fine_grained is_move_op fresh_var_ident pp_sr).
 
 Variable (local_alloc : funname -> stk_alloc_oracle_t).
 Hypothesis Halloc_fd : forall fn fd,
@@ -4192,7 +4193,8 @@ Context
   (hshparams : slh_lowering_proof.h_sh_params shparams)
   (saparams : stack_alloc_params)
   (hsaparams : h_stack_alloc_params saparams)
-  (region_annot : bool).
+  (region_annot : bool)
+  (is_fine_grained : var_i -> bool).
 
 Context
   (is_move_op : asm_op_t -> bool)
@@ -4207,10 +4209,10 @@ Context
       values_uincl v [:: vx ]).
 
 Lemma get_alloc_fd p p_extra mglob oracle fds1 fds2 :
-  map_cfprog_name (alloc_fd shparams saparams region_annot is_move_op fresh_var_ident pp_sr p p_extra mglob oracle) fds1 = ok fds2 ->
+  map_cfprog_name (alloc_fd shparams saparams region_annot is_fine_grained is_move_op fresh_var_ident pp_sr p p_extra mglob oracle) fds1 = ok fds2 ->
   forall fn fd1,
   get_fundef fds1 fn = Some fd1 ->
-  exists2 fd2, alloc_fd shparams saparams region_annot is_move_op fresh_var_ident pp_sr p p_extra mglob oracle fn fd1 = ok fd2 &
+  exists2 fd2, alloc_fd shparams saparams region_annot is_fine_grained is_move_op fresh_var_ident pp_sr p p_extra mglob oracle fn fd1 = ok fd2 &
                get_fundef fds2 fn = Some fd2.
 Proof.
   move=> hmap fn fd1.
@@ -4250,7 +4252,7 @@ Section IT.
 Context {E E0: Type -> Type} {wE : with_Error E E0} {rE : EventRels E0}.
 
 Theorem it_alloc_progP nrip nrsp data oracle_g oracle (P: uprog) (SP: sprog) fn :
-  alloc_prog shparams saparams region_annot is_move_op fresh_var_ident pp_sr nrip nrsp data oracle_g oracle P = ok SP ->
+  alloc_prog shparams saparams region_annot is_fine_grained is_move_op fresh_var_ident pp_sr nrip nrsp data oracle_g oracle P = ok SP ->
   forall ev rip,
   wiequiv_f P SP ev rip
     (fun fn1 fn2 fs1 fs2 =>
@@ -4297,13 +4299,13 @@ Qed.
 End IT.
 
 Lemma alloc_prog_get_fundef nrip nrsp data oracle_g oracle (P: uprog) (SP: sprog) :
-  alloc_prog shparams saparams region_annot is_move_op fresh_var_ident pp_sr nrip nrsp data oracle_g oracle P = ok SP →
+  alloc_prog shparams saparams region_annot is_fine_grained is_move_op fresh_var_ident pp_sr nrip nrsp data oracle_g oracle P = ok SP →
   exists2 mglob,
     init_map oracle_g data (p_globs P) = ok mglob &
     ∀ fn fd,
     get_fundef (p_funcs P) fn = Some fd →
     exists2 fd',
-      alloc_fd shparams saparams region_annot is_move_op fresh_var_ident pp_sr P
+      alloc_fd shparams saparams region_annot is_fine_grained is_move_op fresh_var_ident pp_sr P
         {| sp_rsp := nrsp ; sp_rip := nrip ; sp_globs := data ; sp_glob_names := oracle_g |} mglob oracle fn fd = ok fd' &
       get_fundef (p_funcs SP) fn = Some fd'.
 Proof.
@@ -4313,7 +4315,7 @@ Proof.
 Qed.
 
 Remark alloc_prog_sp_globs nrip nrsp data oracle_g oracle (P: uprog) (SP: sprog) :
-  alloc_prog shparams saparams region_annot is_move_op fresh_var_ident pp_sr nrip nrsp data oracle_g oracle P = ok SP →
+  alloc_prog shparams saparams region_annot is_fine_grained is_move_op fresh_var_ident pp_sr nrip nrsp data oracle_g oracle P = ok SP →
   sp_globs (p_extra SP) = data.
 Proof.
   by rewrite /alloc_prog; t_xrbindP => ???? _ <-.

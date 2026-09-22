@@ -211,6 +211,9 @@ Record compiler_params
   apply_ret_annot  : seq bool -> fun_info -> fun_info;
   (* Whether to add region annotations *)
   region_annot : bool;
+  (* Whether the declaration of a variable carries the [asm_ct_fine_grained]
+     annotation *)
+  is_fine_grained : var_i -> bool;
 }.
 
 Context
@@ -424,6 +427,7 @@ Definition compiler_front_end (entries: seq funname) (p: uprog) : cexec sprog :=
       shparams
       saparams
       cparams.(region_annot)
+      cparams.(is_fine_grained)
       (ap_is_move_op aparams)
       (fun vk => fresh_var_ident cparams vk dummy_instr_info)
       (pp_sr cparams)

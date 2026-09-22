@@ -111,7 +111,20 @@ type signature = {
   post : Env.t;
 }
 
-type memory_instantiation = string list SM.t
+(* For each callee region, the caller regions instantiating it, each flagged
+   with whether the callee region covers them entirely (its size is the sum of
+   theirs), in which case the callee's postcondition replaces their level
+   instead of joining it. *)
+type memory_instantiation = (string * bool) list SM.t
+
+let region_names (regions : Annotations.region list) : string list =
+  List.map (fun (r : Annotations.region) -> r.Annotations.r_name) regions
+
+(* Total size in bytes of a list of regions. *)
+let sizes_sum (regions : Annotations.region list) : Z.t =
+  List.fold_left
+    (fun acc (r : Annotations.region) -> Z.add acc r.Annotations.r_size)
+    Z.zero regions
 
 type analysis = {
   signatures : (string, signature) Hashtbl.t;
@@ -176,13 +189,22 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
     let instr_desc op : _ Arch_decl.instr_desc_t =
       arch._asm_op_decl.instr_desc_op op
 
-    let get_mem_annotation instr : string list =
+    (* The regions (name and size in bytes) accessed by an instruction. *)
+    let get_mem_regions instr : Annotations.region list =
       Option.value ~default:[] (Annot.has_array_annot (snd instr.asmi_ii))
 
+    let get_mem_annotation instr : string list =
+      region_names (get_mem_regions instr)
+
     let get_instr_annotation instr : memory_instantiation =
-      let add_instantiation m (callee, caller) : memory_instantiation =
-        SM.update callee
-          (fun xs -> Some (caller :: Option.value ~default:[] xs)) m
+      let add_instantiation m ((callee : Annotations.region), callers) : memory_instantiation =
+        let covers = Z.equal callee.Annotations.r_size (sizes_sum callers) in
+        List.fold_left
+          (fun m caller ->
+            SM.update callee.Annotations.r_name
+              (fun xs -> Some ((caller, covers) :: Option.value ~default:[] xs))
+              m)
+          m (region_names callers)
       in
       match Annot.has_instantiation_annot (snd instr.asmi_ii) with
       | None -> SM.empty
@@ -192,7 +214,7 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
       match instr.asmi_i with
       | CALL _ ->
           SM.fold
-            (fun _ callers acc -> callers @ acc)
+            (fun _ callers acc -> List.map fst callers @ acc)
             (get_instr_annotation instr) []
       | _ -> []
 
@@ -257,22 +279,22 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
     let declassify_slots env slots : Env.t =
       List.fold_left (fun env slot -> Env.set env slot Level.Public) env slots
 
-    let declassify_region env instr size : Env.t =
-      let mem_annotation = Arch_utils.get_mem_annotation instr in
-      if mem_annotation <> [] && List.length mem_annotation = size then
-        declassify_slots env mem_annotation
-      else begin
-        let loc = fst instr.asmi_ii in
-        if mem_annotation = [] then
+    let declassify_region env instr size : Env.t ==
+      let regions = Arch_utils.get_mem_regions instr in
+      let loc = fst instr.asmi_ii in
+      match regions with
+      | [] ->
           Utils.warning Utils.Always loc
-            "asmCtChecker: ignore declassify of an unannotated memory region"
-        else
+            "asmCtChecker: ignore declassify of an unannotated memory region";
+          env
+      | _ when Z.equal (sizes_sum regions) (Z.of_int size) ->
+          declassify_slots env (region_names regions)
+      | _ ->
           Utils.warning Utils.Always loc
             "asmCtChecker: ignore declassify of %d byte(s), the annotation \
-             only locates them within a region of %d byte(s)"
-            size (List.length mem_annotation);
-        env
-      end
+             only locates them within a region of %s byte(s)"
+            size (Z.to_string (sizes_sum regions));
+          env
 
     let ty_declassify_val env instr lty arg : Env.t =
       match arg with
@@ -288,14 +310,18 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
 
     let ty_asmop env instr op args : Env.t =
       let op_desc = Arch_utils.instr_desc op in
-      let mem_annotation = Arch_utils.get_mem_annotation instr in
+      let regions = Arch_utils.get_mem_regions instr in
+      let mem_annotation = region_names regions in
       let memory_slots = SS.of_list mem_annotation in
       let env_slots = process_op_descs args mem_annotation in
       let env, in_slots = env_slots env op_desc.id_in in
       let env, out_slots = env_slots env op_desc.id_out in
       let level = Level.join_list (List.map (Env.get env) in_slots) in
+      (* A write is strong when it covers the annotated regions exactly. *)
       let strong_write =
-        mem_write_size args op_desc = Some (List.length mem_annotation)
+        match mem_write_size args op_desc with
+        | Some n -> regions <> [] && Z.equal (Z.of_int n) (sizes_sum regions)
+        | None -> false
       in
       List.fold_left
         (fun env x -> Env.write env ~strong_write memory_slots x level)
@@ -343,8 +369,8 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
         map
 
     let infer_type_substitution caller callee bindings : Env.t * Level.t SM.t =
-      let infer (env, substitution) (callee_slot, caller_slots) :
-          Env.t * Level.t SM.t =
+      let infer (env, substitution) (callee_slot, caller_slots) =
+        let caller_slots = List.map fst caller_slots in
         match Env.get callee.pre callee_slot with
         | Level.Public ->
             if caller_slots = [] then
@@ -373,7 +399,12 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
           Level.subst substitution (Env.get callee.post callee_slot)
         in
         List.fold_left
-          (fun acc slot -> join_into acc slot return_level)
+          (fun acc (slot, covers) ->
+            let level =
+              if covers then return_level
+              else Level.join (Env.get caller slot) return_level
+            in
+            join_into acc slot level)
           posts caller_slots
       in
       let post_updates = List.fold_left apply SM.empty bindings in
@@ -387,7 +418,7 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
           if is_array callee_slot then
             (callee_slot,
              Option.value ~default:[] (SM.find_opt callee_slot inst))
-          else (callee_slot, [ callee_slot ]))
+          else (callee_slot, [ (callee_slot, true) ]))
         callee_sig.slots
 
     let call_env caller callee inst : Env.t =

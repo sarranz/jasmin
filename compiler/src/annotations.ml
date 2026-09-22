@@ -48,25 +48,43 @@ let remove_symbol s annot =
   List.filter (fun (k, _) -> not (String.equal (Location.unloc k) s)) annot
 
 (* -------------------------------------------------------------------- *)
+(* A memory region as named by the stack allocation pass: the name of its
+   slot and its total size in bytes. Encoded as the annotation [name = size]. *)
+
+type region = { r_name : string; r_size : Z.t }
+
+let mk_region ~loc (r : region) : annotation =
+  (Location.mk_loc loc r.r_name, Some (Location.mk_loc loc (Aint r.r_size)))
+
+let decode_region ((k, a) : annotation) : region option =
+  match a with
+  | Some { Location.pl_desc = Aint size; _ } ->
+      Some { r_name = Location.unloc k; r_size = size }
+  | _ -> None
+
+let get_int (annot : annotations) (k : string) : Z.t option =
+  match get k annot with
+  | Some (Some { Location.pl_desc = Aint z; _ }) -> Some z
+  | _ -> None
+
+(* -------------------------------------------------------------------- *)
 (* Records, on an instruction built by the stack allocation pass out of a
-   memory access, the set of per-byte names of the slot bytes the access
-   uses: a slot [s] of N bytes yields the names [s_0], ..., [s_(N-1)]. *)
+   memory access, the region the access falls in. *)
 let array_annot = "Internal::array"
 
 let has_array_annot annot = has_symbol array_annot annot
 
-let add_array_annot ~loc (names : string list) annot =
+let add_array_annot ~loc (regions : region list) annot =
   if has_array_annot annot then annot
   else
     let mk d = Location.mk_loc loc d in
-    (mk array_annot,
-     Some (mk (Astruct (List.map (fun n -> (mk n, None)) names))))
+    (mk array_annot, Some (mk (Astruct (List.map (mk_region ~loc) regions))))
     :: annot
 
-let get_array_annot (annot : annotations) : string list option =
+let get_array_annot (annot : annotations) : region list option =
   match get array_annot annot with
   | Some (Some { Location.pl_desc = Astruct l; _ }) ->
-      Some (List.map (fun (k, _) -> Location.unloc k) l)
+      Some (List.filter_map decode_region l)
   | _ -> None
 
 (* -------------------------------------------------------------------- *)
@@ -95,11 +113,6 @@ let add_stack_frame_annot ~loc (slots : (string * (Z.t * Z.t)) list) annot =
 
 let get_stack_frame_annot (annot : annotations) :
     (string * (Z.t * Z.t)) list option =
-  let get_int a k =
-    match get k a with
-    | Some (Some { Location.pl_desc = Aint z; _ }) -> Some z
-    | _ -> None
-  in
   let decode_slot (k, a) =
     match a with
     | Some { Location.pl_desc = Astruct s; _ } ->
@@ -113,28 +126,36 @@ let get_stack_frame_annot (annot : annotations) :
     Some (List.filter_map decode_slot slots)
   | _ -> None
 
+(* -------------------------------------------------------------------- *)
 let instantiation_annot = "Internal::instantiation"
 
-let add_instantiation_annot ~loc (inst : (string * string list) list) annot =
+let add_instantiation_annot ~loc (inst : (region * region list) list) annot =
   let mk d = Location.mk_loc loc d in
-  let mk_one i v = (mk (string_of_int i), Some (mk (Astring v))) in
-  let mk_list v = mk (Astruct (List.mapi mk_one v)) in
-  let mk_inst (name, value) = (mk name, Some (mk_list value)) in
-  let body = mk (Astruct (List.map mk_inst inst)) in
-  let inst_annot = (mk instantiation_annot, Some body) in
-  inst_annot :: annot
+  let mk_inst (callee, callers) =
+    let a = mk (Aint callee.r_size) in
+    let b = mk (Astruct (List.map (mk_region ~loc) callers)) in
+    let c = mk (Astruct [ (mk "size", Some a); (mk "caller", Some b) ]) in
+    (mk callee.r_name, Some c)
+  in
+  let a = mk (Astruct (List.map mk_inst inst)) in
+  (mk instantiation_annot, Some a) :: annot
 
 let has_instantiation_annot annot = has_symbol instantiation_annot annot
 
-let get_instantiation_annot (annot : annotations) : (string * string) list option =
+let get_instantiation_annot annot : (region * region list) list option =
+  let decode_inst (k, a) =
+    match a with
+    | Some { Location.pl_desc = Astruct s; _ } -> (
+        match get_int s "size", get "caller" s with
+        | Some size, Some (Some { Location.pl_desc = Astruct callers; _ }) ->
+            let cs = List.filter_map decode_region callers in
+            Some ({ r_name = Location.unloc k; r_size = size }, cs)
+        | _ -> None)
+    | _ -> None
+  in
   match get instantiation_annot annot with
   | Some (Some { Location.pl_desc = Astruct l; _ }) ->
-    let doit (k, a) =
-      match a with
-      | Some { Location.pl_desc = Astring v } -> Some (Location.unloc k, v)
-      | _ -> None
-    in
-    Some (List.filter_map doit l)
+      Some (List.filter_map decode_inst l)
   | _ -> None
 
 (* -------------------------------------------------------------------- *)

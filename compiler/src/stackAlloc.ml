@@ -106,7 +106,7 @@ module StackAlloc (Arch: Arch_full.Arch) = struct
 
 module Regalloc = Regalloc (Arch)
 
-let memory_analysis pp_sr pp_err ~debug callee_saved_strategy up =
+let memory_analysis pp_sr is_fine_grained pp_err ~debug callee_saved_strategy up =
   if debug then Format.eprintf "START memory analysis@.";
   let p = Conv.prog_of_cuprog up in
   let gao, sao = Varalloc.alloc_stack_prog Arch.callstyle Arch.reg_size p in
@@ -191,6 +191,7 @@ let memory_analysis pp_sr pp_err ~debug callee_saved_strategy up =
         Arch.aparams.ap_shp
         Arch.aparams.ap_sap
         !Glob_options.asm_ct_chk
+        is_fine_grained
         Arch.aparams.ap_is_move_op
         (fun vk -> Conv.fresh_var_ident vk IInfo.dummy)
         pp_sr

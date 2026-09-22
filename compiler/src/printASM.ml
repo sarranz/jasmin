@@ -7,8 +7,8 @@ type asm_element =
 | Instr of string * string list
 | Comment of string
 | Bytes of string list
-| ArrAnnot of string list
-| InstAnnot of (string * string) list
+| ArrAnnot of Annotations.region list
+| InstAnnot of (Annotations.region * Annotations.region list) list
 
 let iwidth = 4
 
@@ -42,6 +42,10 @@ let pp_bytes fmt =
 let pp_dwarf fmt (dwarf: string) =
   Format.fprintf fmt "\t%s" dwarf
 
+(* A memory region annotation: [(name, size in bytes)]. *)
+let string_of_region (r : Annotations.region) =
+  Printf.sprintf "(%s, %s)" r.Annotations.r_name (Z.to_string r.Annotations.r_size)
+
 let pp_asm_element fmt asm_element =
   match asm_element with
   | Header (name, params) ->
@@ -56,9 +60,22 @@ let pp_asm_element fmt asm_element =
     pp_comment fmt content
   | Bytes data ->
     pp_bytes fmt data
-  | ArrAnnot slots -> pp_comment fmt (String.concat " " slots)
+  | ArrAnnot regions ->
+    pp_comment fmt (String.concat " " (List.map string_of_region regions))
   | InstAnnot insts ->
-    let inst_str = List.map (fun (k, v) -> Printf.sprintf "%s<-%s" k v) insts in
+    let string_of_callers = function
+      | [ caller ] -> string_of_region caller
+      | callers ->
+        Printf.sprintf "{%s}"
+          (String.concat " " (List.map string_of_region callers))
+    in
+    let inst_str =
+      List.map
+        (fun (callee, callers) ->
+          Printf.sprintf "%s<-%s" (string_of_region callee)
+            (string_of_callers callers))
+        insts
+    in
     pp_comment fmt (String.concat ", " inst_str)
 
 let needs_newline = function
