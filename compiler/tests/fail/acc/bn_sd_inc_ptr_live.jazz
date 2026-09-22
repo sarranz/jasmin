@@ -1,0 +1,13 @@
+/* The updated pointer [q] and the input pointer [p] are the same explicit
+   argument of [bn.sd], so register allocation must merge them. Both are live
+   after the instruction (both are returned), so they conflict and the program
+   is rejected. */
+
+export
+fn ptr_live(reg u32 p, reg u256 v) -> reg u32, reg u32 {
+    reg u32 q;
+
+    [#aligned :u256 p], q = #BN_SD_INC(v, p);
+
+    return p, q;
+}

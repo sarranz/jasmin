@@ -1,0 +1,11 @@
+/* #BN_LD_INC has two outputs: the loaded value and the updated pointer. The
+   updated pointer must be bound. */
+
+export
+fn single_lval(reg u32 p) -> reg u256 {
+    reg u256 x;
+
+    x = #BN_LD_INC([#aligned :u256 p], p);
+
+    return x;
+}

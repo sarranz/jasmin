@@ -26,6 +26,12 @@ module E = struct
   let invalid_pp_aop_ext = err "invalid pp_aop_ext"
   let not_implemented = hierror ~loc ~kind ~internal "not implemented: %s"
 
+  let increment_not_base inc addr =
+    hierror ~loc ~kind ~internal:false
+      "the incremented register %s must be the base register of the address \
+       %s"
+      inc addr
+
   let address_not_supported base disp off scal =
     let pp =
       Format.pp_print_option
@@ -80,21 +86,19 @@ let pp_flag f =
   | LF1 -> "FG1.L"
   | ZF1 -> "FG1.Z"
 
+(* [base] is the printed base register, possibly with a [++] suffix. *)
+let pp_reg_address_base base addr =
+  let disp = Conv.z_of_word (arch_pd arch) addr.ad_disp in
+  let disp = if Z.equal disp Z.zero then None else Some (Z.to_string disp) in
+  let off = Option.map pp_register addr.ad_offset in
+  let scal = Conv.z_of_nat addr.ad_scale in
+  let scal = if Z.equal scal Z.zero then None else Some (Z.to_string scal) in
+  pp_reg_address_aux base disp off scal
+
 let pp_reg_address addr =
   match addr.ad_base with
   | None -> E.invalid_address ()
-  | Some r ->
-      let base = pp_register r in
-      let disp = Conv.z_of_word (arch_pd arch) addr.ad_disp in
-      let disp =
-        if Z.equal disp Z.zero then None else Some (Z.to_string disp)
-      in
-      let off = Option.map pp_register addr.ad_offset in
-      let scal = Conv.z_of_nat addr.ad_scale in
-      let scal =
-        if Z.equal scal Z.zero then None else Some (Z.to_string scal)
-      in
-      pp_reg_address_aux base disp off scal
+  | Some r -> pp_reg_address_base (pp_register r) addr
 
 let pp_address addr =
   match addr with Areg ra -> pp_reg_address ra | Arip r -> pp_rip_address r
@@ -151,6 +155,24 @@ let src_of_MODnW op pp =
   | (MOD0Wzero | MOD1Wzero), [] -> x0
   | _ -> E.invalid_args ()
 
+(* [bn.ld wrd, off(grs++)] and [bn.sd wrs, off(grs++)]
+   ([Acc_instr_decl.desc_BN_LD_INC] and [desc_BN_SD_INC]): the third explicit
+   argument is the register to increment. It must be the base register of the
+   address operand, which must not be RIP-relative; it is folded into the
+   address operand as [off(grs++)]. *)
+let is_inc_op = function BN_LD_INC | BN_SD_INC -> true | _ -> false
+
+let pp_inc_args pp =
+  match pp.pp_aop_args with
+  | [ (_, XReg w); (_, Addr addr); (_, Reg r) ] ->
+      let ra =
+        match addr with
+        | Areg ra when ra.ad_base = Some r -> ra
+        | _ -> E.increment_not_base (pp_register r) (pp_address addr)
+      in
+      [ pp_xregister w; pp_reg_address_base (pp_register r ^ "++") ra ]
+  | _ -> E.invalid_args ()
+
 let pp_acc_op op pp =
   if op = RV32 NEG then
     match pp.pp_aop_args with
@@ -160,14 +182,16 @@ let pp_acc_op op pp =
   else if is_MODnW op then
     ("csrrw", [ x0; dst_of_MODnW op; src_of_MODnW op pp ])
   else
-    let pp_args = indirect_args pp in
     let name =
       Format.sprintf "%s%s"
         (pp.pp_aop_name |> String.lowercase)
         (pp_mnemonic_ext pp.pp_aop_ext)
     in
-    let args = List.filter_map (fun (_, a) -> pp_asm_arg a) pp_args in
-    (name, args)
+    if is_inc_op op then (name, pp_inc_args pp)
+    else
+      let pp_args = indirect_args pp in
+      let args = List.filter_map (fun (_, a) -> pp_asm_arg a) pp_args in
+      (name, args)
 
 let symbol_of_shift sh =
   match sh with Acc_options.RS_left -> "<<" | RS_right -> ">>"

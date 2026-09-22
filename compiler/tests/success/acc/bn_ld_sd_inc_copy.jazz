@@ -1,0 +1,13 @@
+/* Copy [n] wide words from [src] to [dst] with post-increment loads and
+   stores: the whole loop body is two instructions, [bn.ld w, 0(src++)] and
+   [bn.sd w, 0(dst++)]. */
+
+export
+fn bn_copy_inc(reg u32 dst src n) {
+    reg u256 x;
+
+    repeat n {
+        x, src = #BN_LD_INC([#aligned :u256 src], src);
+        [#aligned :u256 dst], dst = #BN_SD_INC(x, dst);
+    }
+}

@@ -1,0 +1,11 @@
+/* The register to increment (second argument of #BN_SD_INC) must be the base
+   register of the address. Here [q] is incremented while the store address is
+   based on [p]; both are function arguments, hence in distinct registers, and
+   the assembly printer rejects the instruction. */
+
+export
+fn base_mismatch(reg u32 p q, reg u256 v) -> reg u32 {
+    [#aligned :u256 p], q = #BN_SD_INC(v, q);
+
+    return q;
+}

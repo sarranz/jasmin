@@ -526,6 +526,14 @@ Variant acc_op : Type :=
 | BN_LD
 | BN_SD
 
+(* Direct load and store with post-increment of the address register:
+   [bn.ld wrd, off(grs++)] and [bn.sd wrs, off(grs++)]. The register [grs] is
+   both read (address base) and written (incremented by 32, one wide word).
+   In Jasmin, [grs] is given explicitly as the last argument and the updated
+   value is the second output, e.g. [x, p = #BN_LD_INC([p + off], p)]. *)
+| BN_LD_INC
+| BN_SD_INC
+
 (* Indirect load indexed by a wide register; index is 0..31. *)
 | BN_LID of nat
 
@@ -578,6 +586,8 @@ Definition acc_op_to_string (op : acc_op) : string :=
   | MOD1Wzero => "MOD1Wzero"
   | BN_LD => "BN.LD"
   | BN_SD => "BN.SD"
+  | BN_LD_INC => "BN.LD.INC"
+  | BN_SD_INC => "BN.SD.INC"
   | BN_LID _ => "BN.LID"
   | BN_SID _ => "BN.SID"
   end.
@@ -650,6 +660,9 @@ Section I_ARGS_KINDS.
   Definition ak_xreg_reg_mem : i_args_kinds :=
     [:: [:: xreg; [:: CAreg ]; [:: CAmem false ] ]].
 
+  Definition ak_xreg_mem_reg : i_args_kinds :=
+    [:: [:: xreg; [:: CAmem false ]; [:: CAreg ] ]].
+
 End I_ARGS_KINDS.
 
 
@@ -680,6 +693,10 @@ Section PP_ASM_OP.
     | BN_SHV vs _ => mk ("BN.SHV" ++ vec_size_to_string vs)%string args
     | BN_LID _ => mk "BN.LID" args
     | BN_SID _ => mk "BN.SID" args
+    (* The address register to increment is the third argument; the printer
+       ([pp_acc.ml]) folds it into the address operand as [off(grs++)]. *)
+    | BN_LD_INC => mk "BN.LD" args
+    | BN_SD_INC => mk "BN.SD" args
     | _ => mk (acc_op_to_string op) args
     end.
 
@@ -1939,6 +1956,61 @@ Definition desc_BN_SD : instr_desc_t :=
     id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
   |}.
 
+(* [x, p = #BN_LD_INC([p + off], p)], i.e. [bn.ld x, off(p++)].
+   Argument positions in assembly syntax: 0 is the wide register, 1 the
+   memory operand and 2 the address register. Position 2 is both an input
+   (the register before the access) and an output (after the increment):
+   sharing the position is what makes register allocation merge the two
+   pointer variables. The printer checks that this register is the base of
+   the address operand at position 1 (see PLAN-acc-ld-incr.md). *)
+Definition desc_BN_LD_INC : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := [:: lword256; lword U32 ];
+    id_in := [:: Eu 1; Ea 2 ]; (* TODO_ACC: this should be aligned *)
+    id_tout := [:: lword256; lword U32 ];
+    id_out := [:: Ea 0; Ea 2 ];
+    id_semi := fun x p => ok (x, (p + wrepr U32 (wsize_size U256))%R);
+    id_args_kinds := ak_xreg_mem_reg;
+    id_nargs := 3;
+    id_str_jas := pp_s (acc_op_to_string BN_LD_INC);
+    id_pp_asm := pp_acc_op BN_LD_INC;
+    id_valid := true;
+    id_safe := [::];
+    id_doit := DOIT; (* TODO_ACC: check *)
+    id_eq_size := refl_equal;
+    id_check_dest := refl_equal;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+  |}.
+
+(* [[p + off], p = #BN_SD_INC(v, p)], i.e. [bn.sd v, off(p++)].
+   The memory output comes first in [id_out]: the assembly semantics writes
+   outputs left to right and decodes the store address in the current state,
+   so the store must happen before the register is incremented. *)
+Definition desc_BN_SD_INC : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := [:: lword256; lword U32 ];
+    id_in := [:: Ea 0; Ea 2 ];
+    id_tout := [:: lword256; lword U32 ];
+    id_out := [:: Eu 1; Ea 2 ]; (* TODO_ACC: this should be aligned *)
+    id_semi := fun x p => ok (x, (p + wrepr U32 (wsize_size U256))%R);
+    id_args_kinds := ak_xreg_mem_reg;
+    id_nargs := 3;
+    id_str_jas := pp_s (acc_op_to_string BN_SD_INC);
+    id_pp_asm := pp_acc_op BN_SD_INC;
+    id_valid := true;
+    id_safe := [::];
+    id_doit := DOIT; (* TODO_ACC: check *)
+    id_eq_size := refl_equal;
+    id_check_dest := refl_equal;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+  |}.
+
 Definition BN_LID_semi (i : nat) (w : u32) (x : u256) : exec u256 :=
   Let _ := assert (wunsigned w == Z.of_nat i) ErrSemUndef in
   ok x.
@@ -2065,6 +2137,8 @@ Definition desc_acc_op (op : acc_op) : instr_desc_t :=
   | MOD1Wzero => desc_MOD_word32Wzero MOD1Wzero 32
   | BN_LD => desc_BN_LD
   | BN_SD => desc_BN_SD
+  | BN_LD_INC => desc_BN_LD_INC
+  | BN_SD_INC => desc_BN_SD_INC
   | BN_LID i => desc_BN_LID i
   | BN_SID i => desc_BN_SID i
   end.
@@ -2106,7 +2180,7 @@ Section PRIM_STRING.
       [:: BN_MOV; BN_RSHI; BN_ADDM; BN_SUBM; BN_ACCR; BN_ACCW; BN_MODR; BN_MODW
         ; BN_ACCHR; BN_ACCHW
         ; MOD0W; MOD0Wzero; MOD1W; MOD1Wzero
-        ; BN_LD; BN_SD ].
+        ; BN_LD; BN_SD; BN_LD_INC; BN_SD_INC ].
 
   (* The element size, modular flag and shift direction are all encoded in the
      mnemonic, so these take no suffix. *)
