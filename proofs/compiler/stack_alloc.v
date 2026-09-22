@@ -905,6 +905,7 @@ Context
   (shparams : slh_lowering.sh_params)
   (saparams : stack_alloc_params)
   (region_annot : bool)
+  (is_fine_grained : var_i -> bool)
   (is_move_op : asm_op_t -> bool)
   (fresh_var_ident  : v_kind -> Uint63.int -> string -> atype -> Ident.ident)
   (pp_sr : sub_region -> pp_error)
@@ -1541,15 +1542,43 @@ Definition slot_range_get
   if expr.is_const e is Some i then (i * mk_scale aa ws, wsize_size ws)%Z
   else (0, size_slot a)%Z.
 
+(* An access is fine grained when the variable is a [reg ptr] whose
+   declaration carries the [asm_ct_fine_grained] annotation (decided by
+   [is_fine_grained]). The annotation is ignored on stack variables and stack
+   pointers. *)
+Definition fine_grained (x : var_i) : bool :=
+  [&& is_reg_ptr x, is_fine_grained x & is_aarr x.(vtype)].
+
+(* The size in bytes of the elements of an array variable. *)
+Definition elem_size (x : var) : Z :=
+  if x.(vtype) is aarr ws _ then wsize_size ws else size_of x.(vtype).
+
+(* The indices of the elements of size [esz] that intersect the byte range
+   [ofs, ofs + len). *)
+Definition elems_of_range (esz ofs len : Z) : seq Z :=
+  let lo := Z.div ofs esz in
+  let hi := Z.div (ofs + len - 1) esz in
+  ziota lo (hi - lo + 1).
+
+(* The annotations for the byte range [ofs, ofs + len) of the slot [s]: the
+   elements (of size [esz]) the range intersects if the access is fine
+   grained, the whole region otherwise. *)
+Definition slot_infos
+  (fine : bool) (esz : Z) (s : slot) (ofs len : Z) : seq ii_slot_info :=
+  if fine then [seq SIelem s i esz | i <- elems_of_range esz ofs len]
+  else [:: SIregion s (size_slot s)].
+
 Definition slot_of_sr
-  (rm : region_map) (x : var_i) (ofs len : Z) : option (slot * (Z * Z)) :=
+  (rm : region_map) (x : var_i) (ofs len : Z) :
+  option (slot * seq ii_slot_info) :=
   let%opt sr := Mvar.get rm.(var_region) x.(v_var) in
   let s := sr.(sr_region).(r_slot) in
   let z := sr.(sr_zone) in
   let '(ofs', _) := concrete_zone s z in
-  Some (s, (ofs + ofs', len))%Z.
+  Some (s, slot_infos (fine_grained x) (elem_size x) s (ofs + ofs')%Z len).
 
-Definition slot_e (rm : region_map) (e : pexpr) : option (slot * (Z * Z)) :=
+Definition slot_e
+  (rm : region_map) (e : pexpr) : option (slot * seq ii_slot_info) :=
   let%opt (x, ofs, len) :=
     match e with
     | Pvar x => Some (x.(gv), 0, size_slot x.(gv))%Z
@@ -1561,7 +1590,8 @@ Definition slot_e (rm : region_map) (e : pexpr) : option (slot * (Z * Z)) :=
   in
   slot_of_sr rm x ofs len.
 
-Definition slot_lv (rm : region_map) (lv : lval) : option (slot * (Z * Z)) :=
+Definition slot_lv
+  (rm : region_map) (lv : lval) : option (slot * seq ii_slot_info) :=
   let%opt (x, ofs, len) :=
     match lv with
     | Lvar x => Some (x, 0, size_slot x)%Z
@@ -1624,13 +1654,9 @@ Definition slot_chk_lvs (lvs : lvals) : Sv.t :=
 Definition seq_of_opt {T : Type} (ox : option T) : seq T :=
   if ox is Some x then [:: x] else [::].
 
-(* Split into bytes *)
-Definition split_slot_info (p : var * (Z * Z)) : seq ii_slot_info :=
-  let '(x, (ofs, len)) := p in
-  [seq {| si_name := x; si_ofs := i; |} | i <- ziota ofs len].
-
 Definition annot_of_slots
-  (os : seq (option (slot * (Z * Z)))) (ii : instr_info) : cexec instr_info :=
+  (os : seq (option (slot * seq ii_slot_info))) (ii : instr_info) :
+  cexec instr_info :=
   if ~~ region_annot then ok ii
   else
     let rs := seq.pmap id os in
@@ -1648,7 +1674,7 @@ Definition annot_of_slots
     | 0 => ok ii
     | 1 =>
         (* TODO is undup necessary? *)
-        let sis := undup (conc_map split_slot_info rs) in
+        let sis := undup (conc_map snd rs) in
         ok (ii_add_array_annot sis ii)
     | _ =>
         let x := seq_of_opt (Sv.choose ss) in
@@ -1667,10 +1693,11 @@ Definition is_Pstkptr
   if pk is Pstkptr s ofs ws z f then Some (s, ofs, ws, z, f)
   else None.
 
-Definition stkptr_cell (x : var) : option (slot * (Z * Z)) :=
+(* The pointer cell of a stack pointer, always a whole region. *)
+Definition stkptr_cell (x : var) : option (slot * seq ii_slot_info) :=
   let%opt s := get_local x in
   let%opt (s, _, _, cs, _) := is_Pstkptr s in
-  Some (s, (cs.(cs_ofs), cs.(cs_len))).
+  Some (s, [:: SIregion s (size_slot s) ]).
 
 Definition add_stkptr_annot
   (lv : lval) (e : pexpr) (ii : instr_info) : cexec instr_info :=
@@ -1806,35 +1833,57 @@ Definition alloc_call_res rmap srs ret_pos rs :=
 
 (* TODO when we don't know the concrete size of an argument we use the entire
    slot. This means that the parameter needs to have the same size. *)
+(* [e] is the argument before allocation. A fine grained parameter is
+   instantiated element by element: with the corresponding element of the
+   argument when the argument is known to have the size of the parameter and
+   the elements of both have the same size and are aligned, and with the whole
+   argument otherwise. *)
 Definition get_inst
   (param : var_i)
-  (osr : option sub_region) :
+  (osr : option sub_region)
+  (e : pexpr) :
   cexec (seq ii_inst_info) :=
   if osr is Some sr then
     let a := sr.(sr_region).(r_slot) in
     let '(ofs, len) := concrete_zone a sr.(sr_zone) in
     let param_len := size_slot param.(v_var) in
-    let caller_si i :=
-      if param_len == len then [:: {| si_name := a; si_ofs := ofs + i; |}]
-      else [seq {| si_name := a; si_ofs := i; |} | i <- ziota ofs len]
+    let esz := elem_size param in
+    let '(fine_caller, esz_caller) :=
+      match e with
+      | Pvar x | Psub _ _ _ x _ => (fine_grained x.(gv), elem_size x.(gv))
+      | _ => (false, size_slot a)
+      end
     in
-    let mk i :=
+    let exact :=
+      [&& param_len == len, fine_caller, esz_caller == esz
+        & Z.modulo ofs esz == 0%Z]
+    in
+    let caller_si ce :=
+      match ce with
+      | SIelem _ i _ =>
+          if exact then [:: SIelem a (Z.div ofs esz + i)%Z esz ]
+          else slot_infos fine_caller esz_caller a ofs len
+      | SIregion _ _ => slot_infos fine_caller esz_caller a ofs len
+      end
+    in
+    let mk ce :=
       {|
-        inst_caller := caller_si i;
-        inst_callee := {| si_name := param.(v_var); si_ofs := i; |};
+        inst_caller := caller_si ce;
+        inst_callee := ce;
       |}
     in
-    ok [seq mk i | i <- ziota 0 param_len]
+    ok [seq mk ce | ce <- slot_infos (fine_grained param) esz param 0 param_len]
   else ok [::].
 
 Definition get_inst_arg
   (param : var_i)
-  (oarg : option (bool * sub_region) * pexpr) :
+  (oarg : (option (bool * sub_region) * pexpr) * pexpr) :
   cexec (seq ii_inst_info) :=
-  get_inst param (omap snd oarg.1).
+  get_inst param (omap snd oarg.1.1) oarg.2.
 
 Definition alloc_call (ii : instr_info) (sao_caller:stk_alloc_oracle_t) rmap rs fn es : cexec (region_map * instr) :=
   let sao_callee := local_alloc fn in
+  let es0 := es in
   Let es  := alloc_call_args rmap fn sao_callee.(sao_params) es in
   let '(rmap, es) := es in
 
@@ -1846,7 +1895,8 @@ Definition alloc_call (ii : instr_info) (sao_caller:stk_alloc_oracle_t) rmap rs 
     o2r (stk_ierror_no_var "inst callee_fd") (get_fundef P.(p_funcs) fn)
   in
   Let inst :=
-    mapM2 (stk_ierror_no_var "inst 2") get_inst_arg callee_fd.(f_params) es
+    mapM2 (stk_ierror_no_var "inst 2") get_inst_arg callee_fd.(f_params)
+      (zip es es0)
   in
   (* TODO is checking lvs really not necessary? *)
   let ii := ii_add_instantiation_annot (flatten inst) ii in

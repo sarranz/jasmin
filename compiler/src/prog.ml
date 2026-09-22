@@ -87,6 +87,12 @@ let spill_to_mmx v =
   Annot.ensure_uniq1 "spill_to_mmx" Annot.none v.v_annot
   |> Option.is_some
 
+(* [#[asm_ct_fine_grained]] on an array declaration: the memory annotations
+   for the ASM constant-time checker are at the granularity of its elements. *)
+let is_asm_ct_fine_grained v =
+  Annot.ensure_uniq1 "asm_ct_fine_grained" Annot.none v.v_annot
+  |> Option.is_some
+
 (* ------------------------------------------------------------------------ *)
 
 type 'len glval =

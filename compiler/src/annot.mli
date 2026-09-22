@@ -91,6 +91,8 @@ val ensure_uniq1 :
 val consume :
   string -> Annotations.annotations -> Annotations.annotations
 
-val has_array_annot : Annotations.annotations -> string list option
+val has_array_annot :
+  Annotations.annotations -> Annotations.region list option
 val has_instantiation_annot :
-  Annotations.annotations -> (string * string) list option
+  Annotations.annotations ->
+  (Annotations.region * Annotations.region list) list option

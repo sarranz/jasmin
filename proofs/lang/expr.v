@@ -379,8 +379,8 @@ Definition dummy_instr_info : instr_info := InstrInfo.witness.
 Definition ii_with_location (ii : instr_info) : instr_info :=
   InstrInfo.with_location ii.
 Definition ii_is_inline (ii : instr_info) : bool := InstrInfo.is_inline ii.
-(* [rs] associates to each accessed slot the byte range [ofs, ofs + len)
-   the access uses within it. *)
+(* [rs] lists the regions accessed by the instruction, each one given by its
+   slot and its total size in bytes. *)
 Definition ii_add_array_annot : _ -> instr_info -> instr_info :=
   InstrInfo.add_array_annot.
 Definition ii_add_instantiation_annot : _ -> instr_info -> instr_info :=

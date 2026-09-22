@@ -5,6 +5,7 @@ module StackAlloc (Arch: Arch_full.Arch) : sig
 
   val memory_analysis :
     (Stack_alloc.sub_region -> Compiler_util.pp_error) ->
+    (Expr.var_i -> bool) ->
     (Format.formatter -> Compiler_util.pp_error -> unit) ->
     debug:bool ->
     Utils.callee_saved_strategy ->

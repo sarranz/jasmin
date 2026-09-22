@@ -57,6 +57,8 @@ let warn_extra_fd pd msfsize asmOp (_, fd) = List.iter (warn_extra_i pd msfsize 
 (* -------------------------------------------------------------------- *)
 let spill_to_mmx x = spill_to_mmx x.Var0.Var.vname
 
+let is_fine_grained x = is_asm_ct_fine_grained x.Expr.v_var.Var0.Var.vname
+
 let do_spill_unspill asmop ?(debug = false) cp =
   let p = Conv.cuprog_of_prog cp in
   match Lower_spill.spill_uprog asmop Compiler.default_LoopCounter Conv.fresh_var_ident spill_to_mmx p with
@@ -164,6 +166,7 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
   let memory_analysis up : Compiler.stack_alloc_oracles =
     SA.memory_analysis
       pp_sr
+      is_fine_grained
       (Printer.pp_err ~debug:!debug)
       ~debug:!debug
       callee_saved_strategy
@@ -455,6 +458,7 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
       Compiler.pp_sr;
       Compiler.apply_ret_annot = StackAlloc.apply_ret_annot;
       Compiler.region_annot = !asm_ct_chk;
+      Compiler.is_fine_grained;
     }
   in
 

@@ -49,6 +49,11 @@ val is_reg_direct_kind : v_kind -> bool
 
 val spill_to_mmx : var -> bool
 
+(** [#[asm_ct_fine_grained]] on an array declaration: the memory annotations
+    for the ASM constant-time checker are at the granularity of its
+    elements. *)
+val is_asm_ct_fine_grained : var -> bool
+
 (* ------------------------------------------------------------------------ *)
 
 type 'len glval =

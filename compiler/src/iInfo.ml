@@ -29,26 +29,30 @@ let slot_name : Var0.Var.var -> string =
       Hashtbl.add slot_name_tbl key s;
       s
 
-let process_si si = (slot_name si.si_name, CoreConv.z_of_cz si.si_ofs)
-let process_inst i =
-  (process_si i.inst_callee, List.map process_si i.inst_caller)
-
-let string_of_si (n, o) = Format.sprintf "%s[%s]" n (Z.to_string o)
+(* A whole slot is the region [(name, size)]; element [i] of a fine-grained
+   array slot is the region [(name[i], element size)]. *)
+let process_si (si : ii_slot_info) : Annotations.region =
+  match si with
+  | SIregion (x, size) ->
+      { Annotations.r_name = slot_name x; r_size = CoreConv.z_of_cz size }
+  | SIelem (x, i, size) ->
+      let name =
+        Format.sprintf "%s[%s]" (slot_name x) (Z.to_string (CoreConv.z_of_cz i))
+      in
+      { Annotations.r_name = name; r_size = CoreConv.z_of_cz size }
 
 let add_array_annot (rs : ii_mem_annot) ((l, annot) : t) : t =
-  let names = List.map process_si rs |> List.map string_of_si in
-  if names = [] then (l, annot)
-  else (l, Annotations.add_array_annot ~loc:Location.(l.base_loc) names annot)
+  let regions = List.map process_si rs in
+  if regions = [] then (l, annot)
+  else (l, Annotations.add_array_annot ~loc:Location.(l.base_loc) regions annot)
 
 let add_instantiation_annot (inst : ii_inst_annot) ((l, annot) : t) : t =
   let inst =
-    List.map process_inst inst
-    |> List.map (fun (no1, es) -> (string_of_si no1, List.map string_of_si es))
+    List.map
+      (fun i -> (process_si i.inst_callee, List.map process_si i.inst_caller))
+      inst
   in
-  let annot =
-    Annotations.add_instantiation_annot ~loc:Location.(l.base_loc) inst annot
-  in
-  (l, annot)
+  (l, Annotations.add_instantiation_annot ~loc:Location.(l.base_loc) inst annot)
 
 let allocate_stack_frame ((l, annot) : t) : t =
   (l, Annotations.remove_symbol Annotations.instantiation_annot annot)

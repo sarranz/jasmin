@@ -6,20 +6,25 @@ From mathcomp Require Import word_ssrZ.
 
 Require Import var utils.
 
-Record ii_slot_info := mk_si
-  {
-    si_name : var;
-    si_ofs : Z;
-  }.
+(* A memory region as seen by the stack allocation pass: a whole slot with
+   its size in bytes, or, for array slots whose annotations are fine grained,
+   one element of the array. *)
+Variant ii_slot_info :=
+  | SIregion of var & Z    (* the slot and its size in bytes *)
+  | SIelem of var & Z & Z. (* the slot, the index of the element and its size *)
 
 Definition ii_slot_info_eqb (x y : ii_slot_info) : bool :=
-  [&& x.(si_name) == y.(si_name) & x.(si_ofs) == y.(si_ofs)].
+  match x, y with
+  | SIregion s1 n1, SIregion s2 n2 => (s1 == s2) && (n1 == n2)
+  | SIelem s1 i1 n1, SIelem s2 i2 n2 => [&& s1 == s2, i1 == i2 & n1 == n2]
+  | _, _ => false
+  end.
 
 Lemma ii_slot_info_eqb_OK : Equality.axiom ii_slot_info_eqb.
 Proof.
-move=> [n1 o1] [n2 o2]; apply: (iffP idP).
-- by move=> /andP [/= /eqP <- /eqP <-].
-by move=> [<- <-]; rewrite /ii_slot_info_eqb !eqxx.
+move=> [s1 n1|s1 i1 n1] [s2 n2|s2 i2 n2] /=; try by constructor.
+- by apply: (iffP andP) => [[/eqP <- /eqP <-]|[<- <-]].
+by apply: (iffP and3P) => [[/eqP <- /eqP <- /eqP <-]|[<- <- <-]].
 Qed.
 
 HB.instance Definition _ := hasDecEq.Build ii_slot_info ii_slot_info_eqb_OK.
