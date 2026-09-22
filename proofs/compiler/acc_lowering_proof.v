@@ -2107,7 +2107,7 @@ case: op hsem hlow => [pop | slh | aop] hsem hlow //=.
 move: hlow; rewrite /no_pre /lower_pseudo_operator; t_xrbindP=> oa hM ob hli hmatch.
 case: pop hsem ob => [so aty | wz z | aty2 | z2 | | sz1 | sz2 | sz3 | ty] hsem ob.
 all: try done.
-all: try (move: ob hli hmatch => /= -[<-] -[<-] //).
+1-5: by move: ob hli hmatch => /= -[<-] -[<-] //.
 case: hM ob hli hmatch => [[[lvsX opX] esX]|] ob hli hmatch //=.
 have hoa : oa = Some (lvsX, opX, esX) by case: hli.
 rewrite hoa in hmatch.
