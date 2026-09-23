@@ -1,0 +1,8 @@
+// The lane index of BN.MULV.L.8S... is an unsigned 3-bit immediate, i.e. in
+// [0, 8): there are only 8 lanes in the .8S shape.
+export
+fn bn_mulv_l_8s_lane_too_large(reg u256 x, reg u256 y) -> reg u256 {
+    reg u256 r;
+    r = #BN_MULV_L_8S_EVEN_w16(x, y, 8);
+    return r;
+}

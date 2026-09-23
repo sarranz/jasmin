@@ -1,0 +1,7 @@
+// LUI takes an unsigned 20-bit immediate: negative values are invalid.
+export
+fn lui_negative() {
+    reg u32 x;
+    x = #LUI(-1);
+    [#aligned x] = x;
+}

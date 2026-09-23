@@ -1,0 +1,8 @@
+// BN.MOVR's two wide-register suffixes must each be in [0, 31]; _w32 does not
+// name a valid wide register and must be rejected at parsing.
+export
+fn bn_movr_invalid_suffix(reg u32 gd, reg u32 gs) -> reg u256 {
+    reg u256 x;
+    x = #BN_MOVR_w32_w05(gd, gs);
+    return x;
+}

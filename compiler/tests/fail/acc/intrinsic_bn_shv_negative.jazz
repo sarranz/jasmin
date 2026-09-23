@@ -1,0 +1,7 @@
+// BN.SHV takes an unsigned 5-bit shift amount: negative values are invalid.
+export
+fn bn_shv_negative(reg u256 x) -> reg u256 {
+    reg u256 r;
+    r = #BN_SHV_8S_SHL(x, -1);
+    return r;
+}

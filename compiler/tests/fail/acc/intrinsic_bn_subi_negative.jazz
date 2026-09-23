@@ -1,0 +1,7 @@
+// BN.SUBI takes an unsigned 10-bit immediate: negative values are invalid.
+export
+fn bn_subi_negative(reg u256 x) -> reg u256 {
+    reg u256 r;
+    ?{}, r = #BN_SUBI(x, -1);
+    return r;
+}

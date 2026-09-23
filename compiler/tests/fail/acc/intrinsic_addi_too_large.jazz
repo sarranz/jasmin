@@ -1,0 +1,7 @@
+// ADDI takes a signed 12-bit immediate, i.e. in [-2048, 2048).
+export
+fn addi_too_large(reg u32 x) {
+    reg u32 r;
+    r = #ADDI(x, 2048);
+    [#aligned r] = r;
+}

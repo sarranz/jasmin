@@ -4,6 +4,10 @@ fn srli(reg u32 arg0) {
     x = #SRLI(arg0, 0);
     x = #SRLI(x, 1);
     x = #SRLI(x, 31);
+    // The shift amount is a u8 literal, so it follows ordinary Jasmin
+    // sized-literal semantics: 256 wraps modulo 256 to 0, a valid shift,
+    // before the "[0, 32)" range check runs.
+    x = #SRLI(x, 256);
     [#aligned x] = x;
 }
 

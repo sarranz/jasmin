@@ -1,0 +1,7 @@
+// The shift amount of a BN.CMP operand must not exceed 248 (see
+// success/acc/bn_cmp_shift.jazz and bn_cmp_shift_amount.jazz).
+export
+fn shift_too_large(reg u256 a, reg u256 b) -> reg u256 {
+    b = a if (a == (b << 255));
+    return b;
+}

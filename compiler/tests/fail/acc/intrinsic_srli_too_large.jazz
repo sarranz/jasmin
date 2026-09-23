@@ -1,0 +1,7 @@
+// SRLI takes an unsigned 5-bit immediate, i.e. in [0, 32).
+export
+fn srli_too_large(reg u32 x) {
+    reg u32 r;
+    r = #SRLI(x, 32);
+    [#aligned r] = r;
+}

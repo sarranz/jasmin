@@ -1,0 +1,7 @@
+// The lane index of BN.MULV.L is unsigned: negative values are invalid.
+export
+fn bn_mulv_l_lane_negative(reg u256 x, reg u256 y) -> reg u256 {
+    reg u256 r;
+    r = #BN_MULV_L_8S_EVEN_w16(x, y, -1);
+    return r;
+}

@@ -1,0 +1,8 @@
+// The quarter-word selectors of BN.MULQACC are unsigned 2-bit immediates,
+// i.e. in [0, 4).
+export
+fn bn_mulqacc_q_too_large(reg u256 x, reg u256 y) -> reg u256 {
+    reg u256 acc;
+    acc = #BN_MULQACC_Z(x, 4, y, 0, 0);
+    return acc;
+}

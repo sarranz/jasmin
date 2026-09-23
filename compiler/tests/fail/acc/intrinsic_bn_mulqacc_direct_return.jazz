@@ -1,0 +1,15 @@
+// #BN_MULQACC_Z's result is bound to the implicit ACC register (like every
+// BN.MULQACC* variant): it can only be consumed by another instruction that
+// also reads/writes ACC implicitly (chaining further BN.MULQACC* calls, or
+// reading it out explicitly with #BN_ACCR, as success/acc/mulqacc.jazz does).
+// Using it directly as an ordinary wide-register value (here, returning it)
+// is invalid: BN.MOV cannot name ACC as an operand, so register allocation
+// cannot satisfy both "this variable is forced to ACC" (from BN.MULQACC.Z)
+// and "this variable must avoid ACC" (from the implicit BN.MOV a plain
+// return inserts) constraints.
+export
+fn bn_mulqacc_direct_return(reg u256 x, reg u256 y) -> reg u256 {
+    reg u256 acc;
+    acc = #BN_MULQACC_Z(x, 0, y, 0, 0);
+    return acc;
+}

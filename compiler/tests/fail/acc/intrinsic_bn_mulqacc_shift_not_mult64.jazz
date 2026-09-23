@@ -1,0 +1,7 @@
+// The shift amount of BN.MULQACC must be a multiple of 64 in [0, 192].
+export
+fn bn_mulqacc_shift_not_mult64(reg u256 x, reg u256 y) -> reg u256 {
+    reg u256 acc;
+    acc = #BN_MULQACC_Z(x, 0, y, 0, 32);
+    return acc;
+}

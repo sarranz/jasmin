@@ -1,0 +1,7 @@
+// BN.SHV takes an unsigned 5-bit shift amount, i.e. in [0, 32).
+export
+fn bn_shv_too_large(reg u256 x) -> reg u256 {
+    reg u256 r;
+    r = #BN_SHV_8S_SHL(x, 32);
+    return r;
+}

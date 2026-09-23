@@ -7,6 +7,13 @@ fn bn_add(reg u256 arg0 arg1) -> reg u256 {
     ?{}, x = #BN_ADD(x, arg1 << 16);
     ?{}, x = #BN_ADD(x, arg1 << 248);
 
+    // The shift amount is a u8 literal, so it follows ordinary Jasmin
+    // sized-literal semantics: out-of-range values wrap modulo 256 (like any
+    // other u8 literal) before the "multiple of 8 in [0, 248]" check runs.
+    // 256 wraps to 0 and -8 wraps to 248, both valid shifts.
+    ?{}, x = #BN_ADD(x, arg1 << 256);
+    ?{}, x = #BN_ADD(x, arg1 << -8);
+
     ?{}, x = #BN_ADD_FG0(x, arg1);
 
     ?{}, x = #BN_ADD_FG1(x, arg1);

@@ -1,0 +1,8 @@
+// The quarter-word selectors of BN.MULQACC are unsigned: negative values are
+// invalid.
+export
+fn bn_mulqacc_q_negative(reg u256 x, reg u256 y) -> reg u256 {
+    reg u256 acc;
+    acc = #BN_MULQACC_Z(x, -1, y, 0, 0);
+    return acc;
+}

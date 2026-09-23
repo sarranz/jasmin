@@ -1,0 +1,7 @@
+// BN.ADDI takes an unsigned 10-bit immediate, i.e. in [0, 1024).
+export
+fn bn_addi_too_large(reg u256 x) -> reg u256 {
+    reg u256 r;
+    ?{}, r = #BN_ADDI(x, 1024);
+    return r;
+}

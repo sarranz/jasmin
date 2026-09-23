@@ -1,0 +1,8 @@
+// The lane index of BN.MULV.L.16H... is an unsigned 4-bit immediate, i.e. in
+// [0, 16): there are only 16 lanes in the .16H shape.
+export
+fn bn_mulv_l_16h_lane_too_large(reg u256 x, reg u256 y) -> reg u256 {
+    reg u256 r;
+    r = #BN_MULV_L_16H_EVEN_w16(x, y, 16);
+    return r;
+}

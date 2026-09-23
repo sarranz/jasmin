@@ -73,6 +73,15 @@ Module E.
       in
       user_error err ii.
 
+    Definition invalid_bn_sham (e : pexpr) : pp_error_loc :=
+      let err := pp_box
+        [:: pp_s "invalid shift amount:"
+         ; pp_e e
+         ; pp_s ". Must be a multiple of 8 in the range [0, 248]."
+        ]
+      in
+      user_error err ii.
+
     Definition imm_out_of_range {ws : wsize} (w : word ws) : pp_error_loc :=
       let err :=
         pp_box [:: pp_s "immediate out of range:"; pp_e (wconst w) ]
@@ -219,7 +228,7 @@ Section UTILS.
   Definition chk_xreg_ws := chk_ws xreg_size.
 
   Definition chk_bn_shift (z : Z) : cexec unit :=
-    assert (check_bn_shift z) (E.invalid_sham ii (Pconst z)).
+    assert (check_bn_shift z) (E.invalid_bn_sham ii (Pconst z)).
 
   Definition chk_address_displacement (ws : wsize) (w : word ws) : cexec unit :=
     assert (check_nbits Signed 12 w) (E.imm_out_of_range ii w).

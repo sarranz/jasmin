@@ -70,3 +70,21 @@ fn sel_shift(reg u256 a, reg u256 b) -> reg u256 {
     b = #BN_SEL(a, b, a == (b >> 8));
     return b;
 }
+
+// The shift amount is a u8 literal, so it follows ordinary Jasmin
+// sized-literal semantics: out-of-range values wrap modulo 256 (like any
+// other u8 literal) before the "multiple of 8 in [0, 248]" check runs.
+// 256 wraps to 0 and -8 wraps to 248, both valid shifts.
+export
+fn shift_wraps_at_256(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.cmp a, b << 0, FG1 ; bn.sel b, a, b, FG1.Z
+    b = a if (a == (b << 256));
+    return b;
+}
+
+export
+fn shift_negative_wraps(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.cmp a, b << 248, FG1 ; bn.sel b, a, b, FG1.Z
+    b = a if (a == (b << -8));
+    return b;
+}

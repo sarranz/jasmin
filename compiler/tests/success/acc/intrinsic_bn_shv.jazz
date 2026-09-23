@@ -8,9 +8,21 @@ fn bn_shv(reg u256 x) -> reg u256 {
     r = #BN_SHV_16H_SHL(r, 4);
     r = #BN_SHV_16H_SHR(r, 2);
 
-    // Boundary shift amounts (uimm5 range is 0..31).
+    // Boundary shift amounts (uimm5 range is 0..31), all four shape/direction
+    // combinations.
     r = #BN_SHV_8S_SHL(r, 0);
+    r = #BN_SHV_8S_SHL(r, 31);
+    r = #BN_SHV_8S_SHR(r, 0);
+    r = #BN_SHV_8S_SHR(r, 31);
+    r = #BN_SHV_16H_SHL(r, 0);
+    r = #BN_SHV_16H_SHL(r, 31);
+    r = #BN_SHV_16H_SHR(r, 0);
     r = #BN_SHV_16H_SHR(r, 31);
+
+    // The shift amount is a u8 literal, so it follows ordinary Jasmin
+    // sized-literal semantics: 256 wraps modulo 256 to 0, a valid shift,
+    // before the "[0, 32)" range check runs.
+    r = #BN_SHV_8S_SHL(r, 256);
 
     return r;
 }

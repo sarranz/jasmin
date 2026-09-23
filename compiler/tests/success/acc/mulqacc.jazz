@@ -27,6 +27,20 @@ fn mulqacc(reg u256 x y) -> reg u256 {
     return b;
 }
 
+// The quarter-word selectors and the shift amount are u8 literals, so they
+// follow ordinary Jasmin sized-literal semantics: out-of-range values wrap
+// modulo 256 before the range checks run. 256 wraps to 0 for both (a valid
+// selector and a valid shift), as long as the result is read out properly
+// with #BN_ACCR (see intrinsic_bn_mulqacc_direct_return.jazz in fail/acc for
+// what happens when it isn't).
+export
+fn mulqacc_wraps_at_256(reg u256 x y) -> reg u256 {
+    reg u256 acc b;
+    acc = #BN_MULQACC_Z(x, 256, y, 0, 256);
+    b = #BN_ACCR(acc);
+    return b;
+}
+
 export
 fn mulqacc_fg0(reg u256 x y) -> reg u256 {
     reg u256 a b acc;

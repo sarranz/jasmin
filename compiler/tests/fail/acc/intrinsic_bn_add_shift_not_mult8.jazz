@@ -1,0 +1,8 @@
+// The shift amount of a shifted BN.ADD operand must be a multiple of 8 in
+// [0, 248] (see success/acc/intrinsic_bn_add.jazz).
+export
+fn bn_add_shift_not_mult8(reg u256 x, reg u256 y) -> reg u256 {
+    reg u256 r;
+    ?{}, r = #BN_ADD(x, y << 20);
+    return r;
+}

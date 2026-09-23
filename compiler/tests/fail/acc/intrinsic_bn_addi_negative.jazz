@@ -1,0 +1,7 @@
+// BN.ADDI takes an unsigned 10-bit immediate: negative values are invalid.
+export
+fn bn_addi_negative(reg u256 x) -> reg u256 {
+    reg u256 r;
+    ?{}, r = #BN_ADDI(x, -1);
+    return r;
+}

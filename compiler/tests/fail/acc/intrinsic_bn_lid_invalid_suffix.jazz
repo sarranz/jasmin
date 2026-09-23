@@ -1,0 +1,8 @@
+// BN.LID's wide-register suffix must be in [0, 31] (w00..w31); _w32 does not
+// name a valid wide register and must be rejected at parsing.
+export
+fn bn_lid_invalid_suffix(reg u32 addr, reg u32 i) -> reg u256 {
+    reg u256 x;
+    x = #BN_LID_w32(i, [#aligned :u256 addr]);
+    return x;
+}

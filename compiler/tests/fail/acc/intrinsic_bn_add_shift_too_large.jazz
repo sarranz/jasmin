@@ -1,0 +1,7 @@
+// The shift amount of a shifted BN.ADD operand must not exceed 248.
+export
+fn bn_add_shift_too_large(reg u256 x, reg u256 y) -> reg u256 {
+    reg u256 r;
+    ?{}, r = #BN_ADD(x, y << 255);
+    return r;
+}

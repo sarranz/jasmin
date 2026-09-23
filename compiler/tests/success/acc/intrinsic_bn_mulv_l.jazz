@@ -66,6 +66,11 @@ fn bn_mulv_l_8s_w16(reg u256 x y) -> reg u256 {
 
     l = y;
 
+    // The lane index is a u8 literal, so it follows ordinary Jasmin
+    // sized-literal semantics: 256 wraps modulo 256 to 0, a valid lane
+    // index, before the "[0, 8)" range check runs.
+    r = #BN_MULV_L_8S_EVEN_w16(x, l, 256);
+
     r = #BN_MULV_L_8S_EVEN_w16(x, l, 0);
     r = #BN_MULV_L_8S_ODD_w16(r, l, 1);
     r = #BN_MULV_L_8S_EVEN_LO_w16(r, l, 2);

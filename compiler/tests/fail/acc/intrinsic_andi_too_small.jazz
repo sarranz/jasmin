@@ -1,0 +1,7 @@
+// ANDI takes a signed 12-bit immediate, i.e. in [-2048, 2048).
+export
+fn andi_too_small(reg u32 x) {
+    reg u32 r;
+    r = #ANDI(x, -2049);
+    [#aligned r] = r;
+}

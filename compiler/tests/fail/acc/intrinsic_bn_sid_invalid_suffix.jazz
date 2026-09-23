@@ -1,0 +1,6 @@
+// BN.SID's wide-register suffix must be in [0, 31] (w00..w31); _w32 does not
+// name a valid wide register and must be rejected at parsing.
+export
+fn bn_sid_invalid_suffix(reg u256 src, reg u32 dst, reg u32 i) {
+    [#aligned :u256 dst] = #BN_SID_w32(src, i);
+}
