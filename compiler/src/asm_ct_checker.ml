@@ -279,7 +279,7 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
     let declassify_slots env slots : Env.t =
       List.fold_left (fun env slot -> Env.set env slot Level.Public) env slots
 
-    let declassify_region env instr size : Env.t ==
+    let declassify_region env instr size : Env.t =
       let regions = Arch_utils.get_mem_regions instr in
       let loc = fst instr.asmi_ii in
       match regions with
@@ -411,7 +411,7 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
       SM.fold (fun slot level env -> Env.set env slot level)
         post_updates caller
 
-    let slot_bindings callee_sig inst : (string * string list) list =
+    let slot_bindings callee_sig inst : (string * (string * bool) list) list =
       let is_array slot : bool = not (SS.mem slot Arch_utils.arch_slots_set) in
       List.map
         (fun callee_slot ->
