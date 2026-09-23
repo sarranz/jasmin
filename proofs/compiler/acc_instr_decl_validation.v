@@ -55,13 +55,13 @@ Section VALIDATION_PRIM.
   Goal all [predC bad_suffix] strings.
   done. Qed.
 
-  Let hidden := [:: "LA" ]%string.
+  Let hidden := [:: "LA"; "BN_SEL" ]%string.
 
   Goal
     forall op,
       let: s := replace_dot (acc_op_to_string op) in
       xorb (s \in hidden) (s \in strings).
-  by move=> [] // [] // [] //. Qed.
+  by move=> [] // [] // [] // [] // [] //. Qed.
 
 End VALIDATION_PRIM.
 
@@ -88,13 +88,13 @@ Section VALIDATION_ARGS.
       all
         (fun x => size x == count_explicit_arguments (id_in t ++ id_out t))
         (id_args_kinds t).
-  by move=> [] // [] // []. Qed.
+  by move=> [] // [] // [] // [] // []. Qed.
 
   Goal
     forall op,
       let t := instr_desc_op op in
       id_nargs t = count_explicit_arguments (id_in t ++ id_out t).
-  by move=> [] // [] // []. Qed.
+  by move=> [] // [] // [] // [] // []. Qed.
 
 End VALIDATION_ARGS.
 
@@ -122,6 +122,24 @@ Section VALIDATION_SEM.
 
   Goal test3 BN_ADDM
     (wrepr U256 0) (wrepr U256 0) (wrepr U256 100) (wrepr U256 0).
+  Proof. by []. Qed.
+
+  (* Post-increment load and store ([insn.py]: BNLD, BNSD): the value passes
+     through and the address register is incremented by 32, modulo 2^32. *)
+  Notation test_inc op x p x_e p_e :=
+    (is_ok
+       (Let res := id_semi (desc_acc_op op) x p in
+        assert
+          [&& wunsigned res.1 == wunsigned x_e
+            & wunsigned res.2 == wunsigned p_e ]
+          ErrSemUndef)).
+
+  Goal test_inc BN_LD_INC (wrepr U256 7) (wrepr U32 0x100)
+    (wrepr U256 7) (wrepr U32 0x120).
+  Proof. by []. Qed.
+
+  Goal test_inc BN_SD_INC (wrepr U256 7) (wrepr U32 0xffffffe0)
+    (wrepr U256 7) (wrepr U32 0).
   Proof. by []. Qed.
 
   Goal test2 (RV32 SLL) (wrepr U32 1) (wrepr U8 32) (wrepr U32 1).

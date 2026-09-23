@@ -19,7 +19,22 @@ let weak_dep_lv s = function
   | Laset(_, _, _, x, e)
   | Lasub(_, _, _, x, e) -> Sv.add (L.unloc x) (Sv.union (vars_e e) s)
 
-let weak_dep_lvs s lvs = List.fold_left weak_dep_lv s lvs
+(** Same for a list of destinations, which are written from left to right.
+The variables that compute the address of a memory destination are read when
+that destination is written, so they need to be kept apart from the written
+variables (i.e. added to the out live-set) only when an earlier destination
+writes a variable. Otherwise they are read before anything is written and may
+share a register with a variable written later by the same instruction, as in
+a store that also increments its address register:
+[[p], p = #BN_SD_INC(v, p)]. *)
+let weak_dep_lvs s lvs =
+  let add (written, s) lv =
+    match lv with
+    | Lnone _ -> (written, s)
+    | Lmem (_, _, _, e) -> (written, if written then Sv.union (vars_e e) s else s)
+    | Lvar _ | Laset _ | Lasub _ -> (true, weak_dep_lv s lv)
+  in
+  snd (List.fold_left add (false, s) lvs)
 
 (* When [weak] is true, the out live-set contains also the written variables and
 the variables that are used for evaluating LHS expressions. *)

@@ -1,0 +1,13 @@
+/* The register to increment (second argument of #BN_LD_INC) must be the base
+   register of the address. Here [q] is incremented while the address is based
+   on [p]. Both are function arguments, so they are allocated to distinct
+   registers, and the assembly printer rejects the instruction. */
+
+export
+fn base_mismatch(reg u32 p q) -> reg u256, reg u32 {
+    reg u256 x;
+
+    x, q = #BN_LD_INC([#aligned :u256 p], q);
+
+    return x, q;
+}

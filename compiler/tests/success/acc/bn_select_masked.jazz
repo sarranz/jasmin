@@ -1,0 +1,28 @@
+// The destination and source registers of `BN_SELECT_MASKED` are forced to
+// different registers.
+
+export
+fn bn_select_masked(reg u256 arg0 arg1) -> reg u256 {
+    reg bool b;
+    reg u256 x;
+
+    ?{ "CF0" = b } = #BN_CMP(arg0, arg1);
+    x = #BN_SELECT_MASKED(arg0, arg1, b);
+
+    ?{ "LF1" = b } = #BN_CMP_FG1(x, arg1);
+    x = #BN_SELECT_MASKED(arg0, x, b);
+
+    return x;
+}
+
+export
+fn bn_select_masked_same_dest(reg u256 arg0 arg1) -> reg u256 {
+    reg bool b;
+
+    // Even when the name of the variable is the same, this code will always
+    // use a different register for the destination.
+    ?{ "CF0" = b } = #BN_CMP(arg0, arg1);
+    arg0 = #BN_SELECT_MASKED(arg0, arg1, b);
+
+    return arg0;
+}

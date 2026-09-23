@@ -672,6 +672,9 @@ Variant return_address_location :=
 Definition is_RAnone ra :=
   if ra is RAnone then true else false.
 
+Definition is_RAhwstack ra :=
+  if ra is RAhwstack _ then true else false.
+
 Definition is_RAstack ra :=
   if ra is RAstack _ _ _ _ then true else false.
 

@@ -1,0 +1,10 @@
+// ACC has no branch on BN flags, so a wide comparison cannot be an if/while
+// condition; it is left alone by lowering and rejected when the condition is
+// assembled.
+export
+fn if_wide(reg u256 a, reg u256 b) -> reg u256 {
+    if (a == b) {
+        b = a;
+    }
+    return b;
+}

@@ -1,0 +1,8 @@
+// Signed comparisons of wide registers are rejected by lowering, also as the
+// condition of the #BN_SEL intrinsic. The negation does not help: !(a <=s b)
+// is a >s b, still signed.
+export
+fn signed_intrinsic(reg u256 a, reg u256 b) -> reg u256 {
+    b = #BN_SEL(a, b, !(a <=s b));
+    return b;
+}

@@ -1,0 +1,37 @@
+/* Direct wide store with post-increment of the address register.
+
+   [[p + off], p = #BN_SD_INC(v, p)] compiles to [bn.sd v, off(p++)]: the
+   store writes [v] at [p + off], then [p] is incremented by 32 (one wide
+   word), whatever [off] is. As for #BN_LD_INC, the second argument names the
+   register to increment, it is also the second output, and it must be the
+   base register of the address. */
+
+export
+fn bn_sd_inc(reg u32 p, reg u256 v) -> reg u32 {
+    [#aligned :u256 p], p = #BN_SD_INC(v, p);
+    [#aligned :u256 p + 32], p = #BN_SD_INC(v, p);
+    [#aligned :u256 p - 32], p = #BN_SD_INC(v, p);
+    [#aligned :u256 p + 16352], p = #BN_SD_INC(v, p);
+    [#aligned :u256 p - 16384], p = #BN_SD_INC(v, p);
+
+    return p;
+}
+
+/* The updated pointer bound to another variable (see bn_ld_inc_rename in
+   intrinsic_bn_ld_inc.jazz). */
+export
+fn bn_sd_inc_rename(reg u32 p, reg u256 v) -> reg u32 {
+    reg u32 q;
+
+    [#aligned :u256 p], q = #BN_SD_INC(v, p);
+
+    return q;
+}
+
+/* Fill [n] consecutive wide words with [v]. */
+export
+fn bn_sd_inc_loop(reg u32 p n, reg u256 v) {
+    repeat n {
+        [#aligned :u256 p], p = #BN_SD_INC(v, p);
+    }
+}

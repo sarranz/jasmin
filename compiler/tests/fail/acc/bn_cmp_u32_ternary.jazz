@@ -1,0 +1,7 @@
+// There is no conditional select on 32-bit registers (BN.SEL is wide only);
+// a u32 ternary is rejected by lowering as before.
+export
+fn u32_ternary(reg u32 x, reg u32 y) -> reg u32 {
+    y = x if (x <u y);
+    return y;
+}

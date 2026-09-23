@@ -1,0 +1,7 @@
+// a <=u b is compiled as BN.CMP b, a; the shifted operand must therefore be
+// the left one for <=u.
+export
+fn shift_side_leu(reg u256 a, reg u256 b) -> reg u256 {
+    b = a if (a <=u (b << 8));
+    return b;
+}

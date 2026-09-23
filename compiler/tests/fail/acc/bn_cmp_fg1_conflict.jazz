@@ -1,0 +1,11 @@
+// Lowered comparisons use flag group FG1. A user flag of FG1 that is live
+// across an inline comparison conflicts with it in register allocation.
+export
+fn fg1_conflict(reg u256 a, reg u256 b) -> reg u256 {
+    reg u256 x = b;
+    reg bool cf;
+    ?{ CF1 = cf } = #BN_CMP_FG1(a, b);
+    x = a if (a >=u b);
+    x = #BN_SEL(x, a, cf);
+    return x;
+}

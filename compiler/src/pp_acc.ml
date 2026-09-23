@@ -21,9 +21,16 @@ module E = struct
   let invalid_call = err "invalid CALL"
   let invalid_poppc = err "invalid POPPC"
   let invalid_args = err "invalid arguments"
+  let invalid_loop_body = err "invalid loop body"
   let pp_error = err "found PP_error"
   let invalid_pp_aop_ext = err "invalid pp_aop_ext"
   let not_implemented = hierror ~loc ~kind ~internal "not implemented: %s"
+
+  let increment_not_base inc addr =
+    hierror ~loc ~kind ~internal:false
+      "the incremented register %s must be the base register of the address \
+       %s"
+      inc addr
 
   let address_not_supported base disp off scal =
     let pp =
@@ -79,21 +86,19 @@ let pp_flag f =
   | LF1 -> "FG1.L"
   | ZF1 -> "FG1.Z"
 
+(* [base] is the printed base register, possibly with a [++] suffix. *)
+let pp_reg_address_base base addr =
+  let disp = Conv.z_of_word (arch_pd arch) addr.ad_disp in
+  let disp = if Z.equal disp Z.zero then None else Some (Z.to_string disp) in
+  let off = Option.map pp_register addr.ad_offset in
+  let scal = Conv.z_of_nat addr.ad_scale in
+  let scal = if Z.equal scal Z.zero then None else Some (Z.to_string scal) in
+  pp_reg_address_aux base disp off scal
+
 let pp_reg_address addr =
   match addr.ad_base with
   | None -> E.invalid_address ()
-  | Some r ->
-      let base = pp_register r in
-      let disp = Conv.z_of_word (arch_pd arch) addr.ad_disp in
-      let disp =
-        if Z.equal disp Z.zero then None else Some (Z.to_string disp)
-      in
-      let off = Option.map pp_register addr.ad_offset in
-      let scal = Conv.z_of_nat addr.ad_scale in
-      let scal =
-        if Z.equal scal Z.zero then None else Some (Z.to_string scal)
-      in
-      pp_reg_address_aux base disp off scal
+  | Some r -> pp_reg_address_base (pp_register r) addr
 
 let pp_address addr =
   match addr with Areg ra -> pp_reg_address ra | Arip r -> pp_rip_address r
@@ -150,6 +155,24 @@ let src_of_MODnW op pp =
   | (MOD0Wzero | MOD1Wzero), [] -> x0
   | _ -> E.invalid_args ()
 
+(* [bn.ld wrd, off(grs++)] and [bn.sd wrs, off(grs++)]
+   ([Acc_instr_decl.desc_BN_LD_INC] and [desc_BN_SD_INC]): the third explicit
+   argument is the register to increment. It must be the base register of the
+   address operand, which must not be RIP-relative; it is folded into the
+   address operand as [off(grs++)]. *)
+let is_inc_op = function BN_LD_INC | BN_SD_INC -> true | _ -> false
+
+let pp_inc_args pp =
+  match pp.pp_aop_args with
+  | [ (_, XReg w); (_, Addr addr); (_, Reg r) ] ->
+      let ra =
+        match addr with
+        | Areg ra when ra.ad_base = Some r -> ra
+        | _ -> E.increment_not_base (pp_register r) (pp_address addr)
+      in
+      [ pp_xregister w; pp_reg_address_base (pp_register r ^ "++") ra ]
+  | _ -> E.invalid_args ()
+
 let pp_acc_op op pp =
   if op = RV32 NEG then
     match pp.pp_aop_args with
@@ -159,14 +182,16 @@ let pp_acc_op op pp =
   else if is_MODnW op then
     ("csrrw", [ x0; dst_of_MODnW op; src_of_MODnW op pp ])
   else
-    let pp_args = indirect_args pp in
     let name =
       Format.sprintf "%s%s"
         (pp.pp_aop_name |> String.lowercase)
         (pp_mnemonic_ext pp.pp_aop_ext)
     in
-    let args = List.filter_map (fun (_, a) -> pp_asm_arg a) pp_args in
-    (name, args)
+    if is_inc_op op then (name, pp_inc_args pp)
+    else
+      let pp_args = indirect_args pp in
+      let args = List.filter_map (fun (_, a) -> pp_asm_arg a) pp_args in
+      (name, args)
 
 let symbol_of_shift sh =
   match sh with Acc_options.RS_left -> "<<" | RS_right -> ">>"
@@ -236,8 +261,25 @@ let pp_args_mulqacc_selectors op args =
     end
   | _ -> args
 
+(* [BN.MULV.L] multiplies by one lane of [w16] ([sw0]) or [w17] ([sw1]). The
+   lane register is an explicit operand (forced to that register) and the lane
+   index an immediate; the assembly syntax merges them as [sw0.<index>]. *)
+let pp_args_mulv_lane op args =
+  match op with
+  | Acc_instr_decl.BN_MULV_L (_, _, lr) -> begin
+      let sw = match lr with Acc_instr_decl.SW0 -> "sw0" | SW1 -> "sw1" in
+      match args with
+      | wrd :: wrs1 :: _lane_reg :: idx :: rest ->
+          wrd :: wrs1 :: Format.sprintf "%s.%s" sw idx :: rest
+      | _ -> E.invalid_args ()
+    end
+  | _ -> args
+
 let pp_args op args =
-  pp_args_shift op args |> pp_args_flag_group op |> pp_args_mulqacc_selectors op
+  pp_args_shift op args
+  |> pp_args_flag_group op
+  |> pp_args_mulqacc_selectors op
+  |> pp_args_mulv_lane op
 
 let need_nop_i = function
   | LABEL _ | REPEATLOOP _ | JMP _ | JMPI _ | Jcc _ | JAL _ | CALL _
@@ -247,7 +289,26 @@ let need_nop_i = function
       false
 
 let need_nop c = try need_nop_i (List.last c).asmi_i with Failure _ -> true
-let notlbl = function Label _ -> false | _ -> true
+
+(* Number of real instructions an assembly element assembles to, for the size
+   field of [loop]/[loopi].
+   - [la] is a pseudo-instruction that assembles to two real instructions.
+   - [li] assembles to a single [addi] when its immediate fits in 12 signed
+     bits, to a single [lui] when its low 12 bits are zero, and to [lui] +
+     [addi] otherwise. *)
+let li_instr_count imm =
+  let imm = Z.of_string imm in
+  if Acc_params_core.is_arith_small (Conv.cz_of_z imm)
+     || Z.equal (Z.logand imm (Z.of_int 0xfff)) Z.zero
+  then 1
+  else 2
+
+let loop_instr_count = function
+  | Header _ | Label _ | Dwarf _ | Comment _ -> 0
+  | Instr ("la", _) -> 2
+  | Instr ("li", [ _; imm ]) -> li_instr_count imm
+  | Instr _ -> 1
+  | Bytes _ -> E.invalid_loop_body ()
 
 module ACCTarget :
   AsmTarget
@@ -318,7 +379,10 @@ module ACCTarget :
         in
         let c' = pp_cmd fn c in
         let c' = if need_nop c then c' @ [ Instr ("nop", []) ] else c' in
-        let num_c' = Format.sprintf "%i" (List.count_matching notlbl c') in
+        let num_c' =
+          Format.sprintf "%i"
+            (List.fold_left (fun acc i -> acc + loop_instr_count i) 0 c')
+        in
         Instr (name, [ count; num_c' ]) :: c'
     | POPPC -> E.invalid_poppc ()
     | CALL_HWCS lbl -> [ Instr ("jal", [ ra; pp_remote_label lbl ]) ]

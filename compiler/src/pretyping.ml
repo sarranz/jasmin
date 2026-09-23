@@ -1011,17 +1011,17 @@ let peop2_of_eqop (eqop : S.peqop) =
 
 (* -------------------------------------------------------------------- *)
 
-let wk_s_ws (s: W.signedness option) (ws: W.wsize) =
+let wk_s_ws (s: W.signedness option) =
   let wk = if s = None then Word else WInt in
   let s = Option.default W.Unsigned s in
-  (wk, s, ws)
+  (wk, s)
 
-let op_word_of_int (wk, s, ws) =
+let op_word_of_int (wk, s) ws =
   match wk with
   | Word -> Oword_of_int ws
   | WInt -> Owi1(s, WIwint_of_int ws)
 
-let op_int_of_word (wk, s, ws) =
+let op_int_of_word (wk, s) ws =
   match wk with
   | Word -> Oint_of_word (s, ws)
   | WInt -> Owi1(s, WIint_of_wint ws)
@@ -1029,13 +1029,13 @@ let op_int_of_word (wk, s, ws) =
 let cast loc e ety ty =
   match ety, ty with
   | P.ETint, P.ETword(s,ws) ->
-    let op = op_word_of_int (wk_s_ws s ws) in
+    let op = op_word_of_int (wk_s_ws s) ws in
     P.Papp1(op, e)
 
   | P.ETword(s, ws), P.ETint ->
     (* FIXME do we really want to keep this cast word -> int implicit?
        Since we can use to_uint or to_sint ... *)
-    let op = op_int_of_word (wk_s_ws s ws) in
+    let op = op_int_of_word (wk_s_ws s) ws in
     P.Papp1(op, e)
 
   | P.ETword(None, w1), P.ETword(None, w2) when W.wsize_cmp w1 w2 <> Datatypes.Lt -> e
@@ -1045,34 +1045,22 @@ let cast loc e ety ty =
   | P.ETarr _, P.ETarr _ -> e (* we delay typechecking until we know the lengths *)
   | _  ->  rs_tyerror ~loc (InvalidCast(ety,ty))
 
-(*
-let cast_word loc ws e ety =
-  match ety with
-  | P.Bty P.Int   -> P.Papp1 (Oword_of_int ws, e), ws
-  | P.Bty (P.U ws1) -> e, ws1
-  | _             ->  rs_tyerror ~loc (InvalidCast(ety,P.Bty (P.U ws)))
-*)
-
+(** Builds an expression of type int from expression e whose type is ety. The
+optional signedness information os tells which conversion to use. *)
 let cast_int loc os e ety =
   match ety with
   | P.ETint -> e
   | P.ETword (s, ws) ->
-    let wk, s, ws = wk_s_ws s ws in
+    let wk, s = wk_s_ws s in
     let s =
       match wk, os with
-      | _, None ->
-       if wk = Word then
-          Utils.warning Deprecated (L.i_loc0 loc)
-            "Syntax (int)e when e has type %a is deprecated. Use (uint)e of (sint)e instead"
-            (fun fmt -> PrintCommon.pp_btype fmt) (P.U ws);
-        s
+      | _, None -> s
       | Word, Some s -> tt_sign s
       | WInt, Some s' ->
-        (* FIXME: Should we do a better error message ? *)
-        if tt_sign s' <> s then rs_tyerror ~loc (InvalidCast(ety,P.etint));
+        if tt_sign s' <> s then rs_tyerror ~loc (InvalidCast(ety, P.etw ws));
         s
     in
-    let op = op_int_of_word(wk, s, ws) in
+    let op = op_int_of_word(wk, s) ws in
     P.Papp1(op, e)
   | _ -> rs_tyerror ~loc (InvalidCast(ety,P.etint))
 
@@ -1221,7 +1209,7 @@ let word_of_wint wint_of_word ws (cast : W.signedness option) e =
 let array_of_string s =
   s |> String.to_list |> List.map @@ fun c ->
   c |> Char.code |> Z.of_int |> fun z ->
-  P.(Papp1 (op_word_of_int(Word, W.Unsigned, W.U8), Pconst z))
+  P.(Papp1 (op_word_of_int (Word, W.Unsigned) W.U8, Pconst z))
 
 (* -------------------------------------------------------------------- *)
 let create_min_e _pd loc args =
@@ -1275,7 +1263,7 @@ let rec tt_expr pd ?(mode=`AllVar) (env : 'asm Env.env) pe =
     let ws = tt_mem_wsize (P.ws_of_ety ty) ws in
     let ty = P.etw ws in
     let i,ity  = tt_expr ~mode pd env pi in
-    let i = cast_int (L.loc pi) (Some `Unsigned) i ity in
+    let i = cast_int (L.loc pi) None i ity in
     begin match olen with
     | None ->
        let al = tt_al al in
@@ -1509,7 +1497,7 @@ let tt_lvalue pd (env : 'asm Env.env) { L.pl_desc = pl; L.pl_loc = loc; } =
     let ws = tt_mem_wsize (P.ws_of_ety ty) ws in
     let ty = P.etw ws in
     let i,ity  = tt_expr ~mode:`AllVar pd env pi in
-    let i = cast_int (L.loc pi) (Some `Unsigned) i ity in
+    let i = cast_int (L.loc pi) None i ity in
     begin match olen with
     | None ->
       let al = tt_al al in
@@ -1790,9 +1778,9 @@ let tt_lvalues (arch_info : 'asm P.arch_info) env loc (pimp, pls) implicit tys =
         ; ">s" , CF_GT Wsize.Signed
         ; ">u" , CF_GT Wsize.Unsigned ] in
 
-  let pls, pimp_c, implicits =
+  let pls, pimp_c, implicits, flagnames =
     match pimp, implicit with
-    | None, _ -> pls, [], []
+    | None, _ -> pls, [], [], []
     | Some pimp, None -> rs_tyerror ~loc:(L.loc pimp) (string_error "no implicit argument expected");
     | Some pimp, Some implicit ->
       let pimp = L.unloc pimp in
@@ -1805,7 +1793,10 @@ let tt_lvalues (arch_info : 'asm P.arch_info) env loc (pimp, pls) implicit tys =
            | ADImplicit v -> Some (Var0.Var.vname v).v_name)
           implicit in
 
-      let iargs = List.pmap (Option.map String.uppercase_ascii) arguments in
+      (* the flags actually set by this instruction, e.g. just one ACC
+         flag group (4 flags) rather than the whole architecture's flags *)
+      let flagnames = List.pmap (fun x -> x) arguments in
+      let iargs = List.map String.uppercase_ascii flagnames in
 
       let check (id, _) =
         let loc = L.loc id in
@@ -1843,7 +1834,7 @@ let tt_lvalues (arch_info : 'asm P.arch_info) env loc (pimp, pls) implicit tys =
         | None :: arguments, x :: pls -> x :: aux arguments pls
         | Some i :: arguments, pls    -> get_implicit i :: aux arguments pls in
       let a = aux arguments pls in
-      a, pimp_c, !implicits
+      a, pimp_c, !implicits, flagnames
   in
 
   let ls = List.map (tt_lvalue arch_info.pd env) pls in
@@ -1857,7 +1848,12 @@ let tt_lvalues (arch_info : 'asm P.arch_info) env loc (pimp, pls) implicit tys =
         try List.assoc i implicits
         with Not_found ->
           rs_tyerror ~loc (string_error "implicit label %s need to be defined" i) in
-      let pargs = List.map get_implicit arch_info.flagnames in
+      (* restrict to the flags this instruction actually sets (e.g. a
+         single ACC flag group), in the architecture's canonical order,
+         since an instruction may also set untracked flags (e.g. x86's PF)
+         that are not part of [arch_info.flagnames] *)
+      let pargs = List.map get_implicit
+          (List.filter (fun i -> List.mem i flagnames) arch_info.flagnames) in
       let args = List.map (tt_expr_bool arch_info.pd env) pargs in
       let doc (c, s) =
         let error loc = rs_tyerror ~loc (string_error " = ident is expected after %s" (L.unloc c)) in
@@ -2577,7 +2573,7 @@ let tt_global pd (env : 'asm Env.env) _loc (gd: S.pglobal) : 'asm Env.env =
     match ety with
     | P.ETword(wk, ews) when wk = None && Utils0.cmp_le Wsize.wsize_cmp ws ews ->
       L.unloc pe
-    | P.ETint -> Papp1 (op_word_of_int(Word, W.Unsigned, ws), L.unloc pe)
+    | P.ETint -> Papp1 (op_word_of_int (Word, W.Unsigned) ws, L.unloc pe)
     | _ -> rs_tyerror ~loc:(L.loc pe) (TypeMismatch (ety, P.etw ws))
     in
 

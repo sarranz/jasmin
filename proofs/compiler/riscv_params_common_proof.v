@@ -48,7 +48,8 @@ Context
   {atoI  : arch_toIdent}
   {syscall_state : Type}
   {sc_sem : syscall_sem syscall_state}
-  {call_conv : calling_convention}.
+  {call_conv : calling_convention}
+  {hwcs_i : hw_call_stack_info}.
 
 #[local] Existing Instance withsubword.
 

@@ -1,0 +1,115 @@
+// Inline u256 comparisons as ternary conditions.
+//
+// Lowering emits one BN.CMP on flag group FG1 followed by one BN.SEL. The
+// comparisons <=u and >u swap the compared operands, so that every condition
+// is a single flag (C or Z) or its negation; a negated condition swaps the
+// two BN.SEL sources. The expected assembly in the comments names registers
+// after the source variables; see tests/acc-conditions.t for the exact
+// output.
+
+export
+fn eq(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.cmp a, b, FG1 ; bn.sel b, a, b, FG1.Z
+    b = a if (a == b);
+    return b;
+}
+
+export
+fn neq(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.cmp a, b, FG1 ; bn.sel b, b, a, FG1.Z
+    b = a if (a != b);
+    return b;
+}
+
+export
+fn ltu(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.cmp a, b, FG1 ; bn.sel b, a, b, FG1.C
+    b = a if (a <u b);
+    return b;
+}
+
+export
+fn geu(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.cmp a, b, FG1 ; bn.sel b, b, a, FG1.C
+    b = a if (a >=u b);
+    return b;
+}
+
+export
+fn leu(reg u256 a, reg u256 b) -> reg u256 {
+    // a <=u b is b >=u a, operands swapped:
+    // bn.cmp b, a, FG1 ; bn.sel b, b, a, FG1.C
+    b = a if (a <=u b);
+    return b;
+}
+
+export
+fn gtu(reg u256 a, reg u256 b) -> reg u256 {
+    // a >u b is b <u a, operands swapped:
+    // bn.cmp b, a, FG1 ; bn.sel b, a, b, FG1.C
+    b = a if (a >u b);
+    return b;
+}
+
+// The compared operands are independent from the selected values.
+export
+fn three(reg u256 a, reg u256 b, reg u256 c) -> reg u256 {
+    // bn.cmp a, b, FG1 ; bn.sel c, a, c, FG1.C
+    c = a if (a <u b);
+    return c;
+}
+
+// Writing the comparison the other way round gives the same code as >u.
+export
+fn ltu_reversed(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.cmp b, a, FG1 ; bn.sel b, a, b, FG1.C
+    b = a if (b <u a);
+    return b;
+}
+
+// Negations are normalized by the constant-propagation simplifier (double
+// negation disappears) and one remaining negation flips the comparison.
+export
+fn not_eq(reg u256 a, reg u256 b) -> reg u256 {
+    // same as neq: bn.cmp a, b, FG1 ; bn.sel b, b, a, FG1.Z
+    b = a if !(a == b);
+    return b;
+}
+
+export
+fn not_not_ltu(reg u256 a, reg u256 b) -> reg u256 {
+    // same as ltu: bn.cmp a, b, FG1 ; bn.sel b, a, b, FG1.C
+    b = a if !(!(a <u b));
+    return b;
+}
+
+export
+fn not_leu(reg u256 a, reg u256 b) -> reg u256 {
+    // !(a <=u b) is a >u b: bn.cmp b, a, FG1 ; bn.sel b, a, b, FG1.C
+    b = a if !(a <=u b);
+    return b;
+}
+
+// Two ternaries: each one gets its own BN.CMP.
+export
+fn twice(reg u256 a, reg u256 b, reg u256 c) -> reg u256 {
+    // bn.cmp a, b, FG1 ; bn.sel c, a, c, FG1.C
+    // bn.cmp a, b, FG1 ; bn.sel c, b, c, FG1.Z
+    c = a if (a <u b);
+    c = b if (a == b);
+    return c;
+}
+
+// The generated compares use FG1, so user flags in FG0 stay live across
+// them.
+export
+fn keeps_fg0(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.mov x, b ; bn.cmp a, b, FG0 ; bn.cmp a, b, FG1
+    // bn.sel x, x, a, FG1.C ; bn.sel x, x, a, FG0.C
+    reg u256 x = b;
+    reg bool cf;
+    ?{ CF0 = cf } = #BN_CMP(a, b);
+    x = a if (a >=u b);
+    x = #BN_SEL(x, a, cf);
+    return x;
+}

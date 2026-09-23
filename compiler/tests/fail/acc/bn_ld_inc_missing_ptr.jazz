@@ -1,0 +1,12 @@
+/* The register to increment must be given explicitly as the second argument;
+   the address operand alone is not enough (the semantics needs the pointer
+   value to compute the updated pointer). */
+
+export
+fn missing_ptr(reg u32 p) -> reg u256, reg u32 {
+    reg u256 x;
+
+    x, p = #BN_LD_INC([#aligned :u256 p]);
+
+    return x, p;
+}

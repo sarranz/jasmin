@@ -21,4 +21,5 @@
     ../jasminc
     (glob_files_rec warning/*)
     (glob_files_rec fail/linter/*)
+    (glob_files_rec fail/acc/*)
     (glob_files_rec success/acc/*)))

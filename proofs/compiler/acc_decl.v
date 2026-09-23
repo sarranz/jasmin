@@ -5,7 +5,6 @@ From elpi.apps Require Import derive.std.
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype fintype ssralg.
 From mathcomp Require Import word word_ssrZ.
 
-Require Import acc_admit.
 Require Import
   expr
   flag_combination
@@ -101,10 +100,10 @@ Definition register_to_string (r : register) : string :=
 (* -------------------------------------------------------------------------- *)
 (* ACC has 32 general purpose wide registers: w0, ..., w31. *)
 
-(* ACC's wide special registers (WSRs) are MOD, RND, URND, ACC and the four
-   KEY_S0/1_L/H registers. Only ACC and MOD are modeled here; the other WSRs
-   (RND, URND, KEY_S0_L, KEY_S0_H, KEY_S1_L, KEY_S1_H) are ignored for the
-   moment. *)
+(* ACC's wide special registers (WSRs) are MOD, RND, URND, ACC, ACCH, the four
+   KEY_S0/1_L/H registers and the KMAC registers. Only ACC, ACCH and MOD are
+   modeled here ([ACCH] is the high half of the 512-bit accumulator of
+   [BN.MULV]); the other WSRs are ignored for the moment. *)
 
 #[only(eqbOK)] derive
 Variant wide_register : Type :=
@@ -242,14 +241,95 @@ Canonical condition_eqType := @ceqT_eqType _ eqTC_condition.
 (* -------------------------------------------------------------------- *)
 (* Flag combinations. *)
 
-(* TODO_ACC these don't seem to apply? *)
+(* [BN_CMP a, b] (or [BN_CMP_FG1]) computes [a - b] and sets the FG0 (resp.
+   FG1) flags:
+   - [C] (carry/borrow): set on unsigned borrow, i.e. [a <u b].
+   - [M] (most significant bit): the sign of the difference [a - b].
+   - [L] (least significant bit): unused below.
+   - [Z] (zero): set when [a - b] is zero, i.e. [a = b].
+
+   ACC has no overflow flag, so a genuinely signed comparison (one that
+   accounts for signed overflow of [a - b]) is not expressible from these
+   flags. [M] only tracks the sign of the difference, which coincides with
+   the true signed comparison result exactly when [a - b] does not overflow.
+   The signed labels below ([<s], [<=s], [>=s], [>s]) are therefore only
+   correct under that assumption; there is no frontend check for it.
+
+   label   core      ACC flags   meaning after [BN_CMP a, b]
+   ==      CFC_E     Z           a = b
+   !=      ~CFC_E    ~Z          a <> b
+   <u      CFC_B     C           a <u b                        (exact)
+   >=u     ~CFC_B    ~C          a >=u b                       (exact)
+   <=u     CFC_BE    C || Z      a <=u b                       (exact)
+   >u      ~CFC_BE   ~(C || Z)   a >u b                        (exact)
+   <s      CFC_L     M           a <s b   (assumes no signed overflow)
+   >=s     ~CFC_L    ~M          a >=s b  (assumes no signed overflow)
+   <=s     CFC_LE    M || Z      a <=s b  (assumes no signed overflow)
+   >s      ~CFC_LE   ~(M || Z)   a >s b   (assumes no signed overflow)
+
+   The four combine-flag variables [FCVar0..FCVar3] are, in this order, [C],
+   [M], [L], [Z] ([FCVar2]/[L] is unused). This order is forced by the typer:
+   [tt_lvalues] (compiler/src/pretyping.ml) passes flags to a combine-flags
+   label in [arch_info.flagnames] order, filtered to the flags the
+   instruction actually sets; that order is [current_cmlz] in
+   [acc_instr_decl.v], matching the hardware flag-group bit order
+   (C = 0, M = 1, L = 2, Z = 3). *)
 Definition fc_of_cfc (cfc : combine_flags_core) : flag_combination :=
+  let vcf := FCVar0 in
+  let vmf := FCVar1 in
+  let vzf := FCVar3 in
   match cfc with
-  | _ => ACC_ADMIT "not implemented"
+  | CFC_B => vcf
+  | CFC_E => vzf
+  | CFC_BE => FCOr vcf vzf
+  | CFC_L => vmf
+  | CFC_LE => FCOr vmf vzf
   end.
 
 #[global]
 Instance acc_fcp : FlagCombinationParams := { fc_of_cfc := fc_of_cfc; }.
+
+(* Sanity check: [fc_of_cfc] computes the table above, for every
+   [combine_flags] label ([CFC_L]/[FCVar2], i.e. [l], never matters). *)
+Lemma cf_xsem_lt_s c m l z :
+  cf_xsem negb andb orb eq_op c m l z (CF_LT Signed) = m.
+Proof. by []. Qed.
+
+Lemma cf_xsem_lt_u c m l z :
+  cf_xsem negb andb orb eq_op c m l z (CF_LT Unsigned) = c.
+Proof. by []. Qed.
+
+Lemma cf_xsem_le_s c m l z :
+  cf_xsem negb andb orb eq_op c m l z (CF_LE Signed) = m || z.
+Proof. by []. Qed.
+
+Lemma cf_xsem_le_u c m l z :
+  cf_xsem negb andb orb eq_op c m l z (CF_LE Unsigned) = c || z.
+Proof. by []. Qed.
+
+Lemma cf_xsem_eq c m l z :
+  cf_xsem negb andb orb eq_op c m l z CF_EQ = z.
+Proof. by []. Qed.
+
+Lemma cf_xsem_neq c m l z :
+  cf_xsem negb andb orb eq_op c m l z CF_NEQ = ~~ z.
+Proof. by []. Qed.
+
+Lemma cf_xsem_ge_s c m l z :
+  cf_xsem negb andb orb eq_op c m l z (CF_GE Signed) = ~~ m.
+Proof. by []. Qed.
+
+Lemma cf_xsem_ge_u c m l z :
+  cf_xsem negb andb orb eq_op c m l z (CF_GE Unsigned) = ~~ c.
+Proof. by []. Qed.
+
+Lemma cf_xsem_gt_s c m l z :
+  cf_xsem negb andb orb eq_op c m l z (CF_GT Signed) = ~~ (m || z).
+Proof. by []. Qed.
+
+Lemma cf_xsem_gt_u c m l z :
+  cf_xsem negb andb orb eq_op c m l z (CF_GT Unsigned) = ~~ (c || z).
+Proof. by []. Qed.
 
 (* -------------------------------------------------------------------------- *)
 (* Immediate checkers. *)
@@ -309,6 +389,7 @@ Instance acc_decl : arch_decl register empty wide_register rflag condition :=
     toS_f := flag_toS;
     reg_size_neq_xreg_size := refl_equal;
     ad_rsp := X02;
+    ad_hwcs_size := Some 8;
     ad_fcp := acc_fcp;
     caimm_cond := acc_caimm_cond;
     caimm_cond_eqC := eqTC_acc_caimm_cond;

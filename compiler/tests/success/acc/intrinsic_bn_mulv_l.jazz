@@ -1,0 +1,129 @@
+/* BN.MULV.L: lanewise multiply of a wide register by a single lane of a lane
+   register, given by an immediate lane index (0..15 for 16H, 0..7 for 8S).
+   The lane register is w16 (sw0) or w17 (sw1), selected by the suffix _w16 or
+   _w17: the second argument is forced into that register.
+   The type is the same as for BN.MULV, see intrinsic_bn_mulv.jazz. */
+
+export
+fn bn_mulv_l_16h_w16(reg u256 x y) -> reg u256 {
+    reg u256 r l acc acch;
+
+    l = y;
+
+    r = #BN_MULV_L_16H_EVEN_w16(x, l, 0);
+    r = #BN_MULV_L_16H_ODD_w16(r, l, 1);
+    r = #BN_MULV_L_16H_LO_w16(r, l, 2);
+    r = #BN_MULV_L_16H_HI_w16(r, l, 15);
+
+    r, acc, acch = #BN_MULV_L_16H_EVEN_ACC_Z_w16(r, l, 3);
+    r, acc, acch = #BN_MULV_L_16H_EVEN_ACC_w16(r, l, 4, acc, acch);
+    r, acc, acch = #BN_MULV_L_16H_ODD_ACC_Z_w16(r, l, 5);
+    r, acc, acch = #BN_MULV_L_16H_ODD_ACC_w16(r, l, 6, acc, acch);
+    r, acc, acch = #BN_MULV_L_16H_ACC_Z_LO_w16(r, l, 7);
+    r, acc, acch = #BN_MULV_L_16H_ACC_LO_w16(r, l, 8, acc, acch);
+    r, acc, acch = #BN_MULV_L_16H_ACC_Z_HI_w16(r, l, 9);
+    r, acc, acch = #BN_MULV_L_16H_ACC_HI_w16(r, l, 10, acc, acch);
+
+    x = #BN_ACCR(acc);
+    y = #BN_ACCHR(acch);
+    r += x;
+    r += y;
+
+    return r;
+}
+
+export
+fn bn_mulv_l_16h_w17(reg u256 x y) -> reg u256 {
+    reg u256 r l acc acch;
+
+    l = y;
+
+    r = #BN_MULV_L_16H_EVEN_w17(x, l, 15);
+    r = #BN_MULV_L_16H_ODD_w17(r, l, 14);
+    r = #BN_MULV_L_16H_LO_w17(r, l, 13);
+    r = #BN_MULV_L_16H_HI_w17(r, l, 0);
+
+    r, acc, acch = #BN_MULV_L_16H_EVEN_ACC_Z_w17(r, l, 12);
+    r, acc, acch = #BN_MULV_L_16H_EVEN_ACC_w17(r, l, 11, acc, acch);
+    r, acc, acch = #BN_MULV_L_16H_ODD_ACC_Z_w17(r, l, 10);
+    r, acc, acch = #BN_MULV_L_16H_ODD_ACC_w17(r, l, 9, acc, acch);
+    r, acc, acch = #BN_MULV_L_16H_ACC_Z_LO_w17(r, l, 8);
+    r, acc, acch = #BN_MULV_L_16H_ACC_LO_w17(r, l, 7, acc, acch);
+    r, acc, acch = #BN_MULV_L_16H_ACC_Z_HI_w17(r, l, 6);
+    r, acc, acch = #BN_MULV_L_16H_ACC_HI_w17(r, l, 5, acc, acch);
+
+    x = #BN_ACCR(acc);
+    y = #BN_ACCHR(acch);
+    r += x;
+    r += y;
+
+    return r;
+}
+
+export
+fn bn_mulv_l_8s_w16(reg u256 x y) -> reg u256 {
+    reg u256 r l acc acch;
+
+    l = y;
+
+    r = #BN_MULV_L_8S_EVEN_w16(x, l, 0);
+    r = #BN_MULV_L_8S_ODD_w16(r, l, 1);
+    r = #BN_MULV_L_8S_EVEN_LO_w16(r, l, 2);
+    r = #BN_MULV_L_8S_ODD_LO_w16(r, l, 3);
+    r = #BN_MULV_L_8S_EVEN_HI_w16(r, l, 4);
+    r = #BN_MULV_L_8S_ODD_HI_w16(r, l, 7);
+
+    r, acc, acch = #BN_MULV_L_8S_EVEN_ACC_Z_w16(r, l, 5);
+    r, acc, acch = #BN_MULV_L_8S_EVEN_ACC_w16(r, l, 6, acc, acch);
+    r, acc, acch = #BN_MULV_L_8S_ODD_ACC_Z_w16(r, l, 7);
+    r, acc, acch = #BN_MULV_L_8S_ODD_ACC_w16(r, l, 0, acc, acch);
+    r, acc, acch = #BN_MULV_L_8S_EVEN_ACC_Z_LO_w16(r, l, 1);
+    r, acc, acch = #BN_MULV_L_8S_EVEN_ACC_LO_w16(r, l, 2, acc, acch);
+    r, acc, acch = #BN_MULV_L_8S_ODD_ACC_Z_LO_w16(r, l, 3);
+    r, acc, acch = #BN_MULV_L_8S_ODD_ACC_LO_w16(r, l, 4, acc, acch);
+    r, acc, acch = #BN_MULV_L_8S_EVEN_ACC_Z_HI_w16(r, l, 5);
+    r, acc, acch = #BN_MULV_L_8S_EVEN_ACC_HI_w16(r, l, 6, acc, acch);
+    r, acc, acch = #BN_MULV_L_8S_ODD_ACC_Z_HI_w16(r, l, 7);
+    r, acc, acch = #BN_MULV_L_8S_ODD_ACC_HI_w16(r, l, 0, acc, acch);
+
+    x = #BN_ACCR(acc);
+    y = #BN_ACCHR(acch);
+    r += x;
+    r += y;
+
+    return r;
+}
+
+export
+fn bn_mulv_l_8s_w17(reg u256 x y) -> reg u256 {
+    reg u256 r l acc acch;
+
+    l = y;
+
+    r = #BN_MULV_L_8S_EVEN_w17(x, l, 7);
+    r = #BN_MULV_L_8S_ODD_w17(r, l, 6);
+    r = #BN_MULV_L_8S_EVEN_LO_w17(r, l, 5);
+    r = #BN_MULV_L_8S_ODD_LO_w17(r, l, 4);
+    r = #BN_MULV_L_8S_EVEN_HI_w17(r, l, 3);
+    r = #BN_MULV_L_8S_ODD_HI_w17(r, l, 0);
+
+    r, acc, acch = #BN_MULV_L_8S_EVEN_ACC_Z_w17(r, l, 2);
+    r, acc, acch = #BN_MULV_L_8S_EVEN_ACC_w17(r, l, 1, acc, acch);
+    r, acc, acch = #BN_MULV_L_8S_ODD_ACC_Z_w17(r, l, 0);
+    r, acc, acch = #BN_MULV_L_8S_ODD_ACC_w17(r, l, 7, acc, acch);
+    r, acc, acch = #BN_MULV_L_8S_EVEN_ACC_Z_LO_w17(r, l, 6);
+    r, acc, acch = #BN_MULV_L_8S_EVEN_ACC_LO_w17(r, l, 5, acc, acch);
+    r, acc, acch = #BN_MULV_L_8S_ODD_ACC_Z_LO_w17(r, l, 4);
+    r, acc, acch = #BN_MULV_L_8S_ODD_ACC_LO_w17(r, l, 3, acc, acch);
+    r, acc, acch = #BN_MULV_L_8S_EVEN_ACC_Z_HI_w17(r, l, 2);
+    r, acc, acch = #BN_MULV_L_8S_EVEN_ACC_HI_w17(r, l, 1, acc, acch);
+    r, acc, acch = #BN_MULV_L_8S_ODD_ACC_Z_HI_w17(r, l, 0);
+    r, acc, acch = #BN_MULV_L_8S_ODD_ACC_HI_w17(r, l, 7, acc, acch);
+
+    x = #BN_ACCR(acc);
+    y = #BN_ACCHR(acch);
+    r += x;
+    r += y;
+
+    return r;
+}

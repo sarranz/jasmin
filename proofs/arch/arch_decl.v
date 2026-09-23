@@ -66,6 +66,10 @@ Class arch_decl (reg regx xreg rflag cond : Type) :=
   ; toS_f : ToString lbool rflag
   ; reg_size_neq_xreg_size : reg_size != xreg_size
   ; ad_rsp : reg
+  ; ad_hwcs_size : option nat
+      (* Number of entries of the hardware call stack, for architectures that
+         save return addresses in a dedicated bounded stack (ACC); [None] when
+         there is no such stack. *)
   ; ad_fcp : FlagCombinationParams
   ; caimm_cond : Type  (* architecture-specific immediate conditions *)
   ; caimm_cond_eqC : eqTypeC caimm_cond
@@ -677,6 +681,7 @@ Record asm_fundef := XFundef
   ; asm_fd_res   : asm_typed_regs
   ; asm_fd_export: bool
   ; asm_fd_total_stack: Z
+  ; asm_fd_max_call_depth: Z
   ; asm_fd_align_args : seq wsize
   }.
 

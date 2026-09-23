@@ -1,0 +1,13 @@
+// Two lowered comparisons share the same fresh FG1 flags. The second BN.CMP
+// overwrites them before the first bool is used, so propagate_inline cannot
+// substitute the first bool; its assignment survives and register allocation
+// fails ("variables ... remain unallocated"). Use each bool before the next
+// comparison.
+export
+fn bool_interleaved(reg u256 a, reg u256 b, reg u256 c) -> reg u256 {
+    reg bool lt = a <u b;
+    reg bool eq = a == b;
+    c = a if lt;
+    c = b if eq;
+    return c;
+}

@@ -1,0 +1,12 @@
+// 32-bit comparisons are not lowered: the RV32 side has no flags and no
+// set-less-than instruction. A reg bool assigned a u32 comparison survives
+// and register allocation fails ("variables ... remain unallocated"). Only
+// if/while conditions on u32 registers are supported.
+export
+fn u32_bool(reg u32 x, reg u32 y) -> reg u32 {
+    reg bool c = x != y;
+    if c {
+        x = y;
+    }
+    return x;
+}

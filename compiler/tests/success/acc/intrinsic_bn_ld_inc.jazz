@@ -1,0 +1,54 @@
+/* Direct wide load with post-increment of the address register.
+
+   [x, p = #BN_LD_INC([p + off], p)] compiles to [bn.ld x, off(p++)]: the
+   load reads the wide word at [p + off], then [p] is incremented by 32 (one
+   wide word), whatever [off] is. The second argument names the register to
+   increment; it is also the second output. It must be the base register of
+   the address, so it is normally the same variable as in the address.
+   Offsets follow the [bn.ld] rules (multiple of 32 in [-16384, 16352]), see
+   intrinsic_bn_ld.jazz. */
+
+export
+fn bn_ld_inc(reg u32 p) -> reg u256, reg u32 {
+    reg u256 acc x;
+
+    acc, p = #BN_LD_INC([#aligned :u256 p], p);
+    x, p = #BN_LD_INC([#aligned :u256 p + 32], p);
+    ?{}, acc = #BN_XOR(acc, x);
+    x, p = #BN_LD_INC([#aligned :u256 p - 32], p);
+    ?{}, acc = #BN_XOR(acc, x);
+    x, p = #BN_LD_INC([#aligned :u256 p + 16352], p);
+    ?{}, acc = #BN_XOR(acc, x);
+    x, p = #BN_LD_INC([#aligned :u256 p - 16384], p);
+    ?{}, acc = #BN_XOR(acc, x);
+
+    return acc, p;
+}
+
+/* The updated pointer may be bound to another variable: it is the same
+   explicit argument as [p], so register allocation gives [q] the register of
+   [p]. This is only possible because [p] is dead afterwards (see
+   fail/acc/bn_ld_inc_ptr_live.jazz). */
+export
+fn bn_ld_inc_rename(reg u32 p) -> reg u256, reg u32 {
+    reg u32 q;
+    reg u256 x;
+
+    x, q = #BN_LD_INC([#aligned :u256 p], p);
+
+    return x, q;
+}
+
+/* Typical use: walk an array of wide words in a hardware loop. */
+export
+fn bn_ld_inc_loop(reg u32 p n) -> reg u256 {
+    reg u256 acc x;
+
+    acc, p = #BN_LD_INC([#aligned :u256 p], p);
+    repeat n {
+        x, p = #BN_LD_INC([#aligned :u256 p], p);
+        ?{}, acc = #BN_XOR(acc, x);
+    }
+
+    return acc;
+}

@@ -61,6 +61,7 @@ Record lfundef := LFundef {
  lfd_export: bool;
  lfd_callee_saved: seq var; (* A list of variables that must be initialized before calling this function *)
  lfd_stk_max : Z; (* max amount of stack memory used by this function (and all functions called by this one *)
+ lfd_max_call_depth : Z; (* static call-graph depth, checked against the hardware call stack *)
  lfd_frame_size : Z; (* needed for stack zeroization *)
  lfd_align_args : seq wsize;
 }.

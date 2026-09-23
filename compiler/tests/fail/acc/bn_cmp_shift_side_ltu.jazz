@@ -1,0 +1,7 @@
+// BN.CMP shifts its second operand only: for <u the shifted operand must be
+// the right one.
+export
+fn shift_side_ltu(reg u256 a, reg u256 b) -> reg u256 {
+    b = a if ((a << 8) <u b);
+    return b;
+}

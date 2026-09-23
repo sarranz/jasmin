@@ -1,0 +1,72 @@
+// Inline u256 comparisons with a shifted operand.
+//
+// BN.CMP can shift its second operand only (a multiple of 8 in [0, 248]).
+// After the operand swap of <=u and >u, the shifted operand must therefore be
+// the right operand of <u and >=u, and the left operand of <=u and >u; == and
+// != accept a shift on either side, since lowering swaps them as needed. The
+// wrong side is a user error (see fail/acc/bn_cmp_shift_side_*.jazz).
+
+export
+fn eq_shift_right(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.cmp a, b << 8, FG1 ; bn.sel b, a, b, FG1.Z
+    b = a if (a == (b << 8));
+    return b;
+}
+
+export
+fn neq_shift_left(reg u256 a, reg u256 b) -> reg u256 {
+    // operands swapped to put the shift on the right:
+    // bn.cmp b, a << 16, FG1 ; bn.sel b, b, a, FG1.Z
+    b = a if ((a << 16) != b);
+    return b;
+}
+
+export
+fn ltu_shift_right(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.cmp a, b >> 8, FG1 ; bn.sel b, a, b, FG1.C
+    b = a if (a <u (b >> 8));
+    return b;
+}
+
+export
+fn geu_shift_right(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.cmp a, b << 248, FG1 ; bn.sel b, b, a, FG1.C
+    b = a if (a >=u (b << 248));
+    return b;
+}
+
+export
+fn leu_shift_left(reg u256 a, reg u256 b) -> reg u256 {
+    // a <=u b is b >=u a: bn.cmp b, a << 8, FG1 ; bn.sel b, b, a, FG1.C
+    b = a if ((a << 8) <=u b);
+    return b;
+}
+
+export
+fn gtu_shift_left(reg u256 a, reg u256 b) -> reg u256 {
+    // a >u b is b <u a: bn.cmp b, a >> 16, FG1 ; bn.sel b, a, b, FG1.C
+    b = a if ((a >> 16) >u b);
+    return b;
+}
+
+export
+fn shift_zero(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.cmp a, b << 0, FG1 ; bn.sel b, a, b, FG1.Z
+    b = a if (a == (b << 0));
+    return b;
+}
+
+export
+fn bool_shift(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.cmp a, b << 8, FG1 ; bn.sel b, a, b, FG1.C
+    reg bool c = a <u (b << 8);
+    b = a if c;
+    return b;
+}
+
+export
+fn sel_shift(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.cmp a, b >> 8, FG1 ; bn.sel b, a, b, FG1.Z
+    b = #BN_SEL(a, b, a == (b >> 8));
+    return b;
+}

@@ -76,6 +76,9 @@ Proof.
   move=> t1 hs'.
   apply: (lutt_bind (R := fun _ => True)).
   - exact: lutt_true.
+  move=> _ _.
+  apply: (lutt_bind (R := fun _ => True)).
+  - exact: lutt_true.
   move=> _ _; apply lutt_Ret; exact: hs'.
 Qed.
 
