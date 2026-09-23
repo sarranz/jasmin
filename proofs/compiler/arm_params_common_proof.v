@@ -115,7 +115,7 @@ Lemma align_eval_instr {lp ls ii xname vi y al} {wy : word Uptr} :
   eval_instr lp li ls = ok (next_vm_ls ls vm').
 Proof.
   move=> h1; set vm := _.[ _ <- _].
-  apply: (sem_fopn_args_eval_instr (ls:= ls) (s' := with_vm (to_estate ls) vm)).
+  apply (sem_fopn_args_eval_instr (ls:= ls) (s' := with_vm (to_estate ls) vm)).
   by apply :  align_sem_fopn_args; rewrite h1 /= truncate_word_u.
 Qed.
 

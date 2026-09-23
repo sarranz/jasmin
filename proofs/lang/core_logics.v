@@ -20,8 +20,8 @@ From mathcomp Require Import ssreflect ssrfun ssrbool seq.
 
 Require Import xrutt xrutt_facts rutt_extras it_sems_core_defs.
 Require Import type sem_type values.
-Import MonadNotation ITreeNotations.
-Local Open Scope monad_scope.
+Import ITreeNotations.
+Local Open Scope itree_scope.
 
 Notation prepred E := (forall T, E T -> Prop).
 Notation postpred E := (forall T, E T -> T -> Prop).
@@ -205,11 +205,13 @@ Proof.
   move=> u H a b [H0 H1]; by specialize (H1 erefl); eauto.
 Qed.
 
+Notation lutt_eT := (lutt (fun _ _ => True) (fun _ _ _ => True)).
+
 Lemma lutt_true {E : Type -> Type} {T : Type} (t : itree E T) :
-  lutt (fun _ _ => True) (fun _ _ _ => True) (fun _ => True) t.
+  lutt_eT (fun _ => True) t.
 Proof.
   exists t; apply eutt_rutt.
-  rewrite -(Monad.bind_ret_r _ t).
+  rewrite -(bind_ret_r t).
   apply HasPost.eutt_post_bind_eq with (fun=>True).
   + by apply HasPost.has_post_True.
   by move=> u _; apply eutt_Ret.
@@ -378,11 +380,6 @@ End SAFE_XRUTT_RUTT.
 Notation lxrutt := (xrutt (errcutoff (is_error _)) nocutoff).
 Notation lxeutt := (xrutt (errcutoff (is_error _)) nocutoff RPre_eq RPost_eq).
 
-(* TODO is this somewhere?? *)
-Lemma is_error_Throw {E0 E} {wE : with_Error E E0} e :
-  IsCut_ (errcutoff (is_error wE)) void (subevent void (Throw e)).
-Proof. by rewrite /errcutoff /is_error mid12. Qed.
-
 Section EQ.
   Context {E0 E} {wE : with_Error E E0}.
 
@@ -396,6 +393,23 @@ Section EQ.
 
 End EQ.
 
+(* TODO is this somewhere?? *)
+Lemma is_error_Throw {E0 E} {wE : with_Error E E0} e :
+  IsCut_ (errcutoff (is_error wE)) void (subevent void (Throw e)).
+Proof. by rewrite /errcutoff /is_error mid12. Qed.
+
+(* TODO where does this go? *)
+Lemma xrutt_wEl_throw
+  {E0l El Er}
+  {wEl : with_Error El E0l}
+  {EEr : forall T, Er T -> bool}
+  {R1 R2 : Type}
+  (REv : forall A B, El A -> Er B -> Prop)
+  (RAns : forall A B, El A -> A -> Er B -> B -> Prop)
+  (RR : R1 -> R2 -> Prop) e t :
+  xrutt (errcutoff (is_error wEl)) EEr REv RAns RR (throw e) t.
+Proof. exact/xrutt_CutL/is_error_Throw. Qed.
+
 Section XRUTT.
 
   Context
@@ -406,16 +420,14 @@ Section XRUTT.
     (RR : R1 -> R2 -> Prop)
   .
 
-  (* TODO: lcutoff_wE doesn't seem to work for the following theorems because of
-     the D1 D2 *)
-  Lemma lxrutt_throw e t : lxrutt REv RAns RR (throw e) t.
-  Proof. exact/xrutt_CutL/is_error_Throw. Qed.
+  Lemma lxrutt_throw_l e t : lxrutt REv RAns RR (throw e) t.
+  Proof. exact/xrutt_wEl_throw. Qed.
 
   Lemma lxrutt_iresult (x1 : exec R1) (x2 : exec R2) :
     (forall v1, x1 = ok v1 -> exists2 v2, x2 = ok v2 & RR v1 v2) ->
     lxrutt REv RAns RR (iresult x1) (iresult x2).
   Proof.
-  case: x1 => [v1 | ??]; last exact: lxrutt_throw.
+  case: x1 => [v1 | ??]; last exact: lxrutt_throw_l.
   by move=> /(_ _ erefl) [v2 ->]; apply: xrutt_Ret.
   Qed.
 
@@ -423,7 +435,7 @@ Section XRUTT.
     (forall v1, x1 = ok v1 -> RR v1 v2) ->
     lxrutt REv RAns RR (iresult x1) (Ret v2).
   Proof.
-  case: x1 => [v1 | ??]; last exact: lxrutt_throw.
+  case: x1 => [v1 | ??]; last exact: lxrutt_throw_l.
   by move=> /(_ _ erefl); apply: xrutt_Ret.
   Qed.
 
@@ -431,7 +443,7 @@ Section XRUTT.
     (forall v1, x1 = ok v1 -> lxrutt REv RAns RR (F1 v1) F2) ->
     lxrutt REv RAns RR (v1 <- iresult x1 ;; F1 v1) F2.
   Proof.
-  case: x1 => [v1 | ??]; last by rewrite bind_throw; apply: lxrutt_throw.
+  case: x1 => [v1 | ??]; last by rewrite bind_throw; apply: lxrutt_throw_l.
   by rewrite bind_ret_l => /(_ _ erefl).
   Qed.
 
@@ -446,6 +458,8 @@ Section WITH_ERROR.
 
 Context {E E0: Type -> Type} {wE : with_Error E E0}.
 
+(* TODO: D1 and D2 mean that we can't use this elsewhere. How can we unify with
+   xrutt_wEl_throw? *)
 Lemma lcutoff_wE (D1 D2: Type -> Type)
   (EE2 : forall X, (D2 +' E) X -> bool)               
   (REv : forall A B, (D1 +' E) A -> (D2 +' E) B -> Prop)
@@ -455,10 +469,7 @@ Lemma lcutoff_wE (D1 D2: Type -> Type)
   xrutt (@EE_MR E (errcutoff (is_error wE)) D1) EE2 
     REv RAns RR
     (Exception.throw e) t.
-Proof.
-  apply xrutt_CutL.
-  by rewrite /xrutt_facts.EE_MR /errcutoff /is_error /= mid12.
-Qed.      
+Proof. exact/xrutt_CutL/is_error_Throw. Qed.
 
 Lemma lcutoff_wES (D1 D2: Type -> Type)
   (EE2 : forall X, (D2 +' E) X -> bool)               
@@ -468,10 +479,7 @@ Lemma lcutoff_wES (D1 D2: Type -> Type)
   (e: utils.error) (t : itree (D2 +' E) T2) :
   xrutt (errcutoff (is_error _)) EE2 REv RAns RR
         (Exception.throw e) t.
-Proof.
-  apply xrutt_CutL.
-  by rewrite /xrutt_facts.EE_MR /errcutoff /is_error /= mid12.
-Qed.      
+Proof. exact/xrutt_CutL/is_error_Throw. Qed.
 
 Lemma errcutoff_conv' D: 
   (@EE_MR E (errcutoff (is_error wE)) D) = 
@@ -511,8 +519,8 @@ Proof.
 elim: ts op vs vs' => /= [|t ts ih] op [|v vs] [|v' vs'] + /List_Forall2_inv //.
 - move=> _ _; apply: xrutt_refl; first by move=> ?? _ _; apply: RPre_eq_refl.
   by move=> ???? _ _; apply: RPost_eqI.
-- by move=> _ _; apply: lxrutt_throw.
-- by move=> _ _; apply: lxrutt_throw.
+- by move=> _ _; apply: lxrutt_throw_l.
+- by move=> _ _; apply: lxrutt_throw_l.
 move=> /andP [] ht hts [/value_uinclE hv hvs].
 apply: lxrutt_bind_iresult.
 case: t op ht => [|| // | sz] op _ v1 /of_val_typeE.
@@ -528,11 +536,11 @@ Section MkForallIt.
 Context (T : Type) (P : T -> Prop).
 
 Definition mk_forall_it (l : seq ctype) : sem_prod l (itree E T) -> Prop :=
-  sem_forall (lutt (fun _ _ => True) (fun _ _ _ => True) P) l.
+  sem_forall (lutt_eT P) l.
 
 Lemma mk_forall_itP l (f : sem_prod l (itree E T)) vargs :
   mk_forall_it f ->
-  lutt (fun _ _ => True) (fun _ _ _ => True) P (it_app_sopn l f vargs).
+  lutt_eT P (it_app_sopn l f vargs).
 Proof.
 elim: l vargs f => [|t l ih] [|v vs] //= f hall.
 - exact: lutt_throw.
@@ -813,7 +821,7 @@ Lemma xrutt_lutt_true_bind_l
   {T1 T2}
   (RT : T1 -> T2 -> Prop) t1 t2 k1 k2 :
   xrutt (errcutoff is_error1) nocutoff REv RAns RR t1 t2 ->
-  lutt (fun _ _ => True) (fun _ _ _ => True) R t1 ->
+  lutt_eT R t1 ->
   (forall r1 r2,
       R r1 ->
       RR r1 r2 ->

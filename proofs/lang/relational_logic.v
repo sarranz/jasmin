@@ -211,6 +211,9 @@ Definition EPostRel {E_l E0_l : Type -> Type} {wE_l : with_Error E_l E0_l}
     sum_postrelF (fun _ _ _ _ _ _ => True) EPostRel0
       (mfun1 e1) t1 (mfun1 e2) t2.
 
+(* The logic accepts any pre/post condition for events that allows preserving
+   [RndEvent]s exactly (i.e., the pre is reflexive and the post ensures
+   equality). *)
 Class RndRels2
   {syscall_state : Type}
   {E_l E0_l : Type -> Type}
@@ -507,11 +510,8 @@ Lemma xrutt_iresult (T1 T2:Type) (x1 : exec T1) (x2 : exec T2) (R : T1 -> T2 -> 
   (forall v1, x1 = ok v1 -> exists2 v2, x2 = ok v2 & R v1 v2) ->
   xrutt (errcutoff (is_error wE_l)) nocutoff EPreRel EPostRel R (iresult x1) (iresult x2).
 Proof.
-  case: x1 => [ v1 | e1] hok.
-  + have [v2 -> /=] := hok _ erefl.
-    by apply: xrutt_Ret.
-  apply xrutt_CutL => //.
-  by rewrite /errcutoff /is_error /subevent /resum /fromErr mid12.
+  case: x1 => [ v1 | e1] hok; last exact: lxrutt_throw_l.
+  by have [v2 -> /=] := hok _ erefl; apply: xrutt_Ret.
 Qed.
 
 Lemma xrutt_iresult_left (T1 T2:Type) (x1 : exec T1) (v2 : T2) (R : T1 -> T2 -> Prop) :
@@ -519,10 +519,8 @@ Lemma xrutt_iresult_left (T1 T2:Type) (x1 : exec T1) (v2 : T2) (R : T1 -> T2 -> 
   xrutt (errcutoff (is_error wE_l)) nocutoff EPreRel EPostRel R (iresult x1) (Ret v2).
 Proof.
   rewrite /iresult => h.
-  case heq: x1 => [v1 | e] /=.
-  + by apply/xrutt_Ret/h.
-  apply xrutt_CutL.
-  by rewrite /errcutoff /is_error /subevent /= /resum /fromErr mid12.
+  case heq: x1 => [v1 | e] /=; last exact: lxrutt_throw_l.
+  by apply/xrutt_Ret/h.
 Qed.
 
 Lemma xrutt_bind_iresult_left (T T1 T2:Type) (x1 : exec T) (F1 : T -> itree E_l T1) (F2 : itree E_r T2)
@@ -534,8 +532,7 @@ Proof.
   rewrite /iresult => h.
   case heq: x1 => [v1 | e] /=.
   + by rewrite bind_ret_l; apply: h heq.
-  rewrite bind_throw; apply xrutt_CutL.
-  by rewrite /errcutoff /is_error /subevent /= /resum /fromErr mid12.
+  by rewrite bind_throw; apply lxrutt_throw_l.
 Qed.
 
 Lemma wkequiv_iresult {I1 I2 O1 O2} (P : rel I1 I2) (Q : rel O1 O2) F1 F2 :
@@ -685,8 +682,7 @@ Proof.
   + rewrite bind_ret_r.
     have [t' /esem_i_bodyP -> hQ /=] := h s t s' hP heq.
     by apply xrutt.xrutt_Ret.
-  rewrite bind_ret_r; apply xrutt_CutL => //.
-  by rewrite /errcutoff /is_error /subevent /resum /fromErr mid12.
+  by rewrite bind_ret_r; apply lxrutt_throw_l.
 Qed.
 
 Lemma wequiv_opn (Rve Rvo : rel_vs) P Q ii1 xs1 at1 o1 es1 ii2 xs2 at2 o2 es2 :
@@ -743,8 +739,7 @@ Proof.
   + rewrite bind_ret_r.
     have [t' /esem_i_bodyP -> hQ /=] := h s t s' hP heq.
     by apply xrutt.xrutt_Ret.
-  rewrite bind_ret_r; apply xrutt_CutL => //.
-  by rewrite /errcutoff /is_error /subevent /resum /fromErr mid12.
+  by rewrite bind_ret_r; apply lxrutt_throw_l.
 Qed.
 
 Lemma wequiv_syscall Rv Ro P Q ii1 xs1 sc1 es1 ii2 xs2 sc2 es2 :
@@ -796,8 +791,7 @@ Proof.
     have [|t' /esem_i_bodyP -> hQ /=] := h s t s hP.
     + by rewrite heq.
     by rewrite bind_ret_l; apply xrutt.xrutt_Ret.
-  rewrite bind_ret_r bind_vis; apply xrutt_CutL => //.
-  by rewrite /errcutoff /is_error /subevent /resum /fromErr mid12.
+  by rewrite !bind_throw; apply: lxrutt_throw_l.
 Qed.
 
 Lemma wequiv_assert (P Q : rel_c) ii1 a1 ii2 a2 :
@@ -952,8 +946,7 @@ Proof.
   rewrite isem_cmd_cat !bind_ret_r/=.
   rewrite /isem_cond.
   case heq: sem_cond => [b | e] /=; last first.
-  + rewrite bind_vis; apply xrutt_CutL.
-    by rewrite /errcutoff /is_error /subevent /= /resum /fromErr mid12.
+  + by rewrite !bind_throw; apply: lxrutt_throw_l.
   move: heq; rewrite /sem_cond; t_xrbindP => v hse1 hto.
   have [t' [hsemc hP' hse2]] := he s t v hP hse1.
   rewrite bind_ret_l (esem_i_bodyP hsemc) /= bind_ret_l hse2 /= hto /= bind_ret_l bind_ret_r.

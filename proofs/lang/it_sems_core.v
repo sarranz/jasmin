@@ -824,7 +824,7 @@ reflexivity.
 Qed.
 
 Lemma fexec_syscallS o fs :
-  lutt (fun _ _ => True) (fun _ _ _ => True)
+  lutt_eT
     (fun fs' => mem_equiv fs.(fmem) fs'.(fmem))
     (fexec_syscall o fs).
 Proof.

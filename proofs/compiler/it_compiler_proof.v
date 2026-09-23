@@ -414,10 +414,8 @@ Qed.
 
 End PROOF.
 
-(* Generic glue between one-sided Hoare facts ([lutt]) and relational facts
-   ([xrutt] at [EPreRel]/[EPostRel]), and transitivity of the latter.
-   TODO: move to hoare_logic.v ([postInv_trivial]) and relational_logic.v. *)
-Section XRUTT_LUTT.
+(* TODO: move to hoare_logic.v and relational_logic.v *)
+Section MOVE.
 
 Context
   {E E0 : Type -> Type}
@@ -431,14 +429,15 @@ Proof.
 rewrite /postInv; case: (mfun1 e) t => // -[] ? [].
 Qed.
 
+(* lutt_xrutt_trans_r ignoring event rels *)
+(* TODO use weakened form instead of /\ *)
 Lemma xrutt_lutt_l {O1 O2} (PEv : prepred E) (PAns : postpred E)
   (P1 : O1 -> Prop) (RR : O1 -> O2 -> Prop)
   (t1 : itree E O1) (t2 : itree E O2) :
   (forall T (e : E T) t, PAns T e t) ->
   lutt PEv PAns P1 t1 ->
-  xrutt (errcutoff (is_error wE)) nocutoff EPreRel EPostRel RR t1 t2 ->
-  xrutt (errcutoff (is_error wE)) nocutoff EPreRel EPostRel
-    (fun o1 o2 => P1 o1 /\ RR o1 o2) t1 t2.
+  lxrutt EPreRel EPostRel RR t1 t2 ->
+  lxrutt EPreRel EPostRel (fun o1 o2 => P1 o1 /\ RR o1 o2) t1 t2.
 Proof.
 move=> hPAns hlutt hxrutt.
 have := lutt_xrutt_trans_l hlutt hxrutt.
@@ -447,14 +446,14 @@ apply: (xrutt_weaken_v2 (EE1 := errcutoff (is_error wE)) (EE2 := nocutoff)
 by move=> ???? [].
 Qed.
 
+(* TODO use weakened form instead of /\ *)
 Lemma xrutt_lutt_r {O1 O2} (PEv : prepred E) (PAns : postpred E)
   (P2 : O2 -> Prop) (RR : O1 -> O2 -> Prop)
   (t1 : itree E O1) (t2 : itree E O2) :
   (forall T (e : E T) t, PAns T e t) ->
   lutt PEv PAns P2 t2 ->
-  xrutt (errcutoff (is_error wE)) nocutoff EPreRel EPostRel RR t1 t2 ->
-  xrutt (errcutoff (is_error wE)) nocutoff EPreRel EPostRel
-    (fun o1 o2 => P2 o2 /\ RR o1 o2) t1 t2.
+  lxrutt EPreRel EPostRel RR t1 t2 ->
+  lxrutt EPreRel EPostRel (fun o1 o2 => P2 o2 /\ RR o1 o2) t1 t2.
 Proof.
 move=> hPAns hlutt hxrutt.
 have := lutt_xrutt_trans_r hlutt hxrutt.
@@ -463,9 +462,9 @@ apply: (xrutt_weaken_v2 (EE1 := errcutoff (is_error wE)) (EE2 := nocutoff)
 by move=> ???? [].
 Qed.
 
-End XRUTT_LUTT.
+End MOVE.
 
-Section XRUTT_TRANS.
+Section MOVE.
 
 Context
   {E E0 : Type -> Type}
@@ -474,17 +473,13 @@ Context
   {rE_trans : EventRels_trans rE12 rE23 rE13}
 .
 
-(* Pointwise version of [wkequiv_io_trans]. *)
 Lemma xrutt_EPreRel_trans {O1 O2 O3}
   (RR12 : O1 -> O2 -> Prop) (RR23 : O2 -> O3 -> Prop) (RR13 : O1 -> O3 -> Prop)
   (t1 : itree E O1) (t2 : itree E O2) (t3 : itree E O3) :
   (forall o1 o2 o3, RR12 o1 o2 -> RR23 o2 o3 -> RR13 o1 o3) ->
-  xrutt (errcutoff (is_error wE)) nocutoff
-    (EPreRel (rE0 := rE12)) (EPostRel (rE0 := rE12)) RR12 t1 t2 ->
-  xrutt (errcutoff (is_error wE)) nocutoff
-    (EPreRel (rE0 := rE23)) (EPostRel (rE0 := rE23)) RR23 t2 t3 ->
-  xrutt (errcutoff (is_error wE)) nocutoff
-    (EPreRel (rE0 := rE13)) (EPostRel (rE0 := rE13)) RR13 t1 t3.
+  lxrutt (EPreRel (rE0 := rE12)) (EPostRel (rE0 := rE12)) RR12 t1 t2 ->
+  lxrutt (EPreRel (rE0 := rE23)) (EPostRel (rE0 := rE23)) RR23 t2 t3 ->
+  lxrutt (EPreRel (rE0 := rE13)) (EPostRel (rE0 := rE13)) RR13 t1 t3.
 Proof using rE_trans.
 move=> hRR h12 h23.
 have h13 :
@@ -501,7 +496,7 @@ have h13 :
 exact: (h13 tt tt I).
 Qed.
 
-End XRUTT_TRANS.
+End MOVE.
 
 Section IT.
 
@@ -519,11 +514,6 @@ Context
   (print_linearP : forall s p, cparams.(print_linear) s p = p)
 .
 
-(* The whole compiler is proved at the smallest event type able to run
-   syscalls: errors plus the randomness oracle [RndEvent]. Both are
-   concrete here, so the embeddings [wE] and [rndE] are identities, and the
-   handler contract [rE0] is syntactic equality of events: identical [Rnd]
-   queries get identical answers. *)
 Notation E0 := (RndEvent syscall_state) (only parsing).
 Notation E := (ErrEvent +' E0) (only parsing).
 
@@ -1397,6 +1387,11 @@ exists o2; first exact: linpost.
 by rewrite /sz_post align_tfd stkmax_tfd res_tfd; apply: szpost.
 Qed.
 
+(* TODO
+   (1) introduce wkequiv-hoare lemmas like lutt_xrutt_trans_l
+   (2) lutt_xrutt_trans_l should be stated in weakened form *)
+
+
 Lemma it_compiler_back_endP {fn} :
   compiler_back_end aparams cparams entries sp = ok tp ->
   fn \in entries ->
@@ -1469,9 +1464,7 @@ have [_ al_zfd _ arg_zfd _ res_zfd exp_zfd cs_zfd stkmax_zfd _] :=
 have rsp_lp : Sv.In (vid lp.(lp_rsp)) one_varmap.callee_saved.
 - by rewrite ([elaborate lp_rspE ok_lp]).
 have wsz := [elaborate
-  istack_zeroization_lprogP
-    (wE := wE) (rE0 := rE0) (rndE := rndE) (rndE_refl := rndE_refl)
-    (hap_hszp haparams) rsp_lp ok_zp get_lfd ].
+  istack_zeroization_lprogP (hap_hszp haparams) rsp_lp ok_zp get_lfd ].
 
 (* Tunneling *)
 have get_tfd := [elaborate get_fundef_tunnel_program ok_tp get_zfd].

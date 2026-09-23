@@ -2792,8 +2792,10 @@ End ILSTEPS_END.
 
   (* ----------------------------------------------------------------------- *)
 
-  Context {rE0 : EventRels E0}.
-  Context {rndE_refl : RndRels_refl rE0}.
+  Context
+    {rE0 :EventRels E0}
+    {rndE_refl : RndRels_refl rE0}
+  .
 
   (* Assuming [fn] takes [(scs1, m1, vm1)] to [(scs2, m2, vm2)],
      we need to prove that its compilation has the same behavior, and
@@ -2912,7 +2914,7 @@ End ILSTEPS_END.
 
   Import xrutt xrutt_facts.
 
-  (* ITreeNotations clashes with varmap notations *)
+  (* TODO ITreeNotations clashes with varmap notations. What should we do? *)
   #[local] Notation "'let*' p ':=' c1 'in' c2" :=
     (@ITree.bind _ _ _ c1 (fun p => c2))
       (at level 61, p as pattern, c1 at next level, right associativity)
@@ -3331,7 +3333,7 @@ End ILSTEPS_END.
   Qed.
 
   Lemma preserved_metadata_sem_syscall_store
-    {o m1 m2} {args : sem_tuple (sc_in_s o)} {ans : syscall_state * seq u8} {r1 r2} :
+    o m1 m2 args r1 r2 (ans : syscall_state * _) :
     sem_syscall_store o m1 args ans = ok r1 ->
     sem_syscall_store o m2 args ans = ok r2 ->
     preserved_metadata m1 m2 r2.1.2.
@@ -3344,9 +3346,8 @@ End ILSTEPS_END.
     match_mem_gen (top_stack m0) m1 m2 ->
     values_uincl vs1 vs2 ->
     lxeutt
-      (fun r1 r2 : syscall_state * mem * values =>
-         exists (args : sem_tuple (sc_in_s o)) (ans : syscall_state * seq u8)
-                (t : sem_tuple (sc_out_s o)),
+      (fun r1 r2 =>
+         exists args (ans : syscall_state * _) t,
            [/\ sem_syscall_store o m1 args ans = ok (r1.1.1, r1.1.2, t)
              , sem_syscall_store o m2 args ans = ok (r2.1.1, r2.1.2, t)
              , r1.1.1 = r2.1.1
@@ -3359,24 +3360,20 @@ End ILSTEPS_END.
     - apply: lxrutt_iresult => args h.
       by exists args => //; exact: sem_syscall_castP hu h.
     move=> args _ <-.
-    apply: (xrutt_bind (RR := eq)).
-    - exact: eutt_lxeutt (reflexivity _).
+    apply: xrutt_bind; first by apply: eutt_lxeutt; reflexivity.
     move=> ans _ <-.
-    apply: (xrutt_bind
-              (RR := fun r1 r2 : syscall_state * mem * sem_tuple (sc_out_s o) =>
-                       [/\ sem_syscall_store o m1 args ans = ok r1
-                         , sem_syscall_store o m2 args ans = ok r2
-                         , r1.1.1 = r2.1.1
-                         , match_mem_gen (top_stack m0) r1.1.2 r2.1.2
-                         & r1.2 = r2.2])).
+    apply: (xrutt_bind (RR := fun r1 r2 =>
+      [/\ sem_syscall_store o m1 args ans = ok r1
+        , sem_syscall_store o m2 args ans = ok r2
+        , r1.1.1 = r2.1.1
+        , match_mem_gen (top_stack m0) r1.1.2 r2.1.2
+        & r1.2 = r2.2 ])).
     - apply: lxrutt_iresult => -[[scs1' m1''] t1] h1.
       have [m2' hm2 mm2] := match_mem_gen_sem_syscall_store mm h1.
       by exists (scs1', m2', t1) => //; split.
     move=> [[scs1' m1''] t1] [[scs2' m2''] t2] [h1 h2 /= hscs mm2 ht] /=.
     apply: xrutt_Ret.
-    exists args, ans, t1; split=> //.
-    - by rewrite ht.
-    by rewrite ht.
+    by exists args, ans, t1; split=> //; rewrite ht.
   Qed.
 
   Lemma fexec_syscall_match_mem o :
@@ -3387,12 +3384,11 @@ End ILSTEPS_END.
       (fun fs1 fs2 =>
          [/\ fscs fs1 = fscs fs2
            , match_mem_gen (top_stack m0) (fmem fs1) (fmem fs2)
-           & values_uincl (fvals fs1) (fvals fs2)])
+           & values_uincl (fvals fs1) (fvals fs2) ])
       (fexec_syscall (E := recCallK +' E) (scP := sCP_stack) o)
       (fexec_syscall (E := CallE +' E) (scP := sCP_stack) o)
       (fun fs1 fs2 fs1' fs2' =>
-         exists (args : sem_tuple (sc_in_s o)) (ans : syscall_state * seq u8)
-                (t : sem_tuple (sc_out_s o)),
+         exists args ans t,
            [/\ sem_syscall_store o (fmem fs1) args ans
                  = ok (fscs fs1', fmem fs1', t)
              , sem_syscall_store o (fmem fs2) args ans
@@ -3406,7 +3402,8 @@ End ILSTEPS_END.
     - rewrite /exec_syscall /=.
       apply: lxeutt_lrutt_RndRels_refl.
       exact: exec_syscall_s_match_mem mm uvs.
-    move=> [[scs1' m1'] vs1'] [[scs2' m2'] vs2'] [args [ans [t [/= h1 h2 hscs' mm' hvs]]]].
+    move=> [[scs1' m1'] vs1'] [[scs2' m2'] vs2']
+      [args [ans [t [/= h1 h2 hscs' mm' hvs]]]].
     subst scs2' vs2'.
     by apply: xrutt_Ret; exists args, ans, t.
   Qed.
@@ -3426,15 +3423,17 @@ End ILSTEPS_END.
       (sem_syscall (E := recCallK +' E) p o)
       (lexec_syscall (E := CallE +' E) o)
       (fun s1 ls1 s2 ls2 =>
+         let: xs := vrvs (to_lvals (syscall_sig o).(scs_vout)) in
+         let: xs := Sv.union syscall_kill xs in
          [/\ match_mem_gen (top_stack m0) (emem s2) (lmem ls2)
            , vm_uincl (evm s2) (lvm ls2)
            , escs s2 = lscs ls2
            , lfn ls2 = lfn ls1
            , lpc ls2 = (lpc ls1).+1
-           , lvm ls1 =[\Sv.union syscall_kill (vrvs (to_lvals (scs_vout (syscall_sig o)))) ] lvm ls2
+           , lvm ls1 =[\xs] lvm ls2
            , validw (emem s1) =3 validw s2.(emem)
            , preserved_metadata (emem s1) (lmem ls1) ls2.(lmem)
-           & target_mem_unchanged (lmem ls1) ls2.(lmem)]).
+           & target_mem_unchanged (lmem ls1) ls2.(lmem) ]).
   Proof using E E0 Pc Pi Pi_r asm_op enough_space ep fn hliparams linear_ok
     liparams m0 max0 ovm_i p p' rE0 rndE rndE_refl sip sp0 spp syscall_state
     var_tmp var_tmp2 var_tmps vgd vrsp vrspg vrspi wE.
@@ -3489,22 +3488,18 @@ End ILSTEPS_END.
     by rewrite -(proj2 (sem_syscall_storeS hst1)).
   Qed.
 
-  Lemma Hsyscall : ∀ (xs : lvals) (o : syscall_t) (es : pexprs), Pi_r (Csyscall xs o es).
+  Lemma Hsyscall xs o es : Pi_r (Csyscall xs o es).
   Proof using hliparams linear_ok enough_space rndE_refl.
-  move=> xs o es ii lbl lbli P li Q [/checked_iE [fd ok_fd] /= _] [??]; subst lbli li.
+  move=> ii lbl lbli P li Q [/checked_iE [fd ok_fd] /= _] [??]; subst lbli li.
   move=> D C s1 ls1 [M1 SC1 X1 hpc hfn hsp1 S1 MAX1].
-  move: I; rewrite (step_mix_ilsteps C) //; last by simpl_size; lia.
-  move=> _.
+  rewrite (step_mix_ilsteps C) //; last by simpl_size; clear; lia.
   apply: xrutt_bind; first exact: (sem_syscall_lexec_syscall _ ok_fd).
   move=> [scs2 m2 vm2] ls2 [/= mm2 hvm2 hscs2 hfn2 hpc2 heqex hvw hmd hmu].
   case: o C heqex => [ws n] C /= heqex.
-  rewrite addn1 -hpc -hpc2 -hfn -hfn2.
-  move: I; rewrite mix_ilsteps_b0 => //= _.
-  move: I; rewrite tau_eutt => _.
-  apply xrutt_Ret.
-  split=> //=.
-  - by rewrite hpc2 hpc size_cat /=  addn1.
-  by rewrite hfn2.
+  rewrite addn1 -hpc -hpc2 -hfn -hfn2 mix_ilsteps_b0 //= tau_eutt.
+  apply: xrutt_Ret.
+  split=> //=; last by rewrite hfn2.
+  by rewrite hpc2 hpc size_cat /=  addn1.
   Qed.
 
   Lemma Hassert : ∀ a : assertion, Pi_r (Cassert a).
@@ -5567,8 +5562,8 @@ Qed.
       + by subst x; rewrite lp_rspE in vm_rsp; rewrite vm_rsp.
       apply value_uincl_trans with s.[x] => //.
       by apply: vm_uincl_kill_vars.
-    apply: xrutt_facts.xrutt_bind;
-      first exact: (linear_funP sp0_top enough_space hpreF).
+    have h := [elaborate linear_funP sp0_top enough_space hpreF].
+    apply (xrutt_facts.xrutt_bind h).
     move=> ks2 ls2 hpost.
     have [] // := [elaborate
      hpost

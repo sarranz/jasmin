@@ -3522,17 +3522,14 @@ Import
   ITree
   ITreeFacts
 .
+Import seq. (* ITree shadows [map], [cat], etc. *)
 Import
   xrutt
   xrutt_facts
 .
 Import core_logics.
-(* [ITree]/[ITreeFacts]/[xrutt]/[xrutt_facts] above shadow several `seq`
-   identifiers (e.g. [map], [cat]) with unrelated categorical operations of
-   the same name; re-import [seq] to make those resolve to `seq`'s versions
-   again for the rest of the file. *)
-Import seq.
 
+(* TODO ITreeNotations clashes with varmap notations. What should we do? *)
 #[local] Notation "'let*' p ':=' c1 'in' c2" :=
   (@ITree.bind _ _ _ c1 (fun p => c2))
     (at level 61, p as pattern, c1 at next level, right associativity)

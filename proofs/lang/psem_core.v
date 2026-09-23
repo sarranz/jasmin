@@ -31,10 +31,12 @@ Context
   {pT : progT}
 .
 
-(* The core versions are defined exactly on [ErrEvent +' RndEvent] so that when
-   they are instantiated for different [E] (e.g., when interpreting recursive
-   calls we instantiate once with [E := E] and once with [E := Call +' E] we can
-   prove that [exec_syscall] behaves the same by construction. *)
+(* The core versions are defined exactly on [ErrEvent +' RndEvent] instead of on
+   an arbitrary event.
+   In this way, when we instantiate for different event families (e.g., when
+   interpreting recursive calls we instantiate once with [E := E] and once with
+   [E := Call +' E]) we can still prove that [exec_syscall] behaves the same by
+   construction. *)
 
 Class semCallParams := SemCallParams
   {
@@ -56,7 +58,7 @@ Class semCallParams := SemCallParams
         (exec_syscall_core scs m o vargs');
 
   exec_syscall_coreS : forall scs m o vargs,
-      lutt (fun _ _ => True) (fun _ _ _ => True)
+      lutt_eT
         (fun '(_, m', _) => mem_equiv m m')
         (exec_syscall_core scs m o vargs);
 }.
@@ -79,24 +81,25 @@ Lemma exec_syscallP scs m o vargs vargs' :
     (exec_syscall scs m o vargs)
     (exec_syscall scs m o vargs').
 Proof.
-  move=> /exec_syscall_coreP; rewrite /exec_syscall.
-  move=> h; apply: xrutt_translate (h scs m o).
-  + by move=> X [e|e] //= _; rewrite /errcutoff /is_error /= mid12.
-  + done.
-  + move=> A B e1 e2 [heq heqe]; move: e2 heqe.
-    case: B / heq => e2 /= ->; exact: RPre_eq_refl.
-  by move=> A B e1 a e2 b _ hpost; exact: hpost.
+move=> /exec_syscall_coreP; rewrite /exec_syscall.
+move=> h; apply: xrutt_translate (h scs m o).
+- by move=> X [e|e] //= _; rewrite /errcutoff /is_error /= mid12.
+- done.
+- move=> A B e1 e2 [heq heqe]; move: e2 heqe.
+  case: B / heq => e2 /= ->; exact: RPre_eq_refl.
+by move=> A B e1 a e2 b _ hpost; exact: hpost.
 Qed.
 
 Lemma exec_syscallS scs m o vargs :
-  lutt (fun _ _ => True) (fun _ _ _ => True)
+  lutt_eT
     (fun '(_, m', _) => mem_equiv m m')
     (exec_syscall scs m o vargs).
 Proof.
-  have [t' /rutt_eq_trans_refl h] := exec_syscall_coreS scs m o vargs.
-  eexists; apply/eutt_rutt/eutt_translate_gen/gen_rutt_eutt.
-  apply: rutt_weaken h => //.
-  by move=> T1 T2 e1 e2 [].
+(* TODO the following should be a lemma about lutt and translate *)
+have [t' /rutt_eq_trans_refl h] := exec_syscall_coreS scs m o vargs.
+eexists; apply/eutt_rutt/eutt_translate_gen/gen_rutt_eutt.
+apply: rutt_weaken h => //.
+by move=> T1 T2 e1 e2 [].
 Qed.
 
 End SCP.
@@ -144,8 +147,7 @@ Instance sCP_unit : semCallParams (pT := progUnit) :=
 }.
 
 Lemma exec_syscall_typed_res (scs : syscall_state) m o vs :
-  lutt
-    (fun _ _ => True) (fun _ _ _ => True)
+  lutt_eT
     (fun '(_, _, vs') => truncate_vals (sc_out_u o) vs' = ok vs')
     (exec_syscall (pT := progUnit) scs m o vs).
 Proof. exact: lutt_translate (exec_syscall_u_typed_res _ _ _ _). Qed.

@@ -21,7 +21,8 @@ Require Import
   linear_util
   linear_sem
   linear_facts.
-Require Import seq_extra compiler_util relational_logic.
+Require Import seq_extra compiler_util core_logics relational_logic.
+Require Import xrutt xrutt_facts.
 Require Export stack_zeroization.
 
 Section WITH_PARAMS.
@@ -390,15 +391,12 @@ Proof using hszparams pp' hget hget' rndE_refl.
     by have := lt_nm_n (size (lfd_body lfd)) (size cmd); rewrite -heq hlt.
   apply xrutt_facts.xrutt_bind with pre; last first.
   + by move=> s1 s2 hpre'; apply xrutt.xrutt_Ret; constructor.
-  rewrite /istep /next_is_Lsyscall.
+  rewrite /istep /next_is_Lsyscall /is_Lsyscall.
   case hfi: find_instr => [i|] /=; last first.
-  + rewrite /step hfi.
-    apply: xrutt.xrutt_CutL.
-    by rewrite /core_logics.errcutoff /is_error /Subevent.subevent /CategoryOps.resum /fromErr mid12.
-  rewrite (find_instrP pp' hfi) /=.
-  case: is_Lsyscall => [o|].
-  + eapply xrutt_facts.xrutt_weaken_v3.
-    2: exact: ((eq_lsyscall o : forall i1 i2, i1 = i2 -> _) s s erefl).
+  + by rewrite /step hfi; apply/lxrutt_throw_l.
+  rewrite (find_instrP pp' hfi).
+  case: is_Lsyscall_rP => [o|_].
+  + apply: xrutt_weaken_v3; last exact: eq_lsyscall.
     move=> s1' s2' [<- hfn' hpc'].
     split=> // h; rewrite hfn' in h.
     by rewrite hpc'; apply: hlt h.
@@ -496,8 +494,7 @@ Proof using hszparams rndE_refl.
   + by move=> p hb; rewrite -hvalid_eq; apply hvalid.
   have hbody: lfd_body (map_lfundef (cat^~ cmd) lfd) = lfd_body lfd ++ cmd by done.
   case: allP => hall; last first.
-  + rewrite /iresult /= bind_throw; apply xrutt.xrutt_CutL => //.
-    by rewrite /core_logics.errcutoff /is_error /subevent /resum /fromErr mid12.
+  + by rewrite /iresult /= bind_throw; apply: lxrutt_throw_l.
   have {}hrsp: (lvm s2).[vid (lp_rsp lp)] = Vword ptr.
   + have <- // : (evm s).[vid (lp_rsp lp)] = (lvm s2).[vid (lp_rsp lp)].
     by apply /value_eqb_eq/hall/Sv_elemsP.

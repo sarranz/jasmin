@@ -1,9 +1,10 @@
+Require Import psem psem_facts it_sems_core relational_logic.
+Import Utf8.
 From mathcomp Require Import ssreflect ssrfun ssrbool.
 From ITree Require Import Basics ITree ITreeFacts.
 
 Require Import xrutt xrutt_facts rutt_extras.
-Require Import psem psem_facts it_sems_core relational_logic core_logics.
-Import Utf8.
+Require Import core_logics.
 
 #[local] Existing Instance indirect_c.
 Section PROOF.
@@ -190,7 +191,8 @@ Qed.
 
 Section IT_SEM.
 
-Import MonadNotation ITreeNotations.
+Import ITreeNotations.
+#[local] Open Scope itree_scope.
 
 Context
   {E E0 : Type -> Type}

@@ -26,7 +26,8 @@ Section REMOVE_ASSERT.
     {wE : with_Error E E0}
     {rE : EventRels E0}
     {rndE : with_RndEvent syscall_state E0}
-    {rndE_refl : RndRels_refl rE}.
+    {rndE_refl : RndRels_refl rE}
+  .
 
   #[local] Notation st_eq := (st_rel (λ _ : unit, eq) tt).
 

@@ -30,16 +30,16 @@ let exn_exec (ii:instr_info) (r: 't exec) =
   | Ok r -> r
   | Error e -> raise (Eval_error(ii, e))
 
-let rec run_syscall_itree get_random ii t =
-  match ITreeDefinition.observe t with
-  | ITreeDefinition.RetF r -> r
-  | ITreeDefinition.TauF t -> run_syscall_itree get_random ii t
-  | ITreeDefinition.VisF (e, k) ->
-    (match e with
-     | Sum.Coq_inl1 err -> raise (Eval_error (ii, err))
-     | Sum.Coq_inr1 (Syscall.Rnd (scs, len)) ->
-       let ans = get_random scs len in
-       run_syscall_itree get_random ii (k (Obj.magic ans)))
+let rec run_syscall_itree ii t =
+  let open ITreeDefinition in
+  let open Sum in
+  match observe t with
+  | RetF r -> r
+  | TauF t -> run_syscall_itree ii t
+  | VisF (Coq_inl1(err), _) -> raise (Eval_error (ii, err))
+  | VisF (Coq_inr1(Syscall.Rnd(scs, len)), k) ->
+    let ans = Syscall_ocaml.get_random scs len in
+    run_syscall_itree ii (k (Obj.magic ans))
 
 let of_val_z ii v : coq_Z =
   Obj.magic (exn_exec ii (of_val Coq_cint v))
@@ -115,7 +115,7 @@ let return ep spp s =
                s_estate = s1;
                s_stk = Sfor(ii, i, ws, body, c, stk) }
 
-let small_step1 ep spp sip get_random s =
+let small_step1 ep spp sip s =
   match s.s_cmd with
   | [] -> return ep spp s
   | i :: c ->
@@ -131,13 +131,18 @@ let small_step1 ep spp sip get_random s =
       { s with s_cmd = c; s_estate = s2 }
 
     | Copn(xs,_,op,es) ->
-      let s2 = exn_exec ii (sem_sopn nosubword ep spp (_asmop sip) gd op s1 xs es) in
+      let s2 =
+        sem_sopn nosubword ep spp (_asmop sip) gd op s1 xs es
+        |> exn_exec ii
+      in
       { s with s_cmd = c; s_estate = s2 }
 
     | Csyscall(xs,o, es) ->
       let ves = exn_exec ii (sem_pexprs nosubword ep spp true gd s1 es) in
       let ((scs, m), vs) =
-        run_syscall_itree get_random ii (syscall_sem__ ep._pd s1.escs s1.emem o ves) in
+        syscall_sem__ ep._pd s1.escs s1.emem o ves
+        |> run_syscall_itree ii
+      in
       let s2 = exn_exec ii (write_lvals nosubword ep spp true gd {escs = scs; emem = m; evm = s1.evm} xs vs) in
       { s with s_cmd = c; s_estate = s2 }
 
@@ -170,17 +175,17 @@ let small_step1 ep spp sip get_random s =
               s_stk = stk }
 
 
-let rec small_step ep spp sip get_random s =
-  small_step ep spp sip get_random (small_step1 ep spp sip get_random s)
+let rec small_step ep spp sip s =
+  small_step ep spp sip (small_step1 ep spp sip s)
 
 let init_state ep spp p ii fn scs0 m vargs =
   let f, vargs, s_estate = init_estate ep spp p ii fn scs0 m vargs in
   { s_prog = p; s_cmd = f.f_body; s_estate; s_stk = Sempty (ii, f, vargs) }
 
 
-let exec ep spp sip get_random scs0 p ii fn vargs m =
+let exec ep spp sip scs0 p ii fn vargs m =
   let s = init_state ep spp p ii fn scs0 m vargs in
-  try small_step ep spp sip get_random s
+  try small_step ep spp sip s
   with Final(m,vs) -> m, vs
 
 (* ----------------------------------------------------------- *)
@@ -201,7 +206,7 @@ let run (type asm_op extra_op)
   let spp = Sem_params_of_arch_extra.spp_of_asm_e A.asm_e in
   let sip = Sem_params_of_arch_extra.sip_of_asm_e A.asm_e in
   let scs0 = Syscall_ocaml.initial_state () in
-  exec ep spp sip Syscall_ocaml.get_random scs0 p ii fn args m
+  exec ep spp sip scs0 p ii fn args m
 
 (* ----------------------------------------------------------- *)
 let pp_undef fmt cty =

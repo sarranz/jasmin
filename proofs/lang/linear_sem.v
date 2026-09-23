@@ -129,7 +129,7 @@ Definition eval_instr (i : linstr) (s1: lstate) : exec lstate :=
     Let res := exec_sopn o args in
     Let s' := write_lexprs xs res s in
     ok (lnext_pc (lset_estate' s1 s'))
-  | Lsyscall o => Error ErrSemUndef (* triggers event *)
+  | Lsyscall o => Error ErrSemUndef (* handled in istep *)
   | Lcall None d =>
     Let _ := assert (~~ fn_is_export d.1) ErrSemUndef in
     let vrsp := v_var (vid (lp_rsp P)) in
@@ -265,8 +265,8 @@ Context
   {wE : with_Error E E0}
   {rE : with_RndEvent syscall_state E0}.
 
-Import MonadNotation ITreeNotations.
-Local Open Scope monad_scope.
+Import ITreeNotations.
+#[local] Open Scope itree_scope.
 
 Definition lset_fstate (xs : seq var) (s : lstate) (fs : fstate) : exec lstate :=
   Let e := upd_estate true [::] (to_lvals xs) fs (to_estate s) in
@@ -278,10 +278,10 @@ Definition lexec_syscall (o : syscall_t) (s : lstate) : itree E lstate :=
   let vm := s.(lvm) in
   ves <- iresult (get_vars true vm vin) ;;
   let fs := {| fscs := s.(lscs); fmem := s.(lmem); fvals := ves; |} in
-  fs' <- fexec_syscall (scP := sCP_stack) o fs ;;
+  fs' <- fexec_syscall (scP := sCP_stack) o fs;;
   let vout := sig.(scs_vout) in
   let s' := lset_vm s (vm_after_syscall vm) in
-  s'' <- iresult (lset_fstate vout s' fs') ;;
+  s'' <- iresult (lset_fstate vout s' fs');;
   Ret (lnext_pc s'').
 
 Definition next_is_Lsyscall (s : lstate) : option syscall_t :=
@@ -366,8 +366,8 @@ End SMALL_STEP.
 
 Section MIX_STEP.
 
-Import MonadNotation ITreeNotations.
-Local Open Scope monad_scope.
+Import ITreeNotations.
+#[local] Open Scope itree_scope.
 
 Context
   {E E0}

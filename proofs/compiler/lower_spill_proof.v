@@ -427,7 +427,8 @@ Context
   {wE : with_Error E E0}
   {rE : EventRels E0}
   {rndE : with_RndEvent syscall_state E0}
-  {rndE_refl : RndRels_refl rE}.
+  {rndE_refl : RndRels_refl rE}
+.
 
 Definition st_ve S env := st_rel (valid_env S) env.
 

@@ -45,10 +45,9 @@ Context
 
 Lemma iasmsem_exportcall_invariantP
   (xp : asm_prog) (fn : funname) (xm : asmmem) :
-  lutt (fun T (_ : E T) => True)
-       (fun T (_ : E T) (_ : T) => True)
-       (fun xm' => asmsem_invariant xm xm')
-       (iasmsem_exportcall xp fn xm).
+  lutt_eT
+    (fun xm' => asmsem_invariant xm xm')
+    (iasmsem_exportcall xp fn xm).
 Proof.
   rewrite /iasmsem_exportcall.
   apply: (lutt_bind (R := fun _ => True)).

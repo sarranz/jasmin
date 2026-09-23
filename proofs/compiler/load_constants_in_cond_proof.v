@@ -142,7 +142,8 @@ Context
   {wE : with_Error E E0}
   {rE0 : EventRels E0}
   {rndE : with_RndEvent syscall_state E0}
-  {rndE_refl : RndRels_refl rE0}.
+  {rndE_refl : RndRels_refl rE0}
+.
 
 Lemma checker_st_eq_onP_ : Checker_eq p p' checker_st_eq_on.
 Proof using Hp. by apply checker_st_eq_onP; rewrite eq_globs. Qed.
@@ -235,7 +236,8 @@ Context
   {wE : with_Error E E0}
   {rE0 : EventRels E0}
   {rndE : with_RndEvent syscall_state E0}
-  {rndE_refl : RndRels_refl rE0}.
+  {rndE_refl : RndRels_refl rE0}
+.
 
 Lemma it_load_constants_progP p p' doit:
   load_constants_prog fresh_reg doit p = ok p' →

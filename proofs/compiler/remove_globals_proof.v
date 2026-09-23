@@ -98,7 +98,8 @@ Module INCL. Section INCL.
     {wE : with_Error E E0}
     {rE : EventRels E0}
     {rndE : with_RndEvent syscall_state E0}
-    {rndE_refl : RndRels_refl rE}.
+    {rndE_refl : RndRels_refl rE}
+  .
 
   Notation st_equal := (st_rel (fun _ : unit => eq)).
 
@@ -738,7 +739,8 @@ Module RGP. Section PROOFS.
     {wE : with_Error E E0}
     {rE : EventRels E0}
     {rndE : with_RndEvent syscall_state E0}
-    {rndE_refl : RndRels_refl rE}.
+    {rndE_refl : RndRels_refl rE}
+  .
 
   Definition check_es_valid ii (d:venv) (es1 es2 : pexprs) (d':venv) :=
     d = d' /\ mapM (remove_glob_e ii d) es1 = ok es2.

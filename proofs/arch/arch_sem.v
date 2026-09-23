@@ -164,7 +164,7 @@ Class asm_syscall_sem := {
       exists s2,
         [/\ store_syscall_ans o scs bytes s1 = ok s2
           , s2.(asm_scs) = scs
-          , s2.(asm_mem) = m'
+          , s2.(asm_mem) = m' (* TODO: equal only on valid addresses *)
           & sem_tuple_of_values (sc_out_s o) (read_sc_vres o s2) = ok res ];
 
   store_syscall_ans_preserves :
@@ -509,7 +509,7 @@ Definition eval_instr (i : asm_i_r) (s: asm_state) : exec asm_state :=
   | AsmOp o args =>
     Let m := eval_op o args s.(asm_m) in
     ok (st_update_next m s)
-  | SysCall _ => Error ErrSemUndef
+  | SysCall _ => Error ErrSemUndef (* handled in [ifetch_and_eval] *)
   | Declassify_val ty arg =>
    (* Let v := eval_asm_arg (AK_mem Unaligned) s arg ty in *)
     ok (st_update_next (asm_m s) s)
@@ -621,8 +621,8 @@ Qed.
 
 Section SysCall.
 
-Import MonadNotation ITreeNotations.
-Local Open Scope monad_scope.
+Import ITreeNotations.
+#[local] Open Scope itree_scope.
 
 Implicit Types
   (o : syscall_t)
@@ -643,8 +643,8 @@ Definition next_is_SysCall (s : asm_state) : option syscall_t :=
   let%opt i := oseq.onth s.(asm_c) s.(asm_ip) in is_SysCall i.
 
 Definition asm_exec_syscall_core o xm : itree E asmmem :=
-  args' <- iresult (sem_syscall_cast o (read_sc_vargs o xm)) ;;
-  '(scs', bytes) <- sem_syscall o xm.(asm_scs) args' ;;
+  args' <- iresult (sem_syscall_cast o (read_sc_vargs o xm));;
+  '(scs', bytes) <- sem_syscall o xm.(asm_scs) args';;
   iresult (store_syscall_ans o scs' bytes xm).
 
 Definition syscall_ans_rel o xm r xm' : Prop :=
@@ -682,9 +682,7 @@ by rewrite truncate_word_u take0 /= => -[->] [->].
 Qed.
 
 Lemma asm_exec_syscall_coreS o xm :
-  lutt (fun _ _ => True) (fun _ _ _ => True)
-    (fun xm' => asmsem_invariant xm xm')
-    (asm_exec_syscall_core o xm).
+  lutt_eT (fun xm' => asmsem_invariant xm xm') (asm_exec_syscall_core o xm).
 Proof.
 rewrite /asm_exec_syscall_core.
 apply: (lutt_bind (R := fun _ => True)); first exact: lutt_iresult.
@@ -713,8 +711,8 @@ Context
   {rE : with_RndEvent syscall_state E0}
 .
 
-Import MonadNotation ITreeNotations.
-Local Open Scope monad_scope.
+Import ITreeNotations.
+#[local] Open Scope itree_scope.
 
 Definition asm_exec_syscall
   (o : syscall_t) (s : asm_state) : itree E asm_state :=
@@ -722,8 +720,8 @@ Definition asm_exec_syscall
   Ret (st_update_next m' s).
 
 Lemma asm_exec_syscallS o xm :
-  lutt (fun _ _ => True) (fun _ _ _ => True)
-    (fun xm' => asmsem_invariant xm xm')
+  lutt_eT
+    (asmsem_invariant xm)
     (translate subevent (asm_exec_syscall_core o xm) : itree E _).
 Proof.
 have [t' /rutt_eq_trans_refl h] := asm_exec_syscall_coreS o xm.
@@ -733,7 +731,7 @@ by move=> T1 T2 e1 e2 [].
 Qed.
 
 Lemma asm_exec_syscall_invariant o s :
-  lutt (fun _ _ => True) (fun _ _ _ => True)
+  lutt_eT
     (fun s' => asmsem_invariant s.(asm_m) s'.(asm_m))
     (asm_exec_syscall o s).
 Proof.
@@ -823,8 +821,8 @@ Context
   {rE : with_RndEvent syscall_state E0}
 .
 
-Import MonadNotation.
-Local Open Scope monad_scope.
+Import ITreeNotations.
+#[local] Open Scope itree_scope.
 
 Definition iasmsem_exportcall (p : asm_prog) (fn : funname) (m : asmmem) :=
   fd <- ioget ErrType (get_fundef (asm_funcs p) fn);;

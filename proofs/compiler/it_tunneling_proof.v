@@ -428,9 +428,6 @@ Proof using pp'.
   move: (tunnel_plan _ _ _) => uf huf.
   move/andP: p_wf => -[_ /allInP] /= /(_ _ (get_fundef_in' hget)) /= /andP [_ hall].
   case: i hi => /=.
-  (* Most cases are left untouched. All these except the syscall case need
-     [eval_instr_eq] to relate [p] and [p']. The syscall case doesn't need it
-     because [lexec_syscall] doesn't depend on the program. *)
   1-6,8-9: move=> > hi hi'; exists 0; rewrite /= hpc /= hi hi' ?eval_instr_eq;
     reflexivity.
   + move=> [fn' r] /= hi; case: eqP => +; last first.

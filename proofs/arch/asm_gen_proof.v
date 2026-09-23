@@ -1,8 +1,3 @@
-Set Uniform Inductive Parameters.
-Set Implicit Arguments.
-Unset Strict Implicit.
-Unset Printing Implicit Defensive.
-
 From ITree Require Import
   ITree
   ITreeFacts
@@ -33,7 +28,7 @@ Require Import
   arch_sem
   sem_params_of_arch_extra.
 Require Export asm_gen.
-Require Import core_logics relational_logic.
+Require Import core_logics relational_logic xrutt xrutt_facts.
 Import Utf8.
 Import oseq.
 
@@ -1567,9 +1562,8 @@ Definition inv ls xs :=
       ssrfun.omap lfd_body (get_fundef (lp_funcs p) (lfn ls)) = Some lc
     & match_state rip ls lc xs.
 
-Import Monads.
-Import MonadNotation ITreeNotations.
-Local Open Scope monad_scope.
+Import ITreeNotations.
+#[local] Open Scope itree_scope.
 
 Lemma imatch_state_step1 endpc' xs ls' i :
   onth (asm_c xs) (asm_ip xs) = Some i →
@@ -1841,15 +1835,12 @@ Proof using hagparams ok_p' rndE.
   by case: (asm_flag _ _).
 Qed.
 
-Lemma is_Lsyscall_rP i : is_reflect Lsyscall i (is_Lsyscall_r i).
-Proof. by case: i; constructor. Qed.
-
 Lemma imatch_state_step endpc endpc' ls xs :
   wf_endpc endpc endpc' ->
   inv ls xs ->
   exists n,
-  xrutt.xrutt
-    (core_logics.errcutoff (is_error wE)) core_logics.nocutoff EPreRel EPostRel
+  lxrutt
+    EPreRel EPostRel
     (HeterogeneousRelations.sum_rel inv inv)
     (while_body (untilpc endpc) (istep p) ls)
     (iter_n (iasmsem_body p' endpc') n xs).
@@ -1873,8 +1864,7 @@ Proof using hagparams ok_p' rndE.
   case ok_fd: get_fundef omap_lc => [fd|] //= [?]; subst lc.
   case ok_i: (oseq.onth (lfd_body _) _) => [ i | /= ]; last first.
   + exists 0.
-    rewrite bind_throw; apply xrutt.xrutt_CutL.
-    by rewrite /core_logics.errcutoff /is_error /subevent /resum /fromErr mid12.
+    by rewrite bind_throw; apply/lxrutt_throw_l.
   case: (ms) => hloeq heqf hass hip.
   move: (hass); rewrite (onth_split ok_i) /assemble_c mapM_cat /=; t_xrbindP.
   move=> ac ac0 hac ac' aci haci ac1 hac1 <- <-.
@@ -1906,8 +1896,7 @@ Proof using hagparams ok_p' rndE.
     exact:
       match_state_SysCall_eval hloeq ok_fd heqf hass hac heq hip hnth ok_i.
   case hsem: linear_sem.eval_instr  => /= [ls' | e]; last first.
-  + rewrite bind_throw; apply: xrutt.xrutt_CutL.
-    by rewrite /core_logics.errcutoff /is_error /subevent /resum /fromErr mid12.
+  + by rewrite bind_throw; apply/lxrutt_throw_l.
   rewrite bind_ret_l.
   suff : [elaborate
             exists2 xs', asmsem_body_n p' endpc' (size aci).-1 xs = ok (inl xs')
@@ -2094,8 +2083,8 @@ Qed.
 Lemma imatch_state_sem endpc endpc' ls xs :
   wf_endpc endpc endpc' ->
   inv ls xs ->
-  xrutt.xrutt
-    (core_logics.errcutoff (is_error wE)) core_logics.nocutoff EPreRel EPostRel
+  lxrutt
+    EPreRel EPostRel
     inv
     (ilsem p (untilpc endpc) ls)
     (iasmsem p' endpc' xs).
@@ -2110,8 +2099,8 @@ Lemma iasm_gen_exportcall fn ls :
   vm_initialized_on (evm ls) (seq.map var_of_asm_typed_reg callee_saved)
   -> forall xm,
       lom_eqv rip ls xm
-  -> xrutt.xrutt
-       (core_logics.errcutoff (is_error wE)) core_logics.nocutoff EPreRel EPostRel
+  -> lxrutt
+       EPreRel EPostRel
        (fun s' xm' =>
          lom_eqv rip s' xm')
        (ilsem_exportcall p fn ls)
@@ -2120,17 +2109,14 @@ Proof using hagparams ok_p' rndE.
   move=> /allP ok_vm xm M.
   rewrite /ilsem_exportcall /iasmsem_exportcall.
   case ok_fd : (get_fundef (lp_funcs p) fn) => [fd | ] /=; last first.
-  + rewrite bind_throw; apply xrutt.xrutt_CutL.
-    by rewrite /core_logics.errcutoff /is_error /subevent /resum /fromErr mid12.
+  + by rewrite bind_throw; apply/lxrutt_throw_l.
   rewrite bind_ret_l.
   have [ fd' ok_fd' ] := ok_get_fundef ok_fd.
   rewrite ok_fd' /= bind_ret_l.
   case/assemble_fdI => ok_sp _ [] c [] ? [] ? [] ok_c ? ? ? ok_call_conv; subst fd' => /=.
   apply xrutt_facts.xrutt_bind with (fun _ _ => True).
-  + case: lfd_export => /=.
-    + by apply xrutt.xrutt_Ret.
-    apply xrutt.xrutt_CutL.
-    by rewrite /core_logics.errcutoff /is_error /subevent /resum /fromErr mid12.
+  + case: lfd_export; first exact: xrutt.xrutt_Ret.
+    exact/lxrutt_throw_l.
   move=> _ _ _.
   set l := ls_export_initial _ _ _ _.
   set s := {| asm_m := xm; asm_f := fn; asm_c := c; asm_ip := 0; |}.
@@ -2148,9 +2134,7 @@ Proof using hagparams ok_p' rndE.
   move=> l' s' [lc _ [M' _ _ _]].
   apply xrutt_facts.xrutt_bind with (fun _ _ => True); last first.
   + by move=> _ _ _; apply xrutt.xrutt_Ret.
-  case: allP => saved_registers /=; last first.
-  + apply xrutt.xrutt_CutL.
-    by rewrite /core_logics.errcutoff /is_error /subevent /resum /fromErr mid12.
+  case: allP => saved_registers /=; last exact/lxrutt_throw_l.
   set all' := all _ _.
   suff -> : all' by apply xrutt.xrutt_Ret.
   rewrite /all'; apply /allP.

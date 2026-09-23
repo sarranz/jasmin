@@ -21,8 +21,8 @@ Import merge_varmaps.
 Import compiler_util.
 
 Import Monads.
-Import MonadNotation ITreeNotations.
-Local Open Scope monad_scope.
+Import ITreeNotations.
+#[local] Open Scope itree_scope.
 
 Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then remove the line when requiring MathComp >= 2.6 *)
 
@@ -348,7 +348,8 @@ Context {E_l E0_l : Type -> Type} {wE_l: with_Error E_l E0_l}
         {rE0 : EventRels2 E0_l E0_r}
         {rE_l : with_RndEvent syscall_state E0_l}
         {rE_r : with_RndEvent syscall_state E0_r}
-        {rndE : RndRels_refl rE0}.
+        {rndE : RndRels_refl rE0}
+.
 
 Context (sem_F1 : sem_Fun (pT:= progStack) E_l)
         (sem_F2 : sem_FunK E_r).
