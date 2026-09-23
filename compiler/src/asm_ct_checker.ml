@@ -327,6 +327,44 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
         (fun env x -> Env.write env ~strong_write memory_slots x level)
         env out_slots
 
+    let syscall_arg_slots o : string list =
+      let args = (Syscall.syscall_sig_s Arch.reg_size o).Syscall.scs_tin in
+      let in_reg : Type.atype -> bool = function
+        | Type.Coq_aword ws ->
+            Prog.size_of_ws ws <= Prog.size_of_ws Arch.reg_size
+        | Type.Coq_abool | Type.Coq_aint | Type.Coq_aarr _ -> false
+      in
+      if not (List.for_all in_reg args) then
+        error "syscall argument does not fit an argument register";
+      if List.length args > List.length Arch.call_conv.call_reg_args then
+        error
+          "syscall has %d argument(s) but the calling convention has %d \
+           argument register(s)"
+          (List.length args)
+          (List.length Arch.call_conv.call_reg_args);
+      List.take (List.length args) Arch.call_conv.call_reg_args
+      |> List.map Arch_utils.reg_name
+
+    let syscall_writes_memory : _ Syscall_t.syscall_t -> bool = function
+      | Syscall_t.RandomBytes _ -> true
+
+    let ty_syscall env layout instr o : Env.t =
+      let env =
+        List.fold_left Env.use_public env
+          (Arch_utils.rsp :: syscall_arg_slots o)
+      in
+      let regions =
+        Layout.names (Layout.cover layout (Arch_utils.get_mem_regions instr))
+      in
+      if syscall_writes_memory o && regions = [] then
+        error "no annotation names the region this syscall fills";
+      let clobbered =
+        List.filter (fun slot -> slot <> Arch_utils.rsp) Arch_utils.arch_slots
+        @ regions
+      in
+      List.fold_left
+        (fun env slot -> Env.set env slot Level.Secret) env clobbered
+
     let step fn_name labels ~exit env i instr signatures call_env :
         (int * Env.t) list =
       let target lbl : int = LM.find lbl labels in
@@ -338,6 +376,7 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
           [ (i + 1, ty_declassify_val env instr lty arg) ]
       | Declassify_mem (len, _) ->
           [ (i + 1, ty_declassify_mem env instr len) ]
+      | SysCall o -> [ (i + 1, ty_syscall env instr o) ]
       | JMP (fn, lbl) ->
           if fn.CoreIdent.fn_name <> fn_name then
             error "jump to another function is not supported"
