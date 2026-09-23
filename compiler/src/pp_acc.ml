@@ -134,6 +134,15 @@ let pp_mnemonic_ext ext =
 let indirect_args pp =
   match pp.pp_aop_name with
   | "BN.LID" | "BN.SID" -> List.tl pp.pp_aop_args
+  (* [bn.movr grd, grs]: the destination and source wide-register operands
+     ([Acc_instr_decl.desc_BN_MOVR]'s positions 0 and 2) exist only to give
+     Jasmin explicit, register-allocated variables; the real instruction
+     only names the two general-purpose registers that select them. *)
+  | "BN.MOVR" -> begin
+      match pp.pp_aop_args with
+      | [ _; grd; _; grs ] -> [ grd; grs ]
+      | _ -> E.invalid_args ()
+    end
   | _ -> pp.pp_aop_args
 
 (* [MOD0W]/[MOD1W] and their [zero] variants are syntax sugar for a CSR

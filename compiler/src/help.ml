@@ -19,6 +19,7 @@ let show_intrinsics asmOp fmt =
       | PrimACCfg _ :: _ -> 7
       | PrimACCwb _ :: _ -> 8
       | PrimACCwreg _ :: _ -> 9
+      | PrimACCwreg2 _ :: _ -> 10
       | _ -> failwith "Invalid ACC suffix"
       end
   in
@@ -33,7 +34,8 @@ let show_intrinsics asmOp fmt =
       "an optional flag group (i.e., \"FG0\" or \"FG1\")";
       "an optional flag group (i.e., \"FG0\" or \"FG1\") and a mandatory \
        writeback (i.e., \"L\" or \"U\")";
-      "a wide register (i.e., \"w0\" to \"w31\")"
+      "a wide register (i.e., \"w0\" to \"w31\")";
+      "two wide registers, destination then source (e.g., \"_w0_w1\")"
     |] in
   let intrinsics = Array.make (Array.length headers) [] in
   List.iter (fun (n, i) ->

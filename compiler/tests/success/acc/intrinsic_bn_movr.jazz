@@ -1,0 +1,1146 @@
+/* The suffix _wXX_wYY must match the values of the grd and grs registers
+   respectively.
+
+   [bn_movr] picks the right BN_MOVR_wXX_wYY intrinsic for compile-time
+   destination/source indices [m]/[n].
+
+   Precondition: `grd` contains the value `n`, `grs` contains the value `m`.
+   */
+
+inline
+fn bn_movr(reg u256 wn, reg u32 grd, reg u32 grs, inline int n, inline int m)
+    -> reg u256 {
+    reg u256 wm;
+
+    if (m == 0) {
+        if (n == 0) { wm = #BN_MOVR_w00_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w00_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w00_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w00_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w00_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w00_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w00_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w00_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w00_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w00_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w00_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w00_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w00_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w00_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w00_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w00_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w00_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w00_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w00_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w00_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w00_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w00_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w00_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w00_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w00_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w00_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w00_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w00_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w00_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w00_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w00_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w00_w31(grd, wn, grs); }
+    }
+    else if (m == 1) {
+        if (n == 0) { wm = #BN_MOVR_w01_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w01_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w01_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w01_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w01_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w01_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w01_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w01_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w01_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w01_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w01_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w01_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w01_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w01_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w01_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w01_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w01_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w01_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w01_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w01_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w01_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w01_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w01_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w01_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w01_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w01_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w01_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w01_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w01_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w01_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w01_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w01_w31(grd, wn, grs); }
+    }
+    else if (m == 2) {
+        if (n == 0) { wm = #BN_MOVR_w02_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w02_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w02_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w02_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w02_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w02_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w02_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w02_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w02_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w02_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w02_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w02_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w02_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w02_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w02_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w02_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w02_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w02_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w02_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w02_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w02_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w02_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w02_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w02_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w02_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w02_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w02_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w02_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w02_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w02_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w02_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w02_w31(grd, wn, grs); }
+    }
+    else if (m == 3) {
+        if (n == 0) { wm = #BN_MOVR_w03_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w03_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w03_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w03_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w03_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w03_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w03_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w03_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w03_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w03_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w03_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w03_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w03_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w03_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w03_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w03_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w03_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w03_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w03_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w03_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w03_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w03_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w03_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w03_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w03_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w03_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w03_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w03_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w03_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w03_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w03_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w03_w31(grd, wn, grs); }
+    }
+    else if (m == 4) {
+        if (n == 0) { wm = #BN_MOVR_w04_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w04_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w04_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w04_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w04_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w04_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w04_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w04_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w04_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w04_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w04_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w04_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w04_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w04_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w04_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w04_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w04_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w04_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w04_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w04_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w04_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w04_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w04_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w04_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w04_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w04_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w04_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w04_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w04_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w04_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w04_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w04_w31(grd, wn, grs); }
+    }
+    else if (m == 5) {
+        if (n == 0) { wm = #BN_MOVR_w05_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w05_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w05_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w05_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w05_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w05_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w05_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w05_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w05_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w05_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w05_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w05_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w05_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w05_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w05_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w05_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w05_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w05_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w05_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w05_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w05_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w05_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w05_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w05_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w05_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w05_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w05_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w05_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w05_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w05_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w05_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w05_w31(grd, wn, grs); }
+    }
+    else if (m == 6) {
+        if (n == 0) { wm = #BN_MOVR_w06_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w06_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w06_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w06_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w06_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w06_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w06_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w06_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w06_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w06_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w06_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w06_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w06_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w06_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w06_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w06_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w06_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w06_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w06_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w06_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w06_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w06_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w06_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w06_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w06_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w06_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w06_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w06_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w06_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w06_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w06_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w06_w31(grd, wn, grs); }
+    }
+    else if (m == 7) {
+        if (n == 0) { wm = #BN_MOVR_w07_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w07_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w07_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w07_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w07_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w07_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w07_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w07_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w07_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w07_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w07_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w07_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w07_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w07_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w07_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w07_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w07_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w07_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w07_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w07_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w07_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w07_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w07_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w07_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w07_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w07_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w07_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w07_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w07_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w07_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w07_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w07_w31(grd, wn, grs); }
+    }
+    else if (m == 8) {
+        if (n == 0) { wm = #BN_MOVR_w08_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w08_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w08_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w08_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w08_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w08_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w08_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w08_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w08_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w08_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w08_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w08_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w08_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w08_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w08_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w08_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w08_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w08_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w08_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w08_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w08_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w08_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w08_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w08_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w08_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w08_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w08_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w08_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w08_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w08_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w08_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w08_w31(grd, wn, grs); }
+    }
+    else if (m == 9) {
+        if (n == 0) { wm = #BN_MOVR_w09_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w09_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w09_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w09_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w09_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w09_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w09_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w09_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w09_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w09_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w09_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w09_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w09_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w09_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w09_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w09_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w09_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w09_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w09_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w09_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w09_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w09_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w09_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w09_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w09_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w09_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w09_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w09_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w09_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w09_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w09_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w09_w31(grd, wn, grs); }
+    }
+    else if (m == 10) {
+        if (n == 0) { wm = #BN_MOVR_w10_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w10_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w10_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w10_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w10_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w10_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w10_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w10_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w10_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w10_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w10_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w10_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w10_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w10_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w10_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w10_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w10_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w10_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w10_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w10_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w10_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w10_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w10_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w10_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w10_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w10_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w10_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w10_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w10_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w10_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w10_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w10_w31(grd, wn, grs); }
+    }
+    else if (m == 11) {
+        if (n == 0) { wm = #BN_MOVR_w11_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w11_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w11_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w11_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w11_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w11_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w11_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w11_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w11_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w11_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w11_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w11_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w11_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w11_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w11_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w11_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w11_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w11_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w11_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w11_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w11_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w11_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w11_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w11_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w11_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w11_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w11_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w11_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w11_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w11_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w11_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w11_w31(grd, wn, grs); }
+    }
+    else if (m == 12) {
+        if (n == 0) { wm = #BN_MOVR_w12_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w12_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w12_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w12_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w12_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w12_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w12_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w12_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w12_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w12_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w12_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w12_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w12_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w12_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w12_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w12_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w12_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w12_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w12_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w12_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w12_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w12_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w12_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w12_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w12_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w12_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w12_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w12_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w12_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w12_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w12_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w12_w31(grd, wn, grs); }
+    }
+    else if (m == 13) {
+        if (n == 0) { wm = #BN_MOVR_w13_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w13_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w13_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w13_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w13_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w13_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w13_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w13_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w13_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w13_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w13_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w13_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w13_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w13_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w13_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w13_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w13_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w13_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w13_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w13_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w13_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w13_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w13_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w13_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w13_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w13_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w13_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w13_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w13_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w13_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w13_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w13_w31(grd, wn, grs); }
+    }
+    else if (m == 14) {
+        if (n == 0) { wm = #BN_MOVR_w14_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w14_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w14_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w14_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w14_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w14_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w14_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w14_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w14_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w14_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w14_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w14_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w14_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w14_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w14_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w14_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w14_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w14_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w14_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w14_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w14_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w14_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w14_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w14_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w14_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w14_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w14_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w14_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w14_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w14_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w14_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w14_w31(grd, wn, grs); }
+    }
+    else if (m == 15) {
+        if (n == 0) { wm = #BN_MOVR_w15_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w15_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w15_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w15_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w15_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w15_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w15_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w15_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w15_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w15_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w15_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w15_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w15_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w15_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w15_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w15_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w15_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w15_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w15_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w15_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w15_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w15_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w15_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w15_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w15_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w15_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w15_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w15_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w15_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w15_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w15_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w15_w31(grd, wn, grs); }
+    }
+    else if (m == 16) {
+        if (n == 0) { wm = #BN_MOVR_w16_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w16_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w16_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w16_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w16_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w16_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w16_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w16_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w16_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w16_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w16_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w16_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w16_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w16_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w16_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w16_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w16_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w16_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w16_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w16_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w16_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w16_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w16_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w16_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w16_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w16_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w16_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w16_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w16_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w16_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w16_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w16_w31(grd, wn, grs); }
+    }
+    else if (m == 17) {
+        if (n == 0) { wm = #BN_MOVR_w17_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w17_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w17_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w17_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w17_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w17_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w17_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w17_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w17_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w17_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w17_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w17_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w17_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w17_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w17_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w17_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w17_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w17_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w17_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w17_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w17_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w17_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w17_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w17_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w17_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w17_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w17_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w17_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w17_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w17_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w17_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w17_w31(grd, wn, grs); }
+    }
+    else if (m == 18) {
+        if (n == 0) { wm = #BN_MOVR_w18_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w18_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w18_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w18_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w18_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w18_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w18_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w18_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w18_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w18_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w18_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w18_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w18_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w18_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w18_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w18_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w18_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w18_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w18_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w18_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w18_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w18_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w18_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w18_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w18_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w18_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w18_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w18_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w18_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w18_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w18_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w18_w31(grd, wn, grs); }
+    }
+    else if (m == 19) {
+        if (n == 0) { wm = #BN_MOVR_w19_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w19_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w19_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w19_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w19_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w19_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w19_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w19_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w19_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w19_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w19_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w19_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w19_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w19_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w19_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w19_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w19_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w19_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w19_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w19_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w19_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w19_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w19_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w19_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w19_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w19_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w19_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w19_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w19_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w19_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w19_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w19_w31(grd, wn, grs); }
+    }
+    else if (m == 20) {
+        if (n == 0) { wm = #BN_MOVR_w20_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w20_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w20_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w20_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w20_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w20_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w20_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w20_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w20_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w20_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w20_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w20_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w20_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w20_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w20_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w20_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w20_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w20_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w20_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w20_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w20_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w20_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w20_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w20_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w20_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w20_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w20_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w20_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w20_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w20_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w20_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w20_w31(grd, wn, grs); }
+    }
+    else if (m == 21) {
+        if (n == 0) { wm = #BN_MOVR_w21_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w21_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w21_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w21_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w21_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w21_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w21_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w21_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w21_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w21_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w21_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w21_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w21_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w21_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w21_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w21_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w21_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w21_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w21_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w21_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w21_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w21_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w21_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w21_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w21_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w21_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w21_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w21_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w21_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w21_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w21_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w21_w31(grd, wn, grs); }
+    }
+    else if (m == 22) {
+        if (n == 0) { wm = #BN_MOVR_w22_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w22_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w22_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w22_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w22_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w22_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w22_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w22_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w22_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w22_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w22_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w22_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w22_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w22_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w22_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w22_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w22_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w22_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w22_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w22_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w22_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w22_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w22_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w22_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w22_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w22_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w22_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w22_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w22_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w22_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w22_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w22_w31(grd, wn, grs); }
+    }
+    else if (m == 23) {
+        if (n == 0) { wm = #BN_MOVR_w23_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w23_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w23_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w23_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w23_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w23_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w23_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w23_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w23_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w23_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w23_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w23_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w23_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w23_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w23_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w23_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w23_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w23_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w23_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w23_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w23_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w23_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w23_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w23_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w23_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w23_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w23_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w23_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w23_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w23_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w23_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w23_w31(grd, wn, grs); }
+    }
+    else if (m == 24) {
+        if (n == 0) { wm = #BN_MOVR_w24_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w24_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w24_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w24_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w24_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w24_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w24_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w24_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w24_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w24_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w24_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w24_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w24_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w24_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w24_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w24_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w24_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w24_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w24_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w24_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w24_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w24_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w24_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w24_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w24_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w24_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w24_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w24_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w24_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w24_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w24_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w24_w31(grd, wn, grs); }
+    }
+    else if (m == 25) {
+        if (n == 0) { wm = #BN_MOVR_w25_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w25_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w25_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w25_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w25_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w25_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w25_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w25_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w25_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w25_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w25_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w25_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w25_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w25_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w25_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w25_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w25_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w25_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w25_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w25_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w25_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w25_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w25_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w25_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w25_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w25_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w25_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w25_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w25_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w25_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w25_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w25_w31(grd, wn, grs); }
+    }
+    else if (m == 26) {
+        if (n == 0) { wm = #BN_MOVR_w26_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w26_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w26_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w26_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w26_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w26_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w26_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w26_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w26_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w26_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w26_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w26_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w26_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w26_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w26_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w26_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w26_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w26_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w26_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w26_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w26_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w26_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w26_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w26_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w26_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w26_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w26_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w26_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w26_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w26_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w26_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w26_w31(grd, wn, grs); }
+    }
+    else if (m == 27) {
+        if (n == 0) { wm = #BN_MOVR_w27_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w27_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w27_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w27_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w27_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w27_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w27_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w27_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w27_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w27_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w27_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w27_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w27_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w27_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w27_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w27_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w27_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w27_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w27_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w27_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w27_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w27_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w27_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w27_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w27_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w27_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w27_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w27_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w27_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w27_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w27_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w27_w31(grd, wn, grs); }
+    }
+    else if (m == 28) {
+        if (n == 0) { wm = #BN_MOVR_w28_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w28_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w28_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w28_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w28_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w28_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w28_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w28_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w28_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w28_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w28_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w28_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w28_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w28_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w28_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w28_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w28_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w28_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w28_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w28_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w28_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w28_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w28_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w28_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w28_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w28_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w28_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w28_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w28_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w28_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w28_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w28_w31(grd, wn, grs); }
+    }
+    else if (m == 29) {
+        if (n == 0) { wm = #BN_MOVR_w29_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w29_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w29_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w29_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w29_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w29_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w29_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w29_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w29_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w29_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w29_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w29_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w29_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w29_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w29_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w29_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w29_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w29_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w29_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w29_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w29_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w29_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w29_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w29_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w29_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w29_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w29_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w29_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w29_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w29_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w29_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w29_w31(grd, wn, grs); }
+    }
+    else if (m == 30) {
+        if (n == 0) { wm = #BN_MOVR_w30_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w30_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w30_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w30_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w30_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w30_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w30_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w30_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w30_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w30_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w30_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w30_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w30_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w30_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w30_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w30_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w30_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w30_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w30_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w30_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w30_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w30_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w30_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w30_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w30_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w30_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w30_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w30_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w30_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w30_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w30_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w30_w31(grd, wn, grs); }
+    }
+    else {
+        if (n == 0) { wm = #BN_MOVR_w31_w00(grd, wn, grs); }
+        else if (n == 1) { wm = #BN_MOVR_w31_w01(grd, wn, grs); }
+        else if (n == 2) { wm = #BN_MOVR_w31_w02(grd, wn, grs); }
+        else if (n == 3) { wm = #BN_MOVR_w31_w03(grd, wn, grs); }
+        else if (n == 4) { wm = #BN_MOVR_w31_w04(grd, wn, grs); }
+        else if (n == 5) { wm = #BN_MOVR_w31_w05(grd, wn, grs); }
+        else if (n == 6) { wm = #BN_MOVR_w31_w06(grd, wn, grs); }
+        else if (n == 7) { wm = #BN_MOVR_w31_w07(grd, wn, grs); }
+        else if (n == 8) { wm = #BN_MOVR_w31_w08(grd, wn, grs); }
+        else if (n == 9) { wm = #BN_MOVR_w31_w09(grd, wn, grs); }
+        else if (n == 10) { wm = #BN_MOVR_w31_w10(grd, wn, grs); }
+        else if (n == 11) { wm = #BN_MOVR_w31_w11(grd, wn, grs); }
+        else if (n == 12) { wm = #BN_MOVR_w31_w12(grd, wn, grs); }
+        else if (n == 13) { wm = #BN_MOVR_w31_w13(grd, wn, grs); }
+        else if (n == 14) { wm = #BN_MOVR_w31_w14(grd, wn, grs); }
+        else if (n == 15) { wm = #BN_MOVR_w31_w15(grd, wn, grs); }
+        else if (n == 16) { wm = #BN_MOVR_w31_w16(grd, wn, grs); }
+        else if (n == 17) { wm = #BN_MOVR_w31_w17(grd, wn, grs); }
+        else if (n == 18) { wm = #BN_MOVR_w31_w18(grd, wn, grs); }
+        else if (n == 19) { wm = #BN_MOVR_w31_w19(grd, wn, grs); }
+        else if (n == 20) { wm = #BN_MOVR_w31_w20(grd, wn, grs); }
+        else if (n == 21) { wm = #BN_MOVR_w31_w21(grd, wn, grs); }
+        else if (n == 22) { wm = #BN_MOVR_w31_w22(grd, wn, grs); }
+        else if (n == 23) { wm = #BN_MOVR_w31_w23(grd, wn, grs); }
+        else if (n == 24) { wm = #BN_MOVR_w31_w24(grd, wn, grs); }
+        else if (n == 25) { wm = #BN_MOVR_w31_w25(grd, wn, grs); }
+        else if (n == 26) { wm = #BN_MOVR_w31_w26(grd, wn, grs); }
+        else if (n == 27) { wm = #BN_MOVR_w31_w27(grd, wn, grs); }
+        else if (n == 28) { wm = #BN_MOVR_w31_w28(grd, wn, grs); }
+        else if (n == 29) { wm = #BN_MOVR_w31_w29(grd, wn, grs); }
+        else if (n == 30) { wm = #BN_MOVR_w31_w30(grd, wn, grs); }
+        else { wm = #BN_MOVR_w31_w31(grd, wn, grs); }
+    }
+    return wm;
+}
+
+export
+fn test_bn_movr(reg u256 src) -> reg u256 {
+    reg u32 grd;
+    reg u32 grs;
+    reg u256 x acc;
+    ?{}, acc = #set0_256();
+    src = src; grd = 0; grs = 1; x = bn_movr(src, grd, grs, 1, 0); acc += x;
+    src = src; grd = 1; grs = 2; x = bn_movr(src, grd, grs, 2, 1); acc += x;
+    src = src; grd = 2; grs = 3; x = bn_movr(src, grd, grs, 3, 2); acc += x;
+    src = src; grd = 3; grs = 4; x = bn_movr(src, grd, grs, 4, 3); acc += x;
+    src = src; grd = 4; grs = 5; x = bn_movr(src, grd, grs, 5, 4); acc += x;
+    src = src; grd = 5; grs = 6; x = bn_movr(src, grd, grs, 6, 5); acc += x;
+    src = src; grd = 6; grs = 7; x = bn_movr(src, grd, grs, 7, 6); acc += x;
+    src = src; grd = 7; grs = 8; x = bn_movr(src, grd, grs, 8, 7); acc += x;
+    src = src; grd = 8; grs = 9; x = bn_movr(src, grd, grs, 9, 8); acc += x;
+    src = src; grd = 9; grs = 10; x = bn_movr(src, grd, grs, 10, 9); acc += x;
+    src = src; grd = 10; grs = 11; x = bn_movr(src, grd, grs, 11, 10); acc += x;
+    src = src; grd = 11; grs = 12; x = bn_movr(src, grd, grs, 12, 11); acc += x;
+    src = src; grd = 12; grs = 13; x = bn_movr(src, grd, grs, 13, 12); acc += x;
+    src = src; grd = 13; grs = 14; x = bn_movr(src, grd, grs, 14, 13); acc += x;
+    src = src; grd = 14; grs = 15; x = bn_movr(src, grd, grs, 15, 14); acc += x;
+    src = src; grd = 15; grs = 16; x = bn_movr(src, grd, grs, 16, 15); acc += x;
+    src = src; grd = 16; grs = 17; x = bn_movr(src, grd, grs, 17, 16); acc += x;
+    src = src; grd = 17; grs = 18; x = bn_movr(src, grd, grs, 18, 17); acc += x;
+    src = src; grd = 18; grs = 19; x = bn_movr(src, grd, grs, 19, 18); acc += x;
+    src = src; grd = 19; grs = 20; x = bn_movr(src, grd, grs, 20, 19); acc += x;
+    src = src; grd = 20; grs = 21; x = bn_movr(src, grd, grs, 21, 20); acc += x;
+    src = src; grd = 21; grs = 22; x = bn_movr(src, grd, grs, 22, 21); acc += x;
+    src = src; grd = 22; grs = 23; x = bn_movr(src, grd, grs, 23, 22); acc += x;
+    src = src; grd = 23; grs = 24; x = bn_movr(src, grd, grs, 24, 23); acc += x;
+    src = src; grd = 24; grs = 25; x = bn_movr(src, grd, grs, 25, 24); acc += x;
+    src = src; grd = 25; grs = 26; x = bn_movr(src, grd, grs, 26, 25); acc += x;
+    src = src; grd = 26; grs = 27; x = bn_movr(src, grd, grs, 27, 26); acc += x;
+    src = src; grd = 27; grs = 28; x = bn_movr(src, grd, grs, 28, 27); acc += x;
+    src = src; grd = 28; grs = 29; x = bn_movr(src, grd, grs, 29, 28); acc += x;
+    src = src; grd = 29; grs = 30; x = bn_movr(src, grd, grs, 30, 29); acc += x;
+    src = src; grd = 30; grs = 31; x = bn_movr(src, grd, grs, 31, 30); acc += x;
+    src = src; grd = 31; grs = 0; x = bn_movr(src, grd, grs, 0, 31); acc += x;
+
+    return acc;
+}

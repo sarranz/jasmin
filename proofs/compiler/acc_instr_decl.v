@@ -118,6 +118,15 @@ Definition prim_acc_wreg f :=
     else err "a wide register index (e.g. _w5)"
   ).
 
+Definition is_prim_acc_suff_wreg2 (s : prim_acc_suffix) : option ('I_32 * 'I_32) :=
+  if s is PrimACCwreg2 i j then Some (i, j) else None.
+
+Definition prim_acc_wreg2 f :=
+  PrimACC (fun s =>
+    if is_prim_acc_suff_wreg2 s is Some (i, j) then ok (f i j)
+    else err "two wide register indices (e.g. _w5_w6)"
+  ).
+
 End PRIM.
 
 (* -------------------------------------------------------------------------- *)
@@ -539,6 +548,11 @@ Variant acc_op : Type :=
 
 (* Indirect store indexed by a wide register; index is 0..31. *)
 | BN_SID of nat
+
+(* Indirect move: writes wide register [i] (destination index 0..31) with
+   the contents of wide register [j] (source index 0..31); both indices are
+   checked against a general-purpose register, as for [BN_LID]/[BN_SID]. *)
+| BN_MOVR of nat & nat
 .
 
 #[export]
@@ -590,6 +604,7 @@ Definition acc_op_to_string (op : acc_op) : string :=
   | BN_SD_INC => "BN.SD.INC"
   | BN_LID _ => "BN.LID"
   | BN_SID _ => "BN.SID"
+  | BN_MOVR _ _ => "BN.MOVR"
   end.
 
 (* -------------------------------------------------------------------------- *)
@@ -663,6 +678,9 @@ Section I_ARGS_KINDS.
   Definition ak_xreg_mem_reg : i_args_kinds :=
     [:: [:: xreg; [:: CAmem false ]; [:: CAreg ] ]].
 
+  Definition ak_xreg_reg_xreg_reg : i_args_kinds :=
+    [:: [:: xreg; [:: CAreg ]; xreg; [:: CAreg ] ]].
+
 End I_ARGS_KINDS.
 
 
@@ -693,6 +711,7 @@ Section PP_ASM_OP.
     | BN_SHV vs _ => mk ("BN.SHV" ++ vec_size_to_string vs)%string args
     | BN_LID _ => mk "BN.LID" args
     | BN_SID _ => mk "BN.SID" args
+    | BN_MOVR _ _ => mk "BN.MOVR" args
     (* The address register to increment is the third argument; the printer
        ([pp_acc.ml]) folds it into the address operand as [off(grs++)]. *)
     | BN_LD_INC => mk "BN.LD" args
@@ -2101,6 +2120,71 @@ Definition desc_BN_SID (i : nat) : instr_desc_t :=
     id_semi_safe := fun _ => @BN_SID_semi_safe i;
   |}.
 
+(* [BN_MOVR]: writes wide register [i] with the contents of wide register
+   [j]; both are explicit registers whose index is checked against a
+   general-purpose register, combining [BN_LID]'s destination check with
+   [BN_SID]'s source check. *)
+Definition BN_MOVR_semi (i j : nat) (w_grd : u32) (x : u256) (w_grs : u32) :
+  exec u256 :=
+  Let _ := assert (wunsigned w_grd == Z.of_nat i) ErrSemUndef in
+  Let _ := assert (wunsigned w_grs == Z.of_nat j) ErrSemUndef in
+  ok x.
+
+Lemma BN_MOVR_semi_errty i j :
+  sem_lforall
+    (fun r => r <> Error ErrType) [:: lword U32; lword256; lword U32 ]
+    (BN_MOVR_semi i j).
+Proof.
+by move=> w x w'; rewrite /BN_MOVR_semi; case: eqP => //=; case: eqP.
+Qed.
+
+Lemma BN_MOVR_semi_safe i j :
+  interp_safe_cond_lty [:: lword U32; lword256; lword U32 ]
+    [:: UGe U32 (Z.of_nat i) 0; ULt U32 0 ((Z.of_nat i) + 1)
+      ; UGe U32 (Z.of_nat j) 2; ULt U32 2 ((Z.of_nat j) + 1) ]
+    (BN_MOVR_semi i j).
+Proof.
+move=> w x w'
+  /List_Forall_inv [] /(_ w) + /List_Forall_inv [] /(_ w) +
+  /List_Forall_inv [] /(_ w') + /List_Forall_inv [] /(_ w') + _.
+rewrite /= !truncate_word_u
+  => /(_ erefl) hge1 /(_ erefl) hlt1 /(_ erefl) hge2 /(_ erefl) hlt2.
+exists x; rewrite /BN_MOVR_semi.
+have -> : wunsigned w = Z.of_nat i by move: hge1 hlt1; t_lia.
+have -> : wunsigned w' = Z.of_nat j by move: hge2 hlt2; t_lia.
+by rewrite !eqxx.
+Qed.
+
+Definition desc_BN_MOVR (i j : nat) : instr_desc_t :=
+  let wi := index_to_wreg i in
+  let wj := index_to_wreg j in
+  let str :=
+    ("BN_MOVR_w" ++ wide_reg_index_string i ++ "_w" ++ wide_reg_index_string j)
+    %string
+  in
+  {|
+    id_valid := (Z.of_nat i <? 32) && (Z.of_nat j <? 32);
+    id_msb_flag := MSB_MERGE;
+    id_tin := [:: lword U32; lword256; lword U32 ];
+    id_in := [:: Ea 1; ADExplicit (AK_mem Aligned) 2 (ACR_vector wj); Ea 3 ];
+    id_tout := [:: lword256 ];
+    id_out := [:: ADExplicit (AK_mem Aligned) 0 (ACR_vector wi) ];
+    id_semi := BN_MOVR_semi i j;
+    id_args_kinds := ak_xreg_reg_xreg_reg;
+    id_nargs := 4;
+    id_str_jas := fun _ => str;
+    id_pp_asm := pp_acc_op (BN_MOVR i j);
+    id_safe :=
+      [:: UGe U32 (Z.of_nat i) 0; ULt U32 0 ((Z.of_nat i) + 1)
+        ; UGe U32 (Z.of_nat j) 2; ULt U32 2 ((Z.of_nat j) + 1) ];
+    id_doit := DOIT; (* TODO_ACC: check *)
+    id_eq_size := refl_equal;
+    id_check_dest := check_dest_unop_lword;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => @BN_MOVR_semi_errty i j;
+    id_semi_safe := fun _ => @BN_MOVR_semi_safe i j;
+  |}.
+
 Definition desc_acc_op (op : acc_op) : instr_desc_t :=
   match op with
   | RV32 mn => desc_rv_mnemonic mn
@@ -2141,6 +2225,7 @@ Definition desc_acc_op (op : acc_op) : instr_desc_t :=
   | BN_SD_INC => desc_BN_SD_INC
   | BN_LID i => desc_BN_LID i
   | BN_SID i => desc_BN_SID i
+  | BN_MOVR i j => desc_BN_MOVR i j
   end.
 
 Section PRIM_STRING.
@@ -2236,6 +2321,11 @@ Section PRIM_STRING.
   (* BN_SID is indexed by wide register; same suffix convention as BN_LID. *)
   Let bn_sid_prim_string := [:: ("BN.SID"%string, prim_acc_wreg BN_SID) ].
 
+  (* BN_MOVR is indexed by two wide registers (destination, source); the
+     parser produces a PrimACCwreg2 suffix from the two trailing _wXX_wYY
+     tokens. *)
+  Let bn_movr_prim_string := [:: ("BN.MOVR"%string, prim_acc_wreg2 BN_MOVR) ].
+
   (* MULQACC intrinsic string does not change with flag group or writeback. *)
   Let bn_mulqacc_prim_string :=
       let fg := FG0 in
@@ -2265,7 +2355,8 @@ Section PRIM_STRING.
         ++ bn_mulv_prim_string
         ++ bn_mulqacc_prim_string
         ++ bn_lid_prim_string
-        ++ bn_sid_prim_string ].
+        ++ bn_sid_prim_string
+        ++ bn_movr_prim_string ].
 
 End PRIM_STRING.
 

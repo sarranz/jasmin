@@ -110,6 +110,7 @@ Variant prim_acc_suffix :=
 | PrimACCfg of bn_flag_group
 | PrimACCwb of option bn_flag_group & bn_halfword_writeback
 | PrimACCwreg of 'I_32
+| PrimACCwreg2 of 'I_32 & 'I_32
 .
 
 (* The order is important. This is used by the [-help-intrinsics] flag to print
@@ -122,6 +123,7 @@ Definition prim_acc_suffixes : seq prim_acc_suffix :=
   [seq PrimACCwb (Some fg) wb
    | fg <- bn_flag_groups, wb <- bn_halfword_writebacks] ++
   [seq PrimACCwreg r | r : 'I_32] ++
+  [seq PrimACCwreg2 r1 r2 | r1 <- enum 'I_32, r2 <- enum 'I_32] ++
   [:: PrimACCnone].
 
 Definition allowed_prim_acc_suffixes
