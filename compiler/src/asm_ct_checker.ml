@@ -666,6 +666,15 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
 
     let arch_slots_set = SS.of_list arch_slots
 
+    let callee_saved_slots : string list =
+      List.map
+        (function
+          | ARReg r -> reg_name r
+          | ARegX r -> regx_name r
+          | AXReg r -> xreg_name r
+          | ABReg f -> flag_name f)
+        Arch.call_conv.callee_saved
+
     let instr_desc op : _ Arch_decl.instr_desc_t =
       arch._asm_op_decl.instr_desc_op op
 
@@ -673,6 +682,17 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
       | Areg { ad_base; ad_offset; _ } ->
           List.filter_map (Option.map reg_name) [ ad_base; ad_offset ]
       | Arip _ -> []
+  end
+
+  module Syscall_clobber = struct
+    let all_but_rsp : string list =
+      List.filter (fun s -> s <> Arch_utils.rsp) Arch_utils.arch_slots
+
+    let syscall_kill : string list =
+      let saved = SS.of_list Arch_utils.callee_saved_slots in
+      List.filter (fun s -> not (SS.mem s saved)) Arch_utils.arch_slots
+
+    let slots : string list = syscall_kill (* change to `all_but_rsp` for only preserving rsp *)
   end
 
   module Instruction = struct
@@ -777,26 +797,25 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
         (fun env x -> Env.write env ~strong_write access.ac_slots x level)
         env out_slots
 
+    (* which registers a syscall touches *)
+    let convention_slots tys regs : string list =
+      List.take (List.length tys) regs |> List.map Arch_utils.reg_name
+
     let syscall_arg_slots o : string list =
-      let args = (Syscall.syscall_sig_s Arch.reg_size o).Syscall.scs_tin in
-      let in_reg : Type.atype -> bool = function
-        | Type.Coq_aword ws ->
-            Prog.size_of_ws ws <= Prog.size_of_ws Arch.reg_size
-        | Type.Coq_abool | Type.Coq_aint | Type.Coq_aarr _ -> false
-      in
-      if not (List.for_all in_reg args) then
-        error "syscall argument does not fit an argument register";
-      if List.length args > List.length Arch.call_conv.call_reg_args then
-        error
-          "syscall has %d argument(s) but the calling convention has %d \
-           argument register(s)"
-          (List.length args)
-          (List.length Arch.call_conv.call_reg_args);
-      List.take (List.length args) Arch.call_conv.call_reg_args
-      |> List.map Arch_utils.reg_name
+      convention_slots
+        (Syscall.syscall_sig_s Arch.reg_size o).Syscall.scs_tin
+        Arch.call_conv.call_reg_args
+
+    let syscall_ret_slots o : string list =
+      convention_slots
+        (Syscall.syscall_sig_s Arch.reg_size o).Syscall.scs_tout
+        Arch.call_conv.call_reg_ret
 
     let syscall_writes_memory : _ Syscall_t.syscall_t -> bool = function
       | Syscall_t.RandomBytes _ -> true
+
+    let syscall_ret_level : _ Syscall_t.syscall_t -> Level.t = function
+      | Syscall_t.RandomBytes _ -> Level.Public
 
     let ty_syscall env (access : MemoryAccess.t) o : Env.t =
       let env =
@@ -806,12 +825,17 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
       let regions = access.ac_slots in
       if syscall_writes_memory o && access.ac_unannotated then
         error "no annotation names the region this syscall fills";
+      let env = List.fold_left Env.use_public env regions in
       let clobbered =
-        List.filter (fun slot -> slot <> Arch_utils.rsp) Arch_utils.arch_slots
-        @ regions
+        Syscall_clobber.slots @ syscall_ret_slots o @ regions
+      in
+      let env =
+        List.fold_left
+          (fun env slot -> Env.set env slot Level.Secret) env clobbered
       in
       List.fold_left
-        (fun env slot -> Env.set env slot Level.Secret) env clobbered
+        (fun env slot -> Env.set env slot (syscall_ret_level o))
+        env (syscall_ret_slots o)
 
     let step fn_name labels ~exit accesses env i instr signatures call_env :
         (int * Env.t) list =
