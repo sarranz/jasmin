@@ -30,8 +30,7 @@ Module RISCVFopn_coreP.
 Section Section.
 
 Context
-  {syscall_state : Type}
-  {ep : EstateParams syscall_state}
+  {ep : EstateParams}
   {atoI : arch_toIdent}.
 
 #[local] Existing Instance withsubword.
