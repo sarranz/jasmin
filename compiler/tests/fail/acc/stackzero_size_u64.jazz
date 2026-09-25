@@ -1,0 +1,16 @@
+// Expected error (unverified -- no compiler run): acc_stack_zeroization.v's
+// clear-step assertion, roughly:
+//   Clear step u64 is not supported on ACC, only u32 and u256 are; set
+//   "stackzerosize"
+// (Table's shorthand: "ACC" only; the strategy "loop" is added here so the
+// annotation actually reaches the zeroization pass -- functionAnnotations.ml
+// only warns and disables zeroization if "stackzerosize" is given without
+// "stackzero".)
+#[stackzero=loop, stackzerosize=u64]
+export
+fn stackzero_size_u64(reg u256 x) -> reg u256 {
+    stack u256 s;
+    s = x;
+    x = s;
+    return x;
+}

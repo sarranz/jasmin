@@ -1,0 +1,340 @@
+/* ACC stack zeroization (plan_ACC_SZ.md, Phase 1.4). Modeled on
+   ../risc-v/stack-zeroization.jazz, but ACC needs several distinct helper
+   shapes (u32 scalar, u256 scalar, arrays of both, a mixed frame, a callee
+   frame) instead of one shared [f], so each table row below gets its own
+   named export function that calls the matching helper. Expected shapes are
+   from plan_ACC_SZ.md Section 2.8 / Phase 1.4's table; every "Expect"
+   comment is unverified (no compiler run happened while writing this file).
+
+   Helpers: [set_u32]/[set_u256] round-trip a value through a single-word
+   stack slot (mirrors RISC-V's [f]); [set_u32_arrN]/[set_u256_arrN] do the
+   same through the first and last element of an N-element array (touching
+   both endpoints forces the whole array to be allocated, without unrolling
+   N accesses by hand); [leaf] is a non-inline function with its own
+   [stack u32] frame, to exercise a callee contribution to [stk_max]. */
+
+inline
+fn set_u32() -> reg u32 {
+    reg u32 r_s;
+    stack u32 s;
+
+    r_s = 0;
+    s = r_s;
+    r_s = s;
+
+    return r_s;
+}
+
+inline
+fn set_u32_arr16() -> reg u32 {
+    stack u32[16] s;
+    reg u32 r t;
+
+    r = 0;
+    s[#aligned 0] = r;
+    t = 1;
+    s[#aligned 15] = t;
+
+    r = s[#aligned 0];
+    t = s[#aligned 15];
+    r += t;
+
+    return r;
+}
+
+inline
+fn set_u32_arr512() -> reg u32 {
+    stack u32[512] s;
+    reg u32 r t;
+
+    r = 0;
+    s[#aligned 0] = r;
+    t = 1;
+    s[#aligned 511] = t;
+
+    r = s[#aligned 0];
+    t = s[#aligned 511];
+    r += t;
+
+    return r;
+}
+
+inline
+fn set_u256() -> reg u256 {
+    reg u256 x;
+    stack u256 s;
+
+    ?{}, x = #set0_256();
+    s = x;
+    x = s;
+
+    return x;
+}
+
+inline
+fn set_u256_arr8() -> reg u256 {
+    stack u256[8] s;
+    reg u256 x y;
+
+    ?{}, x = #set0_256();
+    s[#aligned 0] = x;
+    s[#aligned 7] = x;
+
+    x = s[#aligned 0];
+    y = s[#aligned 7];
+    x = x ^256u y;
+
+    return x;
+}
+
+inline
+fn set_u256_arr512() -> reg u256 {
+    stack u256[512] s;
+    reg u256 x y;
+
+    ?{}, x = #set0_256();
+    s[#aligned 0] = x;
+    s[#aligned 511] = x;
+
+    x = s[#aligned 0];
+    y = s[#aligned 511];
+    x = x ^256u y;
+
+    return x;
+}
+
+// Non-inline, own [stack u32] frame, called from [loop_callee] (mirrors
+// [leaf] in ../../acc/stack.jazz).
+fn leaf() -> reg u32 {
+    reg u32 f;
+    f = 0;
+
+    stack u32 r;
+    r = f;
+
+    inline int i;
+    for i = 0 to 4 {
+        f = r;
+        f += i;
+        r = f;
+    }
+
+    f = r;
+    return f;
+}
+
+// stack u32, stackzero=loop -- Expect: sw loop, S = 4, one iteration.
+#[stackzero=loop]
+export
+fn loop_u32() -> reg u32 {
+    reg u32 r;
+    r = set_u32();
+    return r;
+}
+
+// stack u32, stackzero=loop, stackzerosize=u32 -- Expect: same as loop_u32.
+#[stackzero=loop, stackzerosize=u32]
+export
+fn loop_u32_size() -> reg u32 {
+    reg u32 r;
+    r = set_u32();
+    return r;
+}
+
+// stack u32, stackzero=unrolled -- Expect: one sw x7, 0(x2).
+#[stackzero=unrolled]
+export
+fn unrolled_u32() -> reg u32 {
+    reg u32 r;
+    r = set_u32();
+    return r;
+}
+
+// stack u32, stackzero=loophw -- Expect: loop x6, 2, count 1.
+#[stackzero=loophw]
+export
+fn loophw_u32() -> reg u32 {
+    reg u32 r;
+    r = set_u32();
+    return r;
+}
+
+// stack u32[16], stackzero=loop -- Expect: S = 64.
+#[stackzero=loop]
+export
+fn loop_u32_arr() -> reg u32 {
+    reg u32 r;
+    r = set_u32_arr16();
+    return r;
+}
+
+// stack u32[16], stackzero=unrolled -- Expect: 16 stores, offsets 60..0.
+#[stackzero=unrolled]
+export
+fn unrolled_u32_arr() -> reg u32 {
+    reg u32 r;
+    r = set_u32_arr16();
+    return r;
+}
+
+// stack u32[16], stackzero=loophw -- Expect: count 16.
+#[stackzero=loophw]
+export
+fn loophw_u32_arr() -> reg u32 {
+    reg u32 r;
+    r = set_u32_arr16();
+    return r;
+}
+
+// stack u32[512], stackzero=unrolled -- Expect: 512 stores, top offset 2044
+// (S = 2048, the unrolled boundary, accepted).
+#[stackzero=unrolled]
+export
+fn unrolled_u32_max() -> reg u32 {
+    reg u32 r;
+    r = set_u32_arr512();
+    return r;
+}
+
+// stack u256, stackzero=loop -- Expect: bn.sd loop, S = 32, bn.xor in the
+// prologue.
+#[stackzero=loop]
+export
+fn loop_u256() -> reg u256 {
+    reg u256 r;
+    r = set_u256();
+    return r;
+}
+
+// stack u256, stackzero=loop, stackzerosize=u32 -- Expect: sw loop over the
+// 32 bytes, 8 iterations, no bn.xor.
+#[stackzero=loop, stackzerosize=u32]
+export
+fn loop_u256_step32() -> reg u256 {
+    reg u256 r;
+    r = set_u256();
+    return r;
+}
+
+// stack u256, stackzero=unrolled -- Expect: one bn.sd w31, 0(x2).
+#[stackzero=unrolled]
+export
+fn unrolled_u256() -> reg u256 {
+    reg u256 r;
+    r = set_u256();
+    return r;
+}
+
+// stack u256, stackzero=unrolled, stackzerosize=u32 -- Expect: 8 sw,
+// offsets 28..0.
+#[stackzero=unrolled, stackzerosize=u32]
+export
+fn unrolled_u256_step32() -> reg u256 {
+    reg u256 r;
+    r = set_u256();
+    return r;
+}
+
+// stack u256, stackzero=loophw -- Expect: loop x6, 1, bn.sd w31, 0(x12++).
+#[stackzero=loophw]
+export
+fn loophw_u256() -> reg u256 {
+    reg u256 r;
+    r = set_u256();
+    return r;
+}
+
+// stack u256, stackzero=loophw, stackzerosize=u32 -- Expect: loop x6, 2,
+// sw + addi body.
+#[stackzero=loophw, stackzerosize=u32]
+export
+fn loophw_u256_step32() -> reg u256 {
+    reg u256 r;
+    r = set_u256();
+    return r;
+}
+
+// stack u256[8], stackzero=loop -- Expect: S = 256, 8 iterations.
+#[stackzero=loop]
+export
+fn loop_u256_arr() -> reg u256 {
+    reg u256 r;
+    r = set_u256_arr8();
+    return r;
+}
+
+// stack u256[8], stackzero=unrolled -- Expect: 8 bn.sd, offsets 224..0.
+#[stackzero=unrolled]
+export
+fn unrolled_u256_arr() -> reg u256 {
+    reg u256 r;
+    r = set_u256_arr8();
+    return r;
+}
+
+// stack u256[8], stackzero=loophw -- Expect: count 8.
+#[stackzero=loophw]
+export
+fn loophw_u256_arr() -> reg u256 {
+    reg u256 r;
+    r = set_u256_arr8();
+    return r;
+}
+
+// stack u256[512], stackzero=unrolled -- Expect: top offset 16352
+// (S = 16384, the unrolled boundary, accepted).
+#[stackzero=unrolled]
+export
+fn unrolled_u256_max() -> reg u256 {
+    reg u256 r;
+    r = set_u256_arr512();
+    return r;
+}
+
+// stack u32 + stack u256, stackzero=loop -- Expect: frame alignment 32,
+// S = 64, bn.sd loop.
+#[stackzero=loop]
+export
+fn loop_mixed() -> reg u32, reg u256 {
+    reg u32 a;
+    stack u32 s32;
+    reg u256 x;
+    stack u256 s256;
+
+    a = 0;
+    s32 = a;
+    a = s32;
+
+    ?{}, x = #set0_256();
+    s256 = x;
+    x = s256;
+
+    return a, x;
+}
+
+// stack u32 + call to leaf (its own stack u32 frame), stackzero=loop --
+// Expect: S includes the callee frame.
+#[stackzero=loop]
+export
+fn loop_callee() -> reg u32 {
+    stack u32 s;
+    reg u32 x k;
+
+    x = 0;
+    s = x;
+    x = s;
+
+    k = leaf();
+
+    x += k;
+    return x;
+}
+
+// No stack at all, stackzero=loop -- Expect: no zeroization code
+// (stk_max = 0).
+#[stackzero=loop]
+export
+fn nostack(reg u32 x) -> reg u32 {
+    x += 1;
+    return x;
+}

@@ -150,6 +150,9 @@ Definition stack_zeroization_cmd
     Error err_sct
   | SZSunrolled =>
     ok (stack_zero_unrolled rsp ws_align ws stk_max, stack_zero_unrolled_vars)
+  | SZSloopHW =>
+    let err_hw := err "Strategy ""loophw"" is only supported in ACC"%string in
+    Error err_hw
   end.
 
 End STACK_ZEROIZATION.

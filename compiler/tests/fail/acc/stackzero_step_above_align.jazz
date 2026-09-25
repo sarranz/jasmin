@@ -1,0 +1,25 @@
+// Verified error (jasminc -arch acc run against this exact file): plain
+// `stackzero=loop, stackzerosize=u256` on a lone `stack u32` does NOT reach
+// stack_zeroization.v's "ws <= ws_align" / "is_align stk_max ws" checks,
+// because stack allocation itself bumps the frame's alignment (`lfd_align`)
+// up to match the requested clear step (stk_max is padded to 32 and
+// alignment becomes u256), so those checks are trivially satisfied and the
+// function compiles successfully. To actually violate "ws <= ws_align", an
+// explicit `stackalign=u32` annotation is added to force the frame's
+// alignment below the requested u256 clear step; this now fails, but in
+// stack ALLOCATION (not stack_zeroization.v), with:
+//   stack allocation: the stack has alignment u256 (expected: u32)
+// i.e. the requested clear step size gets propagated back into stack
+// allocation's own alignment requirement, and stack allocation rejects the
+// resulting mismatch before stack zeroization ever runs. This may mean
+// stack_zeroization.v's "ws <= ws_align"/"is_align stk_max ws" checks are
+// unreachable from ordinary annotations on ACC; flagged in
+// notes_ACC_SZ_asm.md (Phase 1.5) rather than chased further here.
+#[stackzero=loop, stackzerosize=u256, stackalign=u32]
+export
+fn stackzero_step_above_align(reg u32 x) -> reg u32 {
+    stack u32 s;
+    s = x;
+    x = s;
+    return x;
+}

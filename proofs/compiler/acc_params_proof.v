@@ -1,8 +1,3 @@
-Set Uniform Inductive Parameters.
-Set Implicit Arguments.
-Unset Strict Implicit.
-Unset Printing Implicit Defensive.
-
 From Coq Require Import Relations.
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssralg.
 From mathcomp Require Import word_ssrZ.
@@ -41,7 +36,9 @@ Require Import
   acc_params_core_proof
   acc_lower_addressing_proof
   acc_lowering
-  acc_lowering_proof.
+  acc_lowering_proof
+  acc_stack_zeroization
+  acc_stack_zeroization_proof.
 Require Export acc_params.
 
 Set SsrOldRewriteGoalsOrder.  (* change Set to Unset when porting the file, then remove the line when requiring MathComp >= 2.6 *)
@@ -1810,7 +1807,11 @@ Proof. by constructor; move=> ???? []. Qed.
 
 Lemma acc_hszparams :
   stack_zeroization_proof.h_stack_zeroization_params (ap_szp acc_params).
-Proof. by split. Qed.
+Proof.
+  split.
+  + exact: acc_stack_zero_cmd_not_ext_lbl.
+  exact: acc_stack_zero_cmdP.
+Qed.
 
 (* ------------------------------------------------------------------------ *)
 (* Shared hypotheses. *)

@@ -21,6 +21,7 @@ Require Import
   acc_lower_addressing
   acc_lowering
   acc_params_core
+  acc_stack_zeroization
 .
 Require
   asm_gen
@@ -47,9 +48,6 @@ Module E.
         pel_pass := Some pass;
         pel_internal := false
       |}.
-
-    Definition szp_cmd :=
-      user_error None (pp_s "Stack zeroization not implemented").
 
   End ERROR.
 
@@ -330,7 +328,7 @@ Section SZPARAMS.
   Import stack_zeroization.
 
   Definition szparams : stack_zeroization_params :=
-    {| szp_cmd := fun _ _ _ _ _ _ => Error E.szp_cmd; |}.
+    {| szp_cmd := stack_zeroization_cmd; |}.
 
 End SZPARAMS.
 

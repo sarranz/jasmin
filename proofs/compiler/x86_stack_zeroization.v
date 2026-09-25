@@ -261,6 +261,16 @@ Definition x86_stack_zero_cmd
   | SZSloop => ok (x86_stack_zero_loop rspn lbl ws_align ws stk_max)
   | SZSloopSCT => ok (x86_stack_zero_loopSCT rspn lbl ws_align ws stk_max)
   | SZSunrolled => ok (x86_stack_zero_unrolled rspn ws_align ws stk_max)
+  | SZSloopHW =>
+    Error {|
+      pel_msg := compiler_util.pp_s "Strategy ""loophw"" is only supported in ACC"%string;
+      pel_fn := None;
+      pel_fi := None;
+      pel_ii := None;
+      pel_vi := None;
+      pel_pass := Some "stack zeroization"%string;
+      pel_internal := false;
+    |}
   end.
 
 End STACK_ZEROIZATION.

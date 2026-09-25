@@ -15,7 +15,8 @@ Require Import
 Require Import
   arch_decl
   arch_extra
-  arch_sem.
+  arch_sem
+  sem_params_of_arch_extra.
 
 Require Import
   acc_decl
@@ -161,6 +162,32 @@ Proof.
   by rewrite set_var_truncate // (convertible_eval_atype hc).
 Qed.
 
+(* [R[x] := R[y] & imm % 2^32]. *)
+Lemma andi_sem_fopn_args {s} {xi:var_i} {y imm wy} :
+  convertible xi.(vtype) (aword acc_reg_size) ->
+  get_var true (evm s) (v_var y) >>= to_word Uptr = ok wy ->
+  let: wx' := Vword (s:=reg_size) (wand wy (wrepr reg_size imm)) in
+  let: vm' := (evm s).[xi <- wx'] in
+  sem_fopn_args (ACCFopn_core.andi xi y imm) s = ok (with_vm s vm').
+Proof.
+  move=> hc.
+  rewrite /=; t_xrbindP => *; t_acc_op.
+  by rewrite /= set_var_truncate // (convertible_eval_atype hc).
+Qed.
+
+(* [R[x] := R[y] aligned down to a multiple of [wsize_size al]] (implemented
+   as [ANDI x, y, -(wsize_size al)]). *)
+Lemma align_sem_fopn_args {s} {xi:var_i} {y al wy} :
+  convertible xi.(vtype) (aword acc_reg_size) ->
+  get_var true (evm s) (v_var y) >>= to_word Uptr = ok wy ->
+  let: wx' := Vword (align_word al wy) in
+  let: vm' := (evm s).[xi <- wx'] in
+  sem_fopn_args (ACCFopn_core.align xi y al) s = ok (with_vm s vm').
+Proof.
+  move=> hc hgety.
+  by rewrite /ACCFopn_core.align (andi_sem_fopn_args hc hgety).
+Qed.
+
 Opaque ACCFopn_core.add.
 Opaque ACCFopn_core.addi.
 Opaque ACCFopn_core.mov.
@@ -169,6 +196,8 @@ Opaque ACCFopn_core.sub.
 Opaque ACCFopn_core.subi.
 Opaque ACCFopn_core.xori.
 Opaque ACCFopn_core.not.
+Opaque ACCFopn_core.andi.
+Opaque ACCFopn_core.align.
 
 (* NOTE: The RISC-V proof file additionally contains the word-arithmetic helper
    lemmas [wbit_n_add], [mov_movt_aux], [mov_movt_aux1] and [mov_movt].  These
@@ -272,5 +301,165 @@ Proof.
 Qed.
 
 End Section.
+
+Section EVAL_INSTR.
+
+Context
+  {atoI : arch_toIdent}
+  {syscall_state : Type}
+  {sc_sem : syscall_sem syscall_state}
+  {call_conv : calling_convention}
+  {hwcs_i : hw_call_stack_info}
+.
+
+#[local] Existing Instance withsubword.
+
+(* Wraps an [opn_args] triple into a [fopn_args]: mirrors RISC-V's
+   [RISCVFopn.to_opn] / ACC's own [acc_params.fopn_args_of_opn_args] (that
+   one cannot be mentioned here, see [opn_args_eval_instr]'s comment). *)
+Definition to_opn (oa : ACCFopn_core.opn_args) : fopn_args :=
+  let '(les, op, res) := oa in (les, Oacc op, res).
+
+(* [linear_sem.sem_fopn_args] over [Oacc op] agrees with our local
+   [sem_fopn_args] over [op] directly. *)
+Lemma sem_fopn_equiv (les : lexprs) (op : acc_op) (res : rexprs) (s : estate) :
+  linear_sem.sem_fopn_args (to_opn (les, op, res)) s =
+    ACCFopn_coreP.sem_fopn_args (les, op, res) s.
+Proof.
+  rewrite /to_opn /linear_sem.sem_fopn_args /ACCFopn_coreP.sem_fopn_args /=.
+  case: sem_rexprs => //= >.
+  rewrite /exec_sopn /= /sopn_sem /=; case: id_valid => //=.
+  rewrite /sopn_sem_ /= /semi_to_atype.
+  move: (computational_eq _) (computational_eq _) => e1 e2.
+  rewrite <- e1, <- e2.
+  by case: app_sopn.
+Qed.
+
+(* Bridge from [ACCFopn_coreP.sem_fopn_args] to [eval_instr] on the linear
+   instruction that [li_of_opn_args] (in [acc_stack_zeroization.v], which
+   cannot be mentioned here, see that file's comment) builds from an
+   [opn_args] triple. *)
+Lemma opn_args_eval_instr {lp ls ii} oa {s'} :
+  ACCFopn_coreP.sem_fopn_args oa (to_estate ls) = ok s' ->
+  linear_sem.eval_instr lp (MkLI ii (Lopn oa.1.1 (Oacc oa.1.2) oa.2)) ls
+    = ok (lnext_pc (lset_estate' ls s')).
+Proof.
+  case: oa => -[les op] res h.
+  rewrite -sem_fopn_equiv in h.
+  exact: sem_fopn_args_eval_instr h.
+Qed.
+
+(* [R[x] := R[y]] (implemented as [addi x y 0]). *)
+Lemma mov_eval_instr {lp ls ii} {xi:var_i} {y} {wy : word Uptr} :
+  convertible xi.(vtype) (aword acc_reg_size) ->
+  get_var true (lvm ls) (v_var y) = ok (Vword wy) ->
+  let: (les, op, res) := ACCFopn_core.mov xi y in
+  let: li := MkLI ii (Lopn les (Oacc op) res) in
+  let: vm' := (lvm ls).[xi <- Vword wy] in
+  linear_sem.eval_instr lp li ls = ok (lnext_pc (lset_vm ls vm')).
+Proof.
+  move=> hc hy.
+  have h := mov_sem_fopn_args (s := to_estate ls) hc (to_word_get_var hy).
+  rewrite -sem_fopn_equiv in h.
+  exact: sem_fopn_args_eval_instr h.
+Qed.
+
+(* [R[x] := imm] (loaded with the single [LI] instruction). *)
+Lemma movi_eval_instr {lp ls ii imm} {xi:var_i} :
+  convertible xi.(vtype) (aword acc_reg_size) ->
+  let: (les, op, res) := ACCFopn_core.li xi imm in
+  let: li := MkLI ii (Lopn les (Oacc op) res) in
+  let: vm' := (lvm ls).[xi <- Vword (wrepr U32 imm)] in
+  linear_sem.eval_instr lp li ls = ok (lnext_pc (lset_vm ls vm')).
+Proof.
+  move=> hc.
+  have h := movi_sem_fopn_args (s := to_estate ls) (imm := imm) hc.
+  rewrite -sem_fopn_equiv in h.
+  exact: sem_fopn_args_eval_instr h.
+Qed.
+
+(* [R[x] := R[y] aligned down to a multiple of [wsize_size al]]. *)
+Lemma align_eval_instr {lp ls ii} {xi:var_i} {y al} {wy : word Uptr} :
+  convertible xi.(vtype) (aword acc_reg_size) ->
+  get_var true (lvm ls) (v_var y) = ok (Vword wy) ->
+  let: (les, op, res) := ACCFopn_core.align xi y al in
+  let: li := MkLI ii (Lopn les (Oacc op) res) in
+  let: vm' := (lvm ls).[xi <- Vword (align_word al wy)] in
+  linear_sem.eval_instr lp li ls = ok (lnext_pc (lset_vm ls vm')).
+Proof.
+  move=> hc hy.
+  have h := align_sem_fopn_args (s := to_estate ls) (al := al) hc
+              (to_word_get_var hy).
+  rewrite -sem_fopn_equiv in h.
+  exact: sem_fopn_args_eval_instr h.
+Qed.
+
+(* [R[x] := R[y] - R[z]]. *)
+Lemma sub_eval_instr {lp ls ii} {xi:var_i} {y z} {wy wz : word Uptr} :
+  convertible xi.(vtype) (aword acc_reg_size) ->
+  get_var true (lvm ls) (v_var y) = ok (Vword wy) ->
+  get_var true (lvm ls) (v_var z) = ok (Vword wz) ->
+  let: (les, op, res) := ACCFopn_core.sub xi y z in
+  let: li := MkLI ii (Lopn les (Oacc op) res) in
+  let: vm' := (lvm ls).[xi <- Vword (wy - wz)] in
+  linear_sem.eval_instr lp li ls = ok (lnext_pc (lset_vm ls vm')).
+Proof.
+  move=> hc hy hz.
+  have h := sub_sem_fopn_args (s := to_estate ls) hc (to_word_get_var hy)
+              (to_word_get_var hz).
+  rewrite -sem_fopn_equiv in h.
+  exact: sem_fopn_args_eval_instr h.
+Qed.
+
+(* [R[x] := R[y] - imm % 2^32]. *)
+Lemma subi_eval_instr {lp ls ii} {xi:var_i} {y imm} {wy : word Uptr} :
+  convertible xi.(vtype) (aword acc_reg_size) ->
+  get_var true (lvm ls) (v_var y) = ok (Vword wy) ->
+  let: (les, op, res) := ACCFopn_core.subi xi y imm in
+  let: li := MkLI ii (Lopn les (Oacc op) res) in
+  let: vm' := (lvm ls).[xi <- Vword (wy - wrepr reg_size imm)] in
+  linear_sem.eval_instr lp li ls = ok (lnext_pc (lset_vm ls vm')).
+Proof.
+  move=> hc hy.
+  have h := subi_sem_fopn_args (s := to_estate ls) (imm := imm) hc
+              (to_word_get_var hy).
+  rewrite -sem_fopn_equiv in h.
+  exact: sem_fopn_args_eval_instr h.
+Qed.
+
+(* [R[x] := R[y] + imm % 2^32]. *)
+Lemma addi_eval_instr {lp ls ii} {xi:var_i} {y imm} {wy : word Uptr} :
+  convertible xi.(vtype) (aword acc_reg_size) ->
+  get_var true (lvm ls) (v_var y) = ok (Vword wy) ->
+  let: (les, op, res) := ACCFopn_core.addi xi y imm in
+  let: li := MkLI ii (Lopn les (Oacc op) res) in
+  let: vm' := (lvm ls).[xi <- Vword (wy + wrepr reg_size imm)] in
+  linear_sem.eval_instr lp li ls = ok (lnext_pc (lset_vm ls vm')).
+Proof.
+  move=> hc hy.
+  have h := addi_sem_fopn_args (s := to_estate ls) (imm := imm) hc
+              (to_word_get_var hy).
+  rewrite -sem_fopn_equiv in h.
+  exact: sem_fopn_args_eval_instr h.
+Qed.
+
+(* [R[x] := R[y] + R[z]]. *)
+Lemma add_eval_instr {lp ls ii} {xi:var_i} {y z} {wy wz : word Uptr} :
+  convertible xi.(vtype) (aword acc_reg_size) ->
+  get_var true (lvm ls) (v_var y) = ok (Vword wy) ->
+  get_var true (lvm ls) (v_var z) = ok (Vword wz) ->
+  let: (les, op, res) := ACCFopn_core.add xi y z in
+  let: li := MkLI ii (Lopn les (Oacc op) res) in
+  let: vm' := (lvm ls).[xi <- Vword (wy + wz)] in
+  linear_sem.eval_instr lp li ls = ok (lnext_pc (lset_vm ls vm')).
+Proof.
+  move=> hc hy hz.
+  have h := add_sem_fopn_args (s := to_estate ls) hc (to_word_get_var hy)
+              (to_word_get_var hz).
+  rewrite -sem_fopn_equiv in h.
+  exact: sem_fopn_args_eval_instr h.
+Qed.
+
+End EVAL_INSTR.
 
 End ACCFopn_coreP.

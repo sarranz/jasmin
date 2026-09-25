@@ -53,6 +53,8 @@ compiler/acc_lower_addressing.v
 compiler/acc_lower_addressing_proof.v
 compiler/acc_lowering.v
 compiler/acc_lowering_proof.v
+compiler/acc_stack_zeroization.v
+compiler/acc_stack_zeroization_proof.v
 compiler/acc_params.v
 compiler/acc_params_core.v
 compiler/acc_params_core_proof.v

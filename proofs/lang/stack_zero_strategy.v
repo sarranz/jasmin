@@ -4,6 +4,7 @@
 - Loop: Overwrite with a simple one-instruction loop.
 - LoopSCT: Overwrite with a simple one-instruction loop, and put an LFENCE before the return.
 - Unrolled: Overwrite with a sequence of instructions (no loop).
+- LoopHW: overwrite with the hardware loop instruction, ACC only, unverified.
 
 Implemented in [compiler/stack_zeroization.v].
 
@@ -19,7 +20,8 @@ Require Import utils.
 Variant stack_zero_strategy :=
 | SZSloop
 | SZSloopSCT
-| SZSunrolled.
+| SZSunrolled
+| SZSloopHW.
 
 (* This is a list of the strategies. It is defined in Coq so that we can
    show that it is exhaustive (cf. [sz_strategy_list_complete]).
@@ -28,6 +30,7 @@ Definition stack_zero_strategy_list := [::
     SZSloop
   ; SZSloopSCT
   ; SZSunrolled
+  ; SZSloopHW
 ].
 
 (* To use [Finite.axiom], we must first show that [stack_zero_strategy] is [eqType]. *)

@@ -49,3 +49,4 @@ result
 
 .env-acc-root
 compiler/examples/gimli/acc/build/
+compiler/examples/stack_zeroization/acc/build/

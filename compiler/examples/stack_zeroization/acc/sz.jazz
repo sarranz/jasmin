@@ -1,0 +1,194 @@
+/* ACC stack zeroization simulator harness (plan_ACC_SZ.md, Phase 1.6).
+
+   Six export functions, one per (strategy, clear step) pair, meant to
+   actually RUN on the standalone simulator (unlike the compile-only test
+   file ../../../tests/success/stack_zeroization/acc/stack-zeroization.jazz).
+   Each writes a value derived from its `secret` argument into its own
+   stack frame, reads every word of the frame back into a running sum (so
+   the compiler cannot dead-code-eliminate the writes -- the read-back is
+   what keeps the frame "used"), and returns the sum. `gen.py`/`check.py`
+   then check both that returned checksum and that the compiler's appended
+   zeroization code actually wiped the frame after return.
+
+   No `#[stackzerosize=...]` annotation on any function: the u32 functions
+   get a `stack u32[16]` frame (64 bytes, natural alignment 4) so the
+   default clear step is u32 (`sw`); the u256 functions get a `stack
+   u256[2]` frame (64 bytes, natural alignment 32) so the default clear
+   step is u256 (`bn.sd`), per plan_ACC_SZ.md Section 1.3 ("the clear step
+   defaults to lfd_align") and the table observed in notes_ACC_SZ_asm.md.
+
+   VERIFIED BY A REAL COMPILE (2026-09-23, during Phase 1.6 review): the
+   stack allocator's inferred frame alignment (`lfd_align`, which drives
+   the default clear step per Section 1.3) is NOT determined by an array's
+   *declared* element type -- it is determined by the actual access widths
+   used against it. A `stack u256[2]` array touched only through
+   `:u32`-sized accesses compiles to an ordinary 4-byte-aligned, `sw`-based
+   frame, defeating the whole point of having separate u256 test
+   functions. Confirmed by direct experiment that `#[stackalign=u256]`
+   cannot force it either: the stack allocator rejects a *requested*
+   alignment stricter than what the access pattern naturally needs
+   ("stack allocation: the stack has alignment u32 (expected: u256)") --
+   see the parallel finding for `stackzero_step_above_align.jazz` in
+   notes_ACC_SZ_asm.md, which is the same constraint from the opposite
+   direction.
+
+   The fix used below: each u256 function first does two *natural*
+   (non-`:u32`-sized) wide writes -- `s[#aligned 0] = w; s[#aligned 1] = w;`
+   with `w` a zeroed `reg u256` from `#set0_256()` -- purely to make the
+   stack allocator see a real u256-width access and infer alignment 32
+   (confirmed by a real compile: this alone changes the emitted prologue
+   from `andi x7, x5, -4` to `andi x7, x5, -32`, and the zeroization body
+   from `sw`/no-`bn.xor` to `bn.sd`/`bn.xor`). The actual secret-dependent
+   checksum logic is then, as before, ordinary `:u32`-sized sub-accesses on
+   the same array (there is still no scalar<->wide bridging instruction on
+   ACC per the search described above, so the checksum itself cannot
+   literally flow through a wide register) -- the two `w`-writes are purely
+   an "anchor" to steer the allocator, and get overwritten by the `:u32`
+   writes that follow. */
+
+// stack u32[16] (64 bytes), stackzero=loop -- default clear step u32 (sw).
+#[stackzero=loop]
+export
+fn sz_loop_u32(reg u32 secret) -> reg u32 {
+    stack u32[16] s;
+    reg u32 v sum;
+    inline int i;
+
+    for i = 0 to 16 {
+        s[#aligned i] = secret;
+    }
+
+    sum = 0;
+    for i = 0 to 16 {
+        v = s[#aligned i];
+        sum += v;
+    }
+
+    return sum;
+}
+
+// stack u32[16] (64 bytes), stackzero=unrolled -- default clear step u32.
+#[stackzero=unrolled]
+export
+fn sz_unrolled_u32(reg u32 secret) -> reg u32 {
+    stack u32[16] s;
+    reg u32 v sum;
+    inline int i;
+
+    for i = 0 to 16 {
+        s[#aligned i] = secret;
+    }
+
+    sum = 0;
+    for i = 0 to 16 {
+        v = s[#aligned i];
+        sum += v;
+    }
+
+    return sum;
+}
+
+// stack u32[16] (64 bytes), stackzero=loophw (unverified strategy).
+#[stackzero=loophw]
+export
+fn sz_loophw_u32(reg u32 secret) -> reg u32 {
+    stack u32[16] s;
+    reg u32 v sum;
+    inline int i;
+
+    for i = 0 to 16 {
+        s[#aligned i] = secret;
+    }
+
+    sum = 0;
+    for i = 0 to 16 {
+        v = s[#aligned i];
+        sum += v;
+    }
+
+    return sum;
+}
+
+// stack u256[2] (64 bytes), stackzero=loop -- default clear step u256
+// (bn.sd); alignment forced to 32 by the two anchor writes below, actual
+// checksum body accesses at u32 granularity, see file header comment.
+#[stackzero=loop]
+export
+fn sz_loop_u256(reg u32 secret) -> reg u32 {
+    stack u256[2] s;
+    reg u256 w;
+    reg u32 v sum;
+    inline int i;
+
+    ?{}, w = #set0_256();
+    s[#aligned 0] = w;
+    s[#aligned 1] = w;
+
+    for i = 0 to 16 {
+        s[#aligned :u32 i] = secret;
+    }
+
+    sum = 0;
+    for i = 0 to 16 {
+        v = s[#aligned :u32 i];
+        sum += v;
+    }
+
+    return sum;
+}
+
+// stack u256[2] (64 bytes), stackzero=unrolled -- default clear step u256,
+// alignment forced to 32 by the two anchor writes below (see file header
+// comment).
+#[stackzero=unrolled]
+export
+fn sz_unrolled_u256(reg u32 secret) -> reg u32 {
+    stack u256[2] s;
+    reg u256 w;
+    reg u32 v sum;
+    inline int i;
+
+    ?{}, w = #set0_256();
+    s[#aligned 0] = w;
+    s[#aligned 1] = w;
+
+    for i = 0 to 16 {
+        s[#aligned :u32 i] = secret;
+    }
+
+    sum = 0;
+    for i = 0 to 16 {
+        v = s[#aligned :u32 i];
+        sum += v;
+    }
+
+    return sum;
+}
+
+// stack u256[2] (64 bytes), stackzero=loophw (unverified strategy),
+// alignment forced to 32 by the two anchor writes below (see file header
+// comment).
+#[stackzero=loophw]
+export
+fn sz_loophw_u256(reg u32 secret) -> reg u32 {
+    stack u256[2] s;
+    reg u256 w;
+    reg u32 v sum;
+    inline int i;
+
+    ?{}, w = #set0_256();
+    s[#aligned 0] = w;
+    s[#aligned 1] = w;
+
+    for i = 0 to 16 {
+        s[#aligned :u32 i] = secret;
+    }
+
+    sum = 0;
+    for i = 0 to 16 {
+        v = s[#aligned :u32 i];
+        sum += v;
+    }
+
+    return sum;
+}

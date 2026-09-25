@@ -1240,7 +1240,7 @@ Lemma x86_stack_zero_cmd_no_ext_lbl szs rspn lbl ws_align ws stk_max cmd vars :
   label_in_lcmd cmd = [::].
 Proof.
   rewrite /x86_stack_zero_cmd.
-  case: szs.
+  case: szs => //.
   + rewrite /x86_stack_zero_loop.
     by case: ifPn => _ [<- _].
   + rewrite /x86_stack_zero_loopSCT /x86_stack_zero_loop.
@@ -1261,7 +1261,7 @@ Proof.
       /\ state_rel_unrolled_small
           rspn ws_align ws stk_max ptr vars (to_estate ls) s2 0 ptr].
   + move: hcmd; rewrite /x86_stack_zero_cmd.
-    case: szs.
+    case: szs => //.
     + move=> [hcmd].
       rewrite -(cats0 cmd) in hbody.
       have [s2 [hsem hsr]] :=

@@ -1,0 +1,27 @@
+// Verified error (jasminc -arch acc run against this exact file):
+// acc_stack_zeroization.v's SZSunrolled range assertion, since a
+// `stack u256[513]` array forces stk_max = 513 * 32 = 16416, exceeding the
+// unrolled strategy's u256 bound of 16384:
+//   The stack size to zeroize ( 16416 ) is too large for the unrolled
+//   strategy on ACC with clear step u256 (maximum 16384 ); use the loop
+//   strategy instead
+// NOTE: only index 0 is touched (not the last index): touching the array's
+// last element directly (e.g. `s[#aligned 512]`) produces a *different*,
+// unrelated error first (a regular BN.SD store's immediate cannot encode a
+// 16384-byte offset), before ever reaching stack zeroization. Touching
+// only index 0 still forces the whole 513-element array to be allocated
+// (array storage is reserved for the full declared length regardless of
+// which elements are touched), so stk_max is still 16416 and the intended
+// zeroization-pass error is the one that fires.
+#[stackzero=unrolled]
+export
+fn stackzero_unrolled_too_large_u256() -> reg u256 {
+    stack u256[513] s;
+    reg u256 x;
+
+    ?{}, x = #set0_256();
+    s[#aligned 0] = x;
+    x = s[#aligned 0];
+
+    return x;
+}

@@ -1,0 +1,27 @@
+// Verified error (jasminc -arch acc run against this exact file):
+// acc_stack_zeroization.v's SZSunrolled range assertion, since a
+// `stack u32[513]` array forces stk_max = 513 * 4 = 2052, exceeding the
+// unrolled strategy's u32 bound of 2048:
+//   The stack size to zeroize ( 2052 ) is too large for the unrolled
+//   strategy on ACC with clear step u32 (maximum 2048 ); use the loop
+//   strategy instead
+// NOTE: only index 0 is touched (not the last index): touching the array's
+// last element directly (e.g. `s[#aligned 512]`) produces a *different*,
+// unrelated error first (a regular SW store's signed-12-bit immediate
+// cannot encode a 2048-byte offset), before ever reaching stack
+// zeroization. Touching only index 0 still forces the whole 513-element
+// array to be allocated (array storage is reserved for the full declared
+// length regardless of which elements are touched), so stk_max is still
+// 2052 and the intended zeroization-pass error is the one that fires.
+#[stackzero=unrolled]
+export
+fn stackzero_unrolled_too_large_u32() -> reg u32 {
+    stack u32[513] s;
+    reg u32 r;
+
+    r = 0;
+    s[#aligned 0] = r;
+    r = s[#aligned 0];
+
+    return r;
+}

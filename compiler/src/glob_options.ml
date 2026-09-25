@@ -58,6 +58,7 @@ let stack_zero_strategies =
     | SZSloop -> "loop"
     | SZSloopSCT -> "loopSCT"
     | SZSunrolled -> "unrolled"
+    | SZSloopHW -> "loophw"
   in
   List.map (fun s -> (assoc s, s)) stack_zero_strategy_list
 let set_stack_zero_strategy s =

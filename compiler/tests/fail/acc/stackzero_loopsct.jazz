@@ -1,0 +1,11 @@
+// Expected error (unverified -- no compiler run): acc_stack_zeroization.v's
+// SZSloopSCT branch, exactly:
+//   Strategy "loop with SCT" is not supported in ACC
+#[stackzero=loopSCT]
+export
+fn stackzero_loopsct(reg u32 x) -> reg u32 {
+    stack u32 s;
+    s = x;
+    x = s;
+    return x;
+}
