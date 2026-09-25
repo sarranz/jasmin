@@ -5695,7 +5695,7 @@ Qed.
       have := checked_prog ok_fd.
       rewrite /check_fd; t_xrbindP => _ _ _ _ _ _ heq _ _.
       rewrite Export in heq.
-      move=> r_eq; case/sv_of_listP: r_in_result => hmem.
+      move=> r_eq; move/sv_of_listP: r_in_result => hmem.
       by rewrite r_eq (negbTE heq) in hmem.
     move=> res; apply: (get_var_is_uincl_on vm2_vmo).
     by move=> x hx; apply/Sv_memP/sv_of_listP/in_map; exists x.

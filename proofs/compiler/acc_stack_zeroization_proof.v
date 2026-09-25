@@ -1467,7 +1467,7 @@ Proof.
     have hf : (ws == U256) = false := negbTE (introN eqP hws).
     by rewrite /sz_init_ws /sz_loop /restore_sp /store_zero /li_of_opn_args
       hf /=.
-  + t_xrbindP=> _ [<- _].
+  + t_xrbindP=> _ <- _.
     rewrite /stack_zero_unrolled.
     case: (ws =P U256) => hws; subst.
     + rewrite /sz_init_ws /restore_sp /li_of_opn_args !label_in_lcmd_cat
@@ -1515,7 +1515,7 @@ Proof.
       exists s2; split.
       + by move: hsem; rewrite -hfn -hpc of_estate_to_estate.
       exact: hsr.
-    + t_xrbindP=> _ [??]; subst cmd vars.
+    + t_xrbindP=> _ ??; subst cmd vars.
       rewrite -(cats0 (stack_zero_unrolled _ _ _ _)) in hbody.
       case/orP: ws_ok => /eqP hws; subst ws.
       + have [s2 [hsem hsr]] :=

@@ -157,6 +157,14 @@ Promote only after checking every diff against the comments in the test files.
 
   $ ../jasminc -arch acc -o out.s success/acc/bn_cmp_shift.jazz && grep -v '^[[:space:]]*\.' out.s
   warning: support of the ACC architecture is VERY experimental. The loop instruction is not part of the verified compiler. The compiler does NOT check whether the loop stack overflow/underflows. The compiler does NOT check that memory accesses are aligned.
+  shift_negative_wraps:
+  	bn.cmp	w0, w1 << 248, FG1
+  	bn.sel	w0, w0, w1, FG1.Z
+  	ret
+  shift_wraps_at_256:
+  	bn.cmp	w0, w1 << 0, FG1
+  	bn.sel	w0, w0, w1, FG1.Z
+  	ret
   sel_shift:
   	bn.cmp	w0, w1 >> 8, FG1
   	bn.sel	w0, w0, w1, FG1.Z
@@ -244,7 +252,7 @@ A shifted operand must end up as the second BN.CMP operand.
   warning: support of the ACC architecture is VERY experimental. The loop instruction is not part of the verified compiler. The compiler does NOT check whether the loop stack overflow/underflows. The compiler does NOT check that memory accesses are aligned.
   "fail/acc/bn_cmp_shift_amount.jazz", line 4 (4-29):
   compilation error in function shift_amount:
-  lowering: invalid shift amount: 4 . Must be in the range [0, 31] or masked with 0x1f.
+  lowering: invalid shift amount: 4 . Must be a multiple of 8 in the range [0, 248].
   [1]
 
 Composite labels of #BN_CMP as a BN.SEL condition (unchanged user error).
