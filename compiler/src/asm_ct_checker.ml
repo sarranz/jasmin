@@ -358,7 +358,7 @@ type signature = {
   slots : string list;
   layout : MemLayout.t;
   pre : Env.t;
-  post : Env.t;
+  post : Env.t option; (* [None] if no exit: no post; pre still applies. *)
 }
 
 module MemoryAccess = struct
@@ -424,10 +424,10 @@ module Calls = struct
     in
     List.fold_left infer (caller, SM.empty) bindings
 
-  let apply_postconditions caller callee substitution bindings : Env.t =
+  let apply_postconditions caller callee_post substitution bindings : Env.t =
     let apply posts (callee_slot, caller_slots) : Level.t SM.t =
       let return_level =
-        Level.subst substitution (Env.get callee.post callee_slot)
+        Level.subst substitution (Env.get callee_post callee_slot)
       in
       List.fold_left
         (fun acc (slot, covers) ->
@@ -474,12 +474,17 @@ module Calls = struct
            callers))
       bindings
 
-  let call_env ~arch_slots caller callee inst : Env.t =
+  let call_env ~arch_slots caller callee inst : Env.t * Env.t option =
     let bindings = weaken_shared (slot_bindings ~arch_slots callee inst) in
-    let caller, substitution =
+    let demanded, substitution =
       infer_type_substitution caller callee bindings
     in
-    apply_postconditions caller callee substitution bindings
+    match callee.post with
+    | None -> (demanded, None)
+    | Some callee_post ->
+        ( demanded,
+          Some (apply_postconditions demanded callee_post substitution bindings)
+        )
 end
 
 module Dataflow = struct
@@ -623,20 +628,74 @@ let string_of_level : Level.t -> string = function
   | Level.Secret -> "secret"
   | Level.Poly s -> "poly{" ^ String.concat "," (SS.elements s) ^ "}"
 
-let pp_slot s fmt slot : unit =
-  Format.fprintf fmt "%-5s %-12s -> %s" slot
-    (string_of_level (Env.get s.pre slot))
-    (string_of_level (Env.get s.post slot))
+let shown_slots (s : signature) : string list * int =
+  let uses = Hashtbl.create 97 in
+  let count : Level.t -> unit = function
+    | Level.Poly vars ->
+        SS.iter
+          (fun v ->
+            Hashtbl.replace uses v
+              (1 + Option.value ~default:0 (Hashtbl.find_opt uses v)))
+          vars
+    | Level.Public | Level.Secret -> ()
+  in
+  List.iter
+    (fun slot ->
+      count (Env.get s.pre slot);
+      Option.iter (fun post -> count (Env.get post slot)) s.post)
+    s.slots;
+  let occurrences v = Option.value ~default:0 (Hashtbl.find_opt uses v) in
+  let shown slot =
+    match (Env.get s.pre slot, Option.map (fun p -> Env.get p slot) s.post) with
+    | Level.Poly pre, Some (Level.Poly post) when SS.equal pre post ->
+        SS.exists (fun v -> occurrences v > 2) pre
+    | Level.Poly pre, None -> SS.exists (fun v -> occurrences v > 1) pre
+    | _ -> true
+  in
+  let shown = List.filter shown s.slots in
+  (shown, List.length s.slots - List.length shown)
+
+let pp_slot ~slot_width ~pre_width s fmt slot : unit =
+  let pad width text =
+    text ^ String.make (max 0 (width - String.length text)) ' '
+  in
+  match s.post with
+  | Some post ->
+      Format.fprintf fmt "%s %s -> %s" (pad slot_width slot)
+        (pad pre_width (string_of_level (Env.get s.pre slot)))
+        (string_of_level (Env.get post slot))
+  | None ->
+      Format.fprintf fmt "%s %s" (pad slot_width slot)
+        (string_of_level (Env.get s.pre slot))
 
 let pp_signature fmt ((name : string), (s : signature)) : unit =
-  Format.fprintf fmt "@[<v2>%s:@,%a@]" name
-    (Utils.pp_list "@," (pp_slot s))
-    s.slots
+  let slots, omitted = shown_slots s in
+  let width f = List.fold_left (fun w x -> max w (String.length (f x))) 0 slots in
+  let pp_slot =
+    pp_slot
+      ~slot_width:(width (fun slot -> slot))
+      ~pre_width:(width (fun slot -> string_of_level (Env.get s.pre slot)))
+      s
+  in
+  let pp_omitted fmt n =
+    Format.fprintf fmt "(%d slot%s preserved, named nowhere else, omitted)" n
+      (if n = 1 then "" else "s")
+  in
+  let header = if s.post = None then name ^ ": does not return" else name ^ ":" in
+  match (slots, omitted) with
+  | [], 0 -> Format.fprintf fmt "%s" header
+  | [], n -> Format.fprintf fmt "@[<v2>%s@,%a@]" header pp_omitted n
+  | slots, 0 ->
+      Format.fprintf fmt "@[<v2>%s@,%a@]" header (Utils.pp_list "@," pp_slot)
+        slots
+  | slots, n ->
+      Format.fprintf fmt "@[<v2>%s@,%a@,%a@]" header
+        (Utils.pp_list "@," pp_slot) slots pp_omitted n
 
 let pp_result fmt (name, r) : unit =
   match r with
   | Some s -> pp_signature fmt (name, s)
-  | None -> Format.fprintf fmt "%s: skipped" name
+  | None -> Format.fprintf fmt "%s: rejected" name
 
 let pp_signatures fmt results : unit =
   Format.fprintf fmt "@[<v>==== asmCtChecker: signatures ====@,%a@,%s@]@."
@@ -862,9 +921,11 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
       | POPPC -> [ (exit, env) ]
       | CALL (fn, _) -> (
           match Hashtbl.find_opt signatures fn.CoreIdent.fn_name with
-          | Some callee ->
+          | Some callee -> (
               let env = Env.use_public env Arch_utils.rsp in
-              [ (i + 1, call_env env callee access.ac_inst) ]
+              match call_env env callee access.ac_inst with
+              | _, Some after -> [ (i + 1, after) ]
+              | demanded, None -> [ (i, demanded) ]) (* callee does not return *)
           | None ->
               error "signature not available for %s" fn.CoreIdent.fn_name)
       | _ -> error "unsupported instruction"
@@ -889,35 +950,31 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
         analysis.signatures (Calls.call_env ~arch_slots)
     in
 
-    match Dataflow.fixpoint ~step body pre with
-    | _, None ->
-        Utils.hierror ~loc:Utils.Lnone ~funname:name
-          ~kind:"constant-time checker" "no path returns"
-    | public_levels, Some post ->
-        let f_sig =
-          { slots;
-            layout;
-            pre = { pre with public = public_levels };
-            post = { post with public = public_levels } }
-        in
-        Hashtbl.replace analysis.signatures name f_sig;
-        Some f_sig
+    let public_levels, post = Dataflow.fixpoint ~step body pre in
+    let f_sig =
+      { slots;
+        layout;
+        pre = { pre with public = public_levels };
+        post =
+          Option.map
+            (fun (post : Env.t) -> { post with public = public_levels })
+            post }
+    in
+    Hashtbl.replace analysis.signatures name f_sig;
+    Some f_sig
 
   let signatures prog :
-      (string * signature option) list * (Format.formatter -> unit) option =
+      (string * signature option) list * (Format.formatter -> unit) list =
     let analysis = create () in
-    let status =
-      match
-        List.iter
-          (fun ((name : CoreIdent.funname), def) ->
-            try ignore (ty_fundef analysis (name, def))
-            with CtTypeError msg ->
-              error "@[<v>in function %s:@,%t@]" name.CoreIdent.fn_name msg)
-          (callees_first prog.asm_funcs)
-      with
-      | () -> None
-      | exception CtTypeError msg -> Some msg
+    let errors = ref [] in
+    let in_function (name : CoreIdent.funname) msg fmt : unit =
+      Format.fprintf fmt "@[<v>in function %s:@,%t@]" name.CoreIdent.fn_name msg
     in
+    List.iter
+      (fun ((name : CoreIdent.funname), def) ->
+        try ignore (ty_fundef analysis (name, def))
+        with CtTypeError msg -> errors := in_function name msg :: !errors)
+      (callees_first prog.asm_funcs);
     let results =
       List.map
         (fun (name, _) ->
@@ -925,7 +982,7 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
            Hashtbl.find_opt analysis.signatures name.CoreIdent.fn_name))
         prog.asm_funcs
     in
-    results, status
+    results, List.rev !errors
 
   let chk
       (ap :
@@ -937,10 +994,15 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
           Arch.asm_op )
         Arch_decl.asm_prog)
       : unit =
-    let results, status = signatures ap in
+    let results, errors = signatures ap in
     pp_signatures Format.err_formatter results;
-    Option.iter
-      (fun msg ->
-        Utils.hierror ~loc:Utils.Lnone ~kind:"constant-time checker" "%t" msg)
-      status
+    match errors with
+    | [] -> ()
+    | [ msg ] ->
+        Utils.hierror ~loc:Utils.Lnone ~kind:"constant-time checker" "%t" msg
+    | _ ->
+        Utils.hierror ~loc:Utils.Lnone ~kind:"constant-time checker"
+          "@[<v>%d functions rejected:@,%a@]" (List.length errors)
+          (Utils.pp_list "@," (fun fmt msg -> msg fmt))
+          errors
 end
