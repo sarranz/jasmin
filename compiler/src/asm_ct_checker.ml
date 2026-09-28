@@ -895,7 +895,6 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
       let regions = access.ac_slots in
       if syscall_writes_memory o && access.ac_unannotated then
         error "no annotation names the region this syscall fills";
-      let env = List.fold_left Env.use_public env regions in
       let clobbered =
         Syscall_clobber.slots @ syscall_ret_slots o @ regions
       in
