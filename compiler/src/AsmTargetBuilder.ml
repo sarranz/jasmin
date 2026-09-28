@@ -59,7 +59,6 @@ module Make(Target : AsmTarget) : S
       | Some slots -> [ArrAnnot slots]
 
     let pp_instantiation_annot annot =
-      Format.printf "%a@." Printer.pp_annotations annot;
       match Annot.has_instantiation_annot annot with
       | None | Some [] -> []
       | Some inst -> [InstAnnot inst]
