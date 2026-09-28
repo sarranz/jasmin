@@ -838,12 +838,23 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
     let ty_declassify_mem env (access : MemoryAccess.t) instr len : Env.t =
       declassify_region env access instr (Conv.int_of_cz len)
 
+     (* Whether all outputs are input-independent constants; currently XOR r,r only.
+        Note that this level affects the set flags too.
+     *)
+    let constant_output op args : bool =
+      match (Arch_utils.instr_desc op).id_str_jas (), args with
+      | ("XOR_32" | "XOR_64"), [ Reg r1; Reg r2 ] -> r1 = r2
+      | _ -> false
+
     let ty_asmop env (access : MemoryAccess.t) op args : Env.t =
       let op_desc = Arch_utils.instr_desc op in
       let env_slots = process_op_descs args access.ac_slots in
       let env, in_slots = env_slots env op_desc.id_in in
       let env, out_slots = env_slots env op_desc.id_out in
-      let level = Level.join_list (List.map (Env.get env) in_slots) in
+      let level =
+        if constant_output op args then Level.Public
+        else Level.join_list (List.map (Env.get env) in_slots)
+      in
       (* A write is strong when it overwrites every block it touches. *)
       let strong_write =
         match mem_write_size args op_desc with
