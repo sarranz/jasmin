@@ -2027,7 +2027,6 @@ Fixpoint alloc_i sao (trmap:table*region_map) (i: instr) : cexec (table * region
       ok (table, r.1, [:: MkI ii (Cassgn r.2 t ty e)])
 
   | Copn rs t o e =>
-    Let ii := add_iinfo ii (add_arr_annot rmap rs e ii) in
     if is_protect_ptr_fail rs o e is Some (r, e, msf) then
        let table := remove_binding_lval table r in
        Let rs := alloc_protect_ptr rmap ii r t e msf in
@@ -2042,6 +2041,8 @@ Fixpoint alloc_i sao (trmap:table*region_map) (i: instr) : cexec (table * region
       Let i := alloc_declassify_array rmap e in
       ok (table, rmap, [:: MkI ii i ])
     else
+    (* only this case can access memory *)
+    Let ii := add_iinfo ii (add_arr_annot rmap rs e ii) in
     Let table :=
       match rs, o, e with
       | [:: r], Oasm op, [:: e] =>
