@@ -1542,12 +1542,12 @@ Definition slot_range_get
   if expr.is_const e is Some i then (i * mk_scale aa ws, wsize_size ws)%Z
   else (0, size_slot a)%Z.
 
-(* An access is fine grained when the variable is a [reg ptr] whose
-   declaration carries the [asm_ct_fine_grained] annotation (decided by
-   [is_fine_grained]). The annotation is ignored on stack variables and stack
-   pointers. *)
-Definition fine_grained (x : var_i) : bool :=
-  [&& is_reg_ptr x, is_fine_grained x & is_aarr x.(vtype)].
+(* An access through [x] to the slot [s] is fine grained when [x], or the
+   variable [s] is named after, is an array whose declaration carries the
+   [asm_ct_fine_grained] annotation (decided by [is_fine_grained]). *)
+Definition fine_grained (x : var_i) (s : slot) : bool :=
+  let fine (y : var_i) := is_fine_grained y && is_aarr y.(vtype) in
+  fine x || fine (mk_var_i s).
 
 (* The size in bytes of the elements of an array variable. *)
 Definition elem_size (x : var) : Z :=
@@ -1575,7 +1575,7 @@ Definition slot_of_sr
   let s := sr.(sr_region).(r_slot) in
   let z := sr.(sr_zone) in
   let '(ofs', _) := concrete_zone s z in
-  Some (s, slot_infos (fine_grained x) (elem_size x) s (ofs + ofs')%Z len).
+  Some (s, slot_infos (fine_grained x s) (elem_size x) s (ofs + ofs')%Z len).
 
 Definition slot_e
   (rm : region_map) (e : pexpr) : option (slot * seq ii_slot_info) :=
@@ -1850,7 +1850,7 @@ Definition get_inst
     let esz := elem_size param in
     let '(fine_caller, esz_caller) :=
       match e with
-      | Pvar x | Psub _ _ _ x _ => (fine_grained x.(gv), elem_size x.(gv))
+      | Pvar x | Psub _ _ _ x _ => (fine_grained x.(gv) a, elem_size x.(gv))
       | _ => (false, size_slot a)
       end
     in
@@ -1872,7 +1872,7 @@ Definition get_inst
         inst_callee := ce;
       |}
     in
-    ok [seq mk ce | ce <- slot_infos (fine_grained param) esz param 0 param_len]
+    ok [seq mk ce | ce <- slot_infos (fine_grained param param) esz param 0 param_len]
   else ok [::].
 
 Definition get_inst_arg
