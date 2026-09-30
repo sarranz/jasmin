@@ -52,6 +52,11 @@ let error fmt =
    every other region. *)
 let unknown_mem_slot = "%unknown_mem"
 
+(* Abstract region standing for global data: we assume globals are read-only
+   and public and globals are not mentioned in call instantiation
+   annotations. *)
+let global_mem_region = "%global"
+
 module Env = struct
   type t = {
     levels : Level.t SM.t;
@@ -149,7 +154,13 @@ module Annots = struct
     | Access of Region.t list
     | Call of { callee : string; inst : (Region.t * Region.t list) list }
 
-  let of_instr instr : t =
+  let access_region ~globals annot : Region.t =
+    let region = Region.of_annot annot in
+    if SS.mem region.mem_slot globals then
+      { region with mem_slot = global_mem_region }
+    else region
+
+  let of_instr ~globals instr : t =
     match instr.asmi_i with
     | CALL (fn, _) ->
         let inst =
@@ -163,9 +174,9 @@ module Annots = struct
     | _ ->
         Access
           (Option.value ~default:[] (Annot.has_array_annot (snd instr.asmi_ii))
-           |> List.map Region.of_annot)
+           |> List.map (access_region ~globals))
 
-  let of_body body : t array = Array.map of_instr body
+  let of_body ~globals body : t array = Array.map (of_instr ~globals) body
 end
 
 module MemLayout = struct
@@ -286,7 +297,10 @@ module MemLayout = struct
       | _ -> boundaries
     in
     let cut_annot boundaries = function
-      | Annots.Access regions -> Boundaries.cut_all boundaries regions
+      | Annots.Access regions ->
+          List.filter (fun (r : Region.t) -> r.mem_slot <> global_mem_region)
+            regions
+          |> Boundaries.cut_all boundaries
       | Annots.Call { callee; inst } ->
           List.fold_left (cut_inst_entry (layout_of_callee callee)) boundaries inst
     in
@@ -373,7 +387,13 @@ module MemoryAccess = struct
   let resolve signatures layout : Annots.t -> t = function
     | Annots.Access regions ->
         let blocks = MemLayout.blocks_of_regions layout regions in
-        { ac_slots = MemLayout.block_slots blocks;
+        let global =
+          List.exists (fun (r : Region.t) -> r.mem_slot = global_mem_region)
+            regions
+        in
+        { ac_slots =
+            (if global then [ global_mem_region ]
+             else MemLayout.block_slots blocks);
           ac_bytes = MemLayout.total_bytes blocks;
           ac_unannotated = regions = [];
           ac_inst = MemoryInstantiation.empty }
@@ -598,11 +618,12 @@ let callees_first funcs :
 
 type analysis = {
   signatures : (string, signature) Hashtbl.t;
+  globals : SS.t;
   mutable fresh_var_counter : int;
 }
 
-let create () : analysis =
-  { signatures = Hashtbl.create 17; fresh_var_counter = 0 }
+let create ~globals () : analysis =
+  { signatures = Hashtbl.create 17; globals; fresh_var_counter = 0 }
 
 let callee_layout analysis fn : MemLayout.t option =
   Option.map (fun s -> s.layout) (Hashtbl.find_opt analysis.signatures fn)
@@ -621,7 +642,8 @@ let init_pre_env analysis ~stack_frame_blocks slots : Env.t =
       { levels = SM.empty; public = SS.empty }
       slots
   in
-  Env.set env unknown_mem_slot Level.Secret
+  let env = Env.set env unknown_mem_slot Level.Secret in
+  Env.set env global_mem_region Level.Public
 
 let string_of_level : Level.t -> string = function
   | Level.Public -> "public"
@@ -947,7 +969,7 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
   let ty_fundef analysis (f_name, f_def) : signature option =
     let name = f_name.CoreIdent.fn_name in
     let body = Array.of_list f_def.asm_fd_body in
-    let annots = Annots.of_body body in
+    let annots = Annots.of_body ~globals:analysis.globals body in
     let layout = MemLayout.of_annots (callee_layout analysis) annots in
     let accesses = MemoryAccess.resolve_all analysis.signatures layout annots in
     let slots = collect_slots arch_slots layout in
@@ -975,7 +997,12 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
 
   let signatures prog :
       (string * signature option) list * (Format.formatter -> unit) list =
-    let analysis = create () in
+    let globals =
+      List.fold_left
+        (fun globals ((x, _), _) -> SS.add (IInfo.slot_name x) globals)
+        SS.empty prog.asm_glob_names
+    in
+    let analysis = create ~globals () in
     let errors = ref [] in
     let in_function (name : CoreIdent.funname) msg fmt : unit =
       Format.fprintf fmt "@[<v>in function %s:@,%t@]" name.CoreIdent.fn_name msg
