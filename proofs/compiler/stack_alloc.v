@@ -2038,6 +2038,7 @@ Fixpoint alloc_i sao (trmap:table*region_map) (i: instr) : cexec (table * region
       ok (table, rs.1, [:: MkI ii rs.2])
     else
     if is_declassify_array o then
+      Let ii := add_iinfo ii (add_arr_annot rmap [::] e ii) in
       Let i := alloc_declassify_array rmap e in
       ok (table, rmap, [:: MkI ii i ])
     else
