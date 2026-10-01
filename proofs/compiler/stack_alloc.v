@@ -1530,8 +1530,8 @@ Fixpoint concrete_zone_aux (ofs : Z) (z : symbolic_zone) : option (Z * Z) :=
       concrete_zone_aux (ofs + o) z
   end.
 
-Definition concrete_zone (s : slot) (z : symbolic_zone) : Z * Z :=
-  odflt (0%Z, size_slot s) (concrete_zone_aux 0 z).
+Definition concrete_zone (s : slot) (z : symbolic_zone) : option (Z * Z) :=
+  concrete_zone_aux 0 z.
 
 (* The slot accessed by [a[e]] when [a] is allocated as [pk], together with
    the byte range [ofs, ofs + len) the access uses within it: the word at a
@@ -1557,8 +1557,7 @@ Definition elem_size (x : var) : Z :=
    [ofs, ofs + len). *)
 Definition elems_of_range (esz ofs len : Z) : seq Z :=
   let lo := Z.div ofs esz in
-  let hi := Z.div (ofs + len - 1) esz in
-  ziota lo (hi - lo + 1).
+  ziota lo (Z.div len esz).
 
 (* The annotations for the byte range [ofs, ofs + len) of the slot [s]: the
    elements (of size [esz]) the range intersects if the access is fine
@@ -1574,9 +1573,11 @@ Definition slot_of_sr
   let%opt sr := Mvar.get rm.(var_region) x.(v_var) in
   let s := sr.(sr_region).(r_slot) in
   let z := sr.(sr_zone) in
-  let '(ofs', _) := concrete_zone s z in
-  Some (s, slot_infos (fine_grained x s) (elem_size x) s (ofs + ofs')%Z len).
-
+  if concrete_zone s z is Some (ofs', len') then 
+    Some (s, slot_infos (fine_grained x s) (elem_size x) s (ofs + ofs')%Z len)
+  else
+    Some (s, slot_infos (fine_grained x s) (elem_size x) s ofs (size_slot s)).
+  
 Definition slot_e
   (rm : region_map) (e : pexpr) : option (slot * seq ii_slot_info) :=
   let%opt (x, ofs, len) :=
@@ -1845,7 +1846,7 @@ Definition get_inst
   cexec (seq ii_inst_info) :=
   if osr is Some sr then
     let a := sr.(sr_region).(r_slot) in
-    let '(ofs, len) := concrete_zone a sr.(sr_zone) in
+    let '(ofs, len) := odflt (0%Z, size_slot a) (concrete_zone a sr.(sr_zone)) in
     let param_len := size_slot param.(v_var) in
     let esz := elem_size param in
     let '(fine_caller, esz_caller) :=
