@@ -1557,7 +1557,8 @@ Definition elem_size (x : var) : Z :=
    [ofs, ofs + len). *)
 Definition elems_of_range (esz ofs len : Z) : seq Z :=
   let lo := Z.div ofs esz in
-  ziota lo (Z.div len esz).
+  let hi := Z.div (ofs + len + esz - 1) esz in
+  ziota lo (hi - lo).
 
 (* The annotations for the byte range [ofs, ofs + len) of the slot [s]: the
    elements (of size [esz]) the range intersects if the access is fine

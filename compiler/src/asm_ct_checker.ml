@@ -860,12 +860,14 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
     let ty_declassify_mem env (access : MemoryAccess.t) instr len : Env.t =
       declassify_region env access instr (Conv.int_of_cz len)
 
-     (* Whether all outputs are input-independent constants; currently XOR r,r only.
-        Note that this level affects the set flags too.
+     (* Whether all outputs are input-independent constants: XOR r,r 
+        and VPXOR x,y,y.
+        Note that this level affects the set flags too (VPXOR sets none).
      *)
     let constant_output op args : bool =
       match (Arch_utils.instr_desc op).id_str_jas (), args with
       | ("XOR_32" | "XOR_64"), [ Reg r1; Reg r2 ] -> r1 = r2
+      | ("VPXOR_128" | "VPXOR_256"), [ _; XReg r1; XReg r2 ] -> r1 = r2
       | _ -> false
 
     let ty_asmop env (access : MemoryAccess.t) op args : Env.t =
