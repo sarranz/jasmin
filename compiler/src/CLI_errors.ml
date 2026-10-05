@@ -69,13 +69,4 @@ let check_options () =
        The compiler does NOT check whether the loop stack overflow/underflows. \
        The compiler does NOT check that memory accesses are aligned.";
 
-  if
-    !check_safety || !trust_aligned || !safety_param <> None
-    || !safety_config <> None
-    || !safety_makeconfigdoc <> None
-  then
-    warning Deprecated Location.i_dummy
-      "the legacy (jasminc) interface to the safety checker is deprecated; use \
-       jasmin-checksafety instead";
-
   chk_out_file outfile

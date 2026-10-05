@@ -37,12 +37,12 @@ fn mod4p1() -> reg u32 {
     // Since RISC-V does not allow offset registers, we need to take the address
     // at the element we want to load.
     reg ptr u32[1] p;
-    p = t[u32 0:1];
+    p = t[:u32 0:1];
 
     reg u32 y;
     y = p[#aligned 0];
 
-    p = t[u32 1:1];
+    p = t[:u32 1:1];
 
     reg u32 z;
     z = p[#aligned 0];

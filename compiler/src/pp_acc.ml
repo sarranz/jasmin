@@ -115,6 +115,7 @@ let pp_asm_arg (arg : (_, Arch_utils.empty, _, _, _) asm_arg) =
         if ws = Wsize.U8 then Conv.z_unsigned_of_word else Conv.z_of_word
       in
       Some (pp_imm (read ws w))
+  | ImmRip _ -> assert false (* Only on ARMv7-M. *)
   | Reg r -> Some (pp_register r)
   | Regx _ -> .
   | Addr addr -> Some (pp_address addr)

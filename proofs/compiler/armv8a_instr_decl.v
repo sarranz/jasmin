@@ -85,6 +85,8 @@ Variant armv8a_mnemonic : Type :=
 | MSUB                           (* Multiply and subtract *)
 | SDIV                           (* Signed division *)
 | UDIV                           (* Unsigned division *)
+| UMULH                          (* Unsigned multiply high *)
+| SMULH                          (* Signed multiply high *)
 
 (* Logical *)
 | AND                            (* Bitwise AND *)
@@ -97,6 +99,14 @@ Variant armv8a_mnemonic : Type :=
 | LSL                            (* Logical shift left *)
 | LSR                            (* Logical shift right *)
 | ROR                            (* Rotate right *)
+
+(* Bit manipulation *)
+| RBIT                           (* Reverse bits *)
+| REV                            (* Reverse bytes *)
+| REV16                          (* Reverse bytes in 16-bit halfwords *)
+| REV32                          (* Reverse bytes in 32-bit words *)
+| CLZ                            (* Count leading zeros *)
+| CLS                            (* Count leading sign bits *)
 
 (* Bit field operations *)
 
@@ -141,9 +151,10 @@ Canonical armv8a_mnemonic_eqType := @ceqT_eqType _ eqTC_armv8a_mnemonic.
 
 Definition armv8a_mnemonics : seq armv8a_mnemonic :=
   [:: ADD; ADDS; ADC; ADCS; SUB; SUBS; NEG
-    ; MUL; MADD; MSUB; SDIV; UDIV
+    ; MUL; MADD; MSUB; SDIV; UDIV; UMULH; SMULH
     ; AND; ORR; EOR; MVN
     ; ASR; LSL; LSR; ROR
+    ; RBIT; REV; REV16; REV32; CLZ; CLS
     ; MOV; MOVN; MOVZ; MOVK; ADR
     ; SXTB; SXTH; SXTW; UXTB; UXTH; UXTW
     ; CMP; TST
@@ -188,6 +199,7 @@ Definition sized_mnemonics : seq armv8a_mnemonic :=
     ; MUL; MADD; MSUB; SDIV; UDIV
     ; AND; ORR; EOR; MVN
     ; ASR; LSL; LSR; ROR
+    ; RBIT; REV; REV16; CLZ; CLS
     ; MOV; MOVN; MOVZ; MOVK
     ; SXTB; SXTH; UXTB; UXTH
     ; CMP; TST
@@ -248,6 +260,8 @@ Definition string_of_armv8a_mnemonic (mn : armv8a_mnemonic) : string :=
   | MSUB => "MSUB"
   | SDIV => "SDIV"
   | UDIV => "UDIV"
+  | UMULH => "UMULH"
+  | SMULH => "SMULH"
   | AND => "AND"
   | ORR => "ORR"
   | EOR => "EOR"
@@ -256,6 +270,12 @@ Definition string_of_armv8a_mnemonic (mn : armv8a_mnemonic) : string :=
   | LSL => "LSL"
   | LSR => "LSR"
   | ROR => "ROR"
+  | RBIT => "RBIT"
+  | REV => "REV"
+  | REV16 => "REV16"
+  | REV32 => "REV32"
+  | CLZ => "CLZ"
+  | CLS => "CLS"
   | MOV => "MOV"
   | MOVN => "MOVN"
   | MOVZ => "MOVZ"
@@ -869,8 +889,9 @@ Definition armv8a_NEG_instr : instr_desc_t :=
                                    (x.(id_semi_safe) (proj1 (andb_prop _ _ h))))
   else x.
 
-(* A three-register instruction without flags (MUL, SDIV, UDIV, ...). *)
-Definition mk_rrr_instr mn (doit_v : doit_t)
+(* A three-register instruction without flags (MUL, SDIV, UDIV, ...).
+   [valid] restricts the operand sizes the instruction exists at. *)
+Definition mk_rrr_instr mn (doit_v : doit_t) (valid : bool)
   (semi : word osz -> word osz -> ty_w osz)
   : instr_desc_t :=
   let tin := [:: lword osz; lword osz ] in
@@ -889,7 +910,7 @@ Definition mk_rrr_instr mn (doit_v : doit_t)
     id_safe := [::];
     id_doit := doit_v;
     id_pp_asm := pp_armv8a_op mn opts;
-    id_valid := osz_valid;
+    id_valid := valid;
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
     id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
@@ -910,7 +931,7 @@ Definition mk_rrr_instr mn (doit_v : doit_t)
 Definition armv8a_MUL_semi {ws : wsize} (wn wm : word ws) : ty_w ws :=
   (wn * wm)%w.
 
-Definition armv8a_MUL_instr : instr_desc_t := mk_rrr_instr MUL DOIT armv8a_MUL_semi.
+Definition armv8a_MUL_instr : instr_desc_t := mk_rrr_instr MUL DOIT osz_valid armv8a_MUL_semi.
 (* [C6.2.356 SDIV] ARM DDI 0487 M.a, p. 2558
    Signed divide  This instruction divides the first signed source register
    value by the second signed source register value, and writes the result to
@@ -935,7 +956,7 @@ Definition armv8a_SDIV_semi {ws : wsize} (wn wm : word ws) : ty_w ws :=
   wdivi wn wm.
 
 Definition armv8a_SDIV_instr : instr_desc_t :=
-  mk_rrr_instr SDIV NOT_DOIT (* Not DIT *) armv8a_SDIV_semi.
+  mk_rrr_instr SDIV NOT_DOIT (* Not DIT *) osz_valid armv8a_SDIV_semi.
 (* [C6.2.489 UDIV] ARM DDI 0487 M.a, p. 2846
    Unsigned divide  This instruction divides the first unsigned source register
    value by the second unsigned source register value, and writes the result to
@@ -958,7 +979,41 @@ Definition armv8a_UDIV_semi {ws : wsize} (wn wm : word ws) : ty_w ws :=
   wdiv wn wm.
 
 Definition armv8a_UDIV_instr : instr_desc_t :=
-  mk_rrr_instr UDIV NOT_DOIT (* Not DIT *) armv8a_UDIV_semi.
+  mk_rrr_instr UDIV NOT_DOIT (* Not DIT *) osz_valid armv8a_UDIV_semi.
+
+(* [UMULH] ARM DDI 0487 M.a
+   Unsigned multiply high  This instruction multiplies two 64-bit register
+   values, and writes bits[127:64] of the 128-bit result to the 64-bit
+   destination register.
+   Syntax: UMULH <Xd>, <Xn>, <Xm>
+   Operation (ASL, summarized):
+     constant bits(64) operand1 = X[n, 64];
+     constant bits(64) operand2 = X[m, 64];
+     constant integer result = UInt(operand1) * UInt(operand2);
+     X[d, 64] = result<127:64>;
+*)
+Definition armv8a_UMULH_semi {ws : wsize} (wn wm : word ws) : ty_w ws :=
+  wmulhu wn wm.
+
+Definition armv8a_UMULH_instr : instr_desc_t :=
+  mk_rrr_instr UMULH DOIT (osz == U64) armv8a_UMULH_semi.
+
+(* [SMULH] ARM DDI 0487 M.a
+   Signed multiply high  This instruction multiplies two 64-bit register
+   values, and writes bits[127:64] of the 128-bit result to the 64-bit
+   destination register.
+   Syntax: SMULH <Xd>, <Xn>, <Xm>
+   Operation (ASL, summarized):
+     constant bits(64) operand1 = X[n, 64];
+     constant bits(64) operand2 = X[m, 64];
+     constant integer result = SInt(operand1) * SInt(operand2);
+     X[d, 64] = result<127:64>;
+*)
+Definition armv8a_SMULH_semi {ws : wsize} (wn wm : word ws) : ty_w ws :=
+  wmulhs wn wm.
+
+Definition armv8a_SMULH_instr : instr_desc_t :=
+  mk_rrr_instr SMULH DOIT (osz == U64) armv8a_SMULH_semi.
 
 (* Multiply-add and multiply-subtract. *)
 Definition mk_madd_instr mn (semi : word osz -> word osz -> word osz -> ty_w osz)
@@ -1506,6 +1561,145 @@ Definition armv8a_UXTW_instr : instr_desc_t := mk_extend_instr UXTW U32 false (o
 (* -------------------------------------------------------------------- *)
 (* Bit-manipulation instructions. *)
 
+(* A two-register instruction without flags nor shifted operand.
+   [valid] restricts the operand sizes the instruction exists at. *)
+Definition mk_rr_instr mn (doit_v : doit_t) (valid : bool)
+  (semi : word osz -> ty_w osz)
+  : instr_desc_t :=
+  let tin := [:: lword osz ] in
+  {|
+    id_msb_flag := msbf;
+    id_tin := tin;
+    id_in := [:: Ea 1 ];
+    id_tout := [:: lword osz ];
+    id_out := [:: Ea 0 ];
+    id_semi := sem_lprod_ok tin semi;
+    id_nargs := 2;
+    id_args_kinds := ak_rr;
+    id_eq_size := refl_equal;
+    id_check_dest := refl_equal;
+    id_str_jas := armv8a_mn_str mn;
+    id_safe := [::];
+    id_doit := doit_v;
+    id_pp_asm := pp_armv8a_op mn opts;
+    id_valid := valid;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error tin semi;
+    id_semi_safe := fun _ => sem_lprod_ok_safe tin semi;
+  |}.
+
+(* [RBIT] ARM DDI 0487 M.a
+   Reverse bits  This instruction reverses the bit order in a register.
+   Syntax: RBIT <Xd>, <Xn>
+   Operation (ASL, summarized):
+     constant bits(datasize) operand = X[n, datasize];
+     bits(datasize) result;
+     for i = 0 to datasize-1
+         result<datasize-1-i> = operand<i>;
+     X[d, datasize] = result;
+*)
+Definition armv8a_RBIT_semi {ws : wsize} (wn : word ws) : ty_w ws :=
+  wbitrev wn.
+
+Definition armv8a_RBIT_instr : instr_desc_t :=
+  mk_rr_instr RBIT DOIT osz_valid (armv8a_RBIT_semi (ws := osz)).
+
+(* [CLZ] ARM DDI 0487 M.a
+   Count leading zeros  This instruction counts the number of consecutive
+   binary zero bits, starting from the most significant bit in the source
+   register, and places the count in the destination register.
+   Syntax: CLZ <Xd>, <Xn>
+   Operation (ASL, summarized):
+     constant integer result = CountLeadingZeroBits(X[n, datasize]);
+     X[d, datasize] = result<datasize-1:0>;
+*)
+Definition armv8a_CLZ_semi {ws : wsize} (wn : word ws) : ty_w ws :=
+  leading_zero wn.
+
+Definition armv8a_CLZ_instr : instr_desc_t :=
+  mk_rr_instr CLZ DOIT osz_valid (armv8a_CLZ_semi (ws := osz)).
+
+(* [C6.2.90 CLS] ARM DDI 0487 M.a, p. 1939
+   Count leading sign bits  This instruction counts the number of leading bits
+   of the source register that have the same value as the most significant bit
+   of the register, and writes the result to the destination register. This
+   count does not include the most significant bit of the source register.
+   Syntax: CLS <Xd>, <Xn>
+   Operation (ASL):
+     constant bits(datasize) operand1 = X[n, datasize];
+     constant integer result = CountLeadingSignBits(operand1);
+     X[d, datasize] = result<datasize-1:0>;
+*)
+(* CountLeadingSignBits(x) = CountLeadingZeroBits(x<msb:1> EOR x<msb-1:0>):
+   the (N-1)-bit word [x<msb:1> EOR x<msb-1:0>] is computed as the N-bit
+   word [(x >> 1) EOR x] with its top bit cleared, whose leading-zero
+   count is one more than that of the (N-1)-bit word. *)
+Definition armv8a_CLS_semi {ws : wsize} (wn : word ws) : ty_w ws :=
+  let t := wand (wxor (wshr wn 1) wn) (wrepr ws (2 ^ (wsize_bits ws - 1) - 1)) in
+  (leading_zero t - 1)%w.
+
+Definition armv8a_CLS_instr : instr_desc_t :=
+  mk_rr_instr CLS DOIT osz_valid (armv8a_CLS_semi (ws := osz)).
+
+(* [C6.2.341 REV] ARM DDI 0487 M.a, p. 2532
+   Reverse bytes  This instruction reverses the byte order in a register.  This
+   instruction is used by the pseudo-instruction REV64.
+   Syntax: REV <Xd>, <Xn>
+   Operation (ASL):
+     constant bits(datasize) operand = X[n, datasize];
+     bits(datasize) result;
+     constant integer containers = datasize DIV container_size;
+     for c = 0 to containers-1
+         constant bits(container_size) container = Elem[operand, c, container_size];
+         Elem[result, c, container_size] = Reverse(container, 8);
+     X[d, datasize] = result;
+*)
+(* The container is the whole register ([container_size = datasize]). *)
+Definition armv8a_REV_semi {ws : wsize} (wn : word ws) : ty_w ws :=
+  wbswap wn.
+
+Definition armv8a_REV_instr : instr_desc_t :=
+  mk_rr_instr REV DOIT osz_valid (armv8a_REV_semi (ws := osz)).
+
+(* [C6.2.342 REV16] ARM DDI 0487 M.a, p. 2534
+   Reverse bytes in 16-bit halfwords  This instruction reverses the byte order
+   in each 16-bit halfword of a register.
+   Syntax: REV16 <Xd>, <Xn>
+   Operation (ASL):
+     constant bits(datasize) operand = X[n, datasize];
+     bits(datasize) result;
+     constant integer containers = datasize DIV container_size;
+     for c = 0 to containers-1
+         constant bits(container_size) container = Elem[operand, c, container_size];
+         Elem[result, c, container_size] = Reverse(container, 8);
+     X[d, datasize] = result;
+*)
+Definition armv8a_REV16_semi {ws : wsize} (wn : word ws) : ty_w ws :=
+  lift1_vec U16 (@wbswap U16) ws wn.
+
+Definition armv8a_REV16_instr : instr_desc_t :=
+  mk_rr_instr REV16 DOIT osz_valid (armv8a_REV16_semi (ws := osz)).
+
+(* [C6.2.343 REV32] ARM DDI 0487 M.a, p. 2536
+   Reverse bytes in 32-bit words  This instruction reverses the byte order in
+   each 32-bit word of a register.
+   Syntax: REV32 <Xd>, <Xn>
+   Operation (ASL):
+     constant bits(datasize) operand = X[n, datasize];
+     bits(datasize) result;
+     constant integer containers = datasize DIV container_size;
+     for c = 0 to containers-1
+         constant bits(container_size) container = Elem[operand, c, container_size];
+         Elem[result, c, container_size] = Reverse(container, 8);
+     X[d, datasize] = result;
+*)
+(* REV32 only exists in the X form: on a W register it is REV. *)
+Definition armv8a_REV32_semi {ws : wsize} (wn : word ws) : ty_w ws :=
+  lift1_vec U32 (@wbswap U32) ws wn.
+
+Definition armv8a_REV32_instr : instr_desc_t :=
+  mk_rr_instr REV32 DOIT (osz == U64) (armv8a_REV32_semi (ws := osz)).
+
 (* -------------------------------------------------------------------- *)
 (* Comparisons. *)
 
@@ -1939,6 +2133,8 @@ Definition mn_desc (mn : armv8a_mnemonic) : instr_desc_t :=
   | MSUB => armv8a_MSUB_instr
   | SDIV => armv8a_SDIV_instr
   | UDIV => armv8a_UDIV_instr
+  | UMULH => armv8a_UMULH_instr
+  | SMULH => armv8a_SMULH_instr
   | AND => armv8a_AND_instr
   | ORR => armv8a_ORR_instr
   | EOR => armv8a_EOR_instr
@@ -1947,6 +2143,12 @@ Definition mn_desc (mn : armv8a_mnemonic) : instr_desc_t :=
   | LSL => armv8a_LSL_instr
   | LSR => armv8a_LSR_instr
   | ROR => armv8a_ROR_instr
+  | RBIT => armv8a_RBIT_instr
+  | REV => armv8a_REV_instr
+  | REV16 => armv8a_REV16_instr
+  | REV32 => armv8a_REV32_instr
+  | CLZ => armv8a_CLZ_instr
+  | CLS => armv8a_CLS_instr
   | MOV => armv8a_MOV_instr
   | MOVN => armv8a_MOVN_instr
   | MOVZ => armv8a_MOVZ_instr

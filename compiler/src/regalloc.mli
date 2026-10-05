@@ -30,7 +30,6 @@ module type Regalloc = sig
 
   val get_reg_oracle :
     (('info, 'asm) func -> bool) ->
-    (var -> var) ->
     (funname -> Sv.t) ->
     ('info, 'asm) func ->
     reg_oracle_t

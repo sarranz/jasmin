@@ -38,6 +38,7 @@ Require Import
   asm_gen
   asm_gen_proof
   sem_params_of_arch_extra.
+Require Import lower_glob_load_proof.
 Require Import
   armv8a_decl
   armv8a_extra
@@ -571,15 +572,25 @@ Proof.
 Qed.
 
 (* ------------------------------------------------------------------------ *)
-(* Lowering of complex addressing mode for RISC-V.
-   It is the identity on armv8a, so the proof is trivial. *)
+(* Lowering of the loads from a global. *)
+
+Lemma armv8a_glob_addrP gd s (y : var_i) e pa :
+  sem_pexpr true gd s e >>= to_pointer = ok pa ->
+  vtype y = aword Uptr ->
+  sem_sopn gd (Oarmv8a (ARMv8A_op ADR default_opts)) s [:: Lvar y] [:: e]
+  = ok (with_vm s (evm s).[y <- Vword pa]).
+Proof.
+  t_xrbindP=> ve ok_ve ok_pa hty.
+  rewrite /sem_sopn /= ok_ve /= /exec_sopn /= ok_pa /=.
+  by rewrite write_var_eq_type //= hty.
+Qed.
 
 Lemma armv8a_hlaparams : h_lower_addressing_params (ap_lap armv8a_params).
 Proof.
   split=> /=.
-  + by move=> _ ? _ [<-].
-  + move=> _ ? _ [<-] _ fd ->; by exists fd.
-  move=> ???? _ ? _ ?? [<-]; exact: (wiequiv_f_eq (scP := sCP_stack)).
+  + exact: (lower_glob_load_prog_invariants (sip := sip_of_asm_e)).
+  + exact: (lower_glob_load_fd_invariants (sip := sip_of_asm_e)).
+  by move=> > /(it_lower_glob_load_progP (sip := sip_of_asm_e) armv8a_glob_addrP).
 Qed.
 
 (* ------------------------------------------------------------------------ *)
@@ -722,7 +733,7 @@ Proof.
 
   move=> /sem_sop2I /= [b0 [b1 [b [hb0 hb1 hb ?]]]]; subst v.
   move: hb.
-  rewrite /mk_sem_sop2 /=.
+  rewrite /sem_sop2_typed /mk_sem_op /=.
   move=> [?]; subst b.
 
   have hincl0 := xgetflag_ex eqf hr0 hv0.
@@ -756,7 +767,7 @@ Proof.
   move=> /sem_sop2I /= [b0 [b1 [b [hb0 hb1 hb ?]]]]; subst v.
 
   move: hb.
-  rewrite /mk_sem_sop2 /=.
+  rewrite /sem_sop2_typed /mk_sem_op /=.
   move=> [?]; subst b.
 
   have hc0 := value_uincl_to_bool_value_of_bool hincl0 hb0 hv0'.
@@ -782,7 +793,7 @@ Proof.
   move=> /sem_sop2I /= [b0 [b1 [b [hb0 hb1 hb ?]]]]; subst v.
 
   move: hb.
-  rewrite /mk_sem_sop2 /=.
+  rewrite /sem_sop2_typed /mk_sem_op /=.
   move=> [?]; subst b.
 
   have hc0 := value_uincl_to_bool_value_of_bool hincl0 hb0 hv0'.
@@ -843,7 +854,7 @@ Lemma sem_sopns_fopns_args s lc :
 Proof.
   elim: lc s => //= -[[xs o] es ] lc ih s.
   rewrite /sem_fopn_args /sem_sopn_t /=; case: sem_rexprs => //= >.
-  by rewrite /exec_sopn /= /sopn_sem /Oarmv8a; case: i_valid => //=;
+  by rewrite /exec_sopn /=; case: id_valid => //=;
     case : app_sopn => //= >; case write_lexprs.
 Qed.
 
@@ -854,7 +865,7 @@ Proof.
   case: lvs => // -[] // x [] // -[] // y [] //.
   case: args => // -[] // [] // z [] // [] // [] // w [] //=.
   t_xrbindP => vz hz _ vw hw <- <-.
-  rewrite /exec_sopn /= /sopn_sem /sopn_sem_ /= /swap_semi.
+  rewrite /exec_sopn /= /swap_semi.
   t_xrbindP => /= _ wz hvz ww hvw <- <- /=.
   t_xrbindP => _ vm1 /set_varP [_ htrx ->] <- _ vm2 /set_varP [_ htry ->] <- <-
     /eqP hxw /eqP hyx /and4P [hxt hyt hzt hwt] <-.
@@ -886,7 +897,7 @@ Proof.
   set xi := {| v_var := _ |}.
   case: args => // -[] // [] // y [] // [] // [] // [] // w [] // imm [] //=.
   t_xrbindP => vy hvy <-.
-  rewrite /exec_sopn /= /sopn_sem /sopn_sem_ /=; t_xrbindP
+  rewrite /exec_sopn /=; t_xrbindP
     => /= n w1 hw1 w2 hw2 ? <- /=; subst n.
   t_xrbindP => ? vm1 hsetx <- <- /= /eqP hne.
   move=> /andP [] hxtty /andP [] hyty _ <- hmap hlom.
@@ -961,7 +972,7 @@ Proof.
     exists s' => //.
     move: hsemargs hexec hwrite => /=.
     t_xrbindP => vs _ ?; subst xs.
-    rewrite /exec_sopn /= /sopn_sem /=.
+    rewrite /exec_sopn /=.
     t_xrbindP=> w w' /truncate_wordP [hws' ?]; subst w'.
     case: vs => // -[?] ?; subst w ys.
     t_xrbindP=> m0 vm0 hsetx ??; subst m0 m'.
@@ -991,7 +1002,7 @@ Proof.
   exists s' => //.
   move: hsemargs hexec hwrite => /=.
   t_xrbindP => vs _ ?; subst xs.
-  rewrite /exec_sopn /= /sopn_sem /=.
+  rewrite /exec_sopn /=.
   t_xrbindP=> w w' /truncate_wordP [hws' ?]; subst w'.
   case: vs => // -[?] ?; subst w ys.
   t_xrbindP=> m0 vm0 hsetx ??; subst m0 m'.
@@ -1081,7 +1092,7 @@ Proof.
   case: ifP => // hmn /negPf hs.
   case: opt hmn hs => sho sz hmn /= hs.
   case: sho hs => [sk | ] hs; first by [].
-  rewrite /exec_sopn /sopn_sem /sopn_sem_ /=.
+  rewrite /exec_sopn /=.
   rewrite /semi_to_atype.
   move: (computational_eq _) (computational_eq _) => e1 e2.
   rewrite <- e1, <- e2.

@@ -807,10 +807,10 @@ case hws: (ws <= reg_size)%CMP in hops.
     [// | a0 [// | a1 [// | a2 [// | a3 rest]]]] hidc hca hcd.
   + by rewrite /= /= /= in hidc; move: hidc; rewrite !andbF.
   + move: hca; rewrite /check_sopn_args /= => /and3P [hca1 hca2 _].
-    rewrite /check_sopn_arg /= in hca1 hca2.
+    rewrite /check_sopn_arg /= /assemble_word_load /= in hca1 hca2.
     case hxr: (xreg_of_var ii x) => [r|//] in hca1 hca2.
     have hxrI := xreg_of_varI hxr.
-    case: r hxr hxrI hca1 hca2 => [r|r|r|||] hxr hxrI hca1 hca2;
+    case: r hxr hxrI hca1 hca2 => [r|r|r|r|||] hxr hxrI hca1 hca2;
       try (by move: hxrI).
     + move: hca1 hca2; rewrite andbT /compat_imm /= => /orP [/eqP ha1|//] /orP [/eqP ha2|//].
       rewrite orbF in ha2. move: ha2 => /eqP/eqP ha2.
@@ -853,10 +853,10 @@ case hws: (ws <= reg_size)%CMP in hops.
     [// | a0 [// | a1 [// | a2 [// | a3 rest]]]] hidc hca hcd.
   + by rewrite /= /= /= in hidc; move: hidc; rewrite !andbF.
   + move: hca; rewrite /check_sopn_args /= => /and3P [hca1 hca2 _].
-    rewrite /check_sopn_arg /= in hca1 hca2.
+    rewrite /check_sopn_arg /= /assemble_word_load /= in hca1 hca2.
     case hxr: (xreg_of_var ii x) => [r|//] in hca1 hca2.
     have hxrI := xreg_of_varI hxr.
-    case: r hxr hxrI hca1 hca2 => [r|r|r|||] hxr hxrI hca1 hca2;
+    case: r hxr hxrI hca1 hca2 => [r|r|r|r|||] hxr hxrI hca1 hca2;
       try (by move: hxrI).
     + (* x compiles to Reg: contradicts check_arg_kind a1 CAxmm *)
       move: hidc; rewrite /= /= /= => /and3P [h0 h1 h2].

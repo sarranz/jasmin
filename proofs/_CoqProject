@@ -110,6 +110,12 @@ compiler/dead_code.v
 compiler/dead_code_proof.v
 compiler/direct_call_proof.v
 compiler/hoare_valid.v
+compiler/toec_prog.v
+compiler/toec_proof.v
+compiler/toec_for.v
+compiler/toec_for_proof.v
+compiler/toec_while.v
+compiler/toec_while_proof.v
 compiler/inline.v
 compiler/inline_proof.v
 compiler/insert_renaming.v
@@ -126,6 +132,8 @@ compiler/linearization.v
 compiler/load_constants_in_cond.v
 compiler/load_constants_in_cond_proof.v
 compiler/lowering.v
+compiler/lower_glob_load.v
+compiler/lower_glob_load_proof.v
 compiler/lower_spill.v
 compiler/lower_spill_proof.v
 compiler/makeReferenceArguments.v
@@ -213,6 +221,7 @@ lang/memory_example.v
 lang/memory_model.v
 lang/mix_to_small_steps.v
 lang/one_varmap.v
+lang/op_semi.v
 lang/operators.v
 lang/psem.v
 lang/psem_defs.v
@@ -222,8 +231,12 @@ lang/pseudo_operator.v
 lang/psem_facts.v
 lang/relational_logic.v
 lang/safety_common.v
+lang/safety_cond.v
+lang/safety_cond_facts.v
 lang/sem_one_varmap.v
+lang/sem_op_total.v
 lang/sem_op_typed.v
+lang/sem_op_typed_facts.v
 lang/sem_one_varmap_facts.v
 lang/sem_params.v
 lang/sem_type.v
