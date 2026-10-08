@@ -195,7 +195,7 @@ Record compiler_params
   refresh_instr_info: funname -> _ufundef -> _ufundef;
   warning          : instr_info -> warning_msg -> instr_info;
   insert_renaming  : fun_info -> bool;
-  fresh_var_ident  : v_kind -> instr_info -> int -> string -> atype -> Ident.ident;
+  fresh_var_ident  : v_kind -> instr_info -> int -> option Ident.ident -> string -> atype -> Ident.ident;
   spill_to_mmx     : var -> bool;
   slh_info         : _uprog → funname → seq slh_t * seq slh_t;
   stack_zero_info  : funname -> option (stack_zero_strategy * option wsize);
@@ -319,12 +319,12 @@ Definition compiler_first_part (to_keep: seq funname) (p: uprog) : cexec uprog :
   Let pg := remove_glob_prog pe in
   let pg := cparams.(print_uprog) RemoveGlobal pg in
 
-  Let pp := load_constants_prog (fresh_var_ident cparams (Reg (Normal, Direct))) aparams.(ap_plp) pg in
+  Let pp := load_constants_prog (λ ii n, fresh_var_ident cparams (Reg (Normal, Direct)) ii n None) aparams.(ap_plp) pg in
   let pp := cparams.(print_uprog) LoadConstantsInCond pp in
 
   Let _ :=
     assert
-      (lop_fvars_correct loparams (fresh_var_ident cparams (Reg (Normal, Direct)) dummy_instr_info 0) (p_funcs pp))
+      (lop_fvars_correct loparams (fresh_var_ident cparams (Reg (Normal, Direct)) dummy_instr_info 0 None) (p_funcs pp))
       (pp_internal_error_s "lowering" "lowering check fails")
   in
 
@@ -332,7 +332,7 @@ Definition compiler_first_part (to_keep: seq funname) (p: uprog) : cexec uprog :
     lower_prog
       (lop_lower_i loparams)
       (warning cparams)
-      (fresh_var_ident cparams (Reg (Normal, Direct)) dummy_instr_info 0)
+      (fresh_var_ident cparams (Reg (Normal, Direct)) dummy_instr_info 0 None)
       pp
   in
   let p := cparams.(print_uprog) LowerInstruction p in
@@ -440,7 +440,7 @@ Definition compiler_front_end (entries: seq funname) (p: uprog) : cexec sprog :=
   in
   let ps : sprog := cparams.(print_sprog) StackAllocation ps in
 
-  Let ps := (ap_lap aparams).(lap_lower_address) (fresh_var_ident cparams (Reg (Normal, Direct)) dummy_instr_info 0) ps in
+  Let ps := (ap_lap aparams).(lap_lower_address) (fresh_var_ident cparams (Reg (Normal, Direct)) dummy_instr_info 0 None) ps in
   let ps := cparams.(print_sprog) LowerAddressing ps in
 
   let returned_params fn :=

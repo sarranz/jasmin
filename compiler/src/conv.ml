@@ -397,18 +397,19 @@ let error_of_cerror pp_err e =
 (* -------------------------------------------------------------------------- *)
 let fresh_var_ident =
   let memo = Hashtbl.create 5 in
-  fun r (i_loc, _) num n st ->
+  fun r (i_loc, _) num src n st ->
     let k = (r, i_loc.L.uid_loc, num, n, st) in
     match Hashtbl.find memo k with
     | x -> x
     | exception Not_found ->
         let ty = ty_of_cty st in
+        let v_annot = match src with Some x -> x.v_annot | None -> [] in
         let v_annot =
           (* When generating an mmx variable, we add the #[mmx] annotation
              for the sake of clarity when printing programs *)
           match r with
-          | Wsize.Reg (Extra, _) -> [(L.mk_loc L._dummy "mmx", None)]
-          | _ -> []
+          | Wsize.Reg (Extra, _) -> Annotations.add_symbol ~loc:L._dummy "mmx" v_annot
+          | _ -> v_annot
         in
         let x = V.mk n r ty i_loc.L.base_loc v_annot in
         Hashtbl.add memo k x;

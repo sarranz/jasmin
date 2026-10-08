@@ -209,7 +209,7 @@ let memory_analysis pp_sr is_fine_grained pp_err ~debug callee_saved_strategy up
   in
 
   let sp' =
-    match Arch.aparams.ap_lap (Conv.fresh_var_ident (Reg (Normal, Direct)) IInfo.dummy (Uint63.of_int 0)) sp with
+    match Arch.aparams.ap_lap (Conv.fresh_var_ident (Reg (Normal, Direct)) IInfo.dummy (Uint63.of_int 0) None) sp with
     | Utils0.Ok sp -> sp
     | Utils0.Error e ->
       let e = Conv.error_of_cerror pp_err e in

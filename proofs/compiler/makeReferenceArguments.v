@@ -15,22 +15,22 @@ End E.
 
 Section Section.
 Context `{asmop:asmOp}.
-Context (fresh_reg_ptr : instr_info -> int -> string -> atype -> Ident.ident).
+Context (fresh_reg_ptr : instr_info -> int -> option Ident.ident -> string -> atype -> Ident.ident).
 Context (p : uprog).
 
-Definition with_id vi ii ctr id ty :=
-  {| v_var := {| vtype := ty; vname := fresh_reg_ptr ii ctr id ty |};
-     v_info := vi |}.
+Definition with_id (x : var_i) ii ctr id ty :=
+  {| v_var := {| vtype := ty; vname := fresh_reg_ptr ii ctr (Some x.(v_var).(vname)) id ty |};
+     v_info := x.(v_info) |}.
 
 Definition is_reg_ptr_expr doit ii ctr id ty e :=
   match e with
   | Pvar x' =>
     if [&& doit, is_aarr (vtype x'.(gv)), convertible ty (vtype x'.(gv)) & (is_glob x' || ~~is_reg_ptr x'.(gv))] then
-      Some (with_id x'.(gv).(v_info) ii ctr id ty)
+      Some (with_id x'.(gv) ii ctr id ty)
     else None
   | Psub _ ws len x' _ =>
     if doit && (convertible ty (aarr ws len)) then
-      Some (with_id x'.(gv).(v_info) ii ctr id ty)
+      Some (with_id x'.(gv) ii ctr id ty)
     else None
   | _      => None
   end.
@@ -39,10 +39,10 @@ Definition is_reg_ptr_lval doit ii ctr id ty r :=
   match r with
   | Lvar x' =>
     if doit && ~~is_reg_ptr x' then
-          Some (with_id x'.(v_info) ii ctr id ty)
+          Some (with_id x' ii ctr id ty)
     else None
   | Lasub _ _ _ x' _ =>
-    if doit then Some (with_id x'.(v_info) ii ctr id ty) else None
+    if doit then Some (with_id x' ii ctr id ty) else None
   | _      => None
   end.
 

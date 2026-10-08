@@ -27,7 +27,7 @@ Section ASM_OP.
 
 Context `{asmop : asmOp}.
 Context {LC : LoopCounter}.
-Context (fresh_var_ident: v_kind -> instr_info -> int -> string -> atype -> Ident.ident).
+Context (fresh_var_ident: v_kind -> instr_info -> int -> option Ident.ident -> string -> atype -> Ident.ident).
 Context (spill_to_mmx : var -> bool).
 
 Definition to_spill_e s e :=
@@ -196,7 +196,7 @@ Definition init_map fi (s:Sv.t) :=
       end in
     let ty := vtype x in
     let n := (Ident.id_name n ++ "_spill")%string in
-    (Mvar.set m x {| vname := fresh_var_ident k (entry_info_of_fun_info fi) count n ty; vtype := ty |}
+    (Mvar.set m x {| vname := fresh_var_ident k (entry_info_of_fun_info fi) count (Some x.(vname)) n ty; vtype := ty |}
     , succ count))
     s (Mvar.empty var, 0%uint63).
 

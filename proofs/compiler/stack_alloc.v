@@ -907,13 +907,13 @@ Context
   (region_annot : bool)
   (is_fine_grained : var_i -> bool)
   (is_move_op : asm_op_t -> bool)
-  (fresh_var_ident  : v_kind -> Uint63.int -> string -> atype -> Ident.ident)
+  (fresh_var_ident  : v_kind -> Uint63.int -> option Ident.ident -> string -> atype -> Ident.ident)
   (pp_sr : sub_region -> pp_error)
 .
 
 Definition clone (x:var) n :=
   let xn :=
-    fresh_var_ident (Ident.id_kind x.(vname)) n (Ident.id_name x.(vname)) x.(vtype)
+    fresh_var_ident (Ident.id_kind x.(vname)) n (Some x.(vname)) (Ident.id_name x.(vname)) x.(vtype)
   in
   {| vtype := x.(vtype); vname := xn |}.
 
@@ -1542,12 +1542,10 @@ Definition slot_range_get
   if expr.is_const e is Some i then (i * mk_scale aa ws, wsize_size ws)%Z
   else (0, size_slot a)%Z.
 
-(* An access through [x] to the slot [s] is fine grained when [x], or the
-   variable [s] is named after, is an array whose declaration carries the
-   [asm_ct_fine_grained] annotation (decided by [is_fine_grained]). *)
-Definition fine_grained (x : var_i) (s : slot) : bool :=
-  let fine (y : var_i) := is_fine_grained y && is_aarr y.(vtype) in
-  fine x || fine (mk_var_i s).
+(* An access through [x] is fine grained when [x] is an array whose
+   annotations carry [asm_ct_fine_grained] (decided by [is_fine_grained]). *)
+Definition fine_grained (x : var_i) : bool :=
+  is_fine_grained x && is_aarr x.(vtype).
 
 (* The size in bytes of the elements of an array variable. *)
 Definition elem_size (x : var) : Z :=
@@ -1575,9 +1573,9 @@ Definition slot_of_sr
   let s := sr.(sr_region).(r_slot) in
   let z := sr.(sr_zone) in
   if concrete_zone s z is Some (ofs', len') then 
-    Some (s, slot_infos (fine_grained x s) (elem_size x) s (ofs + ofs')%Z len)
+    Some (s, slot_infos (fine_grained x) (elem_size x) s (ofs + ofs')%Z len)
   else
-    Some (s, slot_infos (fine_grained x s) (elem_size x) s ofs (size_slot s)).
+    Some (s, slot_infos (fine_grained x) (elem_size x) s ofs (size_slot s)).
   
 Definition slot_e
   (rm : region_map) (e : pexpr) : option (slot * seq ii_slot_info) :=
@@ -1852,7 +1850,7 @@ Definition get_inst
     let esz := elem_size param in
     let '(fine_caller, esz_caller) :=
       match e with
-      | Pvar x | Psub _ _ _ x _ => (fine_grained x.(gv) a, elem_size x.(gv))
+      | Pvar x | Psub _ _ _ x _ => (fine_grained x.(gv), elem_size x.(gv))
       | _ => (false, size_slot a)
       end
     in
@@ -1874,7 +1872,7 @@ Definition get_inst
         inst_callee := ce;
       |}
     in
-    ok [seq mk ce | ce <- slot_infos (fine_grained param param) esz param 0 param_len]
+    ok [seq mk ce | ce <- slot_infos (fine_grained param) esz param 0 param_len]
   else ok [::].
 
 Definition get_inst_arg
@@ -2296,7 +2294,7 @@ Definition init_params mglob stack disj lmap rmap sao_params params :=
   fmapM2 (stk_ierror_no_var "invalid function info")
     (init_param mglob stack) (disj, lmap, rmap) sao_params params.
 
-Definition fresh_reg := fresh_var_ident (Reg (Normal, Direct)) 0.
+Definition fresh_reg := fresh_var_ident (Reg (Normal, Direct)) 0 None.
 
 Definition alloc_fd_aux P p_extra mglob (local_alloc: funname -> stk_alloc_oracle_t) sao fd : cexec _ufundef :=
   let vrip := {| vtype := aword Uptr; vname := p_extra.(sp_rip) |} in
