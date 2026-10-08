@@ -47,10 +47,10 @@ exception CtTypeError of (Format.formatter -> unit)
 let error fmt =
   Format.kdprintf (fun msg -> raise (CtTypeError msg)) fmt
 
-(* Slot standing for memory accesses that carry no array annotation: we
+(* Cell standing for memory accesses that carry no array annotation: we
    dont know which region is accessed, but we interpret it as disjoint from
    every other region. *)
-let unknown_mem_slot = "%unknown_mem"
+let unknown_mem_cell = "%unknown_mem"
 
 (* Abstract region standing for global data: we assume globals are read-only
    and public and globals are not mentioned in call instantiation
@@ -63,18 +63,31 @@ module Env = struct
     public : SS.t;
   }
 
-  let get (env : t) (slot : string) : Level.t =
-    match SM.find_opt slot env.levels with
+  let empty : t = { levels = SM.empty; public = SS.empty }
+
+  let get (env : t) (cell : string) : Level.t =
+    match SM.find_opt cell env.levels with
     | Some level -> Level.norm env.public level
-    | None -> error "unknown slot: %s" slot
+    | None -> error "unknown slot: %s" cell
 
-  let set (env : t) (slot : string) (level : Level.t) : t =
-    { env with levels = SM.add slot (Level.norm env.public level) env.levels }
+  let set (env : t) (cell : string) (level : Level.t) : t =
+    { env with
+      levels = SM.add cell (Level.norm env.public level) env.levels }
 
-  let use_public (env : t) (slot : string) : t =
-    match get env slot with
+  (* A weak update: the cell may keep what it held. *)
+  let weaken (env : t) (cell : string) (level : Level.t) : t =
+    set env cell (Level.join (get env cell) level)
+
+  let keys (env : t) : string list = List.map fst (SM.bindings env.levels)
+
+  let public (env : t) : SS.t = env.public
+
+  let with_public (env : t) (public : SS.t) : t = { env with public }
+
+  let use_public (env : t) (cell : string) : t =
+    match get env cell with
     | Level.Public -> env
-    | Level.Secret -> error "leak: secret value in %s leaked" slot
+    | Level.Secret -> error "leak: secret value in %s leaked" cell
     | Level.Poly variables ->
         { env with public = SS.union variables env.public }
 
@@ -93,30 +106,23 @@ module Env = struct
     { levels; public }
 
   let le (first : t) (second : t) : bool =
-    let held (env : t) (slot : string) : Level.t =
-      Option.value ~default:Level.Public (SM.find_opt slot env.levels)
+    let held (env : t) (cell : string) : Level.t =
+      Option.value ~default:Level.Public (SM.find_opt cell env.levels)
     in
     SS.subset first.public second.public
     && SM.for_all
-         (fun slot level ->
+         (fun cell level ->
            Level.le (Level.norm first.public level)
-             (Level.norm second.public (held second slot)))
+             (Level.norm second.public (held second cell)))
          first.levels
-
-  let write (env : t) ~(strong_write : bool) (memory_slots : string list)
-      (slot : string) (level : Level.t) : t =
-    if slot = unknown_mem_slot then env
-    else if strong_write || not (List.mem slot memory_slots) then
-      set env slot level
-    else set env slot (Level.join (get env slot) level)
 end
-
-module OffsetSet = Set.Make (Z)
 
 module Region = struct
   type t = { mem_slot : string; offset : Z.t; size : Z.t }
 
   let limit (region : t) : Z.t = Z.add region.offset region.size
+
+  let is_global (region : t) : bool = region.mem_slot = global_mem_region
 
   let parse_array_index (name : string) : (string * Z.t) option =
     let name_length = String.length name in
@@ -179,92 +185,121 @@ module Annots = struct
   let of_body ~globals body : t array = Array.map (of_instr ~globals) body
 end
 
-module MemLayout = struct
-  
-  module Boundaries = struct
-    type t = OffsetSet.t SM.t
+module Partition = struct
+  type block = {
+    location : string;
+    start : Z.t;
+    limit : Z.t;
+    full : bool; (* the block covers its whole location *)
+  }
 
-    let empty : t = SM.empty
-    
-    let cut (boundaries : t) (region : Region.t) : t =
-      SM.update region.mem_slot
-      (fun offsets ->
-        let offsets = Option.value ~default:OffsetSet.empty offsets in
-        Some
-        (OffsetSet.add region.offset
-        (OffsetSet.add (Region.limit region) offsets)))
-        boundaries
-        
-    let cut_all (boundaries : t) (regions : Region.t list) : t =
-      List.fold_left cut boundaries regions
+  let block_size (block : block) : Z.t = Z.sub block.limit block.start
 
-  end
+  let blocks_size (blocks : block list) : Z.t =
+    List.fold_left (fun acc block -> Z.add acc (block_size block)) Z.zero blocks
 
-  module Block = struct
-    type t = { start : Z.t; limit : Z.t; slot : string }
+  let block_as_cell (block : block) : string =
+    if block.full then block.location
+    else
+      Printf.sprintf "%s[%s..%s)" block.location (Z.to_string block.start)
+        (Z.to_string block.limit)
 
-    let size (block : t) : Z.t = Z.sub block.limit block.start
-  end
-        
-  type t = Block.t list SM.t
+  let blocks_as_cells (blocks : block list) : string list =
+    List.map block_as_cell blocks
 
-  let of_boundaries (boundaries : Boundaries.t) : t =
+  let blocks_of_offsets (location : string) (offsets : Z.t list) : block list =
+    (* [offsets] must be sorted and contain the boundaries of the blocks. *)
+
     let rec consecutive_pairs = function
       | x :: (y :: _ as rest) -> (x, y) :: consecutive_pairs rest
       | _ -> []
     in
-    let make_block ~mem_slot (start, limit) =
-      let slot =
-        Printf.sprintf "%s[%s..%s)" mem_slot (Z.to_string start)
-          (Z.to_string limit)
-      in
-      { Block.start; limit; slot }
-    in
-    let to_blocks mem_slot offsets =
-      match consecutive_pairs (OffsetSet.elements offsets) with
-      | [ (start, limit) ] -> [ { Block.start; limit; slot = mem_slot } ]
-      | ranges -> List.map (make_block ~mem_slot) ranges
-    in
-    SM.mapi to_blocks boundaries
+    match consecutive_pairs offsets with
+    | [ (start, limit) ] -> [ { location; start; limit; full = true } ]
+    | ranges ->
+        List.map
+          (fun (start, limit) -> { location; start; limit; full = false })
+          ranges
 
-  let overlapping_blocks (layout : t) (region : Region.t) : Block.t list =
+  let block_overlaps ~(start : Z.t) ~(limit : Z.t) (block : block) : bool =
+    Z.lt block.start limit && Z.lt start block.limit
+
+  let block_within ~(start : Z.t) ~(limit : Z.t) (block : block) : bool =
+    Z.leq start block.start && Z.leq block.limit limit
+
+  module OffsetSet = Set.Make (Z)
+
+  (* The offsets at which each location is cut: the bounds of the ranges of
+     it that are accessed. *)
+  type boundaries = OffsetSet.t SM.t
+
+  let cut (boundaries : boundaries) ~(location : string) ~(start : Z.t)
+      ~(limit : Z.t) : boundaries =
+    SM.update location
+      (fun offsets ->
+        let offsets = Option.value ~default:OffsetSet.empty offsets in
+        Some (OffsetSet.add start (OffsetSet.add limit offsets)))
+      boundaries
+
+  type t = block list SM.t
+
+  let of_boundaries (boundaries : boundaries) : t =
+    SM.mapi
+      (fun location offsets ->
+        blocks_of_offsets location (OffsetSet.elements offsets))
+      boundaries
+end
+
+module MemLayout = struct
+  type t = Partition.t
+
+  let overlapping_blocks (layout : t) (region : Region.t) :
+      Partition.block list =
     match SM.find_opt region.mem_slot layout with
     | None -> []
     | Some blocks ->
-        let overlaps (block : Block.t) =
-          Z.lt block.start (Region.limit region) && Z.lt region.offset block.limit
-        in
-        List.filter overlaps blocks
+        List.filter
+          (Partition.block_overlaps ~start:region.offset
+             ~limit:(Region.limit region))
+          blocks
 
-  let blocks_of_regions (layout : t) (regions : Region.t list) : Block.t list =
+  let blocks_of_regions (layout : t) (regions : Region.t list) :
+      Partition.block list =
     match regions with
     | [] -> []
     | _ ->
         let seen = Hashtbl.create 17 in
-        let is_new (block : Block.t) =
-          if Hashtbl.mem seen block.slot then false
+        let is_new (block : Partition.block) =
+          if Hashtbl.mem seen (Partition.block_as_cell block) then false
           else begin
-            Hashtbl.add seen block.slot (); true
+            Hashtbl.add seen (Partition.block_as_cell block) (); true
           end
         in
         regions
         |> List.concat_map (overlapping_blocks layout)
         |> List.filter is_new
 
-  let block_slots (blocks : Block.t list) : string list =
-    List.map (fun (block : Block.t) -> block.slot) blocks
-
   let slots (layout : t) : string list =
     layout
     |> SM.bindings
-    |> List.concat_map (fun (_, blocks) -> block_slots blocks)
+    |> List.concat_map (fun (_, blocks) -> Partition.blocks_as_cells blocks)
     |> List.sort_uniq String.compare
 
-  let total_bytes (blocks : Block.t list) : Z.t =
-    List.fold_left (fun acc block -> Z.add acc (Block.size block)) Z.zero blocks
+  let stack_frame_cells (layout : t) f_def : SS.t =
+    match
+      Annotations.get_stack_frame_annot (FInfo.user_annot f_def.asm_fd_info)
+    with
+    | None -> SS.empty
+    | Some stack_frame ->
+        List.concat_map
+          (fun (mem_slot, _) ->
+            Partition.blocks_as_cells
+              (Option.value ~default:[] (SM.find_opt mem_slot layout)))
+          stack_frame
+        |> SS.of_list
 
   type translated_block = {
-    callee_block : Block.t;
+    callee_block : Partition.block;
     caller_region : Region.t;
   }
 
@@ -273,10 +308,10 @@ module MemLayout = struct
     match Region.translation callee_reg caller_reg with
     | None -> None
     | Some translate ->
-        let subregion (block : Block.t) : Region.t =
+        let subregion (block : Partition.block) : Region.t =
           { Region.mem_slot = callee_reg.mem_slot;
             offset = block.start;
-            size = Block.size block }
+            size = Partition.block_size block }
         in
         Some
           (List.map
@@ -286,132 +321,162 @@ module MemLayout = struct
              (overlapping_blocks callee_layout callee_reg))
 
   let of_annots layout_of_callee annots : t =
+    let cut_regions boundaries regions =
+      List.fold_left
+        (fun boundaries (region : Region.t) ->
+          Partition.cut boundaries ~location:region.mem_slot
+            ~start:region.offset ~limit:(Region.limit region))
+        boundaries regions
+    in
     let cut_inst_entry callee_layout boundaries (callee_reg, caller_regs) =
-      let boundaries = Boundaries.cut_all boundaries caller_regs in
+      let boundaries = cut_regions boundaries caller_regs in
       match callee_layout, caller_regs with
       | Some callee_layout, [ caller_reg ] ->
           translate_blocks callee_layout callee_reg caller_reg
           |> Option.value ~default:[]
           |> List.map (fun (b : translated_block) -> b.caller_region)
-          |> Boundaries.cut_all boundaries
+          |> cut_regions boundaries
       | _ -> boundaries
     in
     let cut_annot boundaries = function
       | Annots.Access regions ->
-          List.filter (fun (r : Region.t) -> r.mem_slot <> global_mem_region)
-            regions
-          |> Boundaries.cut_all boundaries
+          List.filter (fun r -> not (Region.is_global r)) regions
+          |> cut_regions boundaries
       | Annots.Call { callee; inst } ->
           List.fold_left (cut_inst_entry (layout_of_callee callee)) boundaries inst
     in
-    let collect_boundaries = Array.fold_left cut_annot Boundaries.empty in
-    annots |> collect_boundaries |> of_boundaries
-end
+    let collect_boundaries = Array.fold_left cut_annot SM.empty in
+    annots |> collect_boundaries |> Partition.of_boundaries
 
-module MemoryInstantiation = struct
-  type caller_block = string * bool
+  (* The caller cell that a callee block represents.
+   [covers] is true when the caller cell is covered exactly. *)
+  type caller_cell = { cell : string; covers : bool }
 
-  type t = caller_block list SM.t
+  type instantiation = caller_cell list SM.t
 
-  let empty : t = SM.empty
+  let caller_cells covers (blocks : Partition.block list) : caller_cell list =
+    List.map (fun block -> { cell = Partition.block_as_cell block; covers }) blocks
 
-  type binding = {
-    bd_callee : string;
-    bd_callers : MemLayout.Block.t list;
-    bd_covers : bool;
-  }
-
-  let bindings_of_entry caller_layout callee_layout
-      (callee_region, caller_regions) : binding list =
+  let instantiate_entry caller_layout callee_layout
+      (callee_region, caller_regions) : (string * caller_cell list) list =
     let translated_bindings translated =
       List.map
-        (fun ({ callee_block; caller_region } : MemLayout.translated_block) ->
-          { bd_callee = callee_block.slot;
-            bd_callers =
-              MemLayout.overlapping_blocks caller_layout caller_region;
-            bd_covers = true })
+        (fun { callee_block; caller_region } ->
+          ( Partition.block_as_cell callee_block,
+            caller_cells true
+              (overlapping_blocks caller_layout caller_region) ))
         translated
     in
     let cover_bindings () =
-      let caller_blocks = MemLayout.blocks_of_regions caller_layout caller_regions in
-      let caller_bytes = MemLayout.total_bytes caller_blocks in
+      let caller_blocks = blocks_of_regions caller_layout caller_regions in
+      let caller_bytes = Partition.blocks_size caller_blocks in
       List.map
-        (fun (callee_block : MemLayout.Block.t) ->
-          { bd_callee = callee_block.slot;
-            bd_callers = caller_blocks;
-            bd_covers =
-              Z.equal caller_bytes (MemLayout.Block.size callee_block) })
-        (MemLayout.overlapping_blocks callee_layout callee_region)
+        (fun callee_block ->
+          ( Partition.block_as_cell callee_block,
+            caller_cells
+              (Z.equal caller_bytes (Partition.block_size callee_block))
+              caller_blocks ))
+        (overlapping_blocks callee_layout callee_region)
     in
     match caller_regions with
     | [ caller_region ] -> (
-        match
-          MemLayout.translate_blocks callee_layout callee_region caller_region
-        with
+        match translate_blocks callee_layout callee_region caller_region with
         | Some translated -> translated_bindings translated
         | None -> cover_bindings ())
     | _ -> cover_bindings ()
 
-  let of_entries caller_layout callee_layout entries : t =
-    let add mapping { bd_callee; bd_callers; bd_covers } =
-      let images =
-        List.map
-          (fun (block : MemLayout.Block.t) -> (block.slot, bd_covers))
-          bd_callers
-      in
-      SM.update bd_callee
+  let instantiate caller_layout callee_layout entries : instantiation =
+    let add inst (callee_cell, cells) =
+      SM.update callee_cell
         (fun previous ->
-          Some (List.rev_append images (Option.value ~default:[] previous)))
-        mapping
+          Some (List.rev_append cells (Option.value ~default:[] previous)))
+        inst
     in
-    List.concat_map (bindings_of_entry caller_layout callee_layout) entries
-    |> List.fold_left add empty
+    List.concat_map (instantiate_entry caller_layout callee_layout) entries
+    |> List.fold_left add SM.empty
 end
 
 type signature = {
-  slots : string list;
   layout : MemLayout.t;
   pre : Env.t;
-  post : Env.t option; (* [None] if no exit: no post; pre still applies. *)
+  post : Env.t option; (* [None] if no exit *)
 }
 
 module MemoryAccess = struct
+  type caller_cell = MemLayout.caller_cell = { cell : string; covers : bool }
+
+  type binding = { callee_cell : string; caller_cells : caller_cell list }
+
   type t = {
-    ac_slots : string list; (* The slots the instruction reads or writes *)
+    ac_cells : string list; (* The slots the instruction reads or writes *)
     ac_bytes : Z.t; (* How many bytes the instruction reads or writes. *)
     ac_unannotated : bool; (* True if the instruction has no array annotation. *)
-    ac_inst : MemoryInstantiation.t;
-        (* On a CALL, the caller/callee correspondence; empty otherwise. *)
+    ac_bindings : binding list; (* On a CALL; empty otherwise. *)
   }
+
+  let cell_bindings callee_sig (inst : MemLayout.instantiation) :
+      binding list =
+    let memory = SS.of_list (MemLayout.slots callee_sig.layout) in
+    List.map
+      (fun callee_cell ->
+        let caller_cells =
+          if SS.mem callee_cell memory then
+            Option.value ~default:[] (SM.find_opt callee_cell inst)
+          else [ { cell = callee_cell; covers = true } ]
+        in
+        { callee_cell; caller_cells })
+      (Env.keys callee_sig.pre)
+
+  let shared_cells (bindings : binding list) : SS.t =
+    List.concat_map
+      (fun b -> List.map (fun c -> c.cell) b.caller_cells)
+      bindings
+    |> List.fold_left
+         (fun (seen, shared) cell ->
+           if SS.mem cell seen then (seen, SS.add cell shared)
+           else (SS.add cell seen, shared))
+         (SS.empty, SS.empty)
+    |> snd
+
+  let weaken_shared (bindings : binding list) : binding list =
+    let shared = shared_cells bindings in
+    List.map
+      (fun b ->
+        { b with
+          caller_cells =
+            List.map
+              (fun c ->
+                { c with covers = c.covers && not (SS.mem c.cell shared) })
+              b.caller_cells })
+      bindings
 
   let resolve signatures layout : Annots.t -> t = function
     | Annots.Access regions ->
         let blocks = MemLayout.blocks_of_regions layout regions in
-        let global =
-          List.exists (fun (r : Region.t) -> r.mem_slot = global_mem_region)
-            regions
-        in
-        { ac_slots =
+        let global = List.exists Region.is_global regions in
+        { ac_cells =
             (if global then [ global_mem_region ]
-             else MemLayout.block_slots blocks);
-          ac_bytes = MemLayout.total_bytes blocks;
+             else Partition.blocks_as_cells blocks);
+          ac_bytes = Partition.blocks_size blocks;
           ac_unannotated = regions = [];
-          ac_inst = MemoryInstantiation.empty }
+          ac_bindings = [] }
     | Annots.Call { callee; inst } ->
-        let inst =
+        let bindings =
           match Hashtbl.find_opt signatures callee with
-          | Some callee ->
-              MemoryInstantiation.of_entries layout callee.layout inst
-          | None -> MemoryInstantiation.empty
+          | Some callee_sig ->
+              MemLayout.instantiate layout callee_sig.layout inst
+              |> cell_bindings callee_sig
+              |> weaken_shared
+          | None -> []
         in
-        { ac_slots = []; ac_bytes = Z.zero; ac_unannotated = true;
-          ac_inst = inst }
+        { ac_cells = []; ac_bytes = Z.zero; ac_unannotated = true;
+          ac_bindings = bindings }
 
   let resolve_all signatures layout (annots : Annots.t array) : t array =
     Array.map (resolve signatures layout) annots
 end
 
-type arch_slots = { names : string list; set : SS.t }
+type arch_cells = { names : string list; set : SS.t }
 
 module Calls = struct
   let join_into map key level : Level.t SM.t =
@@ -419,20 +484,24 @@ module Calls = struct
       (function None -> Some level | Some prev -> Some (Level.join level prev))
       map
 
-  let infer_type_substitution caller callee bindings : Env.t * Level.t SM.t =
-    let infer (env, substitution) (callee_slot, caller_slots) =
-      let caller_slots = List.map fst caller_slots in
-      match Env.get callee.pre callee_slot with
+  let infer_type_substitution caller callee
+      (bindings : MemoryAccess.binding list) : Env.t * Level.t SM.t =
+    let infer (env, substitution)
+        ({ callee_cell; caller_cells } : MemoryAccess.binding) =
+      let caller_cells =
+        List.map (fun (c : MemoryAccess.caller_cell) -> c.cell) caller_cells
+      in
+      match Env.get callee.pre callee_cell with
       | Level.Public ->
-          if caller_slots = [] then
+          if caller_cells = [] then
             error "leak: caller has no instantiation for callee's public array %s"
-            callee_slot;
-          (List.fold_left Env.use_public env caller_slots, substitution)
+            callee_cell;
+          (List.fold_left Env.use_public env caller_cells, substitution)
       | Level.Secret -> env, substitution
       | Level.Poly variables ->
           let actual_level =
-            if caller_slots = [] then Level.Secret
-            else Level.join_list (List.map (Env.get env) caller_slots)
+            if caller_cells = [] then Level.Secret
+            else Level.join_list (List.map (Env.get env) caller_cells)
           in
           let substitution' =
             SS.fold
@@ -444,58 +513,22 @@ module Calls = struct
     in
     List.fold_left infer (caller, SM.empty) bindings
 
-  let apply_postconditions caller callee_post substitution bindings : Env.t =
-    let apply posts (callee_slot, caller_slots) : Level.t SM.t =
+  let apply_postconditions caller callee_post substitution
+      (bindings : MemoryAccess.binding list) : Env.t =
+    let apply env ({ callee_cell; caller_cells } : MemoryAccess.binding) :
+        Env.t =
       let return_level =
-        Level.subst substitution (Env.get callee_post callee_slot)
+        Level.subst substitution (Env.get callee_post callee_cell)
       in
       List.fold_left
-        (fun acc (slot, covers) ->
-          let level =
-            if covers then return_level
-            else Level.join (Env.get caller slot) return_level
-          in
-          join_into acc slot level)
-        posts caller_slots
+        (fun env ({ cell; covers } : MemoryAccess.caller_cell) ->
+          if covers then Env.set env cell return_level
+          else Env.weaken env cell return_level)
+        env caller_cells
     in
-    let post_updates = List.fold_left apply SM.empty bindings in
-    SM.fold (fun slot level env -> Env.set env slot level)
-      post_updates caller
+    List.fold_left apply caller bindings
 
-  type slot_binding = string * MemoryInstantiation.caller_block list
-
-  let slot_bindings ~arch_slots callee_sig inst : slot_binding list =
-    let is_array slot : bool = not (SS.mem slot arch_slots.set) in
-    List.map
-      (fun callee_slot ->
-        if is_array callee_slot then
-          (callee_slot,
-           Option.value ~default:[] (SM.find_opt callee_slot inst))
-        else (callee_slot, [ (callee_slot, true) ]))
-      callee_sig.slots
-
-  (* The caller slots that more than one binding reaches. *)
-  let shared_slots (bindings : slot_binding list) : SS.t =
-    List.concat_map (fun (_, callers) -> List.map fst callers) bindings
-    |> List.fold_left
-         (fun (seen, shared) slot ->
-           if SS.mem slot seen then (seen, SS.add slot shared)
-           else (SS.add slot seen, shared))
-         (SS.empty, SS.empty)
-    |> snd
-
-  let weaken_shared (bindings : slot_binding list) : slot_binding list =
-    let shared = shared_slots bindings in
-    List.map
-      (fun (callee_slot, callers) ->
-        (callee_slot,
-         List.map
-           (fun (slot, covers) -> (slot, covers && not (SS.mem slot shared)))
-           callers))
-      bindings
-
-  let call_env ~arch_slots caller callee inst : Env.t * Env.t option =
-    let bindings = weaken_shared (slot_bindings ~arch_slots callee inst) in
+  let call_env caller callee bindings : Env.t * Env.t option =
     let demanded, substitution =
       infer_type_substitution caller callee bindings
     in
@@ -556,33 +589,19 @@ module Dataflow = struct
 
     let public_levels =
       Array.fold_left
-        (fun public ->
-          function Some (e : Env.t) ->
-            SS.union public e.public
+        (fun public -> function
+          | Some env -> SS.union public (Env.public env)
           | None -> public)
         SS.empty envs
     in
     (public_levels, envs.(exit))
 end
 
-let collect_slots arch_slots (layout : MemLayout.t) : string list =
-  arch_slots.names
+let collect_cells arch_cells (layout : MemLayout.t) : string list =
+  arch_cells.names
   @ List.filter
-      (fun s -> not (SS.mem s arch_slots.set))
+      (fun s -> not (SS.mem s arch_cells.set))
       (MemLayout.slots layout)
-
-let stack_frame_blocks (layout : MemLayout.t) f_def : SS.t =
-  match
-    Annotations.get_stack_frame_annot (FInfo.user_annot f_def.asm_fd_info)
-  with
-  | None -> SS.empty
-  | Some stack_frame ->
-      List.concat_map
-        (fun (mem_slot, _) ->
-          MemLayout.block_slots
-            (Option.value ~default:[] (SM.find_opt mem_slot layout)))
-        stack_frame
-      |> SS.of_list
 
 let callees f_def : string list =
   List.filter_map
@@ -632,17 +651,16 @@ let fresh an prefix : Level.t =
   an.fresh_var_counter <- an.fresh_var_counter + 1;
   Level.Poly (SS.singleton (Printf.sprintf "%s%d" prefix an.fresh_var_counter))
 
-let init_pre_env analysis ~stack_frame_blocks slots : Env.t =
+let init_pre_env analysis ~stack_frame_cells cells : Env.t =
   let env =
     List.fold_left
       (fun env s ->
         Env.set env s
-          (if SS.mem s stack_frame_blocks then Level.Secret
+          (if SS.mem s stack_frame_cells then Level.Secret
            else fresh analysis (s ^ "_")))
-      { levels = SM.empty; public = SS.empty }
-      slots
+      Env.empty cells
   in
-  let env = Env.set env unknown_mem_slot Level.Secret in
+  let env = Env.set env unknown_mem_cell Level.Secret in
   Env.set env global_mem_region Level.Public
 
 let string_of_level : Level.t -> string = function
@@ -650,7 +668,8 @@ let string_of_level : Level.t -> string = function
   | Level.Secret -> "secret"
   | Level.Poly s -> "poly{" ^ String.concat "," (SS.elements s) ^ "}"
 
-let shown_slots (s : signature) : string list * int =
+let shown_cells (cells : string list) (s : signature) :
+    string list * int =
   let uses = Hashtbl.create 97 in
   let count : Level.t -> unit = function
     | Level.Poly vars ->
@@ -662,41 +681,48 @@ let shown_slots (s : signature) : string list * int =
     | Level.Public | Level.Secret -> ()
   in
   List.iter
-    (fun slot ->
-      count (Env.get s.pre slot);
-      Option.iter (fun post -> count (Env.get post slot)) s.post)
-    s.slots;
+    (fun cell ->
+      count (Env.get s.pre cell);
+      Option.iter (fun post -> count (Env.get post cell)) s.post)
+    cells;
   let occurrences v = Option.value ~default:0 (Hashtbl.find_opt uses v) in
-  let shown slot =
-    match (Env.get s.pre slot, Option.map (fun p -> Env.get p slot) s.post) with
+  let shown cell =
+    match
+      (Env.get s.pre cell, Option.map (fun p -> Env.get p cell) s.post)
+    with
     | Level.Poly pre, Some (Level.Poly post) when SS.equal pre post ->
         SS.exists (fun v -> occurrences v > 2) pre
     | Level.Poly pre, None -> SS.exists (fun v -> occurrences v > 1) pre
     | _ -> true
   in
-  let shown = List.filter shown s.slots in
-  (shown, List.length s.slots - List.length shown)
+  let shown = List.filter shown cells in
+  (shown, List.length cells - List.length shown)
 
-let pp_slot ~slot_width ~pre_width s fmt slot : unit =
+let pp_cell ~cell_width ~pre_width s fmt cell : unit =
   let pad width text =
     text ^ String.make (max 0 (width - String.length text)) ' '
   in
   match s.post with
   | Some post ->
-      Format.fprintf fmt "%s %s -> %s" (pad slot_width slot)
-        (pad pre_width (string_of_level (Env.get s.pre slot)))
-        (string_of_level (Env.get post slot))
+      Format.fprintf fmt "%s %s -> %s" (pad cell_width cell)
+        (pad pre_width (string_of_level (Env.get s.pre cell)))
+        (string_of_level (Env.get post cell))
   | None ->
-      Format.fprintf fmt "%s %s" (pad slot_width slot)
-        (string_of_level (Env.get s.pre slot))
+      Format.fprintf fmt "%s %s" (pad cell_width cell)
+        (string_of_level (Env.get s.pre cell))
 
-let pp_signature fmt ((name : string), (s : signature)) : unit =
-  let slots, omitted = shown_slots s in
-  let width f = List.fold_left (fun w x -> max w (String.length (f x))) 0 slots in
-  let pp_slot =
-    pp_slot
-      ~slot_width:(width (fun slot -> slot))
-      ~pre_width:(width (fun slot -> string_of_level (Env.get s.pre slot)))
+let pp_signature arch_cells fmt ((name : string), (s : signature)) : unit =
+  let cells, omitted =
+    shown_cells (collect_cells arch_cells s.layout) s
+  in
+  let width f =
+    List.fold_left (fun w x -> max w (String.length (f x))) 0 cells
+  in
+  let pp_cell =
+    pp_cell
+      ~cell_width:(width (fun cell -> cell))
+      ~pre_width:
+        (width (fun cell -> string_of_level (Env.get s.pre cell)))
       s
   in
   let pp_omitted fmt n =
@@ -704,27 +730,39 @@ let pp_signature fmt ((name : string), (s : signature)) : unit =
       (if n = 1 then "" else "s")
   in
   let header = if s.post = None then name ^ ": does not return" else name ^ ":" in
-  match (slots, omitted) with
+  match (cells, omitted) with
   | [], 0 -> Format.fprintf fmt "%s" header
   | [], n -> Format.fprintf fmt "@[<v2>%s@,%a@]" header pp_omitted n
-  | slots, 0 ->
-      Format.fprintf fmt "@[<v2>%s@,%a@]" header (Utils.pp_list "@," pp_slot)
-        slots
-  | slots, n ->
+  | cells, 0 ->
+      Format.fprintf fmt "@[<v2>%s@,%a@]" header
+        (Utils.pp_list "@," pp_cell) cells
+  | cells, n ->
       Format.fprintf fmt "@[<v2>%s@,%a@,%a@]" header
-        (Utils.pp_list "@," pp_slot) slots pp_omitted n
+        (Utils.pp_list "@," pp_cell) cells pp_omitted n
 
-let pp_result fmt (name, r) : unit =
+let pp_result arch_cells fmt (name, r) : unit =
   match r with
-  | Some s -> pp_signature fmt (name, s)
+  | Some s -> pp_signature arch_cells fmt (name, s)
   | None -> Format.fprintf fmt "%s: rejected" name
 
-let pp_signatures fmt results : unit =
+let pp_signatures arch_cells fmt results : unit =
   Format.fprintf fmt "@[<v>==== asmCtChecker: signatures ====@,%a@,%s@]@."
-    (Utils.pp_list "@," pp_result)
+    (Utils.pp_list "@," (pp_result arch_cells))
     results "==== end signatures ===="
 
-module Asm_ct_checker (Arch : Arch_full.Arch) = struct
+module Asm_ct_checker
+    (Arch : Arch_full.Arch)
+    (Program : sig
+       val prog :
+         ( Arch.reg,
+           Arch.regx,
+           Arch.xreg,
+           Arch.rflag,
+           Arch.cond,
+           Arch.asm_op )
+         Arch_decl.asm_prog
+     end) =
+struct
 
   module Arch_utils = struct
     let arch = Arch.asm_e._asm
@@ -734,20 +772,69 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
     let regx_name r : string = arch_decl.toS_rx.to_string r
     let xreg_name r : string = arch_decl.toS_x.to_string r
     let flag_name f : string = arch_decl.toS_f.to_string f
+
     let rsp = reg_name arch_decl.ad_rsp
 
-    let condt_slots c : string list =
-      List.map (fun (v : Prog.var) -> v.CoreIdent.v_name) (Arch.vars_of_condt c)
-
-    let arch_slots : string list =
+    let arch_names : string list =
       List.map reg_name (Arch_decl.registers arch_decl)
       @ List.map regx_name (Arch_decl.registerxs arch_decl)
       @ List.map xreg_name (Arch_decl.xregisters arch_decl)
       @ List.map flag_name (Arch_decl.rflags arch_decl)
 
-    let arch_slots_set = SS.of_list arch_slots
+    let condt_names c : string list =
+      List.map (fun (v : Prog.var) -> v.CoreIdent.v_name) (Arch.vars_of_condt c)
 
-    let callee_saved_slots : string list =
+    let instr_desc op : _ Arch_decl.instr_desc_t =
+      arch._asm_op_decl.instr_desc_op op
+
+    (* Whether all outputs are input-independent constants: XOR r,r and
+       VPXOR x,y,y. Note that this level affects the set flags too (VPXOR
+       sets none). *)
+    let constant_output op args : bool =
+      match (instr_desc op).id_str_jas (), args with
+      | ("XOR_32" | "XOR_64"), [ Reg r1; Reg r2 ] -> r1 = r2
+      | ("VPXOR_128" | "VPXOR_256"), [ _; XReg r1; XReg r2 ] -> r1 = r2
+      | _ -> false
+
+    let size_of_ltype : Type.ltype -> int = function
+      | Type.Coq_lword ws -> Prog.size_of_ws ws
+      | Type.Coq_lbool -> 1
+
+    let register_of_arg : _ Arch_decl.asm_arg -> string option = function
+      | Reg r -> Some (reg_name r)
+      | Regx r -> Some (regx_name r)
+      | XReg r -> Some (xreg_name r)
+      | Condt _ | Addr _ | Imm _ -> None
+
+    (* The register an operand reads or writes, and how many of its bytes. *)
+    let operand_register args (op_desc, ty) : (string * int) option =
+      let register =
+        match op_desc with
+        | ADImplicit (IAreg r) -> Some (reg_name r)
+        | ADImplicit (IArflag _) -> None
+        | ADExplicit (_, n, _) ->
+            Option.bind (List.nth_opt args (Conv.int_of_nat n)) register_of_arg
+      in
+      Option.map (fun reg -> (reg, size_of_ltype ty)) register
+
+    (* The range [start, limit) of its register that an operand of [bytes]
+       bytes is its lowest bytes. *)
+    let operand_range (bytes : int) : Z.t * Z.t = (Z.zero, Z.of_int bytes)
+
+    let convention_registers tys regs : string list =
+      List.map reg_name (List.take (List.length tys) regs)
+
+    let syscall_arg_registers o : string list =
+      convention_registers
+        (Syscall.syscall_sig_s Arch.reg_size o).Syscall.scs_tin
+        Arch.call_conv.call_reg_args
+
+    let syscall_ret_registers o : string list =
+      convention_registers
+        (Syscall.syscall_sig_s Arch.reg_size o).Syscall.scs_tout
+        Arch.call_conv.call_reg_ret
+
+    let callee_saved : string list =
       List.map
         (function
           | ARReg r -> reg_name r
@@ -755,81 +842,193 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
           | AXReg r -> xreg_name r
           | ABReg f -> flag_name f)
         Arch.call_conv.callee_saved
+  end
 
-    let instr_desc op : _ Arch_decl.instr_desc_t =
-      arch._asm_op_decl.instr_desc_op op
+  (* The registers of [Program.prog], cut into blocks where it accesses them
+     partially, and the cells they give. *)
+  module Registers = struct
+    open Arch_utils
+
+    let access_widths prog : int list SM.t =
+      let accesses instr : (string * int) list =
+        match instr.asmi_i with
+        | AsmOp (op, args) ->
+            let desc = instr_desc op in
+            List.combine desc.id_in desc.id_tin
+            @ List.combine desc.id_out desc.id_tout
+            |> List.filter_map (operand_register args)
+        | Declassify_val (lty, arg) -> (
+            match register_of_arg arg with
+            | Some reg -> [ (reg, size_of_ltype lty) ]
+            | None -> [])
+        | _ -> []
+      in
+      let add widths (reg, bytes) =
+        SM.update reg
+          (fun known -> Some (bytes :: Option.value ~default:[] known))
+          widths
+      in
+      prog.asm_funcs
+      |> List.concat_map (fun (_, f_def) ->
+             List.concat_map accesses f_def.asm_fd_body)
+      |> List.fold_left add SM.empty
+
+    let registers : Partition.t =
+      let widths = access_widths Program.prog in
+      let cut width boundaries name =
+        let width = Z.of_int width in
+        let boundaries =
+          Partition.cut boundaries ~location:name ~start:Z.zero
+            ~limit:width
+        in
+        List.fold_left
+          (fun boundaries bytes ->
+            let start, limit = operand_range bytes in
+            if Z.leq limit width then
+              Partition.cut boundaries ~location:name ~start ~limit
+            else boundaries)
+          boundaries
+          (Option.value ~default:[] (SM.find_opt name widths))
+      in
+      let cut_all width names boundaries =
+        List.fold_left (cut width) boundaries names
+      in
+      let reg_bytes = Prog.size_of_ws arch_decl.reg_size in
+      let xreg_bytes = Prog.size_of_ws arch_decl.xreg_size in
+      SM.empty
+      |> cut_all reg_bytes (List.map reg_name (Arch_decl.registers arch_decl))
+      |> cut_all reg_bytes (List.map regx_name (Arch_decl.registerxs arch_decl))
+      |> cut_all xreg_bytes
+           (List.map xreg_name (Arch_decl.xregisters arch_decl))
+      |> Partition.of_boundaries
+
+    let blocks (reg : string) : Partition.block list =
+      match SM.find_opt reg registers with
+      | Some blocks -> blocks
+      | None -> error "unknown register: %s" reg
+
+    let is_register (name : string) : bool = SM.mem name registers
+
+    type coverage = {
+      within : string list;
+      straddling : string list;
+      outside : string list;
+    }
+
+    let coverage (reg : string) (bytes : int) : coverage =
+      let start, limit = operand_range bytes in
+      let within, rest =
+        List.partition (Partition.block_within ~start ~limit) (blocks reg)
+      in
+      let straddling, outside =
+        List.partition (Partition.block_overlaps ~start ~limit) rest
+      in
+      { within = Partition.blocks_as_cells within;
+        straddling = Partition.blocks_as_cells straddling;
+        outside = Partition.blocks_as_cells outside }
+
+    (* The cells of a whole register; any other cell stands for itself. *)
+    let whole (name : string) : string list =
+      match SM.find_opt name registers with
+      | Some blocks -> Partition.blocks_as_cells blocks
+      | None -> [ name ]
+
+    let rsp = whole Arch_utils.rsp
+
+    let condt_cells c : string list = List.concat_map whole (condt_names c)
 
     let regs_of_address : _ Arch_decl.address -> string list = function
       | Areg { ad_base; ad_offset; _ } ->
-          List.filter_map (Option.map reg_name) [ ad_base; ad_offset ]
+          List.concat_map whole
+            (List.filter_map (Option.map reg_name) [ ad_base; ad_offset ])
       | Arip _ -> []
   end
 
   module Syscall_clobber = struct
-    let all_but_rsp : string list =
-      List.filter (fun s -> s <> Arch_utils.rsp) Arch_utils.arch_slots
-
     let syscall_kill : string list =
-      let saved = SS.of_list Arch_utils.callee_saved_slots in
-      List.filter (fun s -> not (SS.mem s saved)) Arch_utils.arch_slots
+      let saved = SS.of_list Arch_utils.callee_saved in
+      List.filter (fun s -> not (SS.mem s saved)) Arch_utils.arch_names
 
-    let slots : string list = syscall_kill (* change to `all_but_rsp` for only preserving rsp *)
+    let names : string list = syscall_kill
   end
 
   module Instruction = struct
-    let implicit_slot : _ Arch_decl.implicit_arg -> string = function
-      | IArflag f -> Arch_utils.flag_name f
-      | IAreg r -> Arch_utils.reg_name r
-
-    let process_address env mem_slots kind address : Env.t * string list =
-      let address_slots = Arch_utils.regs_of_address address in
+    let process_address env mem_cells kind address : Env.t * string list =
+      let address_cells = Registers.regs_of_address address in
       match kind with
-      | AK_compute -> env, address_slots
+      | AK_compute -> env, address_cells
       | AK_mem _ ->
-          let env = List.fold_left Env.use_public env address_slots in
-          if mem_slots = [] then env, [ unknown_mem_slot ]
-          else env, mem_slots
+          let env = List.fold_left Env.use_public env address_cells in
+          if mem_cells = [] then env, [ unknown_mem_cell ]
+          else env, mem_cells
 
-    let process_explicit_arg args mem_slots env kind n :
-        Env.t * string list =
-      match List.nth_opt args (Conv.int_of_nat n) with
-      | Some (Reg r) -> env, [ Arch_utils.reg_name r ]
-      | Some (Regx r) -> env, [ Arch_utils.regx_name r ]
-      | Some (XReg r) -> env, [ Arch_utils.xreg_name r ]
-      | Some (Addr address) -> process_address env mem_slots kind address
-      | Some (Condt c) -> env, Arch_utils.condt_slots c
-      | Some (Imm _) | None -> env, []
+    let operand_cells args mem_cells env op_desc : Env.t * string list =
+      match op_desc with
+      | ADImplicit (IArflag f) -> env, [ Arch_utils.flag_name f ]
+      | ADImplicit (IAreg _) -> env, []
+      | ADExplicit (kind, n, _) -> (
+          match List.nth_opt args (Conv.int_of_nat n) with
+          | Some (Addr address) -> process_address env mem_cells kind address
+          | Some (Condt c) -> env, Registers.condt_cells c
+          | _ -> env, [])
 
-    (* Get the slots the operand descriptors (id_in or id_out) read / write to.
-       Addresses must be public, so the env is passed to record that requirement. *)
-    let process_op_descs args mem_slots env op_descs : Env.t * string list =
+    let input_cells args mem_cells env operand : Env.t * string list =
+      match Arch_utils.operand_register args operand with
+      | Some (reg, bytes) ->
+          let { Registers.within; straddling; _ } =
+            Registers.coverage reg bytes
+          in
+          env, within @ straddling
+      | None -> operand_cells args mem_cells env (fst operand)
+
+    (* What an output operand writes, a register or cells, and how many
+       bytes. *)
+    let outputs args mem_cells env ((op_desc, ty) as operand) :
+        Env.t * (string * int) list =
+      match Arch_utils.operand_register args operand with
+      | Some (reg, bytes) -> env, [ (reg, bytes) ]
+      | None ->
+          let env, cells = operand_cells args mem_cells env op_desc in
+          let bytes = Arch_utils.size_of_ltype ty in
+          env, List.map (fun cell -> (cell, bytes)) cells
+
+    let fold_operands f env descs tys =
       List.fold_left
-        (fun (env, slots) op_desc ->
-          match op_desc with
-          | ADImplicit implicit -> env, implicit_slot implicit :: slots
-          | ADExplicit (kind, n, _) ->
-              let env, new_slots =
-                process_explicit_arg args mem_slots env kind n
-              in
-              env, new_slots @ slots)
-        (env, []) op_descs
+        (fun (env, acc) operand ->
+          let env, xs = f env operand in
+          env, xs @ acc)
+        (env, []) (List.combine descs tys)
 
-    let mem_write_size args op_desc : int option =
-      List.combine op_desc.id_out op_desc.id_tout
-      |> List.find_map (fun (od, ty) ->
-             match (od, ty) with
-             | ADExplicit (AK_mem _, n, _), Type.Coq_lword ws -> (
-                 match List.nth_opt args (Conv.int_of_nat n) with
-                 | Some (Addr _) -> Some (Prog.size_of_ws ws)
-                 | _ -> None)
-             | _ -> None)
+    let write_register env msb reg bytes level : Env.t =
+      let { Registers.within; straddling; outside } =
+        Registers.coverage reg bytes
+      in
+      let set level env cell = Env.set env cell level in
+      let env = List.fold_left (set level) env within in
+      match msb with
+      | MSB_CLEAR ->
+          let env = List.fold_left (set Level.Public) env outside in
+          List.fold_left (set level) env straddling
+      | MSB_MERGE ->
+          List.fold_left (fun env cell -> Env.weaken env cell level) env straddling
 
-    let size_of_ltype : Type.ltype -> int = function
-      | Type.Coq_lword ws -> Prog.size_of_ws ws
-      | Type.Coq_lbool -> 1
+    let write_cell env (access : MemoryAccess.t) cell bytes level : Env.t =
+      if cell = unknown_mem_cell then env
+      else if
+        (not (List.mem cell access.ac_cells))
+        || Z.equal (Z.of_int bytes) access.ac_bytes
+      then Env.set env cell level
+      else Env.weaken env cell level
 
-    let declassify_slots env slots : Env.t =
-      List.fold_left (fun env slot -> Env.set env slot Level.Public) env slots
+    let write_output msb (access : MemoryAccess.t) level env (name, bytes) :
+        Env.t =
+      if Registers.is_register name then write_register env msb name bytes level
+      else write_cell env access name bytes level
+
+    let declassify_cells env cells : Env.t =
+      List.fold_left
+        (fun env cell -> Env.set env cell Level.Public)
+        env cells
 
     let declassify_region env (access : MemoryAccess.t) instr size : Env.t =
       let loc = fst instr.asmi_ii in
@@ -839,7 +1038,7 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
         env
       end
       else if Z.equal access.ac_bytes (Z.of_int size) then
-        declassify_slots env access.ac_slots
+        declassify_cells env access.ac_cells
       else begin
         Utils.warning Utils.Always loc
           "asmCtChecker: ignore declassify of %d byte(s), the annotation \
@@ -848,62 +1047,52 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
         env
       end
 
+    (* Only the cells the declassified operand covers whole. *)
+    let declassify_register env instr reg bytes : Env.t =
+      let { Registers.within; straddling; _ } = Registers.coverage reg bytes in
+      List.iter
+        (fun cell ->
+          Utils.warning Utils.Always (fst instr.asmi_ii)
+            "asmCtChecker: ignore declassify of the bytes of %s in %s, they \
+             share the cell with bytes above"
+            reg cell)
+        straddling;
+      declassify_cells env within
+
     let ty_declassify_val env (access : MemoryAccess.t) instr lty arg : Env.t =
-      match arg with
-      | Reg r -> declassify_slots env [ Arch_utils.reg_name r ]
-      | Regx r -> declassify_slots env [ Arch_utils.regx_name r ]
-      | XReg r -> declassify_slots env [ Arch_utils.xreg_name r ]
-      | Condt c -> declassify_slots env (Arch_utils.condt_slots c)
-      | Addr _ -> declassify_region env access instr (size_of_ltype lty)
-      | Imm _ -> env
+      let bytes = Arch_utils.size_of_ltype lty in
+      match Arch_utils.register_of_arg arg with
+      | Some reg -> declassify_register env instr reg bytes
+      | None -> (
+          match arg with
+          | Condt c -> declassify_cells env (Registers.condt_cells c)
+          | Addr _ -> declassify_region env access instr bytes
+          | _ -> env)
 
     let ty_declassify_mem env (access : MemoryAccess.t) instr len : Env.t =
       declassify_region env access instr (Conv.int_of_cz len)
 
-     (* Whether all outputs are input-independent constants: XOR r,r 
-        and VPXOR x,y,y.
-        Note that this level affects the set flags too (VPXOR sets none).
-     *)
-    let constant_output op args : bool =
-      match (Arch_utils.instr_desc op).id_str_jas (), args with
-      | ("XOR_32" | "XOR_64"), [ Reg r1; Reg r2 ] -> r1 = r2
-      | ("VPXOR_128" | "VPXOR_256"), [ _; XReg r1; XReg r2 ] -> r1 = r2
-      | _ -> false
-
     let ty_asmop env (access : MemoryAccess.t) op args : Env.t =
       let op_desc = Arch_utils.instr_desc op in
-      let env_slots = process_op_descs args access.ac_slots in
-      let env, in_slots = env_slots env op_desc.id_in in
-      let env, out_slots = env_slots env op_desc.id_out in
+      let env, in_cells =
+        fold_operands (input_cells args access.ac_cells) env op_desc.id_in
+          op_desc.id_tin
+      in
+      let env, outs =
+        fold_operands (outputs args access.ac_cells) env op_desc.id_out
+          op_desc.id_tout
+      in
       let level =
-        if constant_output op args then Level.Public
-        else Level.join_list (List.map (Env.get env) in_slots)
+        if Arch_utils.constant_output op args then Level.Public
+        else Level.join_list (List.map (Env.get env) in_cells)
       in
-      (* A write is strong when it overwrites every block it touches. *)
-      let strong_write =
-        match mem_write_size args op_desc with
-        | Some written_bytes ->
-            access.ac_slots <> []
-            && Z.equal (Z.of_int written_bytes) access.ac_bytes
-        | None -> false
-      in
-      List.fold_left
-        (fun env x -> Env.write env ~strong_write access.ac_slots x level)
-        env out_slots
+      List.fold_left (write_output op_desc.id_msb_flag access level) env outs
 
-    (* which registers a syscall touches *)
-    let convention_slots tys regs : string list =
-      List.take (List.length tys) regs |> List.map Arch_utils.reg_name
+    let syscall_arg_cells o : string list =
+      List.concat_map Registers.whole (Arch_utils.syscall_arg_registers o)
 
-    let syscall_arg_slots o : string list =
-      convention_slots
-        (Syscall.syscall_sig_s Arch.reg_size o).Syscall.scs_tin
-        Arch.call_conv.call_reg_args
-
-    let syscall_ret_slots o : string list =
-      convention_slots
-        (Syscall.syscall_sig_s Arch.reg_size o).Syscall.scs_tout
-        Arch.call_conv.call_reg_ret
+    let syscall_ret_cells o : string list =
+      List.concat_map Registers.whole (Arch_utils.syscall_ret_registers o)
 
     let syscall_writes_memory : _ Syscall_t.syscall_t -> bool = function
       | Syscall_t.RandomBytes _ -> true
@@ -914,23 +1103,24 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
     let ty_syscall env (access : MemoryAccess.t) o : Env.t =
       let env =
         List.fold_left Env.use_public env
-          (Arch_utils.rsp :: syscall_arg_slots o)
+          (Registers.rsp @ syscall_arg_cells o)
       in
-      let regions = access.ac_slots in
+      let regions = access.ac_cells in
       if syscall_writes_memory o && access.ac_unannotated then
         error "no annotation names the region this syscall fills";
       let clobbered =
-        Syscall_clobber.slots @ syscall_ret_slots o @ regions
+        List.concat_map Registers.whole Syscall_clobber.names
+        @ syscall_ret_cells o @ regions
       in
       let env =
         List.fold_left
-          (fun env slot -> Env.set env slot Level.Secret) env clobbered
+          (fun env cell -> Env.set env cell Level.Secret) env clobbered
       in
       List.fold_left
-        (fun env slot -> Env.set env slot (syscall_ret_level o))
-        env (syscall_ret_slots o)
+        (fun env cell -> Env.set env cell (syscall_ret_level o))
+        env (syscall_ret_cells o)
 
-    let step fn_name labels ~exit accesses env i instr signatures call_env :
+    let step fn_name labels ~exit accesses env i instr signatures :
         (int * Env.t) list =
       let target lbl : int = LM.find lbl labels in
       let access : MemoryAccess.t = accesses.(i) in
@@ -949,15 +1139,16 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
           else [ (target lbl, env) ]
       | Jcc (lbl, c) ->
           let env =
-            List.fold_left Env.use_public env (Arch_utils.condt_slots c)
+            List.fold_left Env.use_public env
+              (Registers.condt_cells c)
           in
           [ (target lbl, env); (i + 1, env) ]
       | POPPC -> [ (exit, env) ]
       | CALL (fn, _) -> (
           match Hashtbl.find_opt signatures fn.CoreIdent.fn_name with
           | Some callee -> (
-              let env = Env.use_public env Arch_utils.rsp in
-              match call_env env callee access.ac_inst with
+              let env = List.fold_left Env.use_public env Registers.rsp in
+              match Calls.call_env env callee access.ac_bindings with
               | _, Some after -> [ (i + 1, after) ]
               | demanded, None -> [ (i, demanded) ]) (* callee does not return *)
           | None ->
@@ -965,8 +1156,9 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
       | _ -> error "unsupported instruction"
   end
 
-  let arch_slots : arch_slots =
-    { names = Arch_utils.arch_slots; set = Arch_utils.arch_slots_set }
+  let arch_cells : arch_cells =
+    let names = List.concat_map Registers.whole Arch_utils.arch_names in
+    { names; set = SS.of_list names }
 
   let ty_fundef analysis (f_name, f_def) : signature option =
     let name = f_name.CoreIdent.fn_name in
@@ -974,35 +1166,31 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
     let annots = Annots.of_body ~globals:analysis.globals body in
     let layout = MemLayout.of_annots (callee_layout analysis) annots in
     let accesses = MemoryAccess.resolve_all analysis.signatures layout annots in
-    let slots = collect_slots arch_slots layout in
+    let cells = collect_cells arch_cells layout in
     let pre =
       init_pre_env analysis
-        ~stack_frame_blocks:(stack_frame_blocks layout f_def) slots
+        ~stack_frame_cells:(MemLayout.stack_frame_cells layout f_def) cells
     in
     let step ~labels ~exit i env instr =
       Instruction.step name labels ~exit accesses env i instr
-        analysis.signatures (Calls.call_env ~arch_slots)
+        analysis.signatures
     in
 
     let public_levels, post = Dataflow.fixpoint ~step body pre in
     let f_sig =
-      { slots;
-        layout;
-        pre = { pre with public = public_levels };
+      { layout;
+        pre = Env.with_public pre public_levels;
         post =
-          Option.map
-            (fun (post : Env.t) -> { post with public = public_levels })
-            post }
+          Option.map (fun post -> Env.with_public post public_levels) post }
     in
     Hashtbl.replace analysis.signatures name f_sig;
     Some f_sig
 
-  let signatures prog :
-      (string * signature option) list * (Format.formatter -> unit) list =
+  let signatures () : analysis * (Format.formatter -> unit) list =
     let globals =
       List.fold_left
         (fun globals ((x, _), _) -> SS.add (IInfo.slot_name x) globals)
-        SS.empty prog.asm_glob_names
+        SS.empty Program.prog.asm_glob_names
     in
     let analysis = create ~globals () in
     let errors = ref [] in
@@ -1013,28 +1201,19 @@ module Asm_ct_checker (Arch : Arch_full.Arch) = struct
       (fun ((name : CoreIdent.funname), def) ->
         try ignore (ty_fundef analysis (name, def))
         with CtTypeError msg -> errors := in_function name msg :: !errors)
-      (callees_first prog.asm_funcs);
+      (callees_first Program.prog.asm_funcs);
+    (analysis, List.rev !errors)
+
+  let chk () : unit =
+    let analysis, errors = signatures () in
     let results =
       List.map
         (fun (name, _) ->
           (name.CoreIdent.fn_name,
            Hashtbl.find_opt analysis.signatures name.CoreIdent.fn_name))
-        prog.asm_funcs
+        Program.prog.asm_funcs
     in
-    results, List.rev !errors
-
-  let chk
-      (ap :
-        ( Arch.reg,
-          Arch.regx,
-          Arch.xreg,
-          Arch.rflag,
-          Arch.cond,
-          Arch.asm_op )
-        Arch_decl.asm_prog)
-      : unit =
-    let results, errors = signatures ap in
-    pp_signatures Format.err_formatter results;
+    pp_signatures arch_cells Format.err_formatter results;
     match errors with
     | [] -> ()
     | [ msg ] ->

@@ -209,8 +209,10 @@ let main () =
       raise (HiError e)
     | Utils0.Ok asm ->
       if !asm_ct_chk then begin
-        let module ACT = Asm_ct_checker.Asm_ct_checker (Arch) in
-        ACT.chk asm
+        let module ACT =
+          Asm_ct_checker.Asm_ct_checker (Arch) (struct let prog = asm end)
+        in
+        ACT.chk ()
       end;
       if !Glob_options.print_export_info_json then begin
         Format.printf "%a" (fun fmt ->
