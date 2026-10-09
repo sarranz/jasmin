@@ -1576,19 +1576,26 @@ Definition slot_of_sr
     Some (s, slot_infos (fine_grained x) (elem_size x) s (ofs + ofs')%Z len)
   else
     Some (s, slot_infos (fine_grained x) (elem_size x) s ofs (size_slot s)).
-  
+
+Definition slot_of_glob
+  (x : var_i) (ofs len : Z) : option (slot * seq ii_slot_info) :=
+  let s := x.(v_var) in
+  let%opt _ := Mvar.get pmap.(globals) s in
+  Some (s, slot_infos (fine_grained x) (elem_size s) s ofs len).
+
 Definition slot_e
   (rm : region_map) (e : pexpr) : option (slot * seq ii_slot_info) :=
   let%opt (x, ofs, len) :=
     match e with
-    | Pvar x => Some (x.(gv), 0, size_slot x.(gv))%Z
+    | Pvar x => Some (x, 0, size_slot x.(gv))%Z
     | Pget _ aa ws a e =>
         let '(ofs, len) := slot_range_get aa ws a.(gv).(v_var) e in
-        Some (a.(gv), ofs, len)
+        Some (a, ofs, len)
     | _ => None
     end
   in
-  slot_of_sr rm x ofs len.
+  if is_glob x then slot_of_glob x.(gv) ofs len
+  else slot_of_sr rm x.(gv) ofs len.
 
 Definition slot_lv
   (rm : region_map) (lv : lval) : option (slot * seq ii_slot_info) :=
