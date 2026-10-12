@@ -40,7 +40,8 @@ module Arm_core = struct
     match o with
     | Oarm_swap _ -> true
     | Oarm_add_large_imm -> true
-    | (Osmart_li _ | Osmart_li_cc _) -> true (* emit MOVT *)
+    | (Osmart_li _ | Osmart_li_cc _) -> true
+    | Oarm_glob_addr -> true (* emit MOVT *)
 
   let pp_shift_kind fmt = function
     | Shift_kind.SLSL -> ToRocq.pp_bare fmt "SLSL"
@@ -101,7 +102,6 @@ module Arm_core = struct
     | REV -> ToRocq.pp_bare fmt "REV"
     | REV16 -> ToRocq.pp_bare fmt "REV16"
     | REVSH -> ToRocq.pp_bare fmt "REVSH"
-    | ADR -> ToRocq.pp_bare fmt "ADR"
     | MOV -> ToRocq.pp_bare fmt "MOV"
     | MOVT -> ToRocq.pp_bare fmt "MOVT"
     | UBFX -> ToRocq.pp_bare fmt "UBFX"
@@ -134,6 +134,7 @@ module Arm_core = struct
     | Oarm_add_large_imm -> ToRocq.pp_bare fmt "Oarm_add_large_imm"
     | Osmart_li ws -> ToRocq.pp_with_ws fmt "Osmart_li" ws
     | Osmart_li_cc ws -> ToRocq.pp_with_ws fmt "Osmart_li_cc" ws
+    | Oarm_glob_addr -> ToRocq.pp_bare fmt "Oarm_glob_addr"
 
 end
 

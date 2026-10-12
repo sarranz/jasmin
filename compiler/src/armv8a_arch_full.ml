@@ -103,6 +103,17 @@ module Armv8a (Lowering_params : Armv8a_input) = struct
     | STR -> ToRocq.pp_bare fmt "STR"
     | STRB -> ToRocq.pp_bare fmt "STRB"
     | STRH -> ToRocq.pp_bare fmt "STRH"
+    | UMULH -> ToRocq.pp_bare fmt "UMULH"
+    | SMULH -> ToRocq.pp_bare fmt "SMULH"
+    | RBIT -> ToRocq.pp_bare fmt "RBIT"
+    | REV -> ToRocq.pp_bare fmt "REV"
+    | REV16 -> ToRocq.pp_bare fmt "REV16"
+    | REV32 -> ToRocq.pp_bare fmt "REV32"
+    | CLZ -> ToRocq.pp_bare fmt "CLZ"
+    | CLS -> ToRocq.pp_bare fmt "CLS"
+    | CSDB -> ToRocq.pp_bare fmt "CSDB"
+    | DSB -> ToRocq.pp_bare fmt "DSB"
+    | ISB -> ToRocq.pp_bare fmt "ISB"
 
   let pp_asm_op_for_rocq fmt (o : asm_op) =
     let (Armv8a_instr_decl.ARMv8A_op (m, opts)) = o in
@@ -115,6 +126,10 @@ module Armv8a (Lowering_params : Armv8a_input) = struct
     | Oarmv8a_swap ws -> ToRocq.pp_with_ws fmt "Oarmv8a_swap" ws
     | Oarmv8a_add_large_imm -> ToRocq.pp_bare fmt "Oarmv8a_add_large_imm"
     | Oarmv8a_smart_li ws -> ToRocq.pp_with_ws fmt "Oarmv8a_smart_li" ws
+    | Oarmv8a_SLHinit -> ToRocq.pp_bare fmt "Oarmv8a_SLHinit"
+    | Oarmv8a_SLHupdate -> ToRocq.pp_bare fmt "Oarmv8a_SLHupdate"
+    | Oarmv8a_SLHmove -> ToRocq.pp_bare fmt "Oarmv8a_SLHmove"
+    | Oarmv8a_SLHprotect ws -> ToRocq.pp_with_ws fmt "Oarmv8a_SLHprotect" ws
 
   let pp_asm = Pp_arm_v8a.print_prog
 
