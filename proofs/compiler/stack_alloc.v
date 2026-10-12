@@ -1572,7 +1572,10 @@ Definition slot_of_sr
   let%opt sr := Mvar.get rm.(var_region) x.(v_var) in
   let s := sr.(sr_region).(r_slot) in
   let z := sr.(sr_zone) in
-  if concrete_zone s z is Some (ofs', len') then 
+  (* the length from concrete_zone is the total subregion size, but len
+    (from slot_e or slot_lv) is the size of the access which is at least
+    as precise. We discard the one from concrete_zone *)
+  if concrete_zone s z is Some (ofs', _) then 
     Some (s, slot_infos (fine_grained x) (elem_size x) s (ofs + ofs')%Z len)
   else
     Some (s, slot_infos (fine_grained x) (elem_size x) s ofs (size_slot s)).
@@ -1580,6 +1583,8 @@ Definition slot_of_sr
 Definition slot_of_glob
   (x : var_i) (ofs len : Z) : option (slot * seq ii_slot_info) :=
   let s := x.(v_var) in
+  (* we discard the result of mvar get because we only care to check
+    it if is a global *)
   let%opt _ := Mvar.get pmap.(globals) s in
   Some (s, slot_infos (fine_grained x) (elem_size s) s ofs len).
 
