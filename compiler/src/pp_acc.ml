@@ -194,7 +194,7 @@ let pp_acc_op op pp =
   else
     let name =
       Format.sprintf "%s%s"
-        (pp.pp_aop_name |> String.lowercase)
+        (pp.pp_aop_name |> String.lowercase_ascii)
         (pp_mnemonic_ext pp.pp_aop_ext)
     in
     if is_inc_op op then (name, pp_inc_args pp)
