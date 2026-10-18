@@ -123,16 +123,18 @@ Definition desc_set0_small : instruction_desc :=
     [::] [::]
     [:: aword U32 ] [:: E 0 ]
     0%R
+    [:: IBool true ]
     true DOIT.
 
 Definition desc_set0_large : instruction_desc :=
-  let vf := Some false in
-  let vt := Some true in
+  let vf := false in
+  let vt := true in
   mk_instr_desc_safe
     (pp_s (string_of_extra_op (set0 U8)))
     [::] [::]
     [:: abool; abool; abool; aword U256 ] ([:: F MF0; F LF0; F ZF0; E 0 ])
     (:: vf, vf, vt & 0%R)
+    (nseq 4 (IBool true))
     true DOIT.
 
 Definition desc_MOV : instruction_desc :=
@@ -141,6 +143,7 @@ Definition desc_MOV : instruction_desc :=
     [:: aword U32 ] [:: E 1 ]
     [:: aword U32 ] [:: E 0 ]
     id
+    [:: IBool true ]
     true DOIT.
 
 Definition desc_NOT : instruction_desc :=
@@ -149,6 +152,7 @@ Definition desc_NOT : instruction_desc :=
     [:: aword U32 ] [:: E 1 ]
     [:: aword U32 ] [:: E 0 ]
     wnot
+    [:: IBool true ]
     true DOIT.
 
 Definition desc_SUBI : instruction_desc :=
@@ -157,6 +161,7 @@ Definition desc_SUBI : instruction_desc :=
     [:: aword U32; aword U32 ] [:: E 1; E 2 ]
     [:: aword U32 ] [:: E 0 ]
     (fun x y => x - y)%R
+    [:: IBool true ]
     true DOIT.
 
 (* [conflicts] ensures that the destination register is distinct from the
@@ -173,14 +178,18 @@ Definition desc_ADD_LARGE_IMM : instruction_desc :=
    ; tout := [:: ty ]
    ; i_out := [:: E 0 ]
    ; conflicts := [:: (APout 0, APin 0) ]
-   ; semi := sem_prod_ok ctin semi
-   ; semu := @values.vuincl_app_sopn_v ctin [:: cty ] (sem_prod_ok ctin semi) refl_equal
+   ; i_semi_total := semi
    ; i_safe := [::]
+   ; i_err := ErrSemUndef
+   ; i_init := [:: IBool true ]
    ; i_valid := true
    ; i_doit := DOIT
    ; i_safe_wf := refl_equal
-   ; i_semi_errty := fun _ => sem_prod_ok_error (tin := ctin) semi _
-   ; i_semi_safe := fun _ => values.sem_prod_ok_safe (tin := ctin) semi
+   ; i_wf := refl_equal
+   ; semu :=
+       @values.vuincl_app_sopn_v ctin [:: cty ]
+         (@mk_semi ctin [:: cty ] [::] ErrSemUndef [:: IBool true ] semi)
+         refl_equal
    |}.
 
 Definition desc_swap_large : instruction_desc :=
@@ -190,6 +199,7 @@ Definition desc_swap_large : instruction_desc :=
     [:: abool; abool; abool; aword U256; aword U256 ]
     [:: F MF1; F LF1; F ZF1; E 0; E 1 ]
     (fun z w => (:: MF_of_word w, LF_of_word w, ZF_of_word w, w & z))
+    (nseq 5 (IBool true))
     true DOIT.
 
 Definition desc_BN_SELECT_MASKED : instruction_desc :=
@@ -204,14 +214,18 @@ Definition desc_BN_SELECT_MASKED : instruction_desc :=
     tout := [:: ty ];
     i_out := [:: E 0 ];
     conflicts := [:: (APout 0, APin 0); (APout 0, APin 1); (APin 0, APin 1) ];
-    semi := sem_prod_ok ctin semi;
-    semu := @values.vuincl_app_sopn_v ctin [:: cty ] (sem_prod_ok ctin semi) refl_equal;
+    i_semi_total := semi;
     i_safe := [::];
+    i_err := ErrSemUndef;
+    i_init := [:: IBool true ];
     i_valid := true;
     i_doit := DOIT;
     i_safe_wf := refl_equal;
-    i_semi_errty := fun _ => sem_prod_ok_error (tin := ctin) semi _;
-    i_semi_safe := fun _ => values.sem_prod_ok_safe (tin := ctin) semi;
+    i_wf := refl_equal;
+    semu :=
+      @values.vuincl_app_sopn_v ctin [:: cty ]
+        (@mk_semi ctin [:: cty ] [::] ErrSemUndef [:: IBool true ] semi)
+        refl_equal;
   |}.
 
 (* [conflicts] forces the two inputs into different registers:
@@ -230,19 +244,23 @@ Definition desc_zeroize_masked_small : instruction_desc :=
    ; tout := [:: ty ]
    ; i_out := [:: E 0 ]
    ; conflicts := [:: (APin 0, APin 1) ]
-   ; semi := sem_prod_ok ctin semi
-   ; semu := @values.vuincl_app_sopn_v ctin [:: cty ] (sem_prod_ok ctin semi) refl_equal
+   ; i_semi_total := semi
    ; i_safe := [::]
+   ; i_err := ErrSemUndef
+   ; i_init := [:: IBool true ]
    ; i_valid := true
    ; i_doit := DOIT
    ; i_safe_wf := refl_equal
-   ; i_semi_errty := fun _ => sem_prod_ok_error (tin := ctin) semi _
-   ; i_semi_safe := fun _ => values.sem_prod_ok_safe (tin := ctin) semi
+   ; i_wf := refl_equal
+   ; semu :=
+       @values.vuincl_app_sopn_v ctin [:: cty ]
+         (@mk_semi ctin [:: cty ] [::] ErrSemUndef [:: IBool true ] semi)
+         refl_equal
    |}.
 
 Definition desc_zeroize_masked_large : instruction_desc :=
-  let vf := Some false in
-  let vt := Some true in
+  let vf := false in
+  let vt := true in
   let ty := aword U256 in
   let cty := eval_atype ty in
   let ctin := [:: cty; cty ] in
@@ -253,16 +271,19 @@ Definition desc_zeroize_masked_large : instruction_desc :=
    ; tout := [:: abool; abool; abool; ty ]
    ; i_out := [:: F MF0; F LF0; F ZF0; E 0 ]
    ; conflicts := [:: (APin 0, APin 1) ]
-   ; semi := sem_prod_ok ctin semi
-   ; semu :=
-       @values.vuincl_app_sopn_v ctin [:: cbool; cbool; cbool; cty ]
-         (sem_prod_ok ctin semi) refl_equal
+   ; i_semi_total := semi
    ; i_safe := [::]
+   ; i_err := ErrSemUndef
+   ; i_init := nseq 4 (IBool true)
    ; i_valid := true
    ; i_doit := DOIT
    ; i_safe_wf := refl_equal
-   ; i_semi_errty := fun _ => sem_prod_ok_error (tin := ctin) semi _
-   ; i_semi_safe := fun _ => values.sem_prod_ok_safe (tin := ctin) semi
+   ; i_wf := refl_equal
+   ; semu :=
+       @values.vuincl_app_sopn_v ctin [:: cbool; cbool; cbool; cty ]
+         (@mk_semi ctin [:: cbool; cbool; cbool; cty ] [::] ErrSemUndef
+            (nseq 4 (IBool true)) semi)
+         refl_equal
    |}.
 
 (* [BN.SEL]'s condition (the third source) picks the flag group at
@@ -274,6 +295,7 @@ Definition desc_SELECT : instruction_desc :=
     [:: aword U256; aword U256; abool ] [:: E 1; E 2; ADExplicit 3 ACR_any ]
     [:: aword U256 ] [:: E 0 ]
     (fun a b c => if c then a else b)
+    [:: IBool true ]
     true DOIT.
 
 Definition get_instr_desc (eo : extra_op) : instruction_desc :=

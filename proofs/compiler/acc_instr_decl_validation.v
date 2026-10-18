@@ -590,47 +590,52 @@ Section VALIDATION_SEM.
   (* [BN_LID]: loads a 256-bit word from memory into the wide register whose
      index matches the first argument. *)
 
+  (* The safety conditions of [BN_LID] and [BN_SID] truncate their argument,
+     which does not reduce by computation alone. *)
+  Ltac t_check_safe :=
+    rewrite /id_semi /= /check_safe_conds /= ?truncate_word_u.
+
   (* Success: first arg equals the instruction's register index. *)
   Goal is_ok (id_semi (desc_acc_op (BN_LID 5)) (wrepr U32 5) (wrepr U256 42)).
-  Proof. by []. Qed.
+  Proof. by t_check_safe. Qed.
 
   Goal is_ok (id_semi (desc_acc_op (BN_LID 0)) (wrepr U32 0) (wrepr U256 0)).
-  Proof. by []. Qed.
+  Proof. by t_check_safe. Qed.
 
   Goal is_ok (id_semi (desc_acc_op (BN_LID 31)) (wrepr U32 31) (wrepr U256 0xdeadbeef)).
-  Proof. by []. Qed.
+  Proof. by t_check_safe. Qed.
 
   (* Failure: first arg does not match the instruction's register index. *)
   Goal ~is_ok (id_semi (desc_acc_op (BN_LID 5)) (wrepr U32 6) (wrepr U256 42)).
-  Proof. by []. Qed.
+  Proof. by t_check_safe. Qed.
 
   Goal ~is_ok (id_semi (desc_acc_op (BN_LID 0)) (wrepr U32 1) (wrepr U256 0)).
-  Proof. by []. Qed.
+  Proof. by t_check_safe. Qed.
 
   Goal ~is_ok (id_semi (desc_acc_op (BN_LID 31)) (wrepr U32 0) (wrepr U256 0)).
-  Proof. by []. Qed.
+  Proof. by t_check_safe. Qed.
 
   (* [BN_SID]: stores a 256-bit wide register to memory; the second argument
      must equal the instruction's register index at runtime. *)
 
   (* Success: second arg (grs) equals the instruction's register index. *)
   Goal is_ok (id_semi (desc_acc_op (BN_SID 5)) (wrepr U256 42) (wrepr U32 5)).
-  Proof. by []. Qed.
+  Proof. by t_check_safe. Qed.
 
   Goal is_ok (id_semi (desc_acc_op (BN_SID 0)) (wrepr U256 0) (wrepr U32 0)).
-  Proof. by []. Qed.
+  Proof. by t_check_safe. Qed.
 
   Goal is_ok (id_semi (desc_acc_op (BN_SID 31)) (wrepr U256 0xdeadbeef) (wrepr U32 31)).
-  Proof. by []. Qed.
+  Proof. by t_check_safe. Qed.
 
   (* Failure: second arg does not match the instruction's register index. *)
   Goal ~is_ok (id_semi (desc_acc_op (BN_SID 5)) (wrepr U256 42) (wrepr U32 6)).
-  Proof. by []. Qed.
+  Proof. by t_check_safe. Qed.
 
   Goal ~is_ok (id_semi (desc_acc_op (BN_SID 0)) (wrepr U256 0) (wrepr U32 1)).
-  Proof. by []. Qed.
+  Proof. by t_check_safe. Qed.
 
   Goal ~is_ok (id_semi (desc_acc_op (BN_SID 31)) (wrepr U256 0) (wrepr U32 0)).
-  Proof. by []. Qed.
+  Proof. by t_check_safe. Qed.
 
 End VALIDATION_SEM.

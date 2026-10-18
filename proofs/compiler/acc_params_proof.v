@@ -49,7 +49,8 @@ Context
   {atoI  : arch_toIdent}
   {syscall_state : Type}
   {sc_sem : syscall_sem syscall_state}
-  {call_conv : calling_convention}.
+  {call_conv : calling_convention}
+  {vinfo : one_varmap.veneer_info}.
 
 #[local] Existing Instance withsubword.
 #[local] Existing Instance direct_c.
@@ -193,7 +194,7 @@ Proof.
   case: o => -[xs op] es /=.
   case: sem_rexprs => //= args.
   rewrite /exec_sopn /= /sopn_sem /=; case: id_valid => //=.
-  rewrite /sopn_sem_ /= /semi_to_atype.
+  rewrite /sopn_sem_ /semi /semi_to_atype_t /=.
   move: (computational_eq _) (computational_eq _) => e1 e2.
   rewrite <- e1, <- e2. by case: app_sopn.
 Qed.
@@ -315,7 +316,7 @@ Lemma acc_smart_addi_sem_fopns (xi : var_i) y imm s (w : wreg) :
     [/\ sem_fopns_args s (smart_addi_fopn xi y imm) = ok (with_vm s vm')
       , vm' =[\ Sv.singleton xi ] evm s
       & get_var true vm' xi = ok (Vword (w + wrepr reg_size imm)%R) ].
-Proof using atoI call_conv sc_sem syscall_state.
+Proof using atoI call_conv sc_sem syscall_state vinfo.
   move=> hc hor hget.
   rewrite /smart_addi_fopn /smart_addi
           /acc_params_core.ACCFopn_core.smart_addi
@@ -357,7 +358,7 @@ Arguments acc_smart_addi_sem_fopns xi y imm s w _ _ _ : clear implicits.
 
 Lemma acc_spec_lip_allocate_stack_frame :
   allocate_stack_frame_correct (ap_lip acc_params).
-Proof using atoI call_conv sc_sem syscall_state.
+Proof using atoI call_conv sc_sem syscall_state vinfo.
   move=> sp_rsp tmp s ts sz htmp hget /=.
   rewrite /lip_allocate_stack_frame /= /allocate_stack_frame /=.
   case: tmp htmp => [tmp [h1 h2] | _] /=.
@@ -380,7 +381,7 @@ Qed.
 
 Lemma acc_spec_lip_free_stack_frame :
   free_stack_frame_correct (ap_lip acc_params).
-Proof using atoI call_conv sc_sem syscall_state.
+Proof using atoI call_conv sc_sem syscall_state vinfo.
   move=> sp_rsp tmp s ts sz htmp hget /=.
   rewrite /lip_free_stack_frame /= /free_stack_frame /=.
   case: tmp htmp => [tmp [h1 h2] | _] /=.
@@ -413,7 +414,7 @@ Lemma acc_smart_subi_sem_fopns (xi : var_i) y imm s (w : wreg) :
     [/\ sem_fopns_args s (smart_subi_fopn xi y imm) = ok (with_vm s vm')
       , vm' =[\ Sv.singleton xi ] evm s
       & get_var true vm' xi = ok (Vword (w - wrepr reg_size imm)%R) ].
-Proof using atoI call_conv sc_sem syscall_state.
+Proof using atoI call_conv sc_sem syscall_state vinfo.
   move=> hc hor hget.
   rewrite /smart_subi_fopn /smart_subi
           /acc_params_core.ACCFopn_core.smart_subi
@@ -456,7 +457,7 @@ Arguments acc_smart_subi_sem_fopns xi y imm s w _ _ _ : clear implicits.
 
 Lemma acc_spec_lip_set_up_sp_register :
   set_up_sp_register_correct (ap_lip acc_params).
-Proof.
+Proof using vinfo.
 Local Opaque sem_fopn_args.
 move=> [[? nrsp] vi1] [[? nr] vi2] tmp ts al sz s + /= ? hc _ _ + _; subst.
 set vrsp := {| vname := nrsp |}.
@@ -583,20 +584,20 @@ Proof.
 Qed.
 
 Lemma acc_smart_addi_correct : ladd_imm_correct_aux smart_addi_fopn.
-Proof using atoI call_conv sc_sem syscall_state.
+Proof using atoI call_conv sc_sem syscall_state vinfo.
   move=> [[_ xn] xii] x2 s w ofs /= -> hne hget.
   apply: acc_smart_addi_sem_fopns hget => //.
   by right => h; exact (hne h).
 Qed.
 
 Lemma acc_lstores_correct : lstores_correct (ap_lip acc_params).
-Proof using atoI call_conv sc_sem syscall_state.
+Proof using atoI call_conv sc_sem syscall_state vinfo.
 apply/lstores_imm_dfl_correct; first exact: acc_lstore_correct.
 exact: acc_smart_addi_correct.
 Qed.
 
 Lemma acc_lloads_correct : lloads_correct (ap_lip acc_params).
-Proof using atoI call_conv sc_sem syscall_state.
+Proof using atoI call_conv sc_sem syscall_state vinfo.
   apply/lloads_imm_dfl_correct.
   + by apply acc_lload_correct.
   apply acc_smart_addi_correct.
@@ -877,7 +878,7 @@ case hws: (ws <= reg_size)%CMP in hops.
         move: hidc => /and3P [h0 _ _].
         by rewrite /= h0. }
       rewrite /assert hcheck hnotin1 /= !truncate_word_u /= wxor_xx /=.
-      rewrite /lsb w0E msb0 eqxx /=.
+      rewrite /MF_of_word /LF_of_word /ZF_of_word /lsb w0E msb0 eqxx /=.
       set id := instr_desc (None, BN_basic BN_XOR acc_options.FG0).
       have hid_tout : id_tout id = [:: lbool; lbool; lbool; lword256] by rewrite /id /=.
       have hid_out : id_out id = [:: F MF0; F LF0; F ZF0; EXa 0] by rewrite /id /=.
@@ -1086,7 +1087,7 @@ Qed.
    cf. riscv_params_proof.v assemble_add_large_imm_correct. *)
 Lemma acc_assemble_SUBI_correct :
   assemble_extra_correct (ap_agp acc_params) SUBI.
-Proof using atoI call_conv sc_sem syscall_state.
+Proof using atoI call_conv sc_sem syscall_state vinfo.
   move=> rip ii lvs args m xs ys m' s ops ops'.
   move=> hrex hexec hwle hops hmap hlom.
   move: hops; rewrite /to_asm /= /assemble_extra /assemble_SUBI.
@@ -1177,7 +1178,7 @@ Qed.
    guard unpacking. cf. acc_assemble_SUBI_correct. *)
 Lemma acc_assemble_ADD_LARGE_IMM_correct :
   assemble_extra_correct (ap_agp acc_params) ADD_LARGE_IMM.
-Proof using atoI call_conv sc_sem syscall_state.
+Proof using atoI call_conv sc_sem syscall_state vinfo.
   move=> rip ii lvs args m xs ys m' s ops ops'.
   move=> hrex hexec hwle hops hmap hlom.
   move: hops; rewrite /to_asm /= /assemble_extra /assemble_ADD_LARGE_IMM.
@@ -1268,7 +1269,7 @@ Proof.
   - subst ws; case: lvs => // -[] // x [] // [] // y [] //.
     move=> -[[[_ _] _] _] [<- <- <- <-] + hex hwr.
     move: hex hwr.
-    rewrite /exec_sopn /= /sopn_sem /sopn_sem_ /= /swap_semi.
+    rewrite /exec_sopn /= /sopn_sem /sopn_sem_ /=.
     t_xrbindP => /= _ wz hvz ww hvw <- <- /=.
     t_xrbindP => _ vm1 /set_varP [_ htrx ->] <- _ vm2 /set_varP [_ htry ->] <- <- /eqP hxw /eqP hyx /and4P [hxt hyt hzt hwt] <-.
     move=> hmap hlom.
@@ -1291,7 +1292,7 @@ Proof.
   case: lvs => // fM [] // fL [] // fZ [] // [] // x [] // [] // y [] //.
   move=> -[[[_ _] _] _] [<- <- <- <-] + hex hwr.
   move: hex hwr.
-  rewrite /exec_sopn /= /sopn_sem /sopn_sem_ /= /swap_semi.
+  rewrite /exec_sopn /= /sopn_sem /sopn_sem_ /=.
   t_xrbindP=> /= _ wz hvz ww hvw <- <- /=; t_xrbindP.
   move=> z0 hM z1 hL z2 hZ z3 z4 hsx ? z5 z6 hsy ? ?; subst z3 z5 m'.
   move: hM hL hZ.
@@ -1607,7 +1608,7 @@ have h := assemble_opsP acc_eval_assemble_cond hmap erefl _ hlom.
 case: (h m') => {h}.
 - rewrite /sem_sopns /= /sem_sopn_t /= hgy2 /=.
   by rewrite /exec_sopn /sopn_sem /sopn_sem_ /= hw2 /= wxor_xx
-    /lsb w0E msb0 eqxx /= hwle.
+    /MF_of_word /LF_of_word /ZF_of_word /lsb w0E msb0 eqxx /= hwle.
 by move=> s' hfold hlom'; exists s'.
 Qed.
 
@@ -1690,7 +1691,7 @@ Qed.
 
 Lemma acc_assemble_extra_op op :
   assemble_extra_correct (ap_agp acc_params) op.
-Proof using atoI call_conv sc_sem syscall_state.
+Proof using atoI call_conv sc_sem syscall_state vinfo.
   case: op.
   + exact: acc_assemble_set0_correct.
   + exact: acc_assemble_MOV_correct.

@@ -395,6 +395,10 @@ Instance acc_decl : arch_decl register empty wide_register rflag condition :=
     caimm_cond_eqC := eqTC_acc_caimm_cond;
     caimm_cond_pp := acc_caimm_cond_pp;
     check_CAimm := acc_check_CAimm;
+    camem_cond := empty;
+    camem_cond_eqC := eqTC_empty;
+    camem_cond_pp := of_empty _;
+    check_CAmem := fun c _ _ _ _ => of_empty _ c;
   }.
 
 Definition acc_call_conv : calling_convention :=

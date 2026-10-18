@@ -24,10 +24,12 @@ Require Import
   fexpr_sem.
 Require Import
   arch_decl
+  arch_decl_facts
   arch_extra
   arch_sem
-  sem_params_of_arch_extra
-  acc_admit.
+  acc_admit
+  safety_cond_facts
+  sem_params_of_arch_extra.
 Require Export asm_gen.
 Require Import relational_logic.
 Import Utf8.
@@ -49,7 +51,26 @@ Section ASM_EXTRA.
 
 Context {syscall_state : Type} {sc_sem : syscall_sem syscall_state}
         `{asm_e : asm_extra} {call_conv: calling_convention}
-         {asm_scsem : asm_syscall_sem}.
+         {asm_scsem : asm_syscall_sem} {vregs : veneer_regs_info}
+         {avs : asm_veneer_sem}.
+
+(* The registers a veneer destroys are the same on both sides of the
+   translation, by construction and not by assumption: [call_kill], the set
+   of variables the linear semantics undefines at the entry of an internal
+   call, is [veneer_regs] -- the registers the assembly semantics havocs
+   there -- mapped through [to_var] (asm_gen.veneer_i).  Nothing else is
+   assumed about a veneer. *)
+Lemma call_kill_regs_only x :
+  Sv.In x call_kill -> exists r : reg, x = to_var r.
+Proof. by move=> /sv_of_listP /in_map [r _ ->]; exists r. Qed.
+
+Lemma veneer_kill_outside (m : asmmem) (r : reg) :
+  ~~ Sv.mem (to_var r) call_kill ->
+  (veneer_kill m).(asm_reg) r = m.(asm_reg) r.
+Proof.
+  move=> h; apply: veneer_kill_reg_notin; apply: contra h => /InP hin.
+  by apply/Sv_memP/sv_of_listP/in_map; exists r.
+Qed.
 
 (* -------------------------------------------------------------------- *)
 Lemma xreg_of_varI {ii x y} :
@@ -627,6 +648,36 @@ Proof.
   by move=> ?; rewrite Vm.setP_neq.
 Qed.
 
+Lemma not_in_call_kill (x : var) :
+  (forall r : reg, to_var r <> x) -> ~~ Sv.mem x call_kill.
+Proof.
+  by move=> hx; apply/negP => /Sv_memP /call_kill_regs_only [r /esym]; apply: hx.
+Qed.
+
+Lemma lom_eqv_veneer_kill rip scs m vm xs :
+  lom_eqv rip {| escs := scs; emem := m; evm := vm |} xs ->
+  lom_eqv rip {| escs := scs; emem := m; evm := kill_vars call_kill vm |} (veneer_kill xs).
+Proof.
+  case => /= eqscs eqm ok_rip hdisj eqr eqrx eqx eqf.
+  case: (hdisj) => dr drx dx df.
+  have hflag : forall (f : rflag_t) (r : reg), to_var r <> to_var f by move=> f r [].
+  constructor => //=.
+  + by rewrite kill_varsE (negbTE (not_in_call_kill dr)) ok_rip.
+  + move=> r; rewrite kill_varsE.
+    case hmem: (Sv.mem (to_var r) call_kill); last first.
+    + by rewrite veneer_kill_outside ?hmem //; apply eqr.
+    by apply: value_uincl_undef.
+  + move=> r; rewrite kill_varsE.
+    have hne : forall r' : reg, to_var r' <> to_var r.
+    + by move=> r'; apply: to_var_reg_neq_regx.
+    by rewrite (negbTE (not_in_call_kill hne)); apply eqrx.
+  + move=> r; rewrite kill_varsE.
+    have hne : forall r' : reg, to_var r' <> to_var r.
+    + by move=> r'; apply: to_var_reg_neq_xreg.
+    by rewrite (negbTE (not_in_call_kill hne)); apply eqx.
+  by move=> f; rewrite /= kill_varsE (negbTE (not_in_call_kill (hflag f))); apply eqf.
+Qed.
+
 Lemma lom_eqv_write_reg rip msbf r s xs ws ws0 (w : word ws0) :
   lom_eqv rip s xs ->
   (ws0 = ws \/ msbf = MSB_CLEAR) ->
@@ -813,12 +864,18 @@ Proof.
   rewrite /exec_instr_op /eval_instr_op Hid /=.
   move: hval => /=; rewrite -/id => -> /=.
   move: vt Hvt Hm'; rewrite /sopn_sem /sopn_sem_ /get_instr_desc /= -/id => {Hid}.
-  rewrite /semi_to_atype.
+  rewrite /semi /= /semi_to_atype_t.
   move: (computational_eq _) (computational_eq _) => e1 e2.
   rewrite <- e1, <- e2; clear e1 e2.
   case: id Hargs Hdest => /= id_valid msb_flag id_tin
-   id_in id_tout id_out id_semi id_args_kinds id_nargs /andP[] /eqP hsin /eqP hsout
-   id_str_jas id_check_dest id_safe _ id_pp _ _ _ Hargs Hdest vt happ Hm'.
+   id_in id_tout id_out id_semi_total id_args_kinds id_nargs heqsz
+   id_str_jas id_check_dest id_safe id_err id_init id_doit id_pp
+   id_safe_wf id_wf
+   Hargs Hdest vt happ Hm'.
+  rewrite /id_semi /=.
+  case/andP: heqsz => /eqP hsin /eqP hsout.
+  move: happ; move: (mk_semi id_safe id_err id_init id_semi_total) => id_semi happ.
+  clear id_semi_total id_safe_wf id_wf id_init.
   elim: id_in id_tin hsin id_semi args xs Hargs happ Hxs; rewrite /sem_prod.
   + move=> [] //= _ id_semi [|a1 args] [|v1 vs] //= _ -> _ /=.
     exact: (compile_lvals _ hsout Hm' Hlomeqv Hdest).
@@ -1167,6 +1224,7 @@ Proof.
   case: id_valid => //=.
   case: andP => // -[ /eqP -> _] /=.
   case heq : eval_args_in => [vargs | ] //=.
+  rewrite /id_semi /= -(sem_prod_eq_app_sopn vargs (mk_semi_extend ws _ _ _ _)).
   rewrite app_sopn_apply_lprod.
   case: app_sopn => //= t.
   move=> <-; symmetry.
@@ -1179,10 +1237,11 @@ Lemma enforce_imm_arg_kind_correct a c a' :
   enforce_imm_arg_kind a c = Some a' ->
   check_arg_kind a' c.
 Proof.
-  case: a; case: c => [|||| b | | k'] //=; try by move=> ? [<-].
+  case: a; case: c => [|||| b checker | | k'] //=; try by move=> ? /Some_inj <-.
   + move=> checker ws1 ws2 w.
     by case: ifP => // /andP [] /eqP -> /= h [<-] /=; rewrite h eqxx.
-  by move=> k ofs; case: eqP => // -> [<-] /=.
+  + by move=> k ofs; case: eqP => // -> [<-] /=.
+  by move=> addr; case: ifP => // h [<-].
 Qed.
 
 Lemma enforce_imm_arg_kinds_correct a cond' a' :
@@ -2152,10 +2211,11 @@ Proof using hagparams ok_p'.
       have -> := var_of_regP_eq hloeq hsp htow_sp.
       rewrite /mem_write_mem; case: (hloeq) => /= _ <- _ _ _ _ _ _.
       rewrite hm1 /=; apply: eval_jumpP; last by apply hjump.
-      set vi := {| v_var := to_var ad_rsp; v_info := dummy_var_info |}.
-      set ls1 := (X in to_estate X).
-      have : write_var true vi (Vword (wsp -  wrepr reg_size (wsize_size reg_size))) (to_estate ls) = ok {| escs := lscs ls; emem := lmem ls; evm := lvm ls1 |}.
-      + rewrite /write_var /= /to_estate //= /with_vm /=.
+      apply: lom_eqv_veneer_kill.
+      set vrspi := {| v_var := to_var ad_rsp; v_info := dummy_var_info |}.
+      set vmsp := (X in lom_eqv _ {| escs := _; emem := _; evm := X |} _).
+      have : write_var true vrspi (Vword (wsp -  wrepr reg_size (wsize_size reg_size))) (to_estate ls) = ok {| escs := lscs ls; emem := lmem ls; evm := vmsp |}.
+      + rewrite /vmsp /write_var /= /to_estate //= /with_vm /=.
         by have [ ->] := to_var_rsp.
       move=> /(lom_eqv_write_var MSB_CLEAR hloeq) -/(_ ad_rsp erefl).
       by case=> *; constructor => //.
@@ -2171,6 +2231,7 @@ Proof using hagparams ok_p'.
       rewrite -assemble_prog_labels -heqf ptr_eq.
       apply: eval_jumpP; last by apply hjump.
       rewrite /st_update_next /=.
+      apply: lom_eqv_veneer_kill.
       have : write_var true xlr (Vword ptr) (to_estate ls) = ok {| escs := lscs ls; emem := lmem ls; evm := vm |}.
       + by rewrite /write_var /= hset.
       have {}heqlr := of_varI heqlr.

@@ -670,13 +670,13 @@ Section I_ARGS_KINDS.
     [:: [:: xreg; xreg; imm_q; xreg; imm_q; imm_mulqacc_shift ] ].
 
   Definition ak_xreg_mem : i_args_kinds :=
-    [:: [:: xreg; [:: CAmem false ] ]].
+    [:: [:: xreg; [:: CAmem false None ] ]].
 
   Definition ak_xreg_reg_mem : i_args_kinds :=
-    [:: [:: xreg; [:: CAreg ]; [:: CAmem false ] ]].
+    [:: [:: xreg; [:: CAreg ]; [:: CAmem false None ] ]].
 
   Definition ak_xreg_mem_reg : i_args_kinds :=
-    [:: [:: xreg; [:: CAmem false ]; [:: CAreg ] ]].
+    [:: [:: xreg; [:: CAmem false None ]; [:: CAreg ] ]].
 
   Definition ak_xreg_reg_xreg_reg : i_args_kinds :=
     [:: [:: xreg; [:: CAreg ]; xreg; [:: CAreg ] ]].
@@ -725,6 +725,15 @@ Lemma check_dest_unop_lword {ws adout} :
   all2 check_arg_dest [:: adout ] [:: lword ws ].
 Proof. by case: adout. Qed.
 
+(* Total semantics of an instruction (see [id_semi_total]). *)
+Definition semi_type (tin tout : seq ltype) : Type :=
+  sem_lprod tin (sem_ltuple_t tout).
+
+(* Initialisation conditions of an instruction whose outputs are always
+   defined. *)
+Definition init_all (tout : seq ltype) : seq safety_cond :=
+  map (fun=> IBool true) tout.
+
 (* -------------------------------------------------------------------------- *)
 (* Instruction descriptions for the 32-bit ISA.
    These instructions are unary or binary word operations, so we define generic
@@ -759,9 +768,9 @@ Definition rv_last_ak : arg_kind :=
   | ADDI | ANDI | ORI | XORI => ak_s12
   | SLLI | SRLI | SRAI => CAimm (Some (CAimmC_acc_nbits Unsigned 5)) U8
   | LUI => CAimm (Some (CAimmC_acc_nbits Unsigned 20)) U32
-  | LW | SW => CAmem false
+  | LW | SW => CAmem false None
   | LI => CAimm (Some (CAimmC_acc_nbits Signed 32)) U32
-  | LA => CAmem true
+  | LA => CAmem true None
   | NOP => CAreg (* absurd *)
   end.
 
@@ -773,19 +782,20 @@ Definition _desc_rv_unop
     id_in := [:: ad_in ];
     id_tout := [:: lword ws ];
     id_out := [:: ad_out ];
-    id_semi := fun x => ok (semi x);
+    id_semi_total := semi;
+    id_init := [:: IBool true ];
     id_args_kinds := ak_unary rv_last_ak;
     id_nargs := 2;
     id_str_jas := pp_s (rv_mnemonic_to_string mn);
     id_pp_asm := pp_rv_op mn;
     id_valid := ws == U32; (* TODO_ACC remove? *)
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := check_dest_unop_lword;
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 Let desc_rv_unop := _desc_rv_unop (Ea 1) (Ea 0).
@@ -801,19 +811,20 @@ Definition desc_rv_binop {wsa : wsize}
     id_in := [:: Ea 1; Ea 2 ];
     id_tout := [:: lword ws ];
     id_out := [:: Ea 0 ];
-    id_semi := fun x y => ok (semi x y);
+    id_semi_total := semi;
+    id_init := [:: IBool true ];
     id_args_kinds := ak_binary rv_last_ak;
     id_nargs := 3;
     id_str_jas := pp_s (rv_mnemonic_to_string mn);
     id_pp_asm := pp_rv_op mn;
     id_valid := ws == U32; (* TODO_ACC remove? *)
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 Definition desc_nop :=
@@ -823,19 +834,20 @@ Definition desc_nop :=
     id_in := [:: ];
     id_tout := [::];
     id_out := [::];
-    id_semi := ok tt;
+    id_semi_total := tt;
+    id_init := [::];
     id_args_kinds := [:: [::] ];
     id_nargs := 0;
     id_str_jas := pp_s (rv_mnemonic_to_string NOP);
     id_pp_asm := pp_rv_op NOP;
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT;
+    id_err := ErrSemUndef;
+    id_doit :=DOIT;
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 Definition mk_shifted_sem
@@ -908,20 +920,19 @@ Definition bn_flag_group_of_rflag (f : rflag) : bn_flag_group :=
   | CF1 | MF1 | LF1 | ZF1 => FG1
   end.
 
-Definition CF_of_Z (z : Z) : option bool :=
-  Some (Z.land (Z.shiftr z 256) 1 == 1).
-Definition MF_of_word (res : u256) : option bool := Some (msb res).
-Definition LF_of_word (res : u256) : option bool := Some (lsb res).
-Definition ZF_of_word (res : u256) : option bool := Some (res == 0)%R.
+Definition CF_of_Z (z : Z) : bool := Z.land (Z.shiftr z 256) 1 == 1.
+Definition MF_of_word (res : u256) : bool := msb res.
+Definition LF_of_word (res : u256) : bool := lsb res.
+Definition ZF_of_word (res : u256) : bool := (res == 0)%R.
 
-Definition with_mlz (res : u256) : sem_ltuple (ty_mlz ++ [:: lword256 ]) :=
+Definition with_mlz (res : u256) : sem_ltuple_t (ty_mlz ++ [:: lword256 ]) :=
   (:: MF_of_word res
     , LF_of_word res
     , ZF_of_word res
     & res ).
 
 Definition with_cmlz
-  (res : u256) (res_unsigned : Z) : sem_ltuple (ty_cmlz ++ [:: lword256 ]) :=
+  (res : u256) (res_unsigned : Z) : sem_ltuple_t (ty_cmlz ++ [:: lword256 ]) :=
   add_tuple (CF_of_Z res_unsigned) (with_mlz res).
 
 Definition drop_c (idt : instr_desc_t) : instr_desc_t := idt_drop1 idt.
@@ -961,7 +972,7 @@ Definition Z_shift_of_reg_shift
 
 #[local]
 Notation rtuple_drop5th xs :=
-  (Let: (:: x0, x1, x2, x3 & x4 ) := xs in ok (:: x0, x1, x2 & x3 ))
+  (let: (:: x0, x1, x2, x3 & x4 ) := xs in (:: x0, x1, x2 & x3 ))
   (only parsing).
 
 Section BN_BASIC_DESC.
@@ -970,7 +981,7 @@ Let pp_bn_basic_op mn fg args := pp_acc_op (BN_basic mn fg) args.
 
 Let semi_unop_mlz (semi : u256 -> u256) :
   semi_type [:: lword256 ] (ty_mlz ++ [:: lword256 ]) :=
-  fun x => ok (with_mlz (semi x)).
+  fun x => with_mlz (semi x).
 
 Let semi_binop_cmlz
   (semi : u256 -> u256 -> u256)
@@ -978,7 +989,7 @@ Let semi_binop_cmlz
   semi_type [:: lword256; lword256 ] (ty_cmlz ++ [:: lword256 ]) :=
   fun x y =>
     let res_unsigned := semiZ (wunsigned x) (wunsigned y) in
-    ok (with_cmlz (semi x y) res_unsigned).
+    with_cmlz (semi x y) res_unsigned.
 
 Definition semi_carry_binop_cmlz
   (semi : u256 -> u256 -> u256)
@@ -990,7 +1001,7 @@ Definition semi_carry_binop_cmlz
     let c := Z.b2z cf in
     let res := semi (semi x y) (wrepr U256 c) in
     let res_unsigned := semiZ (semiZ (wunsigned x) (wunsigned y)) c in
-    ok (with_cmlz res res_unsigned).
+    with_cmlz res res_unsigned.
 
 Context
   (mn : bn_basic_mnemonic)
@@ -1005,19 +1016,20 @@ Definition desc_bn_basic_unop
     id_in := [:: EXa 1 ];
     id_tout := ty_mlz ++ [:: lword256 ];
     id_out := ad_mlz fg ++ [:: EXa 0 ];
-    id_semi := semi_unop_mlz semi;
+    id_semi_total := semi_unop_mlz semi;
+    id_init := init_all (ty_mlz ++ [:: lword256 ]);
     id_args_kinds := ak_xreg_xreg;
     id_nargs := 2;
     id_str_jas := pp_s (bn_basic_mnemonic_to_string mn);
     id_pp_asm := pp_bn_basic_op mn fg;
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := ltac:(by case: fg);
     id_check_dest := ltac:(by case: fg);
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 Definition desc_bn_basic_binop
@@ -1028,19 +1040,20 @@ Definition desc_bn_basic_binop
     id_in := [:: EXa 1; EXa 2 ];
     id_tout := ty_cmlz ++ [:: lword256 ];
     id_out := ad_cmlz fg ++ [:: EXa 0 ];
-    id_semi := semi_binop_cmlz semi semiZ;
+    id_semi_total := semi_binop_cmlz semi semiZ;
+    id_init := init_all (ty_cmlz ++ [:: lword256 ]);
     id_args_kinds := ak_xreg_xreg_xreg;
     id_nargs := 3;
     id_str_jas := pp_s (bn_basic_mnemonic_to_string mn);
     id_pp_asm := pp_bn_basic_op mn fg;
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := ltac:(by case: fg);
     id_check_dest := ltac:(by case: fg);
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 Let desc_bin_mlz semi semiZ := idt_drop1 (desc_bn_basic_binop semi semiZ).
@@ -1053,19 +1066,20 @@ Definition desc_bn_basic_carry_binop
     id_in := [:: EXa 1; EXa 2; F (current_CF fg) ];
     id_tout := ty_cmlz ++ [:: lword256 ];
     id_out := ad_cmlz fg ++ [:: EXa 0 ];
-    id_semi := semi_carry_binop_cmlz semi semiZ;
+    id_semi_total := semi_carry_binop_cmlz semi semiZ;
+    id_init := init_all (ty_cmlz ++ [:: lword256 ]);
     id_args_kinds := ak_xreg_xreg_xreg;
     id_nargs := 3;
     id_str_jas := pp_s (bn_basic_mnemonic_to_string mn);
     id_pp_asm := pp_bn_basic_op mn fg;
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := ltac:(by case: fg);
     id_check_dest := ltac:(by case: fg);
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 Definition desc_BN_CMP : instr_desc_t :=
@@ -1075,19 +1089,20 @@ Definition desc_BN_CMP : instr_desc_t :=
     id_in := [:: EXa 0; EXa 1 ];
     id_tout := ty_cmlz;
     id_out := ad_cmlz fg;
-    id_semi := fun x y => rtuple_drop5th (semi_binop_cmlz wsub Z.sub x y);
+    id_semi_total := fun x y => rtuple_drop5th (semi_binop_cmlz wsub Z.sub x y);
+    id_init := init_all ty_cmlz;
     id_args_kinds := ak_xreg_xreg;
     id_nargs := 2;
     id_str_jas := pp_s (bn_basic_mnemonic_to_string BN_CMP);
     id_pp_asm := pp_bn_basic_op BN_CMP fg;
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := ltac:(by case: fg);
     id_check_dest := ltac:(by case: fg);
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 Definition desc_BN_CMPB : instr_desc_t :=
@@ -1097,20 +1112,21 @@ Definition desc_BN_CMPB : instr_desc_t :=
     id_in := [:: EXa 0; EXa 1; F (current_CF fg) ];
     id_tout := ty_cmlz;
     id_out := ad_cmlz fg;
-    id_semi :=
+    id_semi_total :=
       fun x y cf => rtuple_drop5th (semi_carry_binop_cmlz wsub Z.sub x y cf);
+    id_init := init_all ty_cmlz;
     id_args_kinds := ak_xreg_xreg;
     id_nargs := 2;
     id_str_jas := pp_s (bn_basic_mnemonic_to_string BN_CMPB);
     id_pp_asm := pp_bn_basic_op BN_CMPB fg;
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := ltac:(by case: fg);
     id_check_dest := ltac:(by case: fg);
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 Definition desc_bn_basic_mnemonic : instr_desc_t :=
@@ -1140,24 +1156,15 @@ Notation mk_semi3_2_shifted sh :=
 
 Notation mk_shifted1 mn fg sh :=
   (let d := desc_bn_basic_mnemonic mn fg in
-   arch_mk_shifted ak_bn_shift d
-     (mk_semi1_shifted sh (id_semi d))
-     (fun h => mk_semi1_shifted_errty (d.(id_semi_errty) h))
-     (fun h => mk_semi1_shifted_safe _ (d.(id_semi_safe) h))
+   arch_mk_shifted ak_bn_shift d (mk_semi1_shifted sh (id_semi_total d))
   ).
 Notation mk_shifted2 mn fg sh :=
   (let d := desc_bn_basic_mnemonic mn fg in
-   arch_mk_shifted ak_bn_shift d
-     (mk_semi2_2_shifted sh (id_semi d))
-     (fun h => mk_semi2_2_shifted_errty (d.(id_semi_errty) h))
-     (fun h => mk_semi2_2_shifted_safe _ (d.(id_semi_safe) h))
+   arch_mk_shifted ak_bn_shift d (mk_semi2_2_shifted sh (id_semi_total d))
   ).
 Notation mk_shifted_carry mn fg sh :=
   (let d := desc_bn_basic_mnemonic mn fg in
-   arch_mk_shifted ak_bn_shift d
-     (mk_semi3_2_shifted sh (id_semi d))
-     (fun h => mk_semi3_2_shifted_errty (d.(id_semi_errty) h))
-     (fun h => mk_semi3_2_shifted_safe _ (d.(id_semi_safe) h))
+   arch_mk_shifted ak_bn_shift d (mk_semi3_2_shifted sh (id_semi_total d))
   ).
 
 Definition desc_bn_basic_shift_mnemonic
@@ -1191,7 +1198,7 @@ Section MODULAR_OP.
 Definition semi_modular_binop (ws : wsize) (body : Z -> Z -> Z -> Z) :
   semi_type [:: lword ws; lword ws; lword ws ] [:: lword ws ] :=
   fun wx wy wm =>
-    ok (wrepr ws (body (wunsigned wx) (wunsigned wy) (wunsigned wm))).
+    wrepr ws (body (wunsigned wx) (wunsigned wy) (wunsigned wm)).
 
 Definition addm_result (x y m : Z) : Z :=
   let res := x + y in
@@ -1212,19 +1219,20 @@ Definition _desc_acc_op_modular_binop
     id_in := [:: EXa 1; EXa 2; Xreg MOD ];
     id_tout := [:: lword ws ];
     id_out := [:: EXa 0 ];
-    id_semi := semi_modular_binop body;
+    id_semi_total := semi_modular_binop body;
+    id_init := [:: IBool true ];
     id_args_kinds := ak_xreg_xreg_xreg;
     id_nargs := 3;
     id_str_jas := pp_s (acc_op_to_string mn);
     id_pp_asm := pp_acc_op mn;
     id_valid := ws == U256;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 Let desc_acc_op_modular_binop mn := _desc_acc_op_modular_binop mn U256.
@@ -1272,19 +1280,20 @@ Definition desc_bn_vec_binop
     id_in := [:: EXa 1; EXa 2 ];
     id_tout := [:: lword256 ];
     id_out := [:: EXa 0 ];
-    id_semi := fun a b => ok (vec_binop ve f a b);
+    id_semi_total := fun a b => vec_binop ve f a b;
+    id_init := [:: IBool true ];
     id_args_kinds := ak_xreg_xreg_xreg;
     id_nargs := 3;
     id_str_jas := pp_s (acc_op_to_string op);
     id_pp_asm := pp_acc_op op;
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 (* [BN.ADDV]/[BN.SUBV], modular variants: each lane is reduced by the lowest
@@ -1297,19 +1306,20 @@ Definition desc_bn_vec_binop_mod
     id_in := [:: EXa 1; EXa 2; Xreg MOD ];
     id_tout := [:: lword256 ];
     id_out := [:: EXa 0 ];
-    id_semi := fun a b m => ok (vec_binop ve (g (vec_modulus ve m)) a b);
+    id_semi_total := fun a b m => vec_binop ve (g (vec_modulus ve m)) a b;
+    id_init := [:: IBool true ];
     id_args_kinds := ak_xreg_xreg_xreg;
     id_nargs := 3;
     id_str_jas := pp_s (acc_op_to_string op);
     id_pp_asm := pp_acc_op op;
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 (* [BN.SHV]: lanewise shift by an immediate. *)
@@ -1321,19 +1331,20 @@ Definition desc_bn_shv
     id_in := [:: EXa 1; Ea 2 ];
     id_tout := [:: lword256 ];
     id_out := [:: EXa 0 ];
-    id_semi := fun a wsham => ok (vec_shift ve sh a wsham);
+    id_semi_total := fun a wsham => vec_shift ve sh a wsham;
+    id_init := [:: IBool true ];
     id_args_kinds := ak_xreg_xreg_imm5;
     id_nargs := 3;
     id_str_jas := pp_s (acc_op_to_string op);
     id_pp_asm := pp_acc_op op;
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 Definition desc_BN_ADDV (vs : vec_size) (modular : bool) : instr_desc_t :=
@@ -1380,19 +1391,20 @@ Definition desc_bn_trn
     id_in := [:: EXa 1; EXa 2 ];
     id_tout := [:: lword256 ];
     id_out := [:: EXa 0 ];
-    id_semi := fun a b => ok (wtrn ve m a b);
+    id_semi_total := fun a b => wtrn ve m a b;
+    id_init := [:: IBool true ];
     id_args_kinds := ak_xreg_xreg_xreg;
     id_nargs := 3;
     id_str_jas := pp_s (acc_op_to_string op);
     id_pp_asm := pp_acc_op op;
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 Definition desc_BN_TRN (ts : trn_size) (m : trn_mode) : instr_desc_t :=
@@ -1407,7 +1419,7 @@ Definition semi_binopI_cmlz
   fun x y =>
     let res := semi x y in
     let res_unsigned := semiZ (wunsigned x) (wunsigned y) in
-    ok (with_cmlz res res_unsigned).
+    with_cmlz res res_unsigned.
 
 Definition desc_bn_binopI
   (op : acc_op)
@@ -1421,19 +1433,20 @@ Definition desc_bn_binopI
     id_in := [:: EXa 1; Ea 2 ];
     id_tout := ty_cmlz ++ [:: lword256 ];
     id_out := ad_cmlz fg ++ [:: EXa 0 ];
-    id_semi := semi_binopI_cmlz semi semiZ;
+    id_semi_total := semi_binopI_cmlz semi semiZ;
+    id_init := init_all (ty_cmlz ++ [:: lword256 ]);
     id_args_kinds := ak_xreg_xreg_imm10;
     id_nargs := 3;
     id_str_jas := pp_s (acc_op_to_string op);
     id_pp_asm := pp_acc_op op;
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := ltac:(by case: fg);
     id_check_dest := ltac:(by case: fg);
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 Definition desc_BN_MOV : instr_desc_t :=
@@ -1443,19 +1456,20 @@ Definition desc_BN_MOV : instr_desc_t :=
     id_in := [:: EXa 1 ];
     id_tout := [:: lword256 ];
     id_out := [:: EXa 0 ];
-    id_semi := fun x => ok x;
+    id_semi_total := fun x => x;
+    id_init := [:: IBool true ];
     id_args_kinds := ak_xreg_xreg;
     id_nargs := 2;
     id_str_jas := pp_s (acc_op_to_string BN_MOV);
     id_pp_asm := pp_acc_op BN_MOV;
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 Definition desc_BN_SEL (fg : bn_flag_group) : instr_desc_t :=
@@ -1465,28 +1479,29 @@ Definition desc_BN_SEL (fg : bn_flag_group) : instr_desc_t :=
     id_in := [:: EXa 1; EXa 2; Ea 3 ];
     id_tout := [:: lword256 ];
     id_out := [:: EXa 0 ];
-    id_semi := fun wn wm b => ok (if b then wn else wm);
+    id_semi_total := fun wn wm b => if b then wn else wm;
+    id_init := [:: IBool true ];
     id_args_kinds := ak_xreg_xreg_xreg_bool;
     id_nargs := 4;
     id_str_jas := pp_s (acc_op_to_string (BN_SEL fg));
     id_pp_asm := pp_acc_op (BN_SEL fg);
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 (* TODO_ACC we are not modeling the semantics exactly as specified because we
    don't have a [u512] type. *)
-Definition semi_BN_RSHI (x y : u256) (wsham : u8) : exec u256 :=
+Definition semi_BN_RSHI (x y : u256) (wsham : u8) : u256 :=
   let sham := wunsigned wsham in
   let lo_part := wshr y sham in
   let hi_part := wshl x (256 - sham) in
-  ok (wor hi_part lo_part).
+  wor hi_part lo_part.
 
 Definition desc_BN_RSHI : instr_desc_t :=
   {|
@@ -1495,19 +1510,20 @@ Definition desc_BN_RSHI : instr_desc_t :=
     id_in := [:: EXa 1; EXa 2; Ea 3 ];
     id_tout := [:: lword256 ];
     id_out := [:: EXa 0 ];
-    id_semi := semi_BN_RSHI;
+    id_semi_total := semi_BN_RSHI;
+    id_init := [:: IBool true ];
     id_args_kinds := ak_xreg_xreg_xreg_shift;
     id_nargs := 4;
     id_str_jas := pp_s (acc_op_to_string BN_RSHI);
     id_pp_asm := pp_acc_op BN_RSHI;
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 
@@ -1548,7 +1564,7 @@ Definition mulqacc
   acc + mul_res.
 
 Definition semi_BN_MULQACC : semi_type base_mulqacc_tin [:: lword256 ] :=
-  fun x ix y iy acc sham => ok (mulqacc x ix y iy acc sham).
+  fun x ix y iy acc sham => mulqacc x ix y iy acc sham.
 
 (* TODO_ACC: It would be better that the quarterword selectors are indices to
    the mnemonic instead of arguments. *)
@@ -1559,19 +1575,20 @@ Definition desc_BN_MULQACC : instr_desc_t :=
     id_in := [:: EXa 0; Ea 1; EXa 2; Ea 3; Xreg ACC; Ea 4 ];
     id_tout := [:: lword256 ];
     id_out := [:: Xreg ACC ];
-    id_semi := semi_BN_MULQACC;
+    id_semi_total := semi_BN_MULQACC;
+    id_init := [:: IBool true ];
     id_args_kinds := ak_xreg_q_xreg_q_shift;
     id_nargs := 5;
     id_str_jas := pp_s (acc_op_to_string BN_MULQACC);
     id_pp_asm := pp_acc_op BN_MULQACC;
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 Definition desc_BN_MULQACC_Z : instr_desc_t :=
@@ -1581,32 +1598,32 @@ Definition desc_BN_MULQACC_Z : instr_desc_t :=
     id_in := [:: EXa 0; Ea 1; EXa 2; Ea 3; Ea 4 ];
     id_tout := [:: lword256 ];
     id_out := [:: Xreg ACC ];
-    id_semi := fun x ix y iy sham => semi_BN_MULQACC x ix y iy 0%R sham;
+    id_semi_total := fun x ix y iy sham => semi_BN_MULQACC x ix y iy 0%R sham;
+    id_init := [:: IBool true ];
     id_args_kinds := ak_xreg_q_xreg_q_shift;
     id_nargs := 5;
     id_str_jas := pp_s (acc_op_to_string BN_MULQACC_Z);
     id_pp_asm := pp_acc_op BN_MULQACC_Z;
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 Definition semi_BN_MULQACC_WO :
   semi_type base_mulqacc_tin (ty_mlz ++ [:: lword256; lword256 ]) :=
   fun x ix y iy acc sham =>
-    Let res := semi_BN_MULQACC x ix y iy acc sham in
-    ok
-      (:: MF_of_word res
-        , LF_of_word res
-        , ZF_of_word res
-        , res
-        & res
-      ).
+    let res := semi_BN_MULQACC x ix y iy acc sham in
+    (:: MF_of_word res
+      , LF_of_word res
+      , ZF_of_word res
+      , res
+      & res
+    ).
 
 Definition desc_BN_MULQACC_WO : instr_desc_t :=
   {|
@@ -1615,19 +1632,20 @@ Definition desc_BN_MULQACC_WO : instr_desc_t :=
     id_in := [:: EXa 1; Ea 2; EXa 3; Ea 4; Xreg ACC; Ea 5 ];
     id_tout := ty_mlz ++ [:: lword256; lword256 ];
     id_out := ad_mlz fg ++ [:: EXa 0; Xreg ACC ];
-    id_semi := semi_BN_MULQACC_WO;
+    id_semi_total := semi_BN_MULQACC_WO;
+    id_init := init_all (ty_mlz ++ [:: lword256; lword256 ]);
     id_nargs := 6;
     id_args_kinds := ak_xreg_xreg_q_xreg_q_shift;
     id_str_jas := pp_s (acc_op_to_string (BN_MULQACC_WO fg));
     id_pp_asm := pp_acc_op (BN_MULQACC_WO fg);
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := ltac:(by case: fg);
     id_check_dest := ltac:(by case: fg);
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 Definition desc_BN_MULQACC_WO_Z : instr_desc_t :=
@@ -1637,19 +1655,20 @@ Definition desc_BN_MULQACC_WO_Z : instr_desc_t :=
     id_in := [:: EXa 1; Ea 2; EXa 3; Ea 4; Ea 5 ];
     id_tout := ty_mlz ++ [:: lword256; lword256 ];
     id_out := ad_mlz fg ++ [:: EXa 0; Xreg ACC ];
-    id_semi := fun x ix y iy sham => semi_BN_MULQACC_WO x ix y iy 0%R sham;
+    id_semi_total := fun x ix y iy sham => semi_BN_MULQACC_WO x ix y iy 0%R sham;
+    id_init := init_all (ty_mlz ++ [:: lword256; lword256 ]);
     id_nargs := 6;
     id_args_kinds := ak_xreg_xreg_q_xreg_q_shift;
     id_str_jas := pp_s (acc_op_to_string (BN_MULQACC_WO_Z fg));
     id_pp_asm := pp_acc_op (BN_MULQACC_WO_Z fg);
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := ltac:(by case: fg);
     id_check_dest := ltac:(by case: fg);
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 Let mulqacc_so_tin := ty_mlz ++ [:: lword256 ] ++ base_mulqacc_tin.
@@ -1667,11 +1686,11 @@ Definition mlz_of_MULQACC_SO
   then (w2b (wand (wshr lo_part 127) 1), lf, zf && (lo_part == 0))%R
   else (mf, w2b (wand lo_part 1), lo_part == 0)%R.
 Notation m_of_MULQACC_SO :=
-  (fun mf lf zf lo_part => Some (mlz_of_MULQACC_SO mf lf zf lo_part).1.1).
+  (fun mf lf zf lo_part => (mlz_of_MULQACC_SO mf lf zf lo_part).1.1).
 Notation l_of_MULQACC_SO :=
-  (fun mf lf zf lo_part => Some (mlz_of_MULQACC_SO mf lf zf lo_part).1.2).
+  (fun mf lf zf lo_part => (mlz_of_MULQACC_SO mf lf zf lo_part).1.2).
 Notation z_of_MULQACC_SO :=
-  (fun mf lf zf lo_part => Some (mlz_of_MULQACC_SO mf lf zf lo_part).2).
+  (fun mf lf zf lo_part => (mlz_of_MULQACC_SO mf lf zf lo_part).2).
 
 Definition semi_BN_MULQACC_SO : semi_type mulqacc_so_tin mulqacc_so_tout :=
   fun mf lf zf r x ix y iy acc sham =>
@@ -1684,7 +1703,7 @@ Definition semi_BN_MULQACC_SO : semi_type mulqacc_so_tin mulqacc_so_tout :=
     let mf' := m_of_MULQACC_SO mf lf zf lo_part in
     let lf' := l_of_MULQACC_SO mf lf zf lo_part in
     let zf' := z_of_MULQACC_SO mf lf zf lo_part in
-    ok (:: mf', lf', zf', new_wrd & hi_part ).
+    (:: mf', lf', zf', new_wrd & hi_part ).
 
 (* TODO_ACC Can we avoid taking the destination as an argument? *)
 Definition desc_BN_MULQACC_SO : instr_desc_t :=
@@ -1695,19 +1714,20 @@ Definition desc_BN_MULQACC_SO : instr_desc_t :=
       ad_mlz fg ++ [:: EXa 0; EXa 1; Ea 2; EXa 3; Ea 4; Xreg ACC; Ea 5 ];
     id_tout := mulqacc_so_tout;
     id_out := ad_mlz fg ++ [:: EXa 0; Xreg ACC ];
-    id_semi := semi_BN_MULQACC_SO;
+    id_semi_total := semi_BN_MULQACC_SO;
+    id_init := init_all mulqacc_so_tout;
     id_args_kinds := ak_xreg_xreg_q_xreg_q_shift;
     id_nargs := 6;
     id_str_jas := pp_s (acc_op_to_string (BN_MULQACC_SO fg wb));
     id_pp_asm := pp_acc_op (BN_MULQACC_SO fg wb);
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := ltac:(by case: fg);
     id_check_dest := ltac:(by case: fg);
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 Definition desc_BN_MULQACC_SO_Z : instr_desc_t :=
@@ -1717,21 +1737,22 @@ Definition desc_BN_MULQACC_SO_Z : instr_desc_t :=
     id_in := ad_mlz fg ++ [:: EXa 0; EXa 1; Ea 2; EXa 3; Ea 4; Ea 5 ];
     id_tout := mulqacc_so_tout;
     id_out := ad_mlz fg ++ [:: EXa 0; Xreg ACC ];
-    id_semi :=
+    id_semi_total :=
       fun mf lf zf r x ix y iy sham =>
         semi_BN_MULQACC_SO mf lf zf r x ix y iy 0%R sham;
+    id_init := init_all mulqacc_so_tout;
     id_args_kinds := ak_xreg_xreg_q_xreg_q_shift;
     id_nargs := 6;
     id_str_jas := pp_s (acc_op_to_string (BN_MULQACC_SO_Z fg wb));
     id_pp_asm := pp_acc_op (BN_MULQACC_SO_Z fg wb);
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := ltac:(by case: fg);
     id_check_dest := ltac:(by case: fg);
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 End MULQACC.
@@ -1775,9 +1796,9 @@ Definition semi_BN_MULV (sh : mulv_shape) (am : mulv_acc) :
   match am
     return semi_type (mulv_src_tin ++ mulv_acc_tin am) (mulv_tout am)
   with
-  | MVAnone => fun _ _ => ok (ACC_ADMIT "mulv semantics")
-  | MVAacc => fun _ _ _ _ => ok (ACC_ADMIT "mulv semantics")
-  | MVAaccz => fun _ _ => ok (ACC_ADMIT "mulv semantics")
+  | MVAnone => fun _ _ => ACC_ADMIT "mulv semantics"
+  | MVAacc => fun _ _ _ _ => ACC_ADMIT "mulv semantics"
+  | MVAaccz => fun _ _ => ACC_ADMIT "mulv semantics"
   end.
 
 Definition desc_BN_MULV (sh : mulv_shape) (am : mulv_acc) : instr_desc_t :=
@@ -1787,19 +1808,20 @@ Definition desc_BN_MULV (sh : mulv_shape) (am : mulv_acc) : instr_desc_t :=
     id_in := [:: EXa 1; EXa 2 ] ++ mulv_acc_in am;
     id_tout := mulv_tout am;
     id_out := mulv_out am;
-    id_semi := semi_BN_MULV sh am;
+    id_semi_total := semi_BN_MULV sh am;
+    id_init := init_all (mulv_tout am);
     id_args_kinds := ak_xreg_xreg_xreg;
     id_nargs := 3;
     id_str_jas := pp_s (acc_op_to_string (BN_MULV sh am));
     id_pp_asm := pp_acc_op (BN_MULV sh am);
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := ltac:(by case: am);
     id_check_dest := ltac:(by case: am);
     id_safe_wf := refl_equal;
-    id_semi_errty := ltac:(by case: am => _; exact: (sem_lprod_ok_error _ _));
-    id_semi_safe := ltac:(by case: am => _; exact: (sem_lprod_ok_safe _ _));
+    id_wf := ltac:(by case: am);
   |}.
 
 (* [BN.MULV.L] sources: [wrs1], the lane register and the lane index (smaller
@@ -1811,9 +1833,9 @@ Definition semi_BN_MULV_L (sh : mulv_shape) (am : mulv_acc) :
   match am
     return semi_type (mulv_l_src_tin ++ mulv_acc_tin am) (mulv_tout am)
   with
-  | MVAnone => fun _ _ _ => ok (ACC_ADMIT "mulv semantics")
-  | MVAacc => fun _ _ _ _ _ => ok (ACC_ADMIT "mulv semantics")
-  | MVAaccz => fun _ _ _ => ok (ACC_ADMIT "mulv semantics")
+  | MVAnone => fun _ _ _ => ACC_ADMIT "mulv semantics"
+  | MVAacc => fun _ _ _ _ _ => ACC_ADMIT "mulv semantics"
+  | MVAaccz => fun _ _ _ => ACC_ADMIT "mulv semantics"
   end.
 
 (* The lane register operand must be in [w16] or [w17]. *)
@@ -1834,19 +1856,20 @@ Definition desc_BN_MULV_L
     id_in := [:: EXa 1; EXlane 2 lr; Ea 3 ] ++ mulv_acc_in am;
     id_tout := mulv_tout am;
     id_out := mulv_out am;
-    id_semi := semi_BN_MULV_L sh am;
+    id_semi_total := semi_BN_MULV_L sh am;
+    id_init := init_all (mulv_tout am);
     id_args_kinds := ak_mulv_l sh;
     id_nargs := 4;
     id_str_jas := pp_s (acc_op_to_string (BN_MULV_L sh am lr));
     id_pp_asm := pp_acc_op (BN_MULV_L sh am lr);
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := ltac:(by case: am);
     id_check_dest := ltac:(by case: am);
     id_safe_wf := refl_equal;
-    id_semi_errty := ltac:(by case: am => _; exact: (sem_lprod_ok_error _ _));
-    id_semi_safe := ltac:(by case: am => _; exact: (sem_lprod_ok_safe _ _));
+    id_wf := ltac:(by case: am);
   |}.
 
 End MULV.
@@ -1864,19 +1887,20 @@ Definition desc_BN_WSR op xr is_read : instr_desc_t :=
     id_in := [:: ad_in ];
     id_tout := [:: lword256 ];
     id_out := [:: ad_out ];
-    id_semi := fun x => ok x;
+    id_semi_total := fun x => x;
+    id_init := [:: IBool true ];
     id_nargs := 1;
     id_args_kinds := ak_xreg;
     id_str_jas := pp_s (acc_op_to_string op);
     id_pp_asm := pp_acc_op op;
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := check_dest_unop_lword;
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 (* Replace the 32-bit word of [r] starting at bit [shift] with [w], keeping
@@ -1894,19 +1918,20 @@ Definition desc_MOD_word32W (op : acc_op) (shift : Z) : instr_desc_t :=
     id_in := [:: Xreg MOD; Ea 0 ];
     id_tout := [:: lword256 ];
     id_out := [:: Xreg MOD ];
-    id_semi := fun r w => ok (write_mod_word32 shift r w);
+    id_semi_total := fun r w => write_mod_word32 shift r w;
+    id_init := [:: IBool true ];
     id_nargs := 1;
     id_args_kinds := ak_reg;
     id_str_jas := pp_s (acc_op_to_string op);
     id_pp_asm := pp_acc_op op;
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := check_dest_unop_lword;
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 Definition desc_MOD_word32Wzero (op : acc_op) (shift : Z) : instr_desc_t :=
@@ -1916,19 +1941,20 @@ Definition desc_MOD_word32Wzero (op : acc_op) (shift : Z) : instr_desc_t :=
     id_in := [:: Xreg MOD ];
     id_tout := [:: lword256 ];
     id_out := [:: Xreg MOD ];
-    id_semi := fun r => ok (write_mod_word32 shift r 0%R);
+    id_semi_total := fun r => write_mod_word32 shift r 0%R;
+    id_init := [:: IBool true ];
     id_nargs := 0;
     id_args_kinds := [:: [::] ];
     id_str_jas := pp_s (acc_op_to_string op);
     id_pp_asm := pp_acc_op op;
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := check_dest_unop_lword;
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 Definition desc_BN_LD : instr_desc_t :=
@@ -1938,19 +1964,20 @@ Definition desc_BN_LD : instr_desc_t :=
     id_in := [:: Eu 1 ]; (* TODO_ACC: this should be aligned *)
     id_tout := [:: lword256 ];
     id_out := [:: Ea 0 ];
-    id_semi := fun x => ok x;
+    id_semi_total := fun x => x;
+    id_init := [:: IBool true ];
     id_args_kinds := ak_xreg_mem;
     id_nargs := 2;
     id_str_jas := pp_s (acc_op_to_string BN_LD);
     id_pp_asm := pp_acc_op BN_LD;
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := check_dest_unop_lword;
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 Definition desc_BN_SD : instr_desc_t :=
@@ -1960,19 +1987,20 @@ Definition desc_BN_SD : instr_desc_t :=
     id_in := [:: Ea 0 ];
     id_tout := [:: lword256 ];
     id_out := [:: Eu 1 ]; (* TODO_ACC: this should be aligned *)
-    id_semi := fun x => ok x;
+    id_semi_total := fun x => x;
+    id_init := [:: IBool true ];
     id_args_kinds := ak_xreg_mem;
     id_nargs := 2;
     id_str_jas := pp_s (acc_op_to_string BN_SD);
     id_pp_asm := pp_acc_op BN_SD;
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := check_dest_unop_lword;
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 (* [x, p = #BN_LD_INC([p + off], p)], i.e. [bn.ld x, off(p++)].
@@ -1989,19 +2017,20 @@ Definition desc_BN_LD_INC : instr_desc_t :=
     id_in := [:: Eu 1; Ea 2 ]; (* TODO_ACC: this should be aligned *)
     id_tout := [:: lword256; lword U32 ];
     id_out := [:: Ea 0; Ea 2 ];
-    id_semi := fun x p => ok (x, (p + wrepr U32 (wsize_size U256))%R);
+    id_semi_total := fun x p => (x, (p + wrepr U32 (wsize_size U256))%R);
+    id_init := [:: IBool true; IBool true ];
     id_args_kinds := ak_xreg_mem_reg;
     id_nargs := 3;
     id_str_jas := pp_s (acc_op_to_string BN_LD_INC);
     id_pp_asm := pp_acc_op BN_LD_INC;
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
 (* [[p + off], p = #BN_SD_INC(v, p)], i.e. [bn.sd v, off(p++)].
@@ -2015,41 +2044,24 @@ Definition desc_BN_SD_INC : instr_desc_t :=
     id_in := [:: Ea 0; Ea 2 ];
     id_tout := [:: lword256; lword U32 ];
     id_out := [:: Eu 1; Ea 2 ]; (* TODO_ACC: this should be aligned *)
-    id_semi := fun x p => ok (x, (p + wrepr U32 (wsize_size U256))%R);
+    id_semi_total := fun x p => (x, (p + wrepr U32 (wsize_size U256))%R);
+    id_init := [:: IBool true; IBool true ];
     id_args_kinds := ak_xreg_mem_reg;
     id_nargs := 3;
     id_str_jas := pp_s (acc_op_to_string BN_SD_INC);
     id_pp_asm := pp_acc_op BN_SD_INC;
     id_valid := true;
     id_safe := [::];
-    id_doit := DOIT; (* TODO_ACC: check *)
+    id_err := ErrSemUndef;
+    id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
-    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+    id_wf := refl_equal;
   |}.
 
-Definition BN_LID_semi (i : nat) (w : u32) (x : u256) : exec u256 :=
-  Let _ := assert (wunsigned w == Z.of_nat i) ErrSemUndef in
-  ok x.
-
-Lemma BN_LID_semi_errty i :
-  sem_lforall (fun r => r <> Error ErrType) [:: lword U32; lword256 ]
-    (BN_LID_semi i).
-Proof. by move=> w x; rewrite /BN_LID_semi; case: eqP. Qed.
-
-Lemma BN_LID_semi_safe i :
-  interp_safe_cond_lty [:: lword U32; lword256 ]
-    [:: UGe U32 (Z.of_nat i) 0; ULt U32 0 ((Z.of_nat i) + 1) ]
-    (BN_LID_semi i).
-Proof.
-move=> w x /List_Forall_inv [] /(_ w) + /List_Forall_inv [] /= /(_ w) + _.
-rewrite /= !truncate_word_u => /(_ erefl) hge /(_ erefl) hlt.
-exists x; rewrite /BN_LID_semi.
-suff -> : wunsigned w = Z.of_nat i by rewrite eqxx.
-by move: hge hlt; t_lia.
-Qed.
+(* The safety conditions ensure that [w] is [i]. *)
+Definition BN_LID_semi (i : nat) (w : u32) (x : u256) : u256 := x.
 
 Definition desc_BN_LID (i : nat) : instr_desc_t :=
   let wi := index_to_wreg i in
@@ -2061,40 +2073,23 @@ Definition desc_BN_LID (i : nat) : instr_desc_t :=
     id_in := [:: Ea 1; Ea 2 ];
     id_tout := [:: lword256 ];
     id_out := [:: ADExplicit (AK_mem Aligned) 0 (ACR_vector wi) ];
-    id_semi := BN_LID_semi i;
+    id_semi_total := BN_LID_semi i;
+    id_init := [:: IBool true ];
     id_args_kinds := ak_xreg_reg_mem;
     id_nargs := 3;
     id_str_jas := fun _ => str;
     id_pp_asm := pp_acc_op (BN_LID i);
     id_safe := [:: UGe U32 (Z.of_nat i) 0; ULt U32 0 ((Z.of_nat i) + 1) ];
+    id_err := ErrSemUndef;
     id_doit := DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := check_dest_unop_lword;
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => @BN_LID_semi_errty i;
-    id_semi_safe := fun _ => @BN_LID_semi_safe i;
+    id_wf := refl_equal;
   |}.
 
-Definition BN_SID_semi (i : nat) (x : u256) (w : u32) : exec u256 :=
-  Let _ := assert (wunsigned w == Z.of_nat i) ErrSemUndef in
-  ok x.
-
-Lemma BN_SID_semi_errty i :
-  sem_lforall (fun r => r <> Error ErrType) [:: lword256; lword U32 ]
-    (BN_SID_semi i).
-Proof. by move=> x w; rewrite /BN_SID_semi; case: eqP. Qed.
-
-Lemma BN_SID_semi_safe i :
-  interp_safe_cond_lty [:: lword256; lword U32 ]
-    [:: UGe U32 (Z.of_nat i) 1; ULt U32 1 ((Z.of_nat i) + 1) ]
-    (BN_SID_semi i).
-Proof.
-move=> x w /List_Forall_inv [] /(_ w) + /List_Forall_inv [] /(_ w) + _.
-rewrite /= !truncate_word_u => /(_ erefl) hge /(_ erefl) hlt.
-exists x; rewrite /BN_SID_semi.
-suff -> : wunsigned w = Z.of_nat i by rewrite eqxx.
-by move: hge hlt; t_lia.
-Qed.
+(* The safety conditions ensure that [w] is [i]. *)
+Definition BN_SID_semi (i : nat) (x : u256) (w : u32) : u256 := x.
 
 Definition desc_BN_SID (i : nat) : instr_desc_t :=
   let wi := index_to_wreg i in
@@ -2106,54 +2101,29 @@ Definition desc_BN_SID (i : nat) : instr_desc_t :=
     id_in := [:: ADExplicit (AK_mem Aligned) 0 (ACR_vector wi); Ea 1 ];
     id_tout := [:: lword256 ];
     id_out := [:: Ea 2 ];
-    id_semi := BN_SID_semi i;
+    id_semi_total := BN_SID_semi i;
+    id_init := [:: IBool true ];
     id_args_kinds := ak_xreg_reg_mem;
     id_nargs := 3;
     id_str_jas := fun _ => str;
     id_pp_asm := pp_acc_op (BN_SID i);
     id_safe := [:: UGe U32 (Z.of_nat i) 1; ULt U32 1 ((Z.of_nat i) + 1) ];
+    id_err := ErrSemUndef;
     id_doit := DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := check_dest_unop_lword;
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => @BN_SID_semi_errty i;
-    id_semi_safe := fun _ => @BN_SID_semi_safe i;
+    id_wf := refl_equal;
   |}.
 
 (* [BN_MOVR]: writes wide register [i] with the contents of wide register
    [j]; both are explicit registers whose index is checked against a
    general-purpose register, combining [BN_LID]'s destination check with
-   [BN_SID]'s source check. *)
+   [BN_SID]'s source check. The safety conditions ensure that [w_grd] is [i]
+   and [w_grs] is [j]. *)
 Definition BN_MOVR_semi (i j : nat) (w_grd : u32) (x : u256) (w_grs : u32) :
-  exec u256 :=
-  Let _ := assert (wunsigned w_grd == Z.of_nat i) ErrSemUndef in
-  Let _ := assert (wunsigned w_grs == Z.of_nat j) ErrSemUndef in
-  ok x.
-
-Lemma BN_MOVR_semi_errty i j :
-  sem_lforall
-    (fun r => r <> Error ErrType) [:: lword U32; lword256; lword U32 ]
-    (BN_MOVR_semi i j).
-Proof.
-by move=> w x w'; rewrite /BN_MOVR_semi; case: eqP => //=; case: eqP.
-Qed.
-
-Lemma BN_MOVR_semi_safe i j :
-  interp_safe_cond_lty [:: lword U32; lword256; lword U32 ]
-    [:: UGe U32 (Z.of_nat i) 0; ULt U32 0 ((Z.of_nat i) + 1)
-      ; UGe U32 (Z.of_nat j) 2; ULt U32 2 ((Z.of_nat j) + 1) ]
-    (BN_MOVR_semi i j).
-Proof.
-move=> w x w'
-  /List_Forall_inv [] /(_ w) + /List_Forall_inv [] /(_ w) +
-  /List_Forall_inv [] /(_ w') + /List_Forall_inv [] /(_ w') + _.
-rewrite /= !truncate_word_u
-  => /(_ erefl) hge1 /(_ erefl) hlt1 /(_ erefl) hge2 /(_ erefl) hlt2.
-exists x; rewrite /BN_MOVR_semi.
-have -> : wunsigned w = Z.of_nat i by move: hge1 hlt1; t_lia.
-have -> : wunsigned w' = Z.of_nat j by move: hge2 hlt2; t_lia.
-by rewrite !eqxx.
-Qed.
+  u256 :=
+  x.
 
 Definition desc_BN_MOVR (i j : nat) : instr_desc_t :=
   let wi := index_to_wreg i in
@@ -2169,7 +2139,8 @@ Definition desc_BN_MOVR (i j : nat) : instr_desc_t :=
     id_in := [:: Ea 1; ADExplicit (AK_mem Aligned) 2 (ACR_vector wj); Ea 3 ];
     id_tout := [:: lword256 ];
     id_out := [:: ADExplicit (AK_mem Aligned) 0 (ACR_vector wi) ];
-    id_semi := BN_MOVR_semi i j;
+    id_semi_total := BN_MOVR_semi i j;
+    id_init := [:: IBool true ];
     id_args_kinds := ak_xreg_reg_xreg_reg;
     id_nargs := 4;
     id_str_jas := fun _ => str;
@@ -2177,12 +2148,12 @@ Definition desc_BN_MOVR (i j : nat) : instr_desc_t :=
     id_safe :=
       [:: UGe U32 (Z.of_nat i) 0; ULt U32 0 ((Z.of_nat i) + 1)
         ; UGe U32 (Z.of_nat j) 2; ULt U32 2 ((Z.of_nat j) + 1) ];
+    id_err := ErrSemUndef;
     id_doit := DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := check_dest_unop_lword;
     id_safe_wf := refl_equal;
-    id_semi_errty := fun _ => @BN_MOVR_semi_errty i j;
-    id_semi_safe := fun _ => @BN_MOVR_semi_safe i j;
+    id_wf := refl_equal;
   |}.
 
 Definition desc_acc_op (op : acc_op) : instr_desc_t :=

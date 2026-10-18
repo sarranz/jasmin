@@ -337,6 +337,8 @@ module ACCTarget :
 
   let headers = []
 
+  let text_alignment = [ Header (".p2align", ["2"]) ]
+
   (* ACC has a Harvard architecture: instructions live in IMEM and data in
      DMEM. Globals are accessed through DMEM loads/stores (bn.ld/bn.sd, lw/sw),
      so the data segment must go into [.data] (which the ACC linker script maps

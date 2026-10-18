@@ -245,3 +245,23 @@ Lemma Hassgn_id (p' : prog) (hglob : p_globs p' = p_globs p)
 Proof. by move=> hsem; rewrite esem1 /= /sem_assgn hglob; exact: hsem. Qed.
 
 End LOWERING_SEM_ID.
+
+(* Patterns shared by the lowering passes of the back-ends. *)
+
+(* A complemented operand [!a], at any width: the operator that consumes it
+   truncates it to its own width, which commutes with the complement. *)
+Definition is_lnot (e : pexpr) : option pexpr :=
+  match e with
+  | Papp1 (Olnot _) a => Some a
+  | _ => None
+  end.
+
+(* The operands of a conjunction, one of which is complemented:
+   [is_andn a b = Some (x, y)] means that [a & b] is [!x & y], whatever the
+   order of the operands. *)
+Definition is_andn (a b : pexpr) : option (pexpr * pexpr) :=
+  match is_lnot a, is_lnot b with
+  | Some a, _ => Some (a, b)
+  | None, Some b => Some (b, a)
+  | None, None => None
+  end.

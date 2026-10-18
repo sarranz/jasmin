@@ -310,6 +310,7 @@ Context
   {sc_sem : syscall_sem syscall_state}
   {call_conv : calling_convention}
   {hwcs_i : hw_call_stack_info}
+  {vinfo : one_varmap.veneer_info}
 .
 
 #[local] Existing Instance withsubword.
@@ -329,7 +330,7 @@ Proof.
   rewrite /to_opn /linear_sem.sem_fopn_args /ACCFopn_coreP.sem_fopn_args /=.
   case: sem_rexprs => //= >.
   rewrite /exec_sopn /= /sopn_sem /=; case: id_valid => //=.
-  rewrite /sopn_sem_ /= /semi_to_atype.
+  rewrite /sopn_sem_ /semi /semi_to_atype_t /=.
   move: (computational_eq _) (computational_eq _) => e1 e2.
   rewrite <- e1, <- e2.
   by case: app_sopn.

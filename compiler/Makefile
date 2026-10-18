@@ -25,7 +25,7 @@ CHECKCATS ?= \
 	acc-stack-zero-loop \
 	acc-stack-zero-unrolled \
 	acc-stack-zero-loophw \
-	CCT CCT-riscv CCT-DOIT CCT-DOIT-riscv SCT
+	CCT CCT-riscv CCT-DOIT CCT-DOIT-riscv CCT-DOIT-arm-m4 SCT
 
 # --------------------------------------------------------------------
 DESTDIR  ?=

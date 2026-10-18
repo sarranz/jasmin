@@ -67,6 +67,10 @@ module ACC (Input : ACC_input) :
   let pp_asm = Pp_acc.print_prog
 
   let callstyle = Arch_full.OnHWStack
+
+  (* Calls go through the hardware call stack and IMEM is small: the linker
+     never inserts a veneer. *)
+  let veneer_registers = []
   let sp_min_align = Wsize.U8
 
   (* BN.SD stores a full wide (256-bit) register in one instruction. *)

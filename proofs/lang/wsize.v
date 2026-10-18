@@ -193,7 +193,7 @@ Variant v_kind :=
 .
 
 (* -------------------------------------------------------------------- *)
-Variant safe_cond :=
+Inductive safe_cond :=
   (* the nth argument must be different from 0 *)
   | NotZero of wsize & nat
   (* this is a division instruction, two words by one word;
@@ -210,7 +210,11 @@ Variant safe_cond :=
   (* the nth argument is an array ws[n] where all cells are initialized *)
   | AllInit of wsize & Z & nat
   (* Unsatisfiable safe_cond *)
-  | ScFalse.
+  | ScFalse
+  (* the nth argument, a word of the given size, must be zero *)
+  | IsZero of wsize & nat
+  (* the condition is required only when the nth argument, a boolean, is true *)
+  | Guarded of nat & safe_cond.
 
 (* -------------------------------------------------------------------- *)
 Class PointerData := {

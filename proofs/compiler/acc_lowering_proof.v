@@ -375,7 +375,7 @@ case: op1 he => //= ws'; t_xrbindP=> v0.
     have h_wr : w_r = wnot we1.
     * by have [_ ->] := truncate_wordP htw; apply: zero_extend_u.
     subst w_r.
-    by rewrite heq /= /semi_to_atype /= /write_lvals /= /write_none /= hw.
+    by rewrite heq /= /= /write_lvals /= /write_none /= hw.
   (* [ws == reg_size]: [ExtOp NOT], mirrors the [Oneg]/[RV32 NEG] case below
      (same [lvs = [::]] / single-argument shape, same cross-width
      [wnot_zero_extend]/[to_wordI']/[zero_extend_idem] reasoning). *)
@@ -394,7 +394,7 @@ case: op1 he => //= ws'; t_xrbindP=> v0.
   subst v0 we1.
   rewrite /to_word /= truncate_word_le; last exact: (cmp_le_trans hcmp hsz0).
   rewrite zero_extend_idem // in hw.
-  rewrite /semi_to_atype /=.
+  rewrite /=.
   rewrite /write_lvals /=.
   by rewrite hw.
 case: ws' => [|ws'] //=.
@@ -413,7 +413,7 @@ have [sz0 [w0 [hsz0 hv0 hwe1eq]]] := to_wordI' heq.
 subst v0 we1.
 rewrite /to_word /= truncate_word_le; last exact: (cmp_le_trans hcmp hsz0).
 rewrite zero_extend_idem // in hw.
-rewrite /semi_to_atype /=.
+rewrite /=.
 rewrite /write_lvals /=.
 by rewrite hw.
 Qed.
@@ -480,7 +480,7 @@ case: op2 ok_v hlow => //.
       have [hcmp [w1 [w2 [ok_w1 ok_w2 sem_correct]]]] :=
         Hassgn_op2 ok_v1 ok_v2 ok_v' htr hw (op2' := op2') erefl erefl erefl.
       apply sem_correct.
-      by rewrite /semi_to_atype /= sub_wordE wsub_zero_extend //.
+      by rewrite /= sub_wordE wsub_zero_extend //.
 (* Oland w *)
 - move=> w ok_v.
   rewrite /= /rv_Imn_of_op2 /rv_mn_of_op2.
@@ -544,7 +544,7 @@ case: op2 ok_v hlow => //.
     Hassgn_op2_shift ok_v1 ok_v2 ok_v htr hw (op2' := op2') erefl erefl erefl.
   have [_ [wa ok_wa eq_shift]] := check_shift_amountP good_shift ok_v2 ok_w2.
   rewrite (sem_correct _ _ ok_wa) //= !zero_extend_u /sem_shr eq_shift.
-  by rewrite /sem_shift /semi_to_atype /= (wand_modulo wa 5) -Z.land_ones.
+  by rewrite /sem_shift /= (wand_modulo wa 5) -Z.land_ones.
 (* Olsl o *)
 - move=> [|w] ok_v //.
   rewrite /lower_shift.
@@ -558,7 +558,7 @@ case: op2 ok_v hlow => //.
   rewrite (sem_correct _ _ ok_wa) //=.
   rewrite /sem_shl /= zero_extend_wshl //;
     last by have [? _] := wunsigned_range w2.
-  by rewrite -/(sem_shift _ _ _) eq_shift /sem_shift /semi_to_atype /=
+  by rewrite -/(sem_shift _ _ _) eq_shift /sem_shift /=
        (wand_modulo wa 5) -Z.land_ones.
 (* Oasr o *)
 - move=> [|[]] // ok_v.
@@ -571,7 +571,7 @@ case: op2 ok_v hlow => //.
     Hassgn_op2_shift ok_v1 ok_v2 ok_v htr hw (op2' := op2') erefl erefl erefl.
   have [_ [wa ok_wa eq_shift]] := check_shift_amountP good_shift ok_v2 ok_w2.
   rewrite (sem_correct _ _ ok_wa) //= !zero_extend_u /sem_sar eq_shift.
-  by rewrite /sem_shift /semi_to_atype /= (wand_modulo wa 5) -Z.land_ones.
+  by rewrite /sem_shift /= (wand_modulo wa 5) -Z.land_ones.
 Qed.
 
 (* Wide case: [BN_ADDI/BN_SUBI FG0] (immediate) or [BN_ADD/BN_SUB FG0]
@@ -607,7 +607,7 @@ move: hlow; case: (isSome (is_wconst xreg_size b)).
     move=> [?]; subst w'.
     rewrite /sem_sopn /= ok_v1 ok_v2 /= /exec_sopn /= /sopn_sem /sopn_sem_ /=.
     rewrite /type_of_opk /eval_atype /= in hbw0 hbw1.
-    rewrite hbw0 hbw1 /= /semi_binopI_cmlz /semi_to_atype /=.
+    rewrite hbw0 hbw1 /= /semi_binopI_cmlz /=.
     cbn [sem_ot eval_ltype ty_mlz ty_cmlz ltuple with_cmlz add_tuple with_mlz].
     by change (wadd bw0 bw1) with ((bw0 + bw1)%w); rewrite hw.
   + move=> ok_v [???]; subst lvs op es.
@@ -616,7 +616,7 @@ move: hlow; case: (isSome (is_wconst xreg_size b)).
     move=> [?]; subst w'.
     rewrite /sem_sopn /= ok_v1 ok_v2 /= /exec_sopn /= /sopn_sem /sopn_sem_ /=.
     rewrite /type_of_opk /eval_atype /= in hbw0 hbw1.
-    rewrite hbw0 hbw1 /= /semi_binopI_cmlz /semi_to_atype /=.
+    rewrite hbw0 hbw1 /= /semi_binopI_cmlz /=.
     cbn [sem_ot eval_ltype ty_mlz ty_cmlz ltuple with_cmlz add_tuple with_mlz].
     by rewrite /wsub -sub_wordE hw /=.
 - rewrite /acc_op_of_op2.
@@ -675,8 +675,8 @@ case: eqP => [?|//]; subst; exact: lower_Papp2_largeP.
 Qed.
 
 (* [waddsubcarry_cmlzP]: the wide-carry op's flag and result match the
-   pseudo-op's [waddcarry]/[wsubcarry].  The carry-out [CF_of_Z z] (= [Some]
-   of bit 256 of [z]) equals the boolean carry, and the wide result equals
+   pseudo-op's [waddcarry]/[wsubcarry].  The carry-out [CF_of_Z z] (bit 256
+   of [z]) equals the boolean carry, and the wide result equals
    the word result.  Idea (cf. ARM [wunsigned_carry], proving
    [(wbase <=? res') = (res != res')]): additionally relate [CF_of_Z]'s
    bit-256 extraction to that overflow predicate -- for
@@ -688,13 +688,13 @@ Lemma waddsubcarry_cmlzP is_add (x y : word arch_decl.xreg_size) (c : bool) :
   let fZ := if is_add then Z.add else Z.sub in
   let fw := if is_add then +%R else (fun a b => a - b)%R in
   CF_of_Z (fZ (fZ (wunsigned x) (wunsigned y)) (Z.b2z c))
-  = Some (if is_add then (waddcarry x y c).1 else (wsubcarry x y c).1)
+  = (if is_add then (waddcarry x y c).1 else (wsubcarry x y c).1)
   /\ fw (fw x y) (wrepr arch_decl.xreg_size (Z.b2z c))
      = (if is_add then (waddcarry x y c).2 else (wsubcarry x y c).2).
 Proof.
   case: is_add => /=; split.
   - (* add CF *)
-    rewrite /CF_of_Z; congr Some; rewrite Z.shiftr_div_pow2 //.
+    rewrite /CF_of_Z Z.shiftr_div_pow2 //.
     have hx := wunsigned_range x.
     have hy := wunsigned_range y.
     have hb : (0 <= Z.b2z c <= 1)%Z by case: c.
@@ -716,7 +716,7 @@ Proof.
       by rewrite hq; vm_compute.
   - by rewrite wrepr_add wrepr_add wrepr_unsigned wrepr_unsigned.
   - (* sub CF *)
-    rewrite /CF_of_Z; congr Some; rewrite Z.shiftr_div_pow2 //.
+    rewrite /CF_of_Z Z.shiftr_div_pow2 //.
     have hx := wunsigned_range x.
     have hy := wunsigned_range y.
     have hb : (0 <= Z.b2z c <= 1)%Z by case: c.
@@ -745,17 +745,17 @@ Qed.
    [is_add := false], [c := false] rather than redoing the [Z.div_*]
    derivation.  [M]/[L] are never needed (Stage D item 1). *)
 Lemma CF_of_Z_subP (x y : u256) :
-  CF_of_Z (wunsigned x - wunsigned y) = Some (wlt Unsigned x y).
+  CF_of_Z (wunsigned x - wunsigned y) = wlt Unsigned x y.
 Proof.
   have [hCF _] := waddsubcarry_cmlzP false x y false.
   move: hCF; rewrite /wsubcarry /wlt /= !Z.sub_0_r.
-  move=> ->; congr Some; rewrite /wunsigned.
+  move=> ->; rewrite /wunsigned.
   move: (word.urepr x) (word.urepr y) => a b.
   case: ZltP => h1; case: ZltP => h2 //; exfalso; Lia.lia.
 Qed.
 
 Lemma ZF_of_word_subP (x y : u256) :
-  ZF_of_word (x - y) = Some (x == y).
+  ZF_of_word (x - y) = (x == y).
 Proof. by rewrite /ZF_of_word GRing.subr_eq0. Qed.
 
 (* [norm_condP]: evaluating the [empty_const_prop_e]-normalized condition
@@ -874,12 +874,12 @@ all: (move: hexec; t_xrbindP => hwx hx hwy hy;
 all: rewrite hwy !truncate_word_u !letok.
 all: have hwy_val : word_shift_of_reg_shift sh wb (wunsigned wa) = hy
        by move: hshift; rewrite hwy_eq => [[<-]].
-all: rewrite /semi_to_atype /= in hsemi.
+all: rewrite /= in hsemi.
 1-6: (rewrite hwy_val; move: hsemi => [hsemi]; rewrite hsemi //).
 (* BN_CMPB: vs' is abstract, extract vs'=[] from hsemi *)
 case: vs' hsemi => [| ?? ] //= hsemi.
 2: by case: (to_bool a) hsemi.
-rewrite truncate_word_u /semi_to_atype /= /arch_utils.arch_mk_semi3_2_shifted /= hwy_val.
+rewrite truncate_word_u /= /arch_utils.arch_mk_semi3_2_shifted /= hwy_val.
 rewrite hsemi //.
 Qed.
 
@@ -1620,7 +1620,7 @@ rewrite truncate_word_u /= truncate_word_u /=.
 have heq : hwx = word_shift_of_reg_shift sh wb (wunsigned wa)
   by move: htw; rewrite hshift => [[<-]].
 rewrite heq in hmatch.
-move: hmatch; rewrite /semi_to_atype /= => [[<-]].
+move: hmatch; rewrite /= => [[<-]].
 by rewrite /with_mlz /=.
 Qed.
 
@@ -1940,21 +1940,11 @@ Proof.
       t_xrbindP=> s_cf hcf s_r hr hlr.
       case: lvs_rest hlr => [[<-] | ? ? //].
       rewrite hw0 hw1.
-      have hinner : (Let v := ok w0 in Let v2 := ok w1 in
-        @semi_to_atype [:: lword256; lword256] (ty_cmlz ++ [:: lword256])
-          (fun x y : u256 =>
-            ok (with_cmlz (wadd x y) (wunsigned x + wunsigned y))) v v2)
-        = ok (with_cmlz (wadd w0 w1)
-            (wunsigned w0 + wunsigned w1)) := erefl.
-      rewrite hinner; cbn - [with_cmlz].
-      rewrite /with_cmlz /add_tuple /with_mlz.
-      cbn [sem_ot eval_ltype ty_mlz ltuple].
       have [hCF hR] := waddsubcarry_cmlzP true w0 w1 false.
       rewrite Z.add_0_r in hCF.
       rewrite wrepr0 GRing.addr0 in hR.
-      rewrite hCF /= hcf /= /write_none /=.
-      change (word.word.add_word w0 w1) with ((w0 + w1)%w).
-      by rewrite add_wordE hR /waddcarry /= hr /=.
+      rewrite /= hCF /= hcf /= /write_none /=.
+      by rewrite /wadd hR /waddcarry /= hr.
     + by move=> //.
   (* ---- BN_SUB: no-carry, sub ---- *)
   - move=> hsrc; move: hsrc; rewrite /sem_sopn /=.
@@ -1970,23 +1960,11 @@ Proof.
     t_xrbindP=> s_cf hcf s_r hr hlr.
     case: lvs_rest hlr => [[<-] | ? ? //].
     rewrite hw0 hw1.
-    have hinner : (Let v := ok w0 in Let v2 := ok w1 in
-      @semi_to_atype [:: lword256; lword256] (ty_cmlz ++ [:: lword256])
-        (fun x y : u256 => ok (with_cmlz (wsub x y)
-          (Z.sub (wunsigned x) (wunsigned y)))) v v2)
-      = ok (with_cmlz (wsub w0 w1)
-          (Z.sub (wunsigned w0) (wunsigned w1))) := erefl.
-    rewrite hinner; cbn - [with_cmlz].
-    rewrite /with_cmlz /add_tuple /with_mlz.
-    cbn [sem_ot eval_ltype ty_mlz ltuple].
     have [hCF hR] := waddsubcarry_cmlzP false w0 w1 false.
     rewrite Z.sub_0_r in hCF.
     rewrite wrepr0 GRing.subr0 in hR.
-    rewrite hCF /= hcf /= /write_none /=.
-    change (word.word.sub_word w0 w1) with ((w0 - w1)%w).
-    change (word.word.add_word w0 (word.word.opp_word w1)) with ((w0 - w1)%R).
-    rewrite hR /wsubcarry /= hr /=.
-    done.
+    rewrite /= hCF /= hcf /= /write_none /=.
+    by rewrite /wsub hR /wsubcarry /= hr.
   (* ---- BN_ADDC: carry, add ---- *)
   - move=> hsrc; move: hsrc; rewrite /sem_sopn /=.
     t_xrbindP=> v0 hv0 v1 hv1 hexec hwrite.
@@ -2002,21 +1980,9 @@ Proof.
     t_xrbindP=> s_cf hcf s_r hr hlr.
     case: lvs_rest hlr => [[<-] | ? ? //].
     rewrite hw0 hw1 hbcarry.
-    have hinner : (Let v := ok w0 in Let v2 := ok w1 in Let v3 := ok b_carry in
-      @semi_to_atype [:: lword256; lword256; lbool] (ty_cmlz ++ [:: lword256])
-        (semi_carry_binop_cmlz wadd Z.add) v v2 v3)
-      = ok (with_cmlz (wadd (wadd w0 w1) (wrepr U256 (Z.b2z b_carry)))
-          (Z.add (Z.add (wunsigned w0) (wunsigned w1))
-            (Z.b2z b_carry))) := erefl.
-    rewrite hinner; cbn - [with_cmlz].
-    rewrite /with_cmlz /add_tuple /with_mlz.
-    cbn [sem_ot eval_ltype ty_mlz ltuple].
     have [hCF hR] := waddsubcarry_cmlzP true w0 w1 b_carry.
-    rewrite hCF /= hcf /= /write_none /=.
-    change (word.word.add_word (word.word.add_word w0 w1)
-             (wrepr U256 (Z.b2z b_carry)))
-      with (((w0 + w1) + wrepr U256 (Z.b2z b_carry))%R).
-    by rewrite hR /waddcarry /= hr /=.
+    rewrite /= hCF /= hcf /= /write_none /=.
+    by rewrite /wadd hR /waddcarry /= hr.
   (* ---- BN_SUBB: carry, sub ---- *)
   - move=> hsrc; move: hsrc; rewrite /sem_sopn /=.
     t_xrbindP=> v0 hv0 v1 hv1 hexec hwrite.
@@ -2032,22 +1998,9 @@ Proof.
     t_xrbindP=> s_cf hcf s_r hr hlr.
     case: lvs_rest hlr => [[<-] | ? ? //].
     rewrite hw0 hw1 hbcarry.
-    have hinner : (Let v := ok w0 in Let v2 := ok w1 in Let v3 := ok b_carry in
-      @semi_to_atype [:: lword256; lword256; lbool] (ty_cmlz ++ [:: lword256])
-        (semi_carry_binop_cmlz wsub Z.sub) v v2 v3)
-      = ok (with_cmlz (wsub (wsub w0 w1) (wrepr U256 (Z.b2z b_carry)))
-          (Z.sub (Z.sub (wunsigned w0) (wunsigned w1))
-            (Z.b2z b_carry))) := erefl.
-    rewrite hinner; cbn - [with_cmlz].
-    rewrite /with_cmlz /add_tuple /with_mlz.
-    cbn [sem_ot eval_ltype ty_mlz ltuple].
     have [hCF hR] := waddsubcarry_cmlzP false w0 w1 b_carry.
-    rewrite hCF /= hcf /= /write_none /=.
-    change (word.word.add_word
-             (word.word.add_word w0 (word.word.opp_word w1))
-             (word.word.opp_word (wrepr U256 (Z.b2z b_carry))))
-      with (((w0 - w1) - wrepr U256 (Z.b2z b_carry))%R).
-    by rewrite hR /wsubcarry /= hr /=.
+    rewrite /= hCF /= hcf /= /write_none /=.
+    by rewrite /wsub hR /wsubcarry /= hr.
 Qed.
 
 (* -------------------------------------------------------------------- *)
@@ -2079,7 +2032,7 @@ Proof.
   - move=> _ hw_exec hw_write.
     move: hw_exec; t_xrbindP => w0 hw0 w1 hw1 ht.
     rewrite hw0 hw1 /= /MF_of_word /LF_of_word /ZF_of_word /=.
-    rewrite -ht /swap_semi /= in hvs.
+    rewrite -ht /= in hvs.
     rewrite -hvs in hw_write.
     exact: hw_write.
   by move=> c rest _ /=;

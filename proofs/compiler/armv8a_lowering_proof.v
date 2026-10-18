@@ -119,7 +119,6 @@ Proof. by repeat (exact: SvD.F.add_1 || apply: SvD.F.add_2). Qed.
 Lemma fvars_VF : Sv.In (fvVF fv) fvars.
 Proof. by repeat (exact: SvD.F.add_1 || apply: SvD.F.add_2). Qed.
 
-
 (* -------------------------------------------------------------------- *)
 (* Lowering of conditions. *)
 
@@ -389,7 +388,6 @@ Proof using atoI ev fv fv_correct p pT sCP sc_sem syscall_state warning wsw.
   exact: (eeq_exc_sem_pexpr hfv hs00 hseme).
 Qed.
 
-
 (* -------------------------------------------------------------------- *)
 (* Lowering of assignments. *)
 
@@ -556,7 +554,7 @@ Proof.
     + rewrite /= ok_t /= ok_idx /= ok_r /=.
       eexists; first reflexivity.
       rewrite /exec_sopn /= hwsx' /=.
-      rewrite /semi_to_atype !computational_eq_refl /=.
+      rewrite !computational_eq_refl /=.
       by rewrite truncate_word_le // /= zero_extend_u.
     done.
 
@@ -577,7 +575,7 @@ Proof.
   eexists; first reflexivity.
 
   rewrite /exec_sopn /= hwsx' /=.
-  rewrite /semi_to_atype !computational_eq_refl /=.
+  rewrite !computational_eq_refl /=.
   rewrite truncate_word_le // {hws} /=.
   by rewrite zero_extend_u.
 Qed.
@@ -608,7 +606,7 @@ Proof.
       all: split; last by split.
       all: eexists; first by rewrite /= hseme /= /sem_sop1 /= hw'.
       all: rewrite /exec_sopn /= ?hwsx' /=.
-      all: rewrite /semi_to_atype ?computational_eq_refl /=.
+      all: rewrite ?computational_eq_refl /=.
       all: by rewrite truncate_word_u zero_extend_wrepr.
     }
 
@@ -627,7 +625,7 @@ Proof.
        rewrite /= hseme {hseme} /=;
        (eexists; first reflexivity);
        rewrite /exec_sopn /= hw' {hw'} /=;
-       by rewrite /armv8a_extend_semi ?zero_extend_u).
+       by rewrite ?zero_extend_u).
 
   (* Case: [Ozeroext]. *)
   - move: hw => /sem_sop1I /= [w' [?] [hw' [?] hw]].
@@ -644,7 +642,7 @@ Proof.
        rewrite /= hseme {hseme} /=;
        (eexists; first reflexivity);
        rewrite /exec_sopn /= hw' {hw'} /=;
-       by rewrite /armv8a_extend_semi ?zero_extend_u).
+       by rewrite ?zero_extend_u).
 
   (* Case: [Olnot]. *)
   - move: hw => /sem_sop1I /= [w' [?] [hw' [?] hw]].
@@ -671,7 +669,7 @@ Proof.
       rewrite hbase hsham {hbase hsham} /=.
       eexists; first reflexivity.
       rewrite /exec_sopn /= ?hwsx' /=.
-      rewrite /semi_to_atype ?computational_eq_refl /=.
+      rewrite !computational_eq_refl /=.
       rewrite !truncate_word_le // {hws1} /=.
       rewrite hallowed /=.
       by rewrite !zero_extend_u hv.
@@ -682,7 +680,7 @@ Proof.
       rewrite /= hseme /=;
       (eexists; first reflexivity);
       rewrite /exec_sopn /= ?hwsx' /=;
-      rewrite /semi_to_atype ?computational_eq_refl /=;
+      rewrite !computational_eq_refl /=;
       by rewrite hw' /= zero_extend_u.
 
     (* No recognized shift: not fused. *)
@@ -691,7 +689,7 @@ Proof.
       rewrite /= hseme /=;
       (eexists; first reflexivity);
       rewrite /exec_sopn /= ?hwsx' /=;
-      rewrite /semi_to_atype ?computational_eq_refl /=;
+      rewrite !computational_eq_refl /=;
       by rewrite hw' /= zero_extend_u.
 
   (* Case: [Oneg]. *)
@@ -719,7 +717,7 @@ Proof.
     rewrite hbase hsham {hbase hsham} /=.
     eexists; first reflexivity.
     rewrite /exec_sopn /= ?hwsx' /=.
-    rewrite /semi_to_atype ?computational_eq_refl /=.
+    rewrite !computational_eq_refl /=.
     rewrite !truncate_word_le // {hws1} /=.
     rewrite hallowed /=.
     rewrite /armv8a_NEG_semi.
@@ -731,7 +729,7 @@ Proof.
     rewrite /= hseme /=;
     (eexists; first reflexivity);
     rewrite /exec_sopn /= ?hwsx' /=;
-    rewrite /semi_to_atype ?computational_eq_refl /=;
+    rewrite !computational_eq_refl /=;
     rewrite hw' /= zero_extend_u /armv8a_NEG_semi;
     by rewrite add_wordE wnot1_wopp.
 
@@ -741,7 +739,7 @@ Proof.
     rewrite /= hseme /=;
     (eexists; first reflexivity);
     rewrite /exec_sopn /= ?hwsx' /=;
-    rewrite /semi_to_atype ?computational_eq_refl /=;
+    rewrite !computational_eq_refl /=;
     rewrite hw' /= zero_extend_u /armv8a_NEG_semi;
     by rewrite add_wordE wnot1_wopp.
 Qed.
@@ -845,14 +843,14 @@ Proof.
   all: move: hz1; rewrite hx => -[?]; subst z1.
   all: move: hmatch; case: vs => //= hmatch.
   all: move: hmatch;
-    rewrite /semi_to_atype !computational_eq_refl /= => -[?]; subst z0.
+    rewrite !computational_eq_refl /= => -[?]; subst z0.
   all: rewrite hvalid hallow /=.
   all: rewrite (truncate_word_le _ hts) truncate_word_u /= /mk_semi1_shifted /=.
   all: by rewrite -heq.
 Qed.
 
 Lemma with_shift_binop mn s eb ea ts (b: word ts) (a: u8) x y vs sh opts r :
-  mn \in [:: ADD; ADDS; SUB; SUBS; AND; EOR; ORR; CMP; TST] ->
+  mn \in [:: ADD; ADDS; SUB; SUBS; AND; ANDS; BIC; BICS; EOR; ORR; CMP; CMN; TST] ->
   shift_allowed mn sh ->
   (opts_size opts ≤ ts)%CMP ->
   has_shift opts = None ->
@@ -873,7 +871,7 @@ Proof.
   all: subst ha.
   all: move: hzy; rewrite hy => -[?]; subst z2.
   all: move: hmatch; case: vs => //=.
-  all: rewrite /semi_to_atype !computational_eq_refl /= => -[?]; subst z0.
+  all: rewrite !computational_eq_refl /= => -[?]; subst z0.
   all: rewrite hvalid hallow /=.
   all: rewrite hzx (truncate_word_le _ hts) truncate_word_u /= /mk_semi2_2_shifted /=.
   all: by rewrite heq.
@@ -993,6 +991,35 @@ Proof.
     by exists c.
 Qed.
 
+(* [a & !b] and [!b & a] are lowered to [BIC a, b], which computes
+   [a AND NOT b]: the complement commutes with the truncation of the operands
+   to the register size. *)
+Lemma lower_Papp2_BICP s ws ws' ws'' e0 e1 x y v0 v1 (w : word ws') :
+  is_andn e0 e1 = Some (x, y)
+  -> (ws <= ws')%CMP
+  -> (ws == U32) || (ws == U64)
+  -> disj_fvars (read_e e0)
+  -> disj_fvars (read_e e1)
+  -> sem_pexpr true (p_globs p) s e0 = ok v0
+  -> sem_pexpr true (p_globs p) s e1 = ok v1
+  -> sem_sop2 (Oland ws'') v0 v1 = ok (Vword w)
+  -> ok_lower_pexpr_aux s ws
+       (Oasm (BaseOp (None, ARMv8A_op BIC (opts_at ws)))) [:: y; x ] w.
+Proof.
+  move=> handn hws hwsx hfve0 hfve1 hseme0 hseme1 hsemop.
+  have hsem : sem_pexpr true (p_globs p) s (Papp2 (Oland ws'') e0 e1) = ok (Vword w)
+    by rewrite /= hseme0 hseme1 /= hsemop.
+  have [wsx [wx [wsy [wy [hx hy hwsx' hwsy /Vword_inj [?]]]]]] := is_andn_semP handn hsem.
+  subst ws' => /= ?; subst w.
+  split; last by split => //; exact: (disj_fvars_is_andn handn hfve0 hfve1).
+  exists [:: Vword wy; Vword wx ]; first by rewrite /sem_pexprs /= hy hx.
+  rewrite /exec_sopn /= hwsx /=.
+  rewrite !(truncate_word_le _ (cmp_le_trans hws _)) //=.
+  rewrite !computational_eq_refl /= /armv8a_bitwise_semi.
+  by rewrite -(wand_zero_extend _ _ hws) -(wnot_zero_extend _ hws)
+    !(zero_extend_idem _ hws) wandC.
+Qed.
+
 Lemma lower_Papp2P op e0 e1 :
   Plower_pexpr_aux (Papp2 op e0 e1).
 Proof.
@@ -1035,6 +1062,9 @@ Proof.
             case: is_mulP => [wsm ? ? hlem ?|]; subst
         end
       | match goal with
+        | [ |- context[ is_andn ] ] => case handn: is_andn => [[? ?] | ]
+        end
+      | match goal with
         | [ |- context[ is_wconst ] ] => case hconst: is_wconst => [c|//]
         end
       ].
@@ -1067,7 +1097,7 @@ Proof.
         move: (hwsx); rewrite orbC => hval;
         rewrite /exec_sopn /= hval /=;
         rewrite !(truncate_word_le _ (cmp_le_trans hws _)) //;
-        rewrite /semi_to_atype !computational_eq_refl /=;
+        rewrite !computational_eq_refl /=;
         rewrite /armv8a_ADD_semi /armv8a_SUB_semi /armv8a_MUL_semi /armv8a_bitwise_semi /=;
         rewrite ?add_wordE ?sub_wordE;
         rewrite ?(wadd_zero_extend _ _ hws) ?(wsub_zero_extend _ _ hws)
@@ -1076,6 +1106,12 @@ Proof.
                 -?(wor_zero_extend _ _ hws) -?(wxor_zero_extend _ _ hws);
         rewrite ?(wopp_zero_extend _ hws) ?(zero_extend_idem _ hws);
         by rewrite ?(zero_extend_idem _ hws)
+      | (* BIC from [a & !b] or [!b & a]: BIC a, b computes a AND NOT b. *)
+        lazymatch goal with
+        | [ |- context[ARMv8A_op BIC _] ] => idtac
+        end;
+        rewrite orbC in hwsx;
+        exact: (lower_Papp2_BICP handn hws hwsx hfve0 hfve1 hseme0 hseme1 hsemop)
       | (* Division: SDIV, UDIV (operate at [ws''= ws]). *)
         lazymatch goal with
         | [ |- context[ARMv8A_op SDIV _] ] => idtac
@@ -1093,7 +1129,7 @@ Proof.
         move: (hwsx); rewrite orbC => hval;
         rewrite /exec_sopn /= hval /=;
         rewrite !(truncate_word_le _ (cmp_le_trans hws _)) //;
-        rewrite /semi_to_atype !computational_eq_refl /=;
+        rewrite !computational_eq_refl /=;
         rewrite /armv8a_SDIV_semi /armv8a_UDIV_semi;
         by rewrite zero_extend_u
       | (* TODO(armv8a): remaining hdflt classes.
@@ -1131,7 +1167,7 @@ Proof.
           first by rewrite /sem_pexprs /= hseme0 hsem1' /=);
         move: (hwsx); rewrite orbC => hval;
         rewrite /exec_sopn /= hval /= hx0 hw1' /=;
-        rewrite /semi_to_atype !computational_eq_refl /=;
+        rewrite !computational_eq_refl /=;
         rewrite /armv8a_shift_semi -heq;
         by rewrite /sem_shr /sem_shl /sem_sar /sem_shift zero_extend_u
       | (* MOV: a shift or rotate by zero, i.e. the identity. *)
@@ -1154,7 +1190,7 @@ Proof.
         (exists [:: v0 ]; first by rewrite /sem_pexprs /= hseme0 /=);
         move: (hwsx); rewrite orbC => hval;
         rewrite /exec_sopn /= hval /= hx0 /=;
-        rewrite /semi_to_atype !computational_eq_refl /=;
+        rewrite !computational_eq_refl /=;
         rewrite /armv8a_MOV_semi
           /sem_shr /sem_shl /sem_sar /sem_ror /sem_rol /sem_shift
           ?wrepr0 wunsigned0 ?wshr0 ?wshl0 ?wsar0 ?wror0 ?wrol0;
@@ -1175,7 +1211,7 @@ Proof.
           first by rewrite /sem_pexprs /= hseme0 hseme1 /=);
         move: (hwsx); rewrite orbC => hval;
         rewrite /exec_sopn /= hval /= hx0 hx1 /=;
-        rewrite /semi_to_atype !computational_eq_refl /=;
+        rewrite !computational_eq_refl /=;
         rewrite /armv8a_shift_semi /sem_ror /sem_shift zero_extend_u;
         do 3 f_equal; apply: wror_m;
         by rewrite Zmod_mod
@@ -1195,7 +1231,7 @@ Proof.
         move: (hwsx); rewrite orbC => hval;
         rewrite /exec_sopn /= hval /= hx0 /=;
         rewrite truncate_word_u /=;
-        rewrite /semi_to_atype !computational_eq_refl /=;
+        rewrite !computational_eq_refl /=;
         rewrite /armv8a_shift_semi wrepr_unsigned /sem_rol /sem_shift
           zero_extend_u -wror_opp;
         do 3 f_equal; apply: wror_m;
@@ -1243,7 +1279,7 @@ Proof.
         move: (hwsx); rewrite orbC => hval;
         rewrite /exec_sopn /= hval /=
           (to_word_m hwx hlem) (to_word_m hwy hlem) (to_word_m haddend hws) /=;
-        rewrite /semi_to_atype !computational_eq_refl /=;
+        rewrite !computational_eq_refl /=;
         rewrite /armv8a_MADD_semi /armv8a_MSUB_semi
           ?add_wordE ?sub_wordE ?mul_wordE
           ?(wadd_zero_extend _ _ hws) ?(wsub_zero_extend _ _ hws)
@@ -1263,7 +1299,7 @@ Proof.
     move=> [<- <-].
     (* we want to use with_shift_binop, so we have to prove this *)
     have hshift_binop:
-      mn' \in [:: ADD; ADDS; SUB; SUBS; AND; EOR; ORR; CMP; TST].
+      mn' \in [:: ADD; ADDS; SUB; SUBS; AND; ANDS; BIC; BICS; EOR; ORR; CMP; CMN; TST].
     {
       case: op hop hhas_shift hsemop => //;
         rewrite /lower_Papp2_op /=.
@@ -1278,6 +1314,9 @@ Proof.
         [ move=> /oassertP [/eqP ?]; subst ws''
         | match goal with
           | [ |- context[ is_mul ] ] => case: is_mulP => [? ? ? ? ?|]; subst
+          end
+        | match goal with
+          | [ |- context[ is_andn ] ] => case handn: is_andn => [[? ?] | ]
           end
         | match goal with
           | [ |- context[ is_wconst ] ] => case hc': is_wconst => [c'|//]
@@ -1327,6 +1366,9 @@ Proof.
     [ move=> /oassertP [/eqP ?]; subst ws''
     | match goal with
       | [ |- context[ is_mul ] ] => case: is_mulP => [? ? ? ? ?|]; subst
+      end
+    | match goal with
+      | [ |- context[ is_andn ] ] => case handn: is_andn => [[? ?] | ]
       end
     | match goal with
       | [ |- context[ is_wconst ] ] => case hconst: is_wconst => [c'|//]
@@ -1413,6 +1455,164 @@ Lemma no_preP o pre aop es :
   -> pre = [::] /\ o = Some (aop, es).
 Proof. case: o => //. by move=> [? ?] [<- <- <-]. Qed.
 
+(* The register operand [a] of [csel_op_arg] evaluates to a value from
+   which the conditional select instruction computes [e]. *)
+Lemma csel_op_argP s ws e mn a w va wa b :
+  csel_op_arg ws e = Some (mn, a)
+  -> ((ws == U64) || (ws == U32))%CMP
+  -> sem_pexpr true (p_globs p) s e >>= to_word ws = ok w
+  -> to_word ws va = ok wa
+  -> exists2 v,
+       sem_pexpr true (p_globs p) s a = ok v
+       & exec_sopn (Oarmv8a (ARMv8A_op mn (opts_at ws))) [:: va; v; Vbool b ]
+         = ok [:: Vword (if b then wa else w) ].
+Proof.
+  move=> h hws hsem hwa.
+  case: e h hsem => //.
+  {
+    case => //=.
+    - move=> ws1 e0 /oassertP [] /andP [] /eqP ? _ [<- <-]; subst ws1.
+      t_xrbindP=> v1 v0 hv0 hop hw; exists v0 => //.
+      move: hop hw; rewrite /sem_sop1 /=; t_xrbindP=> w0 hw0 <-.
+      rewrite /= truncate_word_u => -[<-].
+      rewrite /exec_sopn /= orbC hws hwa hw0 /=.
+      by rewrite !computational_eq_refl.
+    case=> // ws1 e0 /oassertP [] /andP [] /eqP ? _ [<- <-]; subst ws1.
+    t_xrbindP=> v1 v0 hv0 hop hw; exists v0 => //.
+    move: hop hw; rewrite /sem_sop1 /=; t_xrbindP=> w0 hw0 <-.
+    rewrite /= truncate_word_u => -[<-].
+    rewrite /exec_sopn /= orbC hws hwa hw0 /=.
+    rewrite !computational_eq_refl /=.
+    by rewrite /armv8a_CSNEG_semi add_wordE word1E opp_wordE wnot1_wopp.
+  }
+  case=> // -[] // ws1 e0 e1 /oassertP [] /eqP ?; subst ws1.
+  case: andP => [[_ /eqP h1] [<- <-] | _];
+    last case: andP => [[_ /eqP h1] [<- <-] | //].
+  all: assert (hc := is_wconstP true (p_globs p) s h1).
+  all: rewrite /= /sem_sop2 /=; t_xrbindP=> v v0 hv0 v1 hv1 w0 hw0 w1 hw1 <-.
+  all: rewrite ?hv0 ?hv1 /= in hc.
+  - move: hc; rewrite hw1 => -[?]; subst w1.
+    rewrite /= truncate_word_u => -[<-]; exists v0 => //.
+    rewrite /exec_sopn /= orbC hws hwa hw0 /=.
+    rewrite !computational_eq_refl /=.
+    by rewrite /armv8a_CSINC_semi word1E.
+  move: hc; rewrite hw0 => -[?]; subst w0.
+  rewrite /= truncate_word_u => -[<-]; exists v1 => //.
+  rewrite /exec_sopn /= orbC hws hwa hw1 /=.
+  rewrite !computational_eq_refl /=.
+  by rewrite /armv8a_CSINC_semi word1E add_wordE GRing.addrC.
+Qed.
+
+Lemma cset_mnP s ws e0 e1 mn w0 w1 b :
+  cset_mn ws e0 e1 = Some mn
+  -> ((ws == U64) || (ws == U32))%CMP
+  -> sem_pexpr true (p_globs p) s e0 >>= to_word ws = ok w0
+  -> sem_pexpr true (p_globs p) s e1 >>= to_word ws = ok w1
+  -> exec_sopn (Oarmv8a (ARMv8A_op mn (opts_at ws))) [:: Vbool b ]
+     = ok [:: Vword (if b then w0 else w1) ].
+Proof.
+  move=> h hws h0 h1.
+  move: h; rewrite /cset_mn.
+  move=> /oassertP [] /eqP hz1; case hc0: is_wconst => [c0|] //.
+  assert (h1c := is_wconstP true (p_globs p) s hz1).
+  assert (h0c := is_wconstP true (p_globs p) s hc0).
+  move: h0c h1c; rewrite h0 h1 => -[<-] [->].
+  case: eqP => [-> [<-] | _]; last case: eqP => [-> [<-] | //].
+  all: rewrite /exec_sopn /= orbC hws /=.
+  all: rewrite !computational_eq_refl /=.
+  all: by rewrite /armv8a_CSET_semi /armv8a_CSETM_semi ?word1E ?word0E.
+Qed.
+
+(* The negated condition [enot c] of the swapped cases evaluates to the
+   negation of [c]; exchanging the operands compensates it. *)
+Lemma lower_Pif_argsP s ws c e0 e1 mn es b w0 w1 :
+  lower_Pif_args ws c e0 e1 = Some (mn, es)
+  -> ((ws == U64) || (ws == U32))%CMP
+  -> sem_pexpr true (p_globs p) s c = ok (Vbool b)
+  -> sem_pexpr true (p_globs p) s e0 >>= to_word ws = ok w0
+  -> sem_pexpr true (p_globs p) s e1 >>= to_word ws = ok w1
+  -> exists2 vs,
+       sem_pexprs true (p_globs p) s es = ok vs
+       & exec_sopn (Oarmv8a (ARMv8A_op mn (opts_at ws))) vs
+         = ok [:: Vword (if b then w0 else w1) ].
+Proof.
+  move=> h hws hc h0 h1.
+  move: h; rewrite /lower_Pif_args.
+  case: andP => [_ [<- <-] | _].
+  {
+    move: h0 h1; t_xrbindP=> v0 hv0 hw0 v1 hv1 hw1.
+    rewrite /= hv0 hv1 hc /=; eexists; first reflexivity.
+    rewrite /exec_sopn /= orbC hws hw0 hw1 /=.
+    by rewrite !computational_eq_refl.
+  }
+  case hcs: cset_mn => [mn0|].
+  {
+    move=> [<- <-]; rewrite /= hc /=; eexists; first reflexivity.
+    exact: cset_mnP hcs hws h0 h1.
+  }
+  clear hcs; case hcs: cset_mn => [mn0|].
+  {
+    move=> [<- <-]; rewrite /= hc /=; eexists; first reflexivity.
+    rewrite -if_neg; exact: cset_mnP hcs hws h1 h0.
+  }
+  clear hcs; case: ifP => [_ | _].
+  {
+    case ho: csel_op_arg => [[mn0 a]|] // [<- <-].
+    move: h0; t_xrbindP=> v0 hv0 hw0.
+    have [v hv hex] := csel_op_argP b ho hws h1 hw0.
+    rewrite /= hv0 hv hc /=; eexists; first reflexivity.
+    exact: hex.
+  }
+  case: ifP => // _.
+  case ho: csel_op_arg => [[mn0 a]|] // [<- <-].
+  move: h1; t_xrbindP=> v1 hv1 hw1.
+  have [v hv hex] := csel_op_argP (~~ b) ho hws h0 hw1.
+  rewrite /= hv1 hv hc /=; eexists; first reflexivity.
+  by rewrite -if_neg.
+Qed.
+
+Lemma sem_lower_Pif s0 s1 s0' ii vi ws c e0 e1 pre op es b w0 w1 lv tag :
+  lower_Pif fv vi ws c e0 e1 = Some (pre, op, es)
+  -> eq_fv s0 s0'
+  -> disj_fvars (read_e c)
+  -> disj_fvars (read_e e0)
+  -> disj_fvars (read_e e1)
+  -> disj_fvars (vars_lval lv)
+  -> sem_pexpr true (p_globs p) s0 c = ok (Vbool b)
+  -> sem_pexpr true (p_globs p) s0 e0 >>= to_word ws = ok w0
+  -> sem_pexpr true (p_globs p) s0 e1 >>= to_word ws = ok w1
+  -> write_lval true (p_globs p) lv (Vword (if b then w0 else w1)) s0 = ok s1
+  -> exists2 s1',
+       esem p' ev (map (MkI ii) (pre ++ [:: Copn [:: lv ] tag op es ])) s0'
+         = ok s1'
+       & eq_fv s1 s1'.
+Proof using atoI ev fv fv_correct p pT sCP sc_sem syscall_state warning wsw.
+  move=> h hs00 hfvc hfve0 hfve1 hfvlv hsemc hseme0 hseme1 hwrite.
+  move: h; rewrite /lower_Pif.
+  move=> /oassertP [] hwsx.
+  case hc: lower_condition => [pre' c'].
+  case hargs: lower_Pif_args => [[mn es']|] // [? ? ?]; subst pre' op es.
+
+  have [s1' [hsem01' hs10 hsemc']] := sem_lower_condition ii hc hs00 hfvc hsemc.
+  clear hc hs00 hfvc hsemc.
+
+  have hseme0' : sem_pexpr true (p_globs p) s1' e0 >>= to_word ws = ok w0.
+  - move: hseme0; t_xrbindP=> v0 hv0 hw0.
+    by rewrite (eeq_exc_sem_pexpr hfve0 hs10 hv0).
+  have hseme1' : sem_pexpr true (p_globs p) s1' e1 >>= to_word ws = ok w1.
+  - move: hseme1; t_xrbindP=> v1 hv1 hw1.
+    by rewrite (eeq_exc_sem_pexpr hfve1 hs10 hv1).
+  have [vs hsemes hexec] := lower_Pif_argsP hargs hwsx hsemc' hseme0' hseme1'.
+  clear hargs hwsx hsemc' hseme0 hseme1 hseme0' hseme1'.
+
+  have [s2' hwrite' hs21] := eeq_exc_write_lval hfvlv hs10 hwrite.
+  exists s2'; last exact: hs21.
+Opaque esem esem_i.
+  rewrite map_cat esem_cat hsem01' /= esem1.
+Transparent esem esem_i.
+  by rewrite /= /sem_sopn /= hsemes /= hexec /= hwrite'.
+Qed.
+
 Lemma sem_lower_pexpr
   s0 s1 s0' ii vi ws ws' e pre op es (w : word ws') lv tag :
   lower_pexpr vi ws e = Some (pre, op, es)
@@ -1428,77 +1628,81 @@ Lemma sem_lower_pexpr
 Proof using atoI ev fv fv_correct p pT sCP sc_sem syscall_state warning wsw.
   move=> h hs00 hws hfve hfvlv hseme hwrite.
 
-  move: s0 ws' pre op es w h hs00 hws hfve hfvlv hseme hwrite.
-  case: e =>
-    [||| gx | al aa ws0 x e || al ws0 e | op e | op e0 e1 || ty c e0 e1] //
-    s0 ws' pre aop es w h hs00 hws hfve hfvlv hseme hwrite.
-
-  1-5: move: h => /no_preP [? h]; subst pre.
-  1-5: have [s1' hsem' hs11] :=
-    sem_i_lower_pexpr_aux ii tag h hs00 hws hfve hfvlv hseme hwrite.
-  1-5: clear s0 ws w h hs00 hws hfve hfvlv hseme hwrite.
-  1-5: exists s1'; last exact: hs11.
-  1-5: by move: hsem'; rewrite /= => ->.
-
-  (* [Pif]: lowered to CSEL (A64 has no conditional execution). *)
-  clear hws.
-  move: h.
-  case: ty hfve hfvlv hseme => // ws0 hfve hfvlv hseme.
-
-  rewrite /lower_pexpr.
-  move=> /oassertP [] /eqP ?; subst ws0.
-  rewrite /lower_Pif.
-  move=> /oassertP [] hwsx h.
-  move: h => /oassertP [] hcselargs h.
-  move: h.
-  case hc: lower_condition => [pre' c'] [? ? ?]; subst pre aop es.
-  rename pre' into pre.
-
-  move: hseme.
-  rewrite /=.
-  rewrite /truncate_val /=.
-  t_xrbindP=> b vb hsemc hb v0' v0 hseme0 w0' hw0 ? v1' v1 hseme1 w1' hw1 ? hw;
-    subst v0' v1'.
-  move: hb => /to_boolI ?; subst vb.
-  move: hw0 => /to_wordI [ws0 [w0 [? /truncate_wordP [hws0 ?]]]]; subst v0 w0'.
-  move: hw1 => /to_wordI [ws1 [w1 [? /truncate_wordP [hws1 ?]]]]; subst v1 w1'.
-
-  move: hfve => /disj_fvars_read_e_Pif [hfvc hfve0 hfve1].
-
-  have [s1' [hsem01' hs10 hsemc']] := sem_lower_condition ii hc hs00 hfvc hsemc.
-  clear hc hs00 hfvc hsemc.
-
-  have [s2' hwrite12' hs21] :
-    exists2 s2',
-      write_lval true (p_globs p) lv
-        (Vword (if b then zero_extend ws w0 else zero_extend ws w1)) s1'
-        = ok s2'
-      & eq_fv s1 s2'.
+  (* Every expression but the conditional ones goes through
+     [lower_pexpr_aux]. *)
+  match goal with
+  | [ |- ?G ] =>
+      have hnopre : no_pre (lower_pexpr_aux ws e) = Some (pre, op, es) -> G
+  end.
   {
-    case: b hw hsemc' => hw _.
-    all: move: hw => /Vword_inj [?]; subst ws'.
-    all: move=> /= ?; subst w.
-    all: rewrite zero_extend_u in hwrite.
-    all: have [s2' hwrite12' hs21] := eeq_exc_write_lval hfvlv hs10 hwrite.
-    all: exists s2'; last exact: hs21.
-    all: exact: hwrite12'.
+    move=> /no_preP [? h']; subst pre.
+    have [s1' hsem' hs11] :=
+      sem_i_lower_pexpr_aux ii tag h' hs00 hws hfve hfvlv hseme hwrite.
+    exists s1'; last exact: hs11.
+    by move: hsem'; rewrite /= => ->.
   }
 
-  exists s2'; last exact: hs21.
-Opaque esem esem_i.
-  rewrite map_cat esem_cat hsem01' /= esem1.
-Transparent esem esem_i.
-  clear hsem01'.
-  rewrite /= /sem_sopn /=.
-  rewrite (eeq_exc_sem_pexpr hfve0 hs10 hseme0) /=
-          (eeq_exc_sem_pexpr hfve1 hs10 hseme1) /=
-          hsemc' /=.
-  rewrite /exec_sopn /=.
-  move: (hwsx); rewrite orbC => hval; rewrite hval /=.
-  rewrite (truncate_word_le _ hws0) (truncate_word_le _ hws1) /=.
-  rewrite /semi_to_atype !computational_eq_refl /=.
-  rewrite /armv8a_CSEL_semi.
-  by rewrite hwrite12'.
+  move: h; rewrite /lower_pexpr.
+  case: e hfve hseme hnopre =>
+    [ z | b | ws0 n | gx | al aa ws0 x e | aa ws0 len x e | al ws0 e | o e
+    | o e0 e1 | o es0 | ty c e0 e1 ] hfve hseme hnopre.
+  1-7, 9-10: exact: hnopre.
+
+  (* [(ws1)(c ? z0 : z1)]: lowered as [c ? (ws1)z0 : (ws1)z1]. *)
+  {
+    case: o hfve hseme hnopre =>
+      [ ws1 | ? ? | ? ? | ? ? | | ? | ? | ? ? ] hfve hseme hnopre.
+    2-8: exact: hnopre.
+    case: e hfve hseme hnopre =>
+      [ z | b | ws0 n | gx | al aa ws0 x e | aa ws0 len x e | al ws0 e | o e
+      | o e0 e1 | o es0 | ty c e0 e1 ] hfve hseme hnopre.
+    1-10: exact: hnopre.
+    case: ty hfve hseme hnopre => [ | | ? ? | ? ] hfve hseme hnopre.
+    1, 3, 4: exact: hnopre.
+    clear hnopre; move=> /oassertP [] hws1 h.
+
+    move: hseme; rewrite /= /truncate_val /=.
+    t_xrbindP=> v b vb hsemc hb v0 v0' hv0 z0 hz0 <- v1 v1' hv1 z1 hz1 <- <-.
+    move=> hop.
+    move: hb => /to_boolI ?; subst vb.
+
+    have {}hwrite :
+      write_lval true (p_globs p) lv
+        (Vword (if b then wrepr ws z0 else wrepr ws z1)) s0
+        = ok s1.
+    {
+      move: hop hwrite; rewrite /sem_sop1 /=.
+      case: (b) => /= /ok_inj /Vword_inj [?]; subst ws' => /= <-.
+      all: by rewrite (zero_extend_wrepr _ hws1).
+    }
+
+    have [hfvc hfve0 hfve1] := disj_fvars_read_e_Pif (ty := aint) hfve.
+    apply: (sem_lower_Pif ii tag h hs00 hfvc hfve0 hfve1 hfvlv hsemc _ _ hwrite).
+    all: rewrite /= ?hv0 ?hv1 /sem_sop1 /= ?hz0 ?hz1 /=.
+    all: by rewrite (truncate_word_le _ hws1) (zero_extend_wrepr _ hws1).
+  }
+
+  (* [c ? e0 : e1] at a word type. *)
+  case: ty hfve hseme hnopre => [ | | ? ? | ws0 ] hfve hseme hnopre.
+  1-3: exact: hnopre.
+  clear hnopre hws; move=> /oassertP [] /eqP ? h; subst ws0.
+
+  move: hseme; rewrite /= /truncate_val /=.
+  t_xrbindP=> b vb hsemc hb v0' v0 hv0 w0 hw0 ? v1' v1 hv1 w1 hw1 ? hw;
+    subst v0' v1'.
+  move: hb => /to_boolI ?; subst vb.
+
+  have {}hwrite :
+    write_lval true (p_globs p) lv (Vword (if b then w0 else w1)) s0 = ok s1.
+  {
+    case: (b) hw => /Vword_inj [?]; subst ws' => /= ?; subst w.
+    all: by rewrite zero_extend_u in hwrite.
+  }
+
+  have [hfvc hfve0 hfve1] := disj_fvars_read_e_Pif hfve.
+  apply: (sem_lower_Pif ii tag h hs00 hfvc hfve0 hfve1 hfvlv hsemc _ _ hwrite).
+  - by rewrite hv0.
+  by rewrite hv1.
 Qed.
 
 Lemma sem_i_lower_store s0 s1 s0' ws ws' ii e aop es (w : word ws') lv tag :
@@ -1523,8 +1727,7 @@ Proof.
   rewrite /exec_sopn /=.
   case: ws hws hwrite hmn => // hws hwrite [?]; subst mn.
   all: rewrite /= (truncate_word_le _ hws) /=.
-  all: rewrite /semi_to_atype ?computational_eq_refl /=.
-  all: rewrite /armv8a_extend_semi ?zero_extend_u /=.
+  all: rewrite ?zero_extend_u /=.
   all: by rewrite hwrite.
 Qed.
 

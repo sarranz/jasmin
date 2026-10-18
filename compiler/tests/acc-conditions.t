@@ -280,7 +280,7 @@ A user FG1 flag live across a lowered compare conflicts in register allocation.
   warning: support of the ACC architecture is VERY experimental. The loop instruction is not part of the verified compiler. The compiler does NOT check whether the loop stack overflow/underflows. The compiler does NOT check that memory accesses are aligned.
   "fail/acc/bn_cmp_fg1_conflict.jazz", line 8 (4-23):
   compilation error:
-  register allocation: variable __cf1__.325 must be allocated to register CF1 due to architectural constraints; this register already holds conflicting variable: cf.321
+  register allocation: variable __cf1__.322 must be allocated to register CF1 due to architectural constraints; this register already holds conflicting variable: cf.318
   [1]
 
 32-bit comparisons are not lowered (unchanged behavior).
