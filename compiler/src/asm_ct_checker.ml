@@ -533,40 +533,40 @@ module Dataflow = struct
       body;
     !m
 
+  module IS = Set.Make (Stdlib.Int)
+
   let fixpoint ~step body pre : Env.t option =
     let labels = label_map body in
     let exit = Array.length body in
     let envs : Env.t option array = Array.make (exit + 1) None in
-    let changed = ref false in
+    let work = ref IS.empty in
 
     let flow (instr_i, new_env) : unit =
+      let update env =
+        envs.(instr_i) <- Some env;
+        if instr_i < exit then work := IS.add instr_i !work
+      in
       match envs.(instr_i) with
-      | None ->
-          envs.(instr_i) <- Some new_env;
-          if instr_i < exit then changed := true
+      | None -> update new_env
       | Some old_env ->
           let joined = Env.join old_env new_env in
-          if not (Env.le joined old_env) then begin
-            envs.(instr_i) <- Some joined;
-            if instr_i < exit then changed := true
-          end
+          if not (Env.le joined old_env) then update joined
     in
 
     flow (0, pre);
-    while !changed do
-      changed := false;
-      Array.iteri
-        (fun i instr ->
-          match envs.(i) with
-          | None -> ()
-          | Some env ->
-              let next =
-                try step ~labels ~exit i env instr
-                with CtTypeError msg ->
-                  error "%a:@ %t" Location.pp_iloc (fst instr.asmi_ii) msg
-              in
-              List.iter flow next)
-        body
+    while not (IS.is_empty !work) do
+      let i = IS.min_elt !work in
+      work := IS.remove i !work;
+      match envs.(i) with
+      | None -> ()
+      | Some env ->
+          let instr = body.(i) in
+          let next =
+            try step ~labels ~exit i env instr
+            with CtTypeError msg ->
+              error "%a:@ %t" Location.pp_iloc (fst instr.asmi_ii) msg
+          in
+          List.iter flow next
     done;
     envs.(exit)
 end
