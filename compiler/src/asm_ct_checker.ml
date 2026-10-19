@@ -58,63 +58,50 @@ let unknown_mem_cell = "%unknown_mem"
 let global_mem_region = "%global"
 
 module Env = struct
-  type t = {
-    levels : Level.t SM.t;
-    public : SS.t;
-  }
+  type t = Level.t SM.t
 
-  let empty : t = { levels = SM.empty; public = SS.empty }
+  let empty : t = SM.empty
 
   let get (env : t) (cell : string) : Level.t =
-    match SM.find_opt cell env.levels with
-    | Some level -> Level.norm env.public level
+    match SM.find_opt cell env with
+    | Some level -> level
     | None -> error "unknown slot: %s" cell
 
   let set (env : t) (cell : string) (level : Level.t) : t =
-    { env with
-      levels = SM.add cell (Level.norm env.public level) env.levels }
+    SM.add cell level env
 
   (* A weak update: the cell may keep what it held. *)
   let weaken (env : t) (cell : string) (level : Level.t) : t =
     set env cell (Level.join (get env cell) level)
 
-  let keys (env : t) : string list = List.map fst (SM.bindings env.levels)
+  let keys (env : t) : string list = List.map fst (SM.bindings env)
 
-  let public (env : t) : SS.t = env.public
-
-  let with_public (env : t) (public : SS.t) : t = { env with public }
-
-  let use_public (env : t) (cell : string) : t =
-    match get env cell with
-    | Level.Public -> env
-    | Level.Secret -> error "leak: secret value in %s leaked" cell
-    | Level.Poly variables ->
-        { env with public = SS.union variables env.public }
+  let map (f : Level.t -> Level.t) (env : t) : t = SM.map f env
 
   let join (first : t) (second : t) : t =
-    let public = SS.union first.public second.public in
-    let levels =
-      SM.merge
-        (fun _ first_level second_level ->
-          match (first_level, second_level) with
-          | None, level | level, None -> level
-          | Some first_level, Some second_level ->
-              Some (Level.join (Level.norm public first_level)
-                      (Level.norm public second_level)))
-        first.levels second.levels
-    in
-    { levels; public }
+    SM.union (fun _ first second -> Some (Level.join first second)) first second
 
   let le (first : t) (second : t) : bool =
-    let held (env : t) (cell : string) : Level.t =
-      Option.value ~default:Level.Public (SM.find_opt cell env.levels)
-    in
-    SS.subset first.public second.public
-    && SM.for_all
-         (fun cell level ->
-           Level.le (Level.norm first.public level)
-             (Level.norm second.public (held second cell)))
-         first.levels
+    SM.for_all
+      (fun cell level ->
+        Level.le level
+          (Option.value ~default:Level.Public (SM.find_opt cell second)))
+      first
+end
+
+module PublicVars = struct
+  type t = SS.t ref
+
+  let create () : t = ref SS.empty
+
+  let use (public_vars : t) (env : Env.t) (cell : string) : unit =
+    match Env.get env cell with
+    | Level.Public -> ()
+    | Level.Secret -> error "leak: secret value in %s leaked" cell
+    | Level.Poly variables -> public_vars := SS.union variables !public_vars
+
+  let apply (public_vars : t) (env : Env.t) : Env.t =
+    Env.map (Level.norm !public_vars) env
 end
 
 module Region = struct
@@ -484,9 +471,9 @@ module Calls = struct
       (function None -> Some level | Some prev -> Some (Level.join level prev))
       map
 
-  let infer_type_substitution caller callee
-      (bindings : MemoryAccess.binding list) : Env.t * Level.t SM.t =
-    let infer (env, substitution)
+  let infer_type_substitution public_vars caller callee
+      (bindings : MemoryAccess.binding list) : Level.t SM.t =
+    let infer substitution
         ({ callee_cell; caller_cells } : MemoryAccess.binding) =
       let caller_cells =
         List.map (fun (c : MemoryAccess.caller_cell) -> c.cell) caller_cells
@@ -496,22 +483,19 @@ module Calls = struct
           if caller_cells = [] then
             error "leak: caller has no instantiation for callee's public array %s"
             callee_cell;
-          (List.fold_left Env.use_public env caller_cells, substitution)
-      | Level.Secret -> env, substitution
+          List.iter (PublicVars.use public_vars caller) caller_cells;
+          substitution
+      | Level.Secret -> substitution
       | Level.Poly variables ->
           let actual_level =
             if caller_cells = [] then Level.Secret
-            else Level.join_list (List.map (Env.get env) caller_cells)
+            else Level.join_list (List.map (Env.get caller) caller_cells)
           in
-          let substitution' =
-            SS.fold
-              (fun variable acc ->
-                join_into acc variable actual_level)
-              variables substitution
-          in
-          env, substitution'
+          SS.fold
+            (fun variable acc -> join_into acc variable actual_level)
+            variables substitution
     in
-    List.fold_left infer (caller, SM.empty) bindings
+    List.fold_left infer SM.empty bindings
 
   let apply_postconditions caller callee_post substitution
       (bindings : MemoryAccess.binding list) : Env.t =
@@ -528,16 +512,14 @@ module Calls = struct
     in
     List.fold_left apply caller bindings
 
-  let call_env caller callee bindings : Env.t * Env.t option =
-    let demanded, substitution =
-      infer_type_substitution caller callee bindings
+  let call_env public_vars caller callee bindings : Env.t option =
+    let substitution =
+      infer_type_substitution public_vars caller callee bindings
     in
-    match callee.post with
-    | None -> (demanded, None)
-    | Some callee_post ->
-        ( demanded,
-          Some (apply_postconditions demanded callee_post substitution bindings)
-        )
+    Option.map
+      (fun callee_post ->
+        apply_postconditions caller callee_post substitution bindings)
+      callee.post
 end
 
 module Dataflow = struct
@@ -551,7 +533,7 @@ module Dataflow = struct
       body;
     !m
 
-  let fixpoint ~step body pre : SS.t * Env.t option =
+  let fixpoint ~step body pre : Env.t option =
     let labels = label_map body in
     let exit = Array.length body in
     let envs : Env.t option array = Array.make (exit + 1) None in
@@ -586,15 +568,7 @@ module Dataflow = struct
               List.iter flow next)
         body
     done;
-
-    let public_levels =
-      Array.fold_left
-        (fun public -> function
-          | Some env -> SS.union public (Env.public env)
-          | None -> public)
-        SS.empty envs
-    in
-    (public_levels, envs.(exit))
+    envs.(exit)
 end
 
 let collect_cells arch_cells (layout : MemLayout.t) : string list =
@@ -953,51 +927,45 @@ struct
   end
 
   module Instruction = struct
-    let process_address env mem_cells kind address : Env.t * string list =
+    let process_address public_vars env mem_cells kind address : string list =
       let address_cells = Registers.regs_of_address address in
       match kind with
-      | AK_compute -> env, address_cells
+      | AK_compute -> address_cells
       | AK_mem _ ->
-          let env = List.fold_left Env.use_public env address_cells in
-          if mem_cells = [] then env, [ unknown_mem_cell ]
-          else env, mem_cells
+          List.iter (PublicVars.use public_vars env) address_cells;
+          if mem_cells = [] then [ unknown_mem_cell ] else mem_cells
 
-    let operand_cells args mem_cells env op_desc : Env.t * string list =
+    let operand_cells public_vars env args mem_cells op_desc : string list =
       match op_desc with
-      | ADImplicit (IArflag f) -> env, [ Arch_utils.flag_name f ]
-      | ADImplicit (IAreg _) -> env, []
+      | ADImplicit (IArflag f) -> [ Arch_utils.flag_name f ]
+      | ADImplicit (IAreg _) -> []
       | ADExplicit (kind, n, _) -> (
           match List.nth_opt args (Conv.int_of_nat n) with
-          | Some (Addr address) -> process_address env mem_cells kind address
-          | Some (Condt c) -> env, Registers.condt_cells c
-          | _ -> env, [])
+          | Some (Addr address) ->
+              process_address public_vars env mem_cells kind address
+          | Some (Condt c) -> Registers.condt_cells c
+          | _ -> [])
 
-    let input_cells args mem_cells env operand : Env.t * string list =
+    let input_cells public_vars env args mem_cells operand : string list =
       match Arch_utils.operand_register args operand with
       | Some (reg, bytes) ->
           let { Registers.within; straddling; _ } =
             Registers.coverage reg bytes
           in
-          env, within @ straddling
-      | None -> operand_cells args mem_cells env (fst operand)
+          within @ straddling
+      | None -> operand_cells public_vars env args mem_cells (fst operand)
 
     (* What an output operand writes, a register or cells, and how many
        bytes. *)
-    let outputs args mem_cells env ((op_desc, ty) as operand) :
-        Env.t * (string * int) list =
+    let outputs public_vars env args mem_cells ((op_desc, ty) as operand) :
+        (string * int) list =
       match Arch_utils.operand_register args operand with
-      | Some (reg, bytes) -> env, [ (reg, bytes) ]
+      | Some (reg, bytes) -> [ (reg, bytes) ]
       | None ->
-          let env, cells = operand_cells args mem_cells env op_desc in
           let bytes = Arch_utils.size_of_ltype ty in
-          env, List.map (fun cell -> (cell, bytes)) cells
-
-    let fold_operands f env descs tys =
-      List.fold_left
-        (fun (env, acc) operand ->
-          let env, xs = f env operand in
-          env, xs @ acc)
-        (env, []) (List.combine descs tys)
+          List.map
+            (fun cell -> (cell, bytes))
+            (operand_cells public_vars env args mem_cells op_desc)
 
     let write_register env msb reg bytes level : Env.t =
       let { Registers.within; straddling; outside } =
@@ -1072,15 +1040,17 @@ struct
     let ty_declassify_mem env (access : MemoryAccess.t) instr len : Env.t =
       declassify_region env access instr (Conv.int_of_cz len)
 
-    let ty_asmop env (access : MemoryAccess.t) op args : Env.t =
+    let ty_asmop public_vars env (access : MemoryAccess.t) op args : Env.t =
       let op_desc = Arch_utils.instr_desc op in
-      let env, in_cells =
-        fold_operands (input_cells args access.ac_cells) env op_desc.id_in
-          op_desc.id_tin
+      let in_cells =
+        List.concat_map
+          (input_cells public_vars env args access.ac_cells)
+          (List.combine op_desc.id_in op_desc.id_tin)
       in
-      let env, outs =
-        fold_operands (outputs args access.ac_cells) env op_desc.id_out
-          op_desc.id_tout
+      let outs =
+        List.concat_map
+          (outputs public_vars env args access.ac_cells)
+          (List.combine op_desc.id_out op_desc.id_tout)
       in
       let level =
         if Arch_utils.constant_output op args then Level.Public
@@ -1100,11 +1070,9 @@ struct
     let syscall_ret_level : _ Syscall_t.syscall_t -> Level.t = function
       | Syscall_t.RandomBytes _ -> Level.Public
 
-    let ty_syscall env (access : MemoryAccess.t) o : Env.t =
-      let env =
-        List.fold_left Env.use_public env
-          (Registers.rsp @ syscall_arg_cells o)
-      in
+    let ty_syscall public_vars env (access : MemoryAccess.t) o : Env.t =
+      List.iter (PublicVars.use public_vars env)
+        (Registers.rsp @ syscall_arg_cells o);
       let regions = access.ac_cells in
       if syscall_writes_memory o && access.ac_unannotated then
         error "no annotation names the region this syscall fills";
@@ -1120,37 +1088,34 @@ struct
         (fun env cell -> Env.set env cell (syscall_ret_level o))
         env (syscall_ret_cells o)
 
-    let step fn_name labels ~exit accesses env i instr signatures :
+    let step fn_name labels ~exit accesses public_vars env i instr signatures :
         (int * Env.t) list =
       let target lbl : int = LM.find lbl labels in
       let access : MemoryAccess.t = accesses.(i) in
       match instr.asmi_i with
       | ALIGN | LABEL _ -> [ (i + 1, env) ]
       | AsmOp (op, args) ->
-          [ (i + 1, ty_asmop env access op args) ]
+          [ (i + 1, ty_asmop public_vars env access op args) ]
       | Declassify_val (lty, arg) ->
           [ (i + 1, ty_declassify_val env access instr lty arg) ]
       | Declassify_mem (len, _) ->
           [ (i + 1, ty_declassify_mem env access instr len) ]
-      | SysCall o -> [ (i + 1, ty_syscall env access o) ]
+      | SysCall o -> [ (i + 1, ty_syscall public_vars env access o) ]
       | JMP (fn, lbl) ->
           if fn.CoreIdent.fn_name <> fn_name then
             error "jump to another function is not supported"
           else [ (target lbl, env) ]
       | Jcc (lbl, c) ->
-          let env =
-            List.fold_left Env.use_public env
-              (Registers.condt_cells c)
-          in
+          List.iter (PublicVars.use public_vars env) (Registers.condt_cells c);
           [ (target lbl, env); (i + 1, env) ]
       | POPPC -> [ (exit, env) ]
       | CALL (fn, _) -> (
           match Hashtbl.find_opt signatures fn.CoreIdent.fn_name with
           | Some callee -> (
-              let env = List.fold_left Env.use_public env Registers.rsp in
-              match Calls.call_env env callee access.ac_bindings with
-              | _, Some after -> [ (i + 1, after) ]
-              | demanded, None -> [ (i, demanded) ]) (* callee does not return *)
+              List.iter (PublicVars.use public_vars env) Registers.rsp;
+              match Calls.call_env public_vars env callee access.ac_bindings with
+              | Some after -> [ (i + 1, after) ]
+              | None -> [])
           | None ->
               error "signature not available for %s" fn.CoreIdent.fn_name)
       | _ -> error "unsupported instruction"
@@ -1171,17 +1136,16 @@ struct
       init_pre_env analysis
         ~stack_frame_cells:(MemLayout.stack_frame_cells layout f_def) cells
     in
+    let public_vars = PublicVars.create () in
     let step ~labels ~exit i env instr =
-      Instruction.step name labels ~exit accesses env i instr
+      Instruction.step name labels ~exit accesses public_vars env i instr
         analysis.signatures
     in
-
-    let public_levels, post = Dataflow.fixpoint ~step body pre in
+    let post = Dataflow.fixpoint ~step body pre in
     let f_sig =
       { layout;
-        pre = Env.with_public pre public_levels;
-        post =
-          Option.map (fun post -> Env.with_public post public_levels) post }
+        pre = PublicVars.apply public_vars pre;
+        post = Option.map (PublicVars.apply public_vars) post }
     in
     Hashtbl.replace analysis.signatures name f_sig;
     Some f_sig
