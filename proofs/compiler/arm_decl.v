@@ -195,13 +195,19 @@ Instance arm_decl : arch_decl register register_ext xregister rflag condt :=
   ; caimm_cond_eqC := eqTC_arm_caimm_cond
   ; caimm_cond_pp := arm_caimm_cond_pp
   ; check_CAimm := arm_check_CAimm
+  ; camem_cond := empty
+  ; camem_cond_eqC := eqTC_empty
+  ; camem_cond_pp := of_empty _
+  ; check_CAmem := fun c _ _ _ _ => of_empty _ c
   }.
 
 Definition arm_linux_call_conv : calling_convention :=
-  {| callee_saved :=
-      map ARReg [:: R04; R05; R06; R07; R08; R09; R10; R11; SP ]
+  let saved := map ARReg [:: R04; R05; R06; R07; R08; R09; R10; R11; SP ] in
+  {| callee_saved := saved
    ; callee_saved_not_bool := erefl true
    ; callee_saved_has_rsp  := erefl true
+   ; syscall_preserved := saved
+   ; syscall_preserved_subset := erefl true
    ; call_reg_args  := [:: R00; R01; R02; R03 ]
    ; call_xreg_args := [::]
    ; call_reg_ret   := [:: R00; R01 ]

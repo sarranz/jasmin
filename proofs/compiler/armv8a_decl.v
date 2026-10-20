@@ -303,6 +303,42 @@ Definition armv8a_caimm_cond_pp (checker : armv8a_caimm_cond) : string :=
   | CAimmC_armv8a_mov_imm => "(wide, inverted wide or bitmask immediate)"
   end%string.
 
+(* Memory-argument conditions (see [camem_cond] in arch_decl.v).
+   - [CAmemC_armv8a_pair ws]: the address of a load/store pair of [ws]
+     registers in the signed offset form, [<Xn|SP>{, #<imm>}]. It has a base
+     register and no offset register, and the displacement is "a multiple of
+     8 in the range -512 to 504" (X registers) or "a multiple of 4 in the
+     range -256 to 252" (W registers), encoded in the imm7 field
+     (ARM DDI 0487 M.d, C6.2.214 LDP and C6.2.414 STP). *)
+#[only(eqbOK)] derive
+Variant armv8a_camem_cond :=
+  | CAmemC_armv8a_pair of wsize.
+
+#[ export ]
+Instance eqTC_armv8a_camem_cond : eqTypeC armv8a_camem_cond :=
+  { ceqP := armv8a_camem_cond_eqb_OK }.
+
+Definition is_pair_offset (ws : wsize) (d : Z) : bool :=
+  let n := wsize_size ws in
+  let q := (d / n)%Z in
+  ((d mod n =? 0) && (-64 <=? q) && (q <=? 63))%Z.
+
+Definition armv8a_check_CAmem
+  (checker : armv8a_camem_cond) (disp : word armv8a_reg_size)
+  (base : option register) (_ : nat) (ofs : option register) : bool :=
+  match checker with
+  | CAmemC_armv8a_pair ws =>
+    isSome base && ~~ isSome ofs && is_pair_offset ws (wsigned disp)
+  end.
+
+Definition armv8a_camem_cond_pp (checker : armv8a_camem_cond) : string :=
+  match checker with
+  | CAmemC_armv8a_pair ws =>
+    if ws == U64
+    then "[Xn|SP, #imm], imm a multiple of 8 in [-512, 504]"
+    else "[Xn|SP, #imm], imm a multiple of 4 in [-256, 252]"
+  end%string.
+
 #[ export ]
 Instance armv8a_decl : arch_decl register register_ext xregister rflag condt :=
   { reg_size  := armv8a_reg_size
@@ -319,6 +355,10 @@ Instance armv8a_decl : arch_decl register register_ext xregister rflag condt :=
   ; caimm_cond_eqC := eqTC_armv8a_caimm_cond
   ; caimm_cond_pp := armv8a_caimm_cond_pp
   ; check_CAimm := armv8a_check_CAimm
+  ; camem_cond := armv8a_camem_cond
+  ; camem_cond_eqC := eqTC_armv8a_camem_cond
+  ; camem_cond_pp := armv8a_camem_cond_pp
+  ; check_CAmem := armv8a_check_CAmem
   }.
 
 (* -------------------------------------------------------------------- *)
@@ -332,11 +372,16 @@ Instance armv8a_decl : arch_decl register register_ext xregister rflag condt :=
    is valid on all platforms. *)
 
 Definition armv8a_call_conv : calling_convention :=
-  {| callee_saved :=
-      map ARReg [:: R19; R20; R21; R22; R23; R24; R25; R26; R27; R28
-                  ; R29; RSP ]
+  let saved_regs :=
+    map ARReg [:: R19; R20; R21; R22; R23; R24; R25; R26; R27; R28
+                ; R29; RSP ] in
+  {| callee_saved := saved_regs
    ; callee_saved_not_bool := erefl true
    ; callee_saved_has_rsp  := erefl true
+     (* No vector register: AAPCS64 only preserves the low 64 bits of
+        v8-v15. *)
+   ; syscall_preserved := saved_regs
+   ; syscall_preserved_subset := erefl true
    ; call_reg_args  := [:: R0; R1; R2; R3; R4; R5; R6; R7 ]
    ; call_xreg_args := [::]
    ; call_reg_ret   := [:: R0; R1; R2; R3; R4; R5; R6; R7 ]
