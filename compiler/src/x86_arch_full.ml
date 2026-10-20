@@ -212,6 +212,7 @@ module X86_core = struct
     | VSHUFPS _ -> false (* Not DOIT *)
     | XCHG _ -> false (* Not DOIT *)
     | XOR _ -> true
+    | RDPMC -> false (* Not DOIT *)
 
   (* -------------------------------------------------------------------- *)
   (* Rocq printing for x86 asm ops *)
@@ -370,6 +371,7 @@ module X86_core = struct
     | SHA256RNDS2 -> ToRocq.pp_bare fmt "SHA256RNDS2"
     | SHA256MSG1 -> ToRocq.pp_bare fmt "SHA256MSG1"
     | SHA256MSG2 -> ToRocq.pp_bare fmt "SHA256MSG2"
+    | RDPMC -> ToRocq.pp_bare fmt "RDPMC"
 
   let pp_extra_op_for_rocq fmt (o : extra_op) =
     let open X86_extra in
