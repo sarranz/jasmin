@@ -56,6 +56,12 @@ make
 The definition of oracle systems is in `proofs/compiler/cil.v`. The KEM-IND-CCA
 definition is at the end of the file.
 
+The intended KEM-IND-CCA definition (a stateful challenger and a two-stage
+adversary) is in `proofs/compiler/indcca.v`. The CIL encoding is at the end of
+`proofs/compiler/cil.v`, and the bridge theorem `indcca_reduction_reduction`,
+which shows that the CIL encoding implies the intended definition, is in
+`proofs/compiler/cil_indcca.v`.
+
 The probabilistic semantics of ITrees (and thus of cryptographic games) is in
 `proofs/lang/dinterp.v`. In this file, `dinterp_eutt` corresponds to Theorem
 2.1.
@@ -79,7 +85,9 @@ preservation result `it_compile_prog_to_asmP` in
 
 The general security preservation theorem is `compiler_preserves` in
 `proofs/compiler/end_to_end.v`, and its instantiation to KEM-IND-CCA is
-`mlkem_end_to_end` in the same file.
+`mlkem_end_to_end` in the same file. The theorem `mlkem_end_to_end_game`
+restates `mlkem_end_to_end` for the intended definition in
+`proofs/compiler/indcca.v`.
 
 ## Relational Hoare Logic
 

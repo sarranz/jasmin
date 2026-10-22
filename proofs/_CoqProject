@@ -27,7 +27,10 @@
 
 compiler/cil.v
 compiler/end_to_end.v
+compiler/end_to_end2.v
 compiler/it_compiler_proof.v
+compiler/indcca.v
+compiler/cil_indcca.v
 compiler/hoare_valid.v
 arch/asm_invariant.v
 

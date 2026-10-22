@@ -75,8 +75,10 @@ Require allocation.
 
 Require Import
   cil
+  cil_indcca
   dinterp
 .
+Require indcca.
 
 Import Order.TTheory.
 
@@ -887,6 +889,15 @@ Proof.
 apply/sim_indcca_adv/simulating_JKEM.
 exact: (compiler_preserves
           xget_resP haparams print_uprogP print_sprogP print_linearP hcomp).
+Qed.
+
+(* The same result for the intended definition of KEM-IND-CCA. *)
+Theorem mlkem_end_to_end_game {advmem : Type} mkigk mkienc mkidec :
+  indcca.reduction (advmem := advmem)
+    (challenger_of_kem (KEM_of_Jazz (Source p q) mkigk mkienc mkidec))
+    (challenger_of_kem (KEM_of_Jazz (Target p q xget_res) mkigk mkienc mkidec)).
+Proof.
+apply/indcca_reduction_reduction/mlkem_end_to_end.
 Qed.
 
 End INSTANTIATION.

@@ -75,8 +75,10 @@ Require allocation.
 
 Require Import
   cil
+  cil_indcca
   dinterp
 .
+Require indcca.
 
 Import Order.TTheory.
 
@@ -1010,6 +1012,15 @@ move=> fn fd; rewrite entriesE !inE => /or3P [] /eqP -> _ vs m hm hpre.
 - exact: genkey_ok hm hpre.
 - exact: encap_ok hm hpre.
 exact: decap_ok hm hpre.
+Qed.
+
+(* The same result for the intended definition of KEM-IND-CCA. *)
+Theorem mlkem_end_to_end_game {advmem : Type} mkigk mkienc mkidec :
+  indcca.reduction (advmem := advmem)
+    (challenger_of_kem (KEM_of_Jazz (Source p q) mkigk mkienc mkidec))
+    (challenger_of_kem (KEM_of_Jazz (Target p q) mkigk mkienc mkidec)).
+Proof.
+apply/indcca_reduction_reduction/mlkem_end_to_end.
 Qed.
 
 End INSTANTIATION.
