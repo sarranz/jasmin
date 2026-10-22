@@ -752,6 +752,14 @@ Lemma sim_mem_equiv_mi ms mt :
   mem_equiv mS ms.
 Proof. by move=> [-> _]. Qed.
 
+Lemma sim_mem_equiv_ms ms mt :
+  sim ms mt ->
+  mem_equiv ms mS.
+Proof.
+move=> /sim_mem_equiv_mi [hss hv]; split; first by apply: stack_stable_sym; exact: hss.
+by move=> al x ws; rewrite hv.
+Qed.
+
 Definition post_isem
   (fn : funname)
   (vs : values)
@@ -794,9 +802,9 @@ Proof.
 move=> hm.
 apply: eutt_clo_bind.
 - case ok_fd: get_fundef (export_ok o.(efn_export)) => [fd|//] _.
-  have [hsafe0 hdef0] := safe_p o.(efn_export) ok_fd i.(vi_pre).
-  have hsafe : safe_uprog p o (mkfs ms i) by apply/hsafe0/sim_mem_equiv_mi/hm.
-  have hdef : res_defined p o (mkfs ms i) by apply/hdef0/sim_mem_equiv_mi/hm.
+  have [hsafe hdef] :=
+    safe_p o.(efn_export) ok_fd (sim_mem_equiv_ms hm)
+      (i.(vi_pre) (sim_mem_equiv_mi hm)).
   exact: eutt_isem_post o.(efn_export) ok_fd hsafe hdef hm.
 case: hm => ??; subst ms mt.
 move=> fs xm [xfd [hxfd hpre [hma hscs hz hargs]]]; apply eutt_Ret.
@@ -858,17 +866,23 @@ Context
   (fd_decap_ok : get_fundef (p_funcs p) fn_decap = Some fd_decap)
   (ppk psk pct pmsg : pointer)
   (genkey_ok :
-    forall vs,
-      pre_on p fn_genkey mS vs ->
-      safe_on p fn_genkey mS vs /\ res_defined_on p fn_genkey mS vs)
+    forall vs m,
+      let: fs := mkfs m vs in
+      mem_equiv m mS ->
+      fun_pre p fn_genkey fs ->
+      safe_uprog p fn_genkey fs /\ res_defined p fn_genkey fs)
   (encap_ok :
-    forall vs,
-      pre_on p fn_encap mS vs ->
-      safe_on p fn_encap mS vs /\ res_defined_on p fn_encap mS vs)
+    forall vs m,
+      let: fs := mkfs m vs in
+      mem_equiv m mS ->
+      fun_pre p fn_encap fs ->
+      safe_uprog p fn_encap fs /\ res_defined p fn_encap fs)
   (decap_ok :
-    forall vs,
-      pre_on p fn_decap mS vs ->
-      safe_on p fn_decap mS vs /\ res_defined_on p fn_decap mS vs)
+    forall vs m,
+      let: fs := mkfs m vs in
+      mem_equiv m mS ->
+      fun_pre p fn_decap fs ->
+      safe_uprog p fn_decap fs /\ res_defined p fn_decap fs)
 .
 
 Notation OracleSystem := (OracleSystem (R := R)) (only parsing).
@@ -992,10 +1006,10 @@ apply: (compiler_preserves
   + by rewrite fd_genkey_ok.
   + by rewrite fd_encap_ok.
   by rewrite fd_decap_ok.
-move=> fn fd; rewrite entriesE !inE => /or3P [] /eqP -> _ vs hpre.
-- exact: genkey_ok hpre.
-- exact: encap_ok hpre.
-exact: decap_ok hpre.
+move=> fn fd; rewrite entriesE !inE => /or3P [] /eqP -> _ vs m hm hpre.
+- exact: genkey_ok hm hpre.
+- exact: encap_ok hm hpre.
+exact: decap_ok hm hpre.
 Qed.
 
 End INSTANTIATION.
