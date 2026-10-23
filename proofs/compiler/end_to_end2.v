@@ -45,6 +45,7 @@ Require Import
   psem_facts
   relational_logic
   hoare_logic
+  hoare_valid
 .
 Require Import
   compiler
@@ -61,6 +62,7 @@ Require Import
   arch_extra
   arch_sem
   arch_params
+  asm_invariant
   sem_params_of_arch_extra
 .
 Require Import
@@ -253,7 +255,51 @@ Definition aux_post p q fn xfd s t s' t' :=
   [/\ mem_agreement ms' mt' t'.(asm_rip) q.(asm_globs)
     , t'.(asm_scs) = s'.(fscs)
     , zeroized_u cparams p fn args argt ms mt mt'
-    & values_match p fn xfd t s' t' ].
+    , values_match p fn xfd t s' t'
+    , mem_equiv ms ms'
+    , asmsem_invariant t t'
+    & validw mt =3 validw mt' ].
+
+Section LUTT_XRUTT_TRANS_R.
+
+Context
+  {E1 E2 : Type -> Type}
+  (is_error : forall T, E1 T -> bool)
+  (REv : forall A B, E1 A -> E2 B -> Prop)
+  (RAns : forall A B, E1 A -> A -> E2 B -> B -> Prop)
+  (PEv2 : prepred E2)
+  (PAns2 : postpred E2)
+  {R1 R2 : Type}
+  (RR : R1 -> R2 -> Prop)
+  (P2 : R2 -> Prop)
+.
+
+Lemma lutt_xrutt_trans_r' t1 t2
+  (REv' : forall A B, E1 A -> E2 B -> Prop)
+  (RAns' : forall A B, E1 A -> A -> E2 B -> B -> Prop)
+  RR' :
+  (forall A1 A2 e1 e2,
+      PEv2 e2 -> REv e1 e2 -> REv' A1 A2 e1 e2) ->
+  (forall A1 A2 e1 a1 e2 a2,
+      IsNoCut_ (errcutoff is_error) A1 e1 ->
+      IsNoCut_ nocutoff A2 e2 ->
+      PEv2 e2 ->
+      REv e1 e2 ->
+      RAns' A1 A2 e1 a1 e2 a2 ->
+      PAns2 e2 a2 /\ RAns e1 a1 e2 a2) ->
+  (forall r1 r2, P2 r2 -> RR r1 r2 -> RR' r1 r2) ->
+  lutt PEv2 PAns2 P2 t2 ->
+  xrutt (errcutoff is_error) nocutoff REv RAns RR t1 t2 ->
+  xrutt (errcutoff is_error) nocutoff REv' RAns' RR' t1 t2.
+Proof.
+move=> he ha hr h1 h2.
+apply: xrutt_weaken_v2; [ done | done | | | | exact: lutt_xrutt_trans_r h1 h2 ].
+- move=> ???? []; exact: he.
+- move=> ???????? []; exact: ha.
+move=> ?? []; exact: hr.
+Qed.
+
+End LUTT_XRUTT_TRANS_R.
 
 Lemma correct_comp entries p q fn fd :
   compile_prog_to_asm aparams cparams entries p = ok q ->
@@ -262,6 +308,9 @@ Lemma correct_comp entries p q fn fd :
   exists2 xfd,
     get_fundef q.(asm_funcs) fn = Some xfd
     & forall s t,
+        lutt (fun _ _ => True) (fun _ _ _ => True)
+          (fun t' => validw t.(asm_mem) =3 validw t'.(asm_mem))
+          (isem_asm q fn t) ->
         safe_uprog p fn s ->
         res_defined p fn s ->
         full_pre p q fn xfd s t ->
@@ -274,29 +323,62 @@ have [xfd [hxfd _ heq]] := [elaborate
   it_compile_prog_to_asmP
     haparams print_uprogP print_sprogP print_linearP hcomp hfn ].
 exists xfd; first exact: hxfd.
-move=> s t hsafe hdef hpre.
+move=> s t hvalid hsafe hdef hpre.
+have hmeq := [elaborate sem_fun_mem_equiv_uprog
+  (wa := withassert) (asm_op := extended_op) (ep := ep_of_asm_e)
+  (spp := spp_of_asm_e) (sip := sip_of_asm_e) (wsw := nosubword)
+  (dc := indirect_c) (wE := wE) p tt (fn := fn)] dummy_instr_info s I.
+have hinv := [elaborate iasmsem_exportcall_invariantP (wE := wE) q fn t].
 apply/simple_rutt_eutt/(EPreRel_safe_xrutt_rutt hsafe).
 apply: (lutt_xrutt_trans_l'
   (REv := EPreRel_safe (is_error wE) REeq)
   (RAns := RAeq)
   (RR := fun s' t' =>
            [/\ all val_is_def (fvals s')
+             , mem_equiv (fmem s) (fmem s')
+             , asmsem_invariant t t'
+             , validw t.(asm_mem) =3 validw t'.(asm_mem)
              & full_post cparams p q fn xfd s t s' t' ]));
   cycle -2.
 - exact:
     (isem_fun_finalize (wa := withassert) (scP := sCP_unit) (wE := wE)) hfd.
 - apply: lutt_xrutt_trans_l'; cycle -2.
   + exact: hdef.
-  + exact: heq hpre.
+  + refine (lutt_xrutt_trans_l'
+      (RR := fun r1 r2 =>
+               [/\ asmsem_invariant t r2
+                 , validw t.(asm_mem) =3 validw r2.(asm_mem)
+                 & full_post cparams p q fn xfd s t r1 r2 ])
+      _ _ _ hmeq
+      (lutt_xrutt_trans_r'
+        (RR := fun r1 r2 =>
+                 validw t.(asm_mem) =3 validw r2.(asm_mem)
+                 /\ full_post cparams p q fn xfd s t r1 r2)
+        _ _ _ hinv
+        (lutt_xrutt_trans_r'
+          (RR := full_post cparams p q fn xfd s t)
+          _ _ _ hvalid (heq _ _ hpre)))).
+  (* [hmeq] layer; [hinv] and [hvalid] layers *)
+  + by move=> ???? _ h; exact: h.
+  + move=> A1 A2 e1 a1 e2 a2 hne _ _ _ h; split; last exact: h.
+    by clear h; case: e1 hne.
+  + by move=> r1 r2 hm hr; exact: conj hm hr.
+  + by move=> ???? _ h; exact: h.
+  + by move=> A1 A2 e1 a1 e2 a2 _ _ _ _ h; split; [exact: I | exact: h].
+  + by move=> r1 r2 hi [hv hf]; split.
+  + by move=> ???? _ h; exact: h.
+  + by move=> A1 A2 e1 a1 e2 a2 _ _ _ _ h; split; [exact: I | exact: h].
+  + by move=> r1 r2 hv hf; split.
   + move=> T1 T2 [|[scs1 n1]]; first by left.
     move=> [|[scs2 n2]]; first by left.
     by move=> _ [??]; subst scs2 n2; right; exists erefl.
   + move=> T1 T2 [//|[scs1 n1]] r1 [//|[scs2 n2]] r2 _ _ _ [??]; subst scs2 n2.
     by move=> /(JMeq_eq (x := r1)) <-.
-  done.
+  by move=> r1 r2 hd [hm [hi hv hf]]; split.
 - done.
 - done.
-move=> s' t' [st hfin] [{}hdef [hm hscs hz hptr hres]]; split=> //.
+move=> s' t' [st hfin] [{}hdef hmeq' hinv' hvalid' [hm hscs hz hptr hres]].
+split=> //.
 have htys : [seq type_of_val v | v <- fvals s'] = get_tyout p fn.
 - rewrite /get_tyout hfd /=.
   move: hfin; rewrite /finalize_funcall; t_xrbindP=> vres _ vres' htr <- /=.
@@ -480,6 +562,7 @@ Context
 Definition mkfs (m : mem) (vs : values) : fstate :=
   {| fscs := tt; fmem := m; fvals := vs; |}.
 
+(* safe on any memory with the same layout as [m] *)
 Definition safe_on p fn m vs :=
   forall m',
     mem_equiv m m' ->
@@ -569,7 +652,17 @@ Context
   (q : asm_prog) (* target program (assembly) *)
   (export_ok : jazz_api_wf JP p)
   (safe_p : jazz_api_safe JP p)
+  (* The initial target memory contains the initial source memory and the
+     globals. *)
+  (init_agree : mem_agreement mS mT ripT q.(asm_globs))
 .
+
+(* TODO prove in arch *)
+Lemma asm_validw fn xm :
+  lutt (fun _ _ => True) (fun _ _ _ => True)
+    (fun xm' => validw xm.(asm_mem) =3 validw xm'.(asm_mem))
+    (isem_asm q fn xm).
+Proof using. Admitted.
 
 Definition xmT : asmmem :=
   {|
@@ -581,6 +674,20 @@ Definition xmT : asmmem :=
     asm_xreg := xrmT;
     asm_flag := rfmT;
   |}.
+
+Definition MoS : choiceType := {choice mem}.
+
+Definition MoT : choiceType := {choice asmmem}.
+
+(* The leftover memories keep the structure of the initial ones, and the target
+   memory contains the source memory and the globals. *)
+Record sim (ms : MoS) (mt : MoT) : Prop :=
+  {
+    sim_ms : mem_equiv ms mS;
+    sim_mt : mem_equiv mt.(asm_mem) mT;
+    sim_rip : mt.(asm_rip) = ripT;
+    sim_agree : mem_agreement ms mt.(asm_mem) ripT q.(asm_globs);
+  }.
 
 (* TODO should take xfd *)
 Definition mkxm
@@ -607,13 +714,16 @@ Record valid_input (o : export_fn) : Type :=
     vi_pre : pre_on p o mS _args; (* inputs satisfy the function's precondition *)
     vi_ptrs : seq pointer; (* pointers for array inputs *)
 
-    (* We only allow inputs where:
-       - Pointers are valid
-       - There is enough stack space in xmT *)
+    (* We only allow inputs where, for any pair of memories in simulation
+       (which the adversary does not see), writing the inputs satisfies the
+       compiler's precondition:
+       - Pointers are valid and fresh
+       - There is enough stack space *)
     vi_ptrs_ok :
-      forall xfd,
+      forall ms mt xfd,
+        sim ms mt ->
         get_fundef q.(asm_funcs) o = Some xfd ->
-        full_pre p q o xfd (mkfs mS _args) (mkxm o xmT _args vi_ptrs);
+        full_pre p q o xfd (mkfs ms _args) (mkxm o mt _args vi_ptrs);
   }.
 
 Definition JIn (o : JNo) : choiceType := {choice valid_input o}.
@@ -630,8 +740,6 @@ Instance JazzI : OracleSystemInterface :=
 (* -------------------------------------------------------------------------- *)
 (* Source oracle system *)
 
-Definition MoS : choiceType := {choice mem}.
-
 (* Source programs take inputs as lists of values *)
 Definition unmkfs (fs : fstate) : seq wseq * mem :=
   let: tys := [seq type_of_val v | v <- fs.(fvals) ] in
@@ -641,8 +749,7 @@ Definition isem_unit_res
   (o : JNo) (i : JIn o) (m : MoS) : itree E (JOut o * MoS) :=
   let fs := mkfs m i in
   let* fs' := isem_unit p o fs in
-  let (r, _) := unmkfs fs' in
-  Ret (r, mS).
+  Ret (unmkfs fs').
 
 #[global] Arguments isem_unit_res : clear implicits.
 
@@ -655,8 +762,10 @@ Definition isem_unit_res
    - Allows nontermination *)
 Definition OoS (o : JNo) (i : JIn o) (m : MoS) : itree Rnd (JOut o * MoS) :=
   let* ores := to_Rnd (isem_unit_res o i m |> interp_Err) in
-  if ores is ESok (rs, _) then Ret (rs, mS)
-  else Ret ([::], mS). (* absurd *)
+  if ores is ESok (rs, m') then Ret (rs, m')
+  else Ret ([::], m). (* TODO this case is absurd, how can we rule out this
+                         case? for now, returning the input memory keeps
+                         [sim] *)
 
 Instance Source : OracleSystem JazzI :=
   {|
@@ -667,8 +776,6 @@ Instance Source : OracleSystem JazzI :=
 
 (* -------------------------------------------------------------------------- *)
 (* Target oracle system *)
-
-Definition MoT : choiceType := {choice asmmem}.
 
 (* Reading the results from target states.
    Pointer results are read from memory from the argument pointers.
@@ -703,7 +810,7 @@ Definition isem_asm_res
   (o : JNo) (i : JIn o) (m : MoT) : itree E (JOut o * MoT) :=
   let xm := mkxm o m i (vi_ptrs i) in
   let* xm' := isem_asm q o xm in
-  Ret (xget_res o xm xm', xmT).
+  Ret (xget_res o xm xm', xm').
 Arguments isem_asm_res : clear implicits.
 
 (* Assembly semantics:
@@ -716,7 +823,7 @@ Arguments isem_asm_res : clear implicits.
 Definition OoT (o : JNo) (i : JIn o) (m : MoT) : itree Rnd (JOut o * MoT) :=
   let* ores := to_Rnd (isem_asm_res o i m |> interp_Err) in
   if ores is ESok res then Ret res
-  else Ret ([::], xmT). (* absurd *)
+  else Ret ([::], m). (* absurd: returning the input memory keeps [sim] *)
 
 Instance Target : OracleSystem JazzI :=
   {|
@@ -739,27 +846,91 @@ Context
   (hcomp : compile_prog_to_asm aparams cparams entries p = ok q)
 .
 
-(* We always start from the initial memories *)
-Definition sim (ms : MoS) (mt : MoT) : Prop :=
-  ms = mS /\ mt = xmT.
-
 Definition eq_sim {X : Type} : X * MoS -> X * MoT -> Prop :=
   eqR (X := X) sim.
 
+Lemma mem_equiv_refl m : mem_equiv m m.
+Proof. by split. Qed.
+
+Lemma mem_equiv_sym m1 m2 : mem_equiv m1 m2 -> mem_equiv m2 m1.
+Proof.
+move=> [hss hv]; split; first by apply: stack_stable_sym; exact: hss.
+by move=> al x ws; rewrite hv.
+Qed.
+
 Lemma sim_mS_xmT : sim mS xmT.
-Proof. done. Qed.
+Proof.
+split; [exact: mem_equiv_refl | exact: mem_equiv_refl | done | exact: init_agree].
+Qed.
 
 Lemma sim_mem_equiv_mi ms mt :
   sim ms mt ->
   mem_equiv mS ms.
-Proof. by move=> [-> _]. Qed.
+Proof. by move=> /sim_ms /mem_equiv_sym. Qed.
 
 Lemma sim_mem_equiv_ms ms mt :
   sim ms mt ->
   mem_equiv ms mS.
+Proof. exact: sim_ms. Qed.
+
+Lemma xm_write_mem x v ptr xm xm' :
+  xm_write x v ptr xm = ok xm' ->
+  mem_equiv xm.(asm_mem) xm'.(asm_mem) /\ xm'.(asm_rip) = xm.(asm_rip).
 Proof.
-move=> /sim_mem_equiv_mi [hss hv]; split; first by apply: stack_stable_sym; exact: hss.
-by move=> al x ws; rewrite hv.
+rewrite /xm_write; case: x => [r|rx|xr|f].
+- case: v => [b|z|len a|ws w|ty ?].
+  all: try by t_xrbindP=> ? _ <-; split; [exact: mem_equiv_refl | done].
+  move=> [<-] /=; split=> //.
+  split; first exact: write_wseq_stack_stable.
+  by move=> al x ws; rewrite -write_wseq_validw_eq.
+all: by t_xrbindP=> ? _ <-; split; [exact: mem_equiv_refl | done].
+Qed.
+
+Lemma xm_writes_mem xm xs args ptrs xm' :
+  xm_writes xm xs args ptrs = ok xm' ->
+  mem_equiv xm.(asm_mem) xm'.(asm_mem) /\ xm'.(asm_rip) = xm.(asm_rip).
+Proof.
+rewrite /xm_writes.
+elim: (zip (zip xs args) ptrs) xm => /= [|[[x v] ptr] l ih] xm.
+- by move=> [<-]; split; [exact: mem_equiv_refl | done].
+t_xrbindP=> xm1 /xm_write_mem [h1 e1] /ih [h2 e2].
+split; first exact: mem_equiv_trans h1 h2.
+by rewrite e2 e1.
+Qed.
+
+Lemma mkxm_sim ms mt fn args ptrs :
+  sim ms mt ->
+  mem_equiv (mkxm fn mt args ptrs).(asm_mem) mT
+  /\ (mkxm fn mt args ptrs).(asm_rip) = ripT.
+Proof.
+move=> hm; rewrite /mkxm.
+case: get_fundef => [xfd|].
+2: by split; [exact: mem_equiv_refl | done]. (* absurd: [xmT] is related to itself *)
+case hw: xm_writes => [xm''|].
+2: by split; [exact: mem_equiv_refl | done]. (* absurd: [xmT] is related to itself *)
+have [h1 e1] := xm_writes_mem hw.
+split.
+- exact: mem_equiv_trans (mem_equiv_sym h1) (sim_mt hm).
+by rewrite e1; exact: sim_rip hm.
+Qed.
+
+Lemma sim_post fn vs ptrs ms mt fs' xm' xfd :
+  sim ms mt ->
+  aux_post cparams p q fn xfd (mkfs ms vs) (mkxm fn mt vs ptrs) fs' xm' ->
+  sim (fmem fs') xm'.
+Proof.
+move=> hm [hagree _ _ _ hmeq hinv hvalid].
+have [hmt hrip] := mkxm_sim fn vs ptrs hm.
+have {}hmeq : mem_equiv ms (fmem fs') := hmeq.
+have hxrip : xm'.(asm_rip) = ripT.
+- by rewrite -(asmsem_invariant_rip hinv).
+split.
+- exact: mem_equiv_trans (mem_equiv_sym hmeq) (sim_ms hm).
+- have hxm : mem_equiv (mkxm fn mt vs ptrs).(asm_mem) xm'.(asm_mem).
+  + by split; [exact: asmsem_invariant_stack_stable hinv | exact: hvalid].
+  exact: mem_equiv_trans (mem_equiv_sym hxm) hmt.
+- exact: hxrip.
+by rewrite hxrip in hagree.
 Qed.
 
 Definition post_isem
@@ -788,13 +959,13 @@ Lemma eutt_isem_post fn fd ms mt (i : valid_input fn) :
     (isem_unit p fn (mkfs ms i))
     (isem_asm q fn (mkxm fn mt i (vi_ptrs i))).
 Proof.
-move=> hfn hfd hsafe hdef [??]; subst ms mt.
+move=> hfn hfd hsafe hdef hm.
 have [xfd hxfd heq] :=
   correct_comp haparams print_uprogP print_sprogP print_linearP hcomp hfn hfd.
-have hpre := i.(vi_ptrs_ok) hxfd.
-have := heq _ _ hsafe hdef hpre.
+have hpre := i.(vi_ptrs_ok) hm hxfd.
+have := heq _ _ (asm_validw _ _) hsafe hdef hpre.
 apply: eutt_subrel.
-by move=> fs xm [??? [? h]]; exists xfd; split=> //.
+by move=> fs xm h; exists xfd; split.
 Qed.
 
 Lemma eutt_isem_res o i ms mt :
@@ -808,10 +979,12 @@ apply: eutt_clo_bind.
     safe_p o.(efn_export) ok_fd (sim_mem_equiv_ms hm)
       (i.(vi_pre) (sim_mem_equiv_mi hm)).
   exact: eutt_isem_post o.(efn_export) ok_fd hsafe hdef hm.
-case: hm => ??; subst ms mt.
-move=> fs xm [xfd [hxfd hpre [hma hscs hz hargs]]]; apply eutt_Ret.
+move=> fs xm [xfd [hxfd hpre hpost]]; apply eutt_Ret.
+have [_ _ _ hargs _ _ _] := hpost.
 have [_ htys _ _] := hargs.
-by split=> //=; rewrite htys; exact: xget_resP hxfd hargs.
+split=> /=.
+- by rewrite htys; exact: xget_resP hxfd hargs.
+exact: sim_post hm hpost.
 Qed.
 
 (* Security preservation: the source and target oracle systems are in
@@ -826,9 +999,9 @@ have [xfd [hgetq _ heq]] := [elaborate
 apply (eutt_clo_bind _ (UU := exec_rel eq_sim)).
 - apply/eutt_interp_RR/interp_exec_eutt_gen/eutt_isem_res/hm.
 move=> /= [[rs ms]|?] [[rt mt]|?] //=; last first.
-- move=> _; apply eutt_Ret; split=> //=; exact/sim_mS_xmT.
-move=> [/= -> hm']; apply eutt_Ret; split=> //; split=> //.
-by case: hm' => _ ->.
+- (* Absurd: both oracles return the input memory, so [sim] is kept by [hm] *)
+  by move=> _; apply eutt_Ret; split.
+by move=> [/= -> hm']; apply eutt_Ret; split.
 Qed.
 
 End DEFS.
@@ -837,6 +1010,20 @@ End DEFS.
 (* Instantiation to KEMs and IND-CCA. *)
 
 Section INSTANTIATION.
+
+(* TODO I would like to build [mS] from [mT] so that the statement is
+     forall target state, exists source state,
+       forall adversary A,
+         Advantage A target = Advantage A source
+
+   But there is no way of building memories right now. We would need to expose
+   an operation in the memory module to build
+     "a memory restricted to valid addresses X, with frames Y, root Z, and a
+     limit W"
+    where X would be [validw mT] minus the globals minus [limit, root)
+          Y would be [::]
+          Z would be [rmT ad_rsp]
+          W would be [top_stack mT] *)
 
 Context
   {JP : JazzIParams}
@@ -863,9 +1050,9 @@ Definition dummym := WArray.empty msgbytes.
    ones.
    As usual, we ask that the source program is safe on valid inputs. *)
 Context
-  (fd_genkey_ok : get_fundef (p_funcs p) fn_genkey = Some fd_genkey)
-  (fd_encap_ok : get_fundef (p_funcs p) fn_encap = Some fd_encap)
-  (fd_decap_ok : get_fundef (p_funcs p) fn_decap = Some fd_decap)
+  (fd_genkey_ok : get_fundef p.(p_funcs) fn_genkey = Some fd_genkey)
+  (fd_encap_ok : get_fundef p.(p_funcs) fn_encap = Some fd_encap)
+  (fd_decap_ok : get_fundef p.(p_funcs) fn_decap = Some fd_decap)
   (ppk psk pct pmsg : pointer)
   (genkey_ok :
     forall vs m,
@@ -885,6 +1072,9 @@ Context
       mem_equiv m mS ->
       fun_pre p fn_decap fs ->
       safe_uprog p fn_decap fs /\ res_defined p fn_decap fs)
+  (* The initial target memory contains the initial source memory and the
+     globals. *)
+  (init_agree : mem_agreement mS mT ripT q.(asm_globs))
 .
 
 Notation OracleSystem := (OracleSystem (R := R)) (only parsing).
@@ -1003,7 +1193,8 @@ Theorem mlkem_end_to_end mkigk mkienc mkidec :
 Proof.
 apply/sim_indcca_adv/simulating_JKEM.
 apply: (compiler_preserves
-  _ _ haparams print_uprogP print_sprogP print_linearP hcomp).
+  _ _ init_agree haparams print_uprogP print_sprogP print_linearP
+  hcomp).
 - move=> fn; rewrite entriesE !inE => /or3P [] /eqP ->.
   + by rewrite fd_genkey_ok.
   + by rewrite fd_encap_ok.
@@ -1019,9 +1210,7 @@ Theorem mlkem_end_to_end_game {advmem : Type} mkigk mkienc mkidec :
   indcca.reduction (advmem := advmem)
     (challenger_of_kem (KEM_of_Jazz (Source p q) mkigk mkienc mkidec))
     (challenger_of_kem (KEM_of_Jazz (Target p q) mkigk mkienc mkidec)).
-Proof.
-apply/indcca_reduction_reduction/mlkem_end_to_end.
-Qed.
+Proof. exact/indcca_reduction_reduction/mlkem_end_to_end. Qed.
 
 End INSTANTIATION.
 
