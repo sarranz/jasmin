@@ -891,6 +891,40 @@ End SPEC.
 #[ global ] Arguments stack_stable {_ _ _} _ _.
 #[ global ] Arguments free_stack_spec {_ _ _} _ _.
 
+Section RESTRICT_SPEC.
+  Context mem (CM: coreMem pointer mem) (M: memory CM)
+    (m: mem) (keep: pointer -> bool) (root limit: pointer) (m': mem).
+
+  Record restrict_spec : Prop := mkRS {
+    rs_valid     : forall p,
+                     validw m' Aligned p U8 =
+                     [&& keep p, validw m Aligned p U8
+                       & ~~ pointer_range limit root p];
+    rs_read_old8 : forall p,
+                     validw m' Aligned p U8 ->
+                     read m' Aligned p U8 = read m Aligned p U8;
+    rs_root      : stack_root m' = root;
+    rs_limit     : stack_limit m' = limit;
+    rs_frames    : frames m' = [::];
+  }.
+
+  Lemma rs_read_old (rs:restrict_spec) al p s :
+    validw m' al p s -> read m' al p s = read m al p s.
+  Proof.
+    move /validwP => [] ha hv; apply eq_read => al' k hk.
+    rewrite 2!(read8_alignment Aligned).
+    apply: (rs_read_old8 rs).
+    rewrite (validw8_alignment al).
+    exact: hv.
+  Qed.
+
+  Lemma rs_top_stack (rs:restrict_spec) : top_stack m' = root.
+  Proof. by rewrite /top_stack (rs_frames rs) /= (rs_root rs). Qed.
+
+End RESTRICT_SPEC.
+
+#[ global ] Arguments restrict_spec {_ _ _} _ _ _ _ _.
+
 Definition is_stack_stable mem {CM : coreMem pointer mem} {M : memory CM} m m' :=
   [&& stack_root m == stack_root m'
     , stack_limit m == stack_limit m'
@@ -985,6 +1019,16 @@ Parameter write_mem_stable : forall m m' al p s (v:word s),
 
 Parameter free_stackP : forall m,
   free_stack_spec m (free_stack m).
+
+Parameter restrict : mem -> (pointer -> bool) -> pointer -> pointer -> exec mem.
+
+Parameter restrictP : forall m keep root limit m',
+  restrict m keep root limit = ok m' -> restrict_spec m keep root limit m'.
+
+Parameter restrict_complete : forall m keep root limit,
+  wunsigned limit <= wunsigned root ->
+  wunsigned limit <= wunsigned (top_stack m) ->
+  exists m', restrict m keep root limit = ok m'.
 
 End WITH_POINTER_DATA.
 End MemoryT.

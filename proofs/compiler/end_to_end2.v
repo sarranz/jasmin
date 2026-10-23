@@ -514,6 +514,134 @@ Qed.
 
 End WSEQ_EP.
 
+Section RESTRICT_MEM.
+
+Context
+  {reg regx xreg rflag cond asm_op extra_op syscall_state : Type}
+  {sc_sem : syscall.syscall_sem syscall_state}
+  {asm_e : asm_extra reg regx xreg rflag cond asm_op extra_op}
+.
+
+(* Well-formedness of an initial target memory [m] with globals [gd] at [rip]
+   and stack root [rsp]. *)
+Record target_mem_wf
+  (m : mem) (rip : pointer) (gd : seq u8) (rsp : pointer) : Prop :=
+  {
+    twf_rip_no_overflow : no_overflow rip (Z.of_nat (size gd));
+    twf_rip_align : is_align rip U256;
+    twf_globs_data :
+      forall i,
+        (0 <= i < Z.of_nat (size gd))%Z ->
+        read m Aligned (rip + wrepr _ i)%R U8 = ok (nth 0%R gd (Z.to_nat i));
+    twf_globs_not_stack :
+      forall p,
+        between rip (Z.of_nat (size gd)) p U8 ->
+        ~~ pointer_range (top_stack m) rsp p;
+    twf_stack_valid :
+      forall p, pointer_range (top_stack m) rsp p -> validw m Aligned p U8;
+    twf_stack_le : (wunsigned (top_stack m) <= wunsigned rsp)%Z;
+  }.
+
+Definition keep_no_globs (rip : pointer) (gd : seq u8) (p : pointer) : bool :=
+  ~~ between rip (Z.of_nat (size gd)) p U8.
+
+Definition restrict_dflt
+  (m : mem) (keep : pointer -> bool) (root limit : pointer) : mem :=
+  if Memory.restrict m keep root limit is Ok m' then m' else m.
+
+(* Initial source memory *)
+Definition mS_of
+  (m : mem) (rip : pointer) (gd : seq u8) (rsp : pointer) : mem :=
+  restrict_dflt m (keep_no_globs rip gd) rsp (top_stack m).
+
+(* Ghost memory: the initial source memory extended with the globals *)
+Definition mi_of (m : mem) (rsp : pointer) : mem :=
+  restrict_dflt m predT rsp (top_stack m).
+
+Lemma restrict_dflt_ok m keep root limit :
+  (wunsigned limit <= wunsigned root)%Z ->
+  (wunsigned limit <= wunsigned (top_stack m))%Z ->
+  Memory.restrict m keep root limit = ok (restrict_dflt m keep root limit).
+Proof.
+move=> h1 h2; have [m' hm'] := Memory.restrict_complete keep h1 h2.
+by rewrite /restrict_dflt hm'.
+Qed.
+
+Lemma mS_of_spec m rip gd rsp :
+  target_mem_wf m rip gd rsp ->
+  restrict_spec m (keep_no_globs rip gd) rsp (top_stack m) (mS_of m rip gd rsp).
+Proof.
+move=> hwf; apply: Memory.restrictP.
+exact: restrict_dflt_ok (twf_stack_le hwf) (Z.le_refl _).
+Qed.
+
+Lemma mi_of_spec m rip gd rsp :
+  target_mem_wf m rip gd rsp ->
+  restrict_spec m (fun _ => true) rsp (top_stack m) (mi_of m rsp).
+Proof.
+move=> hwf; apply: Memory.restrictP.
+exact: restrict_dflt_ok (twf_stack_le hwf) (Z.le_refl _).
+Qed.
+
+Lemma target_mem_wf_agreement m rip gd rsp :
+  target_mem_wf m rip gd rsp ->
+  mem_agreement (mS_of m rip gd rsp) m rip gd.
+Proof.
+move=> hwf.
+have rsS := mS_of_spec hwf.
+have rsI := mi_of_spec hwf.
+have hS (p : pointer) : validw (mS_of m rip gd rsp) Aligned p U8 ->
+    [/\ ~~ between rip (Z.of_nat (size gd)) p U8
+      , validw m Aligned p U8
+      & ~~ pointer_range (top_stack m) rsp p].
+- by rewrite (rs_valid rsS) => /and3P[hk hm hr]; split.
+have hI (p : pointer) : validw m Aligned p U8 ->
+    ~~ pointer_range (top_stack m) rsp p ->
+    validw (mi_of m rsp) Aligned p U8.
+- by move=> hv hr; rewrite (rs_valid rsI) /= hv hr.
+have hglob (p : pointer) : between rip (Z.of_nat (size gd)) p U8 ->
+    validw (mi_of m rsp) Aligned p U8.
+- move=> hb; apply: hI.
+  + have hi :
+      (0 <= wunsigned p - wunsigned rip < Z.of_nat (size gd))%Z.
+    * move: hb; rewrite /between /zbetween !zify.
+      by change (wsize_size U8) with 1%Z; lia.
+    have hv := readV (twf_globs_data hwf hi).
+    by rewrite wrepr_sub !wrepr_unsigned GRing.addrC GRing.subrK in hv.
+  exact: (twf_globs_not_stack hwf hb).
+exists (mi_of m rsp); split.
+- split.
+  + exact: (twf_rip_no_overflow hwf).
+  + exact: (twf_rip_align hwf).
+  + move=> p hv; have [_ hm hr] := hS p hv.
+    by rewrite (rs_read_old8 rsS hv) -(rs_read_old8 rsI (hI _ hm hr)).
+  + move=> p hv; have [hb _ _] := hS p hv.
+    apply: not_between_U8_disjoint_zrange (twf_rip_no_overflow hwf) _.
+    by move/negP: hb.
+  + move=> p /orP [hv | hb].
+    * by have [_ hm hr] := hS p hv; exact: (hI _ hm hr).
+    exact: hglob hb.
+  + move=> i hi.
+    have hb : between rip (Z.of_nat (size gd)) (rip + wrepr _ i) U8.
+    * apply: between_byte (twf_rip_no_overflow hwf) (zbetween_refl _ _) hi.
+    by rewrite (rs_read_old8 rsI (hglob _ hb)) (twf_globs_data hwf hi).
+- split=> p; rewrite ?(rs_top_stack rsI) ?(rs_limit rsI).
+  + move=> _ hv; exact: (rs_read_old8 rsI hv).
+  + move=> w hrng hrd.
+    have := readV hrd; rewrite (rs_valid rsI) => /and3P[_ _ /negP hr].
+    by case: hr; apply/pointer_rangeP.
+  + by rewrite (rs_valid rsI) => /and3P[_ ? _].
+  + rewrite (rs_root rsI) => hrng; apply: (twf_stack_valid hwf).
+    exact/pointer_rangeP.
+- split.
+  + by rewrite (rs_root rsS) (rs_root rsI).
+  + by rewrite (rs_limit rsS) (rs_limit rsI).
+  + by rewrite (rs_frames rsS) (rs_frames rsI).
+by rewrite (rs_limit rsI); exact: Z.le_refl.
+Qed.
+
+End RESTRICT_MEM.
+
 Section MAIN.
 
 Context {R : realType}.
@@ -996,32 +1124,32 @@ End DEFS.
 
 Section INSTANTIATION.
 
-(* TODO I would like to build [mS] from [mT] so that the statement is
-     forall target state, exists source state,
-       forall adversary A,
-         Advantage A target = Advantage A source
-
-   But there is no way of building memories right now. We would need to expose
-   an operation in the memory module to build
-     "a memory restricted to valid addresses X, with frames Y, root Z, and a
-     limit W"
-    where X would be [validw mT] minus the globals minus [limit, root)
-          Y would be [::]
-          Z would be [rmT ad_rsp]
-          W would be [top_stack mT]
-
-    We need a way to ensure that [mT] is well formed though, e.g., that the
-    region where the stack gets allocated is valid. *)
-
 Context
-  {JP : JazzIParams}
   (pkbytes skbytes ctbytes msgbytes : positive)
   (fn_genkey fn_encap fn_decap : funname)
   (fd_genkey fd_encap fd_decap : ufundef)
-  (entriesE : entries = [:: fn_genkey; fn_encap; fn_decap])
   (p : uprog)
   (q : asm_prog)
+  (tmem : mem)
+  (trip trsp : pointer)
+  (trm : regmap)
+  (trxm : regxmap)
+  (txrm : xregmap)
+  (trfm : rflagmap)
+  (hwf : target_mem_wf tmem trip q.(asm_globs) trsp)
 .
+
+#[local] Instance JP_T : JazzIParams :=
+  {|
+    entries := [:: fn_genkey; fn_encap; fn_decap];
+    mS := mS_of tmem trip q.(asm_globs) trsp;
+    mT := tmem;
+    ripT := trip;
+    rmT := trm;
+    rxmT := trxm;
+    xrmT := txrm;
+    rfmT := trfm;
+  |}.
 
 Definition pk0 := mkwvec pkbytes [::].
 Definition sk0 := mkwvec skbytes [::].
@@ -1060,10 +1188,12 @@ Context
       mem_equiv m mS ->
       fun_pre p fn_decap fs ->
       safe_uprog p fn_decap fs /\ res_defined p fn_decap fs)
-  (* The initial target memory contains the initial source memory and the
-     globals. *)
-  (init_agree : mem_agreement mS mT ripT q.(asm_globs))
 .
+
+(* The initial target memory contains the initial source memory and the
+   globals. *)
+Lemma init_agree : mem_agreement mS mT ripT q.(asm_globs).
+Proof. exact: target_mem_wf_agreement hwf. Qed.
 
 Notation OracleSystem := (OracleSystem (R := R)) (only parsing).
 
@@ -1078,13 +1208,13 @@ Notation OracleSystem := (OracleSystem (R := R)) (only parsing).
   |}.
 
 Lemma export_genkey : fn_genkey \in entries.
-Proof. by rewrite entriesE !inE eqxx. Qed.
+Proof. by rewrite !inE eqxx. Qed.
 
 Lemma export_encap : fn_encap \in entries.
-Proof. by rewrite entriesE !inE eqxx orbT. Qed.
+Proof. by rewrite !inE eqxx orbT. Qed.
 
 Lemma export_decap : fn_decap \in entries.
-Proof. by rewrite entriesE !inE eqxx !orbT. Qed.
+Proof. by rewrite !inE eqxx !orbT. Qed.
 
 Definition efn_kg : export_fn := {| efn_export := export_genkey; |}.
 Definition efn_encap : export_fn := {| efn_export := export_encap; |}.
@@ -1183,11 +1313,11 @@ apply/sim_indcca_adv/simulating_JKEM.
 apply: (compiler_preserves
   _ _ init_agree haparams print_uprogP print_sprogP print_linearP
   hcomp).
-- move=> fn; rewrite entriesE !inE => /or3P [] /eqP ->.
+- move=> fn; rewrite !inE => /or3P [] /eqP ->.
   + by rewrite fd_genkey_ok.
   + by rewrite fd_encap_ok.
   by rewrite fd_decap_ok.
-move=> fn fd; rewrite entriesE !inE => /or3P [] /eqP -> _ vs m hm hpre.
+move=> fn fd; rewrite !inE => /or3P [] /eqP -> _ vs m hm hpre.
 - exact: genkey_ok hm hpre.
 - exact: encap_ok hm hpre.
 exact: decap_ok hm hpre.

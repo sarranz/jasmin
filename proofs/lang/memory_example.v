@@ -878,5 +878,147 @@ Module MemoryI : MemoryT.
     rewrite wunsigned_repr_small; lia.
   Qed.
 
+  (** Restriction *)
+  Definition restrict_ok (m : mem) (root limit : pointer) : bool :=
+    (wunsigned limit <=? wunsigned root) &&
+    (wunsigned limit <=? wunsigned (top_stack m)).
+
+  Definition restrict_alloc
+    (m : mem) (keep : pointer -> bool) (root limit : pointer) : Mz.t unit :=
+    Mz.filter_map
+      (fun k _ =>
+        let: p := wrepr Uptr k in
+        if keep p && ~~ pointer_range limit root p then Some tt else None)
+      m.(alloc).
+
+  Lemma restrict_allocP m keep root limit x :
+    is_zalloc (restrict_alloc m keep root limit) x =
+      is_zalloc m.(alloc) x &&
+      (keep (wrepr Uptr x) && ~~ pointer_range limit root (wrepr Uptr x)).
+  Proof.
+    rewrite /restrict_alloc /is_zalloc Mz.filter_mapP.
+    by case: Mz.get => //= ?; case: ifP.
+  Qed.
+
+  Lemma restrict_framesP m root limit :
+    restrict_ok m root limit ->
+    valid_frames limit root [::].
+  Proof.
+    case/andP => /lezP h _; apply/andP; split => //.
+    by apply/lezP; rewrite /footprint_of_stack /=; lia.
+  Qed.
+
+  Lemma restrict_stk_allocP (a : Mz.t unit) x :
+    false ->
+    is_zalloc a x.
+  Proof. by []. Qed.
+
+  Lemma restrict_stk_freeP m keep root limit x :
+    restrict_ok m root limit ->
+    0 <= x < wunsigned root - footprint_of_stack [::] ->
+    is_zalloc (restrict_alloc m keep root limit) x = false.
+  Proof.
+    case/andP => _ /lezP hlim [hx0 hx1].
+    have hr := wunsigned_range root.
+    have hx : wunsigned (wrepr Uptr x) = x.
+    + rewrite /footprint_of_stack /= in hx1.
+      by rewrite wunsigned_repr_small; lia.
+    rewrite restrict_allocP.
+    case hz: is_zalloc => //=.
+    case hp: (pointer_range limit root (wrepr Uptr x)); first by rewrite andbF.
+    exfalso.
+    have hp' : ~ (wunsigned limit <= x < wunsigned root).
+    + by rewrite -hx => h; move/negP: hp; apply; apply/pointer_rangeP.
+    rewrite wunsigned_top_stack in hlim.
+    have := stk_freeP m x.
+    rewrite /footprint_of_stack /= in hx1.
+    rewrite hz; lia.
+  Qed.
+
+  Definition restrict
+    (m : mem) (keep : pointer -> bool) (root limit : pointer) : exec mem :=
+    match Sumbool.sumbool_of_bool (restrict_ok m root limit) with
+    | right _ => Error ErrStack
+    | left C =>
+      ok
+        {| data := m.(data);
+           alloc := restrict_alloc m keep root limit;
+           stk_root := root;
+           stk_limit := limit;
+           frames := [::];
+           framesP := restrict_framesP C;
+           stk_allocP x := restrict_stk_allocP _ x;
+           stk_freeP x := restrict_stk_freeP keep C (x := x);
+        |}
+    end.
+
+  Lemma rs_valid m keep root limit m' :
+    restrict m keep root limit = ok m' ->
+    forall p,
+      validw m' Aligned p U8 =
+        [&& keep p, validw m Aligned p U8 & ~~ pointer_range limit root p].
+  Proof.
+    rewrite /restrict; case: Sumbool.sumbool_of_bool => // C [<-] p.
+    rewrite -!valid8_validw /valid8 /= /is_alloc /= restrict_allocP.
+    rewrite wrepr_unsigned.
+    by case: is_zalloc; case: keep; case: pointer_range.
+  Qed.
+
+  Lemma rs_read_old8 m keep root limit m' :
+    restrict m keep root limit = ok m' ->
+    forall p,
+      validw m' Aligned p U8 -> read m' Aligned p U8 = read m Aligned p U8.
+  Proof.
+    move=> o p.
+    have hv := rs_valid o p.
+    move: o hv.
+    rewrite /restrict; case: Sumbool.sumbool_of_bool => // C [<-] hv hv'.
+    have hv'' := hv'.
+    move: hv'; rewrite hv => /and3P[_ hvm _].
+    move: hv'' hvm.
+    by rewrite -!valid8_validw -!get_read8 /memory_model.get /= /get => -> ->.
+  Qed.
+
+  Lemma rs_root m keep root limit m' :
+    restrict m keep root limit = ok m' ->
+    stack_root m' = root.
+  Proof. by rewrite /restrict; case: Sumbool.sumbool_of_bool => // C [<-]. Qed.
+
+  Lemma rs_limit m keep root limit m' :
+    restrict m keep root limit = ok m' ->
+    stack_limit m' = limit.
+  Proof. by rewrite /restrict; case: Sumbool.sumbool_of_bool => // C [<-]. Qed.
+
+  Lemma rs_frames m keep root limit m' :
+    restrict m keep root limit = ok m' ->
+    memory_model.frames m' = [::].
+  Proof.
+    rewrite /restrict; case: Sumbool.sumbool_of_bool => // C [<-].
+    by rewrite /memory_model.frames /= /stack_frames /stack_blocks.
+  Qed.
+
+  Lemma restrictP m keep root limit m' :
+    restrict m keep root limit = ok m' ->
+    restrict_spec m keep root limit m'.
+  Proof.
+    move=> o; split.
+    - exact: rs_valid o.
+    - exact: rs_read_old8 o.
+    - exact: rs_root o.
+    - exact: rs_limit o.
+    exact: rs_frames o.
+  Qed.
+
+  Lemma restrict_complete m keep root limit :
+    wunsigned limit <= wunsigned root ->
+    wunsigned limit <= wunsigned (memory_model.top_stack m) ->
+    exists m', restrict m keep root limit = ok m'.
+  Proof.
+    rewrite top_stackE => h1 h2.
+    have hok : restrict_ok m root limit by apply/andP; split; apply/lezP.
+    rewrite /restrict; case: Sumbool.sumbool_of_bool; first by eauto.
+    by move=> C; move: C; rewrite hok.
+  Qed.
+
   End WITH_POINTER_DATA.
 End MemoryI.
