@@ -257,8 +257,7 @@ Definition aux_post p q fn xfd s t s' t' :=
     , zeroized_u cparams p fn args argt ms mt mt'
     , values_match p fn xfd t s' t'
     , mem_equiv ms ms'
-    , asmsem_invariant t t'
-    & validw mt =3 validw mt' ].
+    & asmsem_invariant t t' ].
 
 Section LUTT_XRUTT_TRANS_R.
 
@@ -308,9 +307,6 @@ Lemma correct_comp entries p q fn fd :
   exists2 xfd,
     get_fundef q.(asm_funcs) fn = Some xfd
     & forall s t,
-        lutt (fun _ _ => True) (fun _ _ _ => True)
-          (fun t' => validw t.(asm_mem) =3 validw t'.(asm_mem))
-          (isem_asm q fn t) ->
         safe_uprog p fn s ->
         res_defined p fn s ->
         full_pre p q fn xfd s t ->
@@ -323,7 +319,7 @@ have [xfd [hxfd _ heq]] := [elaborate
   it_compile_prog_to_asmP
     haparams print_uprogP print_sprogP print_linearP hcomp hfn ].
 exists xfd; first exact: hxfd.
-move=> s t hvalid hsafe hdef hpre.
+move=> s t hsafe hdef hpre.
 have hmeq := [elaborate sem_fun_mem_equiv_uprog
   (wa := withassert) (asm_op := extended_op) (ep := ep_of_asm_e)
   (spp := spp_of_asm_e) (sip := sip_of_asm_e) (wsw := nosubword)
@@ -337,7 +333,6 @@ apply: (lutt_xrutt_trans_l'
            [/\ all val_is_def (fvals s')
              , mem_equiv (fmem s) (fmem s')
              , asmsem_invariant t t'
-             , validw t.(asm_mem) =3 validw t'.(asm_mem)
              & full_post cparams p q fn xfd s t s' t' ]));
   cycle -2.
 - exact:
@@ -347,37 +342,28 @@ apply: (lutt_xrutt_trans_l'
   + refine (lutt_xrutt_trans_l'
       (RR := fun r1 r2 =>
                [/\ asmsem_invariant t r2
-                 , validw t.(asm_mem) =3 validw r2.(asm_mem)
                  & full_post cparams p q fn xfd s t r1 r2 ])
       _ _ _ hmeq
       (lutt_xrutt_trans_r'
-        (RR := fun r1 r2 =>
-                 validw t.(asm_mem) =3 validw r2.(asm_mem)
-                 /\ full_post cparams p q fn xfd s t r1 r2)
-        _ _ _ hinv
-        (lutt_xrutt_trans_r'
-          (RR := full_post cparams p q fn xfd s t)
-          _ _ _ hvalid (heq _ _ hpre)))).
-  (* [hmeq] layer; [hinv] and [hvalid] layers *)
+        (RR := full_post cparams p q fn xfd s t)
+        _ _ _ hinv (heq _ _ hpre))).
+  (* [hmeq] layer; [hinv] layer *)
   + by move=> ???? _ h; exact: h.
   + move=> A1 A2 e1 a1 e2 a2 hne _ _ _ h; split; last exact: h.
     by clear h; case: e1 hne.
   + by move=> r1 r2 hm hr; exact: conj hm hr.
   + by move=> ???? _ h; exact: h.
   + by move=> A1 A2 e1 a1 e2 a2 _ _ _ _ h; split; [exact: I | exact: h].
-  + by move=> r1 r2 hi [hv hf]; split.
-  + by move=> ???? _ h; exact: h.
-  + by move=> A1 A2 e1 a1 e2 a2 _ _ _ _ h; split; [exact: I | exact: h].
-  + by move=> r1 r2 hv hf; split.
+  + by move=> r1 r2 hi hf; split.
   + move=> T1 T2 [|[scs1 n1]]; first by left.
     move=> [|[scs2 n2]]; first by left.
     by move=> _ [??]; subst scs2 n2; right; exists erefl.
   + move=> T1 T2 [//|[scs1 n1]] r1 [//|[scs2 n2]] r2 _ _ _ [??]; subst scs2 n2.
     by move=> /(JMeq_eq (x := r1)) <-.
-  by move=> r1 r2 hd [hm [hi hv hf]]; split.
+  by move=> r1 r2 hd [hm [hi hf]]; split.
 - done.
 - done.
-move=> s' t' [st hfin] [{}hdef hmeq' hinv' hvalid' [hm hscs hz hptr hres]].
+move=> s' t' [st hfin] [{}hdef hmeq' hinv' [hm hscs hz hptr hres]].
 split=> //.
 have htys : [seq type_of_val v | v <- fvals s'] = get_tyout p fn.
 - rewrite /get_tyout hfd /=.
@@ -657,13 +643,6 @@ Context
   (init_agree : mem_agreement mS mT ripT q.(asm_globs))
 .
 
-(* TODO prove in arch *)
-Lemma asm_validw fn xm :
-  lutt (fun _ _ => True) (fun _ _ _ => True)
-    (fun xm' => validw xm.(asm_mem) =3 validw xm'.(asm_mem))
-    (isem_asm q fn xm).
-Proof using. Admitted.
-
 Definition xmT : asmmem :=
   {|
     asm_rip := ripT;
@@ -919,7 +898,7 @@ Lemma sim_post fn vs ptrs ms mt fs' xm' xfd :
   aux_post cparams p q fn xfd (mkfs ms vs) (mkxm xfd mt vs ptrs) fs' xm' ->
   sim (fmem fs') xm'.
 Proof.
-move=> hm [hagree _ _ _ hmeq hinv hvalid].
+move=> hm [hagree _ _ _ hmeq hinv].
 have [hmt hrip] := mkxm_sim xfd vs ptrs hm.
 have {}hmeq : mem_equiv ms (fmem fs') := hmeq.
 have hxrip : xm'.(asm_rip) = ripT.
@@ -927,7 +906,7 @@ have hxrip : xm'.(asm_rip) = ripT.
 split.
 - exact: mem_equiv_trans (mem_equiv_sym hmeq) (sim_ms hm).
 - have hxm : mem_equiv (mkxm xfd mt vs ptrs).(asm_mem) xm'.(asm_mem).
-  + by split; [exact: asmsem_invariant_stack_stable hinv | exact: hvalid].
+  + exact: asmsem_invariant_mem_equiv hinv.
   exact: mem_equiv_trans (mem_equiv_sym hxm) hmt.
 - exact: hxrip.
 by rewrite hxrip in hagree.
@@ -964,7 +943,7 @@ have [xfd' hxfd' heq] :=
   correct_comp haparams print_uprogP print_sprogP print_linearP hcomp hfn hfd.
 move: hxfd'; rewrite hxfd => -[?]; subst xfd'.
 have hpre := i.(vi_ptrs_ok) hm hxfd.
-have := heq _ _ (asm_validw _ _) hsafe hdef hpre.
+have := heq _ _ hsafe hdef hpre.
 apply: eutt_subrel.
 by move=> fs xm h; split.
 Qed.
@@ -984,7 +963,7 @@ apply: eutt_clo_bind.
       (i.(vi_pre) (sim_mem_equiv_mi hm)).
   exact: eutt_isem_post hfn ok_fd hxfd hsafe hdef hm.
 move=> fs xm [hpre hpost]; apply eutt_Ret.
-have [_ _ _ hargs _ _ _] := hpost.
+have [_ _ _ hargs _ _] := hpost.
 have [_ htys _ _] := hargs.
 split=> /=.
 - by rewrite htys; exact: xget_resP hargs.

@@ -1311,7 +1311,7 @@ Proof.
       symmetry. exact: (sem_call_stack_stable_uprog p_call).
     rewrite
       -(ss_limit (sem_call_stack_stable_sprog sp_call))
-      -(ss_top_stack (asmsem_invariant_stack_stable xm_xm')).
+      -(ss_top_stack (proj1 (asmsem_invariant_mem_equiv xm_xm'))).
     exact: mi4.
   + move=> hszs pr hnvalid hdisj.
     change reg_size with Uptr in pr.

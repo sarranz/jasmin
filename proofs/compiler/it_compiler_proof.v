@@ -1566,7 +1566,7 @@ apply: xrutt_weaken_v1;
     - apply: stack_stable_trans; last exact: proj1 hmem_s.
       apply: stack_stable_trans; last exact: hmga.(ma_stack_stable).
       by symmetry; exact: (proj1 hmem_u).
-    - rewrite -(ss_limit (proj1 hmem_s)) -(ss_top_stack hss_xm).
+    - rewrite -(ss_limit (proj1 hmem_s)) -(ss_top_stack (proj1 hss_xm)).
       exact: hmga.(ma_stack_range).
   + by have [_ [_ _ <- _]] := h_be_post; have [_ [_ [_ _ _ _ <-]]] := h_fe_post.
   + move=> hszs pr hdisj /negP hnvalid.

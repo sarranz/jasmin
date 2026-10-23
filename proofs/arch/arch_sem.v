@@ -505,7 +505,7 @@ Definition asmsem : relation asm_state := clos_refl_trans asm_state asmsem1.
 (* ---------------------------------------------------------------- *)
 Record asmsem_invariant (x y: asmmem) : Prop :=
   { asmsem_invariant_rip: asm_rip x = asm_rip y
-  ; asmsem_invariant_stack_stable: stack_stable x.(asm_mem) y.(asm_mem)
+  ; asmsem_invariant_mem_equiv: mem_equiv x.(asm_mem) y.(asm_mem)
   }.
 
 Local Notation "(≡)" := asmsem_invariant.
@@ -515,10 +515,13 @@ Local Infix "≡" := asmsem_invariant (at level 40).
 Instance asmsem_invariant_Equiv : Equivalence (≡).
 Proof.
   split => //.
-  - move => x y [] ? ?; split; by symmetry.
-  move => x y z [] ? ? [] ? ?; split.
+  - move => x y [] ? [hss hv]; split; first by symmetry.
+    split; first exact: stack_stable_sym.
+    by move=> al a ws; rewrite hv.
+  move => x y z [] ? [hss1 hv1] [] ? [hss2 hv2]; split.
   - by transitivity (asm_rip y).
-  by transitivity (asm_mem y).
+  split; first exact: stack_stable_trans hss1 hss2.
+  by move=> al a ws; rewrite hv1 hv2.
 Qed.
 
 Lemma eval_JMP_invariant (r: remote_label)  (s s': asm_state) :
@@ -536,7 +539,11 @@ Proof. by []. Qed.
 
 Lemma mem_write_mem_invariant al a sz (w: word sz) (s s': asmmem) :
   mem_write_mem al a w s = ok s' → s ≡ s'.
-Proof. by rewrite /mem_write_mem; t_xrbindP => ? /Memory.write_mem_stable ? <-. Qed.
+Proof.
+  rewrite /mem_write_mem; t_xrbindP => ? hw <-; split => //=.
+  split; first exact: Memory.write_mem_stable hw.
+  by move=> al' a' sz'; rewrite (write_validw_eq hw).
+Qed.
 
 Lemma mem_write_val_invariant f xs d v (s s': asmmem) :
   mem_write_val f xs d v s = ok s' →
@@ -586,7 +593,7 @@ Proof.
   - by rewrite /eval_op /exec_instr_op; t_xrbindP => ? ? ? /mem_write_vals_invariant -> <-.
   - t_xrbindP => m hm <-.
     have /= [h1 h2 h3]:= eval_syscall_spec1 hm; split => //.
-    by have [] := exec_syscallSs h1.
+    exact: exec_syscallSs h1.
   - by move=> [<-].
   by move=> _ [<-].
 Qed.
@@ -632,7 +639,7 @@ Class it_asm_syscall_sem := {
       put_syscall_ans o scs bytes s1 = ok s2 ->
       [/\ forall r, r \in callee_saved -> preserved_register r s1 s2
         , s1.(asm_rip) = s2.(asm_rip)
-        & stack_stable s1.(asm_mem) s2.(asm_mem) ];
+        & mem_equiv s1.(asm_mem) s2.(asm_mem) ];
 }.
 
 (* ITree based Semantics *)
