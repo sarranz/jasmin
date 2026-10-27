@@ -53,8 +53,7 @@ let error fmt =
 let unknown_mem_cell = "%unknown_mem"
 
 (* Abstract region standing for global data: we assume globals are read-only
-   and public and globals are not mentioned in call instantiation
-   annotations. *)
+   and public. A callee region instantiated with a global is bound to it. *)
 let global_mem_region = "%global"
 
 module Env = struct
@@ -161,7 +160,7 @@ module Annots = struct
             (Annot.has_instantiation_annot (snd instr.asmi_ii))
           |> List.map (fun (annot_callee, annot_callers) ->
                  (Region.of_annot annot_callee,
-                  List.map Region.of_annot annot_callers))
+                  List.map (access_region ~globals) annot_callers))
         in
         Call { callee = fn.CoreIdent.fn_name; inst }
     | _ ->
@@ -313,7 +312,8 @@ module MemLayout = struct
         (fun boundaries (region : Region.t) ->
           Partition.cut boundaries ~location:region.mem_slot
             ~start:region.offset ~limit:(Region.limit region))
-        boundaries regions
+        boundaries
+        (List.filter (fun r -> not (Region.is_global r)) regions)
     in
     let cut_inst_entry callee_layout boundaries (callee_reg, caller_regs) =
       let boundaries = cut_regions boundaries caller_regs in
@@ -326,9 +326,7 @@ module MemLayout = struct
       | _ -> boundaries
     in
     let cut_annot boundaries = function
-      | Annots.Access regions ->
-          List.filter (fun r -> not (Region.is_global r)) regions
-          |> cut_regions boundaries
+      | Annots.Access regions -> cut_regions boundaries regions
       | Annots.Call { callee; inst } ->
           List.fold_left (cut_inst_entry (layout_of_callee callee)) boundaries inst
     in
@@ -365,6 +363,16 @@ module MemLayout = struct
               caller_blocks ))
         (overlapping_blocks callee_layout callee_region)
     in
+    (* A global is never written, so no callee block covers it. *)
+    let global_bindings () =
+      List.map
+        (fun callee_block ->
+          ( Partition.block_as_cell callee_block,
+            [ { cell = global_mem_region; covers = false } ] ))
+        (overlapping_blocks callee_layout callee_region)
+    in
+    if List.exists Region.is_global caller_regions then global_bindings ()
+    else
     match caller_regions with
     | [ caller_region ] -> (
         match translate_blocks callee_layout callee_region caller_region with
