@@ -518,7 +518,7 @@ Section RESTRICT_MEM.
 
 Context
   {reg regx xreg rflag cond asm_op extra_op syscall_state : Type}
-  {sc_sem : syscall.syscall_sem syscall_state}
+  {sc_sem : syscall.syscall_sem syscall_state}in simulation 
   {asm_e : asm_extra reg regx xreg rflag cond asm_op extra_op}
 .
 
@@ -549,6 +549,9 @@ Definition restrict_dflt
   (m : mem) (keep : pointer -> bool) (root limit : pointer) : mem :=
   if Memory.restrict m keep root limit is Ok m' then m' else m.
 
+(* TODO: The main lemma should use memory simulation. Then there should be a
+   separate lemma showing that it's always possible to find a source memory
+   (using [ms_of]) and that it's in simulation. *)
 (* Initial source memory *)
 Definition mS_of
   (m : mem) (rip : pointer) (gd : seq u8) (rsp : pointer) : mem :=
@@ -826,7 +829,9 @@ Record valid_input (o : export_fn) : Type :=
        (which the adversary does not see), writing the inputs satisfies the
        compiler's precondition:
        - Pointers are valid and fresh
-       - There is enough stack space *)
+       - There is enough stack space
+       TODO: weaken this given that the memories where initially
+       compatible by proving something about mkxm? *)
     vi_ptrs_ok :
       forall ms mt xfd,
         sim ms mt ->
@@ -1164,7 +1169,9 @@ Definition dummym := WArray.empty msgbytes.
 (* ML-KEM's implementation involves the three algorithms.
    The signatures take arrays (readable and writable) and return the writable
    ones.
-   As usual, we ask that the source program is safe on valid inputs. *)
+   As usual, we ask that the source program is safe on valid inputs.
+   TODO: We can require that preconditions make do not constrain memories
+   (we could allow them to assume that the initial memory shape is preserved) *)
 Context
   (fd_genkey_ok : get_fundef p.(p_funcs) fn_genkey = Some fd_genkey)
   (fd_encap_ok : get_fundef p.(p_funcs) fn_encap = Some fd_encap)
