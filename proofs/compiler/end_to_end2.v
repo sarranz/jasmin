@@ -518,7 +518,7 @@ Section RESTRICT_MEM.
 
 Context
   {reg regx xreg rflag cond asm_op extra_op syscall_state : Type}
-  {sc_sem : syscall.syscall_sem syscall_state}in simulation 
+  {sc_sem : syscall.syscall_sem syscall_state}
   {asm_e : asm_extra reg regx xreg rflag cond asm_op extra_op}
 .
 
@@ -1166,7 +1166,7 @@ Definition dummys := WArray.empty skbytes.
 Definition dummyc := WArray.empty ctbytes.
 Definition dummym := WArray.empty msgbytes.
 
-(* ML-KEM's implementation involves the three algorithms.
+(* A KEM's implementation involves the three algorithms.
    The signatures take arrays (readable and writable) and return the writable
    ones.
    As usual, we ask that the source program is safe on valid inputs.
@@ -1310,8 +1310,7 @@ Context
   (hcomp : compile_prog_to_asm aparams cparams entries p = ok q)
 .
 
-(* The main result for ML-KEM. *)
-Theorem mlkem_end_to_end mkigk mkienc mkidec :
+Lemma kem_end_to_end mkigk mkienc mkidec :
   indcca_reduction
     (KEM_of_Jazz (Source p q) mkigk mkienc mkidec)
     (KEM_of_Jazz (Target p q) mkigk mkienc mkidec).
@@ -1331,12 +1330,183 @@ exact: decap_ok hm hpre.
 Qed.
 
 (* The same result for the intended definition of KEM-IND-CCA. *)
-Theorem mlkem_end_to_end_game {advmem : Type} mkigk mkienc mkidec :
+Theorem kem_end_to_end_game {advmem : Type} mkigk mkienc mkidec :
   indcca.reduction (advmem := advmem)
     (challenger_of_kem (KEM_of_Jazz (Source p q) mkigk mkienc mkidec))
     (challenger_of_kem (KEM_of_Jazz (Target p q) mkigk mkienc mkidec)).
-Proof. exact/indcca_reduction_reduction/mlkem_end_to_end. Qed.
+Proof. exact/indcca_reduction_reduction/kem_end_to_end. Qed.
 
 End INSTANTIATION.
 
 End MAIN.
+
+Require x86_decl x86_extra x86_lowering x86_params x86_params_proof.
+
+(* Concrete KEM parameters and architecture. *)
+Section MLKEM.
+
+Import indcca.
+Import x86_decl x86_extra x86_lowering x86_params x86_params_proof.
+
+Existing Instance x86_linux_call_conv.
+Existing Instance x86_extra.
+Existing Instance asm_opI.
+Existing Instance sc_sem.
+
+(* Assumptions about semantics setup. *)
+Context
+  {R : realType}
+  {atoI : arch_toIdent}
+  {asm_scsem : asm_syscall_sem}
+  {it_asm_scsem : it_asm_syscall_sem}
+.
+
+(* Source and target programs, three export function names, and arbitrary
+   compilation options *)
+Context
+  (p : uprog)
+  (q : asm_prog)
+  (fn_genkey fn_encap fn_decap : funname)
+  (cparams : compiler_params lowering_options)
+  (hcomp :
+    let: entries := [:: fn_genkey; fn_encap; fn_decap] in
+    compile_prog_to_asm x86_params cparams entries p = ok q)
+.
+
+(* The export functions must exist in the source program. *)
+Context
+  (fd_genkey fd_encap fd_decap : ufundef)
+  (fd_genkey_ok : get_fundef p.(p_funcs) fn_genkey = Some fd_genkey)
+  (fd_encap_ok : get_fundef p.(p_funcs) fn_encap = Some fd_encap)
+  (fd_decap_ok : get_fundef p.(p_funcs) fn_decap = Some fd_decap)
+.
+
+(* Printing passes must not modify the program. *)
+Context
+  (print_uprogP : forall s p, cparams.(print_uprog) s p = p)
+  (print_sprogP : forall s p, cparams.(print_sprog) s p = p)
+  (print_linearP : forall s p, cparams.(print_linear) s p = p)
+.
+
+(* Arbitrary initial target memory. *)
+Context
+  (tmem : mem)
+  (trip trsp : pointer)
+  (trm : regmap)
+  (trxm : regxmap)
+  (txrm : xregmap)
+  (trfm : rflagmap)
+.
+
+Let JP_x86 :=
+  JP_T fn_genkey fn_encap fn_decap q tmem trip trsp trm trxm txrm trfm.
+
+Existing Instance JP_x86.
+
+Context
+  (hwf : target_mem_wf tmem trip q.(asm_globs) trsp)
+  (ppk psk pct pmsg : pointer)
+  (genkey_ok :
+    forall vs m,
+      let: fs := mkfs m vs in
+      mem_equiv m mS ->
+      fun_pre p fn_genkey fs ->
+      safe_uprog p fn_genkey fs /\ res_defined p fn_genkey fs)
+  (encap_ok :
+    forall vs m,
+      let: fs := mkfs m vs in
+      mem_equiv m mS ->
+      fun_pre p fn_encap fs ->
+      safe_uprog p fn_encap fs /\ res_defined p fn_encap fs)
+  (decap_ok :
+    forall vs m,
+      let: fs := mkfs m vs in
+      mem_equiv m mS ->
+      fun_pre p fn_decap fs ->
+      safe_uprog p fn_decap fs /\ res_defined p fn_decap fs)
+.
+
+Let efn_kg :=
+  efn_kg fn_genkey fn_encap fn_decap q tmem trip trsp trm trxm txrm trfm.
+Let efn_encap :=
+  efn_encap fn_genkey fn_encap fn_decap q tmem trip trsp trm trxm txrm trfm.
+Let efn_decap :=
+  efn_decap fn_genkey fn_encap fn_decap q tmem trip trsp trm trxm txrm trfm.
+
+Let MLKEM_K : positive := 3.
+Let MLKEM_POLYCOMPRESSEDBYTES : positive := 128. (* 256*4/8 *)
+Let MLKEM_POLYVECCOMPRESSEDBYTES : positive := (MLKEM_K * 320). (* 256*10/8 *)
+
+Let MLKEM_Q : positive := 3329.
+Let MLKEM_N : positive := 256.
+Let MLKEM_VECN : positive := MLKEM_K * MLKEM_N.
+
+Let MLKEM_SYMBYTES : positive := 32.
+Let MLKEM_SSBYTES : positive := 32.
+
+Let MLKEM_ETA1 : positive := 2.
+Let MLKEM_ETA2 : positive := 2.
+
+Let MLKEM_POLYBYTES : positive := 384. (* 256*12/8 *)
+Let MLKEM_POLYVECBYTES : positive := (MLKEM_K * MLKEM_POLYBYTES).
+
+Let MLKEM_INDCPA_MSGBYTES : positive := MLKEM_SYMBYTES.
+Let MLKEM_INDCPA_PUBLICKEYBYTES : positive :=
+  MLKEM_POLYVECBYTES + MLKEM_SYMBYTES.
+Let MLKEM_INDCPA_SECRETKEYBYTES : positive := MLKEM_POLYVECBYTES.
+Let MLKEM_INDCPA_CIPHERTEXTBYTES : positive :=
+  MLKEM_POLYVECCOMPRESSEDBYTES + MLKEM_POLYCOMPRESSEDBYTES.
+
+Let Source :=
+  KEM_of_Jazz
+    (pkbytes := MLKEM_INDCPA_PUBLICKEYBYTES)
+    (skbytes := MLKEM_INDCPA_SECRETKEYBYTES)
+    (ctbytes := MLKEM_INDCPA_CIPHERTEXTBYTES)
+    (msgbytes := MLKEM_INDCPA_MSGBYTES)
+    (fn_genkey := fn_genkey) (fn_encap := fn_encap) (fn_decap := fn_decap)
+    (tmem := tmem)
+    (trip := trip)
+    (trsp := trsp)
+    (trm  := trm)
+    (trxm := trxm)
+    (txrm := txrm)
+    (trfm := trfm)
+    (Source (R := R) p q).
+
+Let Target :=
+  KEM_of_Jazz
+    (pkbytes := MLKEM_INDCPA_PUBLICKEYBYTES)
+    (skbytes := MLKEM_INDCPA_SECRETKEYBYTES)
+    (ctbytes := MLKEM_INDCPA_CIPHERTEXTBYTES)
+    (msgbytes := MLKEM_INDCPA_MSGBYTES)
+    (fn_genkey := fn_genkey) (fn_encap := fn_encap) (fn_decap := fn_decap)
+    (tmem := tmem)
+    (trip := trip)
+    (trsp := trsp)
+    (trm  := trm)
+    (trxm := trxm)
+    (txrm := txrm)
+    (trfm := trfm)
+    (Target
+       (R := R)
+       (call_conv := x86_linux_call_conv)
+       (asm_scsem := asm_scsem)
+       (it_asm_scsem := it_asm_scsem)
+       p q).
+
+Context
+  (mkigk : valid_input p q efn_kg)
+  (mkienc : 'rV[u8]_MLKEM_INDCPA_PUBLICKEYBYTES -> valid_input p q efn_encap)
+  (mkidec :
+    'rV[u8]_MLKEM_INDCPA_SECRETKEYBYTES *
+      'rV[u8]_MLKEM_INDCPA_CIPHERTEXTBYTES ->
+    valid_input p q efn_decap)
+.
+
+Theorem main amem :
+  reduction (advmem := amem)
+    (challenger_of_kem (Source mkigk mkienc mkidec))
+    (challenger_of_kem (Target mkigk mkienc mkidec)).
+Proof. apply: kem_end_to_end_game; try by eauto. exact: x86_h_params. Qed.
+
+End MLKEM.
