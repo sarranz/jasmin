@@ -549,9 +549,6 @@ Definition restrict_dflt
   (m : mem) (keep : pointer -> bool) (root limit : pointer) : mem :=
   if Memory.restrict m keep root limit is Ok m' then m' else m.
 
-(* TODO: The main lemma should use memory simulation. Then there should be a
-   separate lemma showing that it's always possible to find a source memory
-   (using [ms_of]) and that it's in simulation. *)
 (* Initial source memory *)
 Definition mS_of
   (m : mem) (rip : pointer) (gd : seq u8) (rsp : pointer) : mem :=
@@ -586,7 +583,9 @@ move=> hwf; apply: Memory.restrictP.
 exact: restrict_dflt_ok (twf_stack_le hwf) (Z.le_refl _).
 Qed.
 
-Lemma target_mem_wf_agreement m rip gd rsp :
+(* For every well-formed initial target memory [m], the initial source memory
+   [mS_of m rip gd rsp] is in simulation with it. *)
+Theorem target_mem_wf_agreement m rip gd rsp :
   target_mem_wf m rip gd rsp ->
   mem_agreement (mS_of m rip gd rsp) m rip gd.
 Proof.
@@ -1130,31 +1129,14 @@ End DEFS.
 Section INSTANTIATION.
 
 Context
+  {JP : JazzIParams}
   (pkbytes skbytes ctbytes msgbytes : positive)
   (fn_genkey fn_encap fn_decap : funname)
   (fd_genkey fd_encap fd_decap : ufundef)
+  (entriesE : entries = [:: fn_genkey; fn_encap; fn_decap])
   (p : uprog)
   (q : asm_prog)
-  (tmem : mem)
-  (trip trsp : pointer)
-  (trm : regmap)
-  (trxm : regxmap)
-  (txrm : xregmap)
-  (trfm : rflagmap)
-  (hwf : target_mem_wf tmem trip q.(asm_globs) trsp)
 .
-
-#[local] Instance JP_T : JazzIParams :=
-  {|
-    entries := [:: fn_genkey; fn_encap; fn_decap];
-    mS := mS_of tmem trip q.(asm_globs) trsp;
-    mT := tmem;
-    ripT := trip;
-    rmT := trm;
-    rxmT := trxm;
-    xrmT := txrm;
-    rfmT := trfm;
-  |}.
 
 Definition pk0 := mkwvec pkbytes [::].
 Definition sk0 := mkwvec skbytes [::].
@@ -1195,12 +1177,10 @@ Context
       mem_equiv m mS ->
       fun_pre p fn_decap fs ->
       safe_uprog p fn_decap fs /\ res_defined p fn_decap fs)
+  (* The initial target memory contains the initial source memory and the
+     globals. *)
+  (init_agree : mem_agreement mS mT ripT q.(asm_globs))
 .
-
-(* The initial target memory contains the initial source memory and the
-   globals. *)
-Lemma init_agree : mem_agreement mS mT ripT q.(asm_globs).
-Proof. exact: target_mem_wf_agreement hwf. Qed.
 
 Notation OracleSystem := (OracleSystem (R := R)) (only parsing).
 
@@ -1215,13 +1195,13 @@ Notation OracleSystem := (OracleSystem (R := R)) (only parsing).
   |}.
 
 Lemma export_genkey : fn_genkey \in entries.
-Proof. by rewrite !inE eqxx. Qed.
+Proof. by rewrite entriesE !inE eqxx. Qed.
 
 Lemma export_encap : fn_encap \in entries.
-Proof. by rewrite !inE eqxx orbT. Qed.
+Proof. by rewrite entriesE !inE eqxx orbT. Qed.
 
 Lemma export_decap : fn_decap \in entries.
-Proof. by rewrite !inE eqxx !orbT. Qed.
+Proof. by rewrite entriesE !inE eqxx !orbT. Qed.
 
 Definition efn_kg : export_fn := {| efn_export := export_genkey; |}.
 Definition efn_encap : export_fn := {| efn_export := export_encap; |}.
@@ -1319,11 +1299,11 @@ apply/sim_indcca_adv/simulating_JKEM.
 apply: (compiler_preserves
   _ _ init_agree haparams print_uprogP print_sprogP print_linearP
   hcomp).
-- move=> fn; rewrite !inE => /or3P [] /eqP ->.
+- move=> fn; rewrite entriesE !inE => /or3P [] /eqP ->.
   + by rewrite fd_genkey_ok.
   + by rewrite fd_encap_ok.
   by rewrite fd_decap_ok.
-move=> fn fd; rewrite !inE => /or3P [] /eqP -> _ vs m hm hpre.
+move=> fn fd; rewrite entriesE !inE => /or3P [] /eqP -> _ vs m hm hpre.
 - exact: genkey_ok hm hpre.
 - exact: encap_ok hm hpre.
 exact: decap_ok hm hpre.
@@ -1364,13 +1344,13 @@ Context
 (* Source and target programs, three export function names, and arbitrary
    compilation options *)
 Context
+  {JP : JazzIParams}
   (p : uprog)
   (q : asm_prog)
   (fn_genkey fn_encap fn_decap : funname)
+  (entriesE : entries = [:: fn_genkey; fn_encap; fn_decap])
   (cparams : compiler_params lowering_options)
-  (hcomp :
-    let: entries := [:: fn_genkey; fn_encap; fn_decap] in
-    compile_prog_to_asm x86_params cparams entries p = ok q)
+  (hcomp : compile_prog_to_asm x86_params cparams entries p = ok q)
 .
 
 (* The export functions must exist in the source program. *)
@@ -1388,23 +1368,7 @@ Context
   (print_linearP : forall s p, cparams.(print_linear) s p = p)
 .
 
-(* Arbitrary initial target memory. *)
 Context
-  (tmem : mem)
-  (trip trsp : pointer)
-  (trm : regmap)
-  (trxm : regxmap)
-  (txrm : xregmap)
-  (trfm : rflagmap)
-.
-
-Let JP_x86 :=
-  JP_T fn_genkey fn_encap fn_decap q tmem trip trsp trm trxm txrm trfm.
-
-Existing Instance JP_x86.
-
-Context
-  (hwf : target_mem_wf tmem trip q.(asm_globs) trsp)
   (ppk psk pct pmsg : pointer)
   (genkey_ok :
     forall vs m,
@@ -1424,14 +1388,14 @@ Context
       mem_equiv m mS ->
       fun_pre p fn_decap fs ->
       safe_uprog p fn_decap fs /\ res_defined p fn_decap fs)
+  (* The initial target memory contains the initial source memory and the
+     globals. *)
+  (init_agree : mem_agreement mS mT ripT q.(asm_globs))
 .
 
-Let efn_kg :=
-  efn_kg fn_genkey fn_encap fn_decap q tmem trip trsp trm trxm txrm trfm.
-Let efn_encap :=
-  efn_encap fn_genkey fn_encap fn_decap q tmem trip trsp trm trxm txrm trfm.
-Let efn_decap :=
-  efn_decap fn_genkey fn_encap fn_decap q tmem trip trsp trm trxm txrm trfm.
+Let efn_kg := efn_kg entriesE.
+Let efn_encap := efn_encap entriesE.
+Let efn_decap := efn_decap entriesE.
 
 Let MLKEM_K : positive := 3.
 Let MLKEM_POLYCOMPRESSEDBYTES : positive := 128. (* 256*4/8 *)
@@ -1464,13 +1428,7 @@ Let Source :=
     (ctbytes := MLKEM_INDCPA_CIPHERTEXTBYTES)
     (msgbytes := MLKEM_INDCPA_MSGBYTES)
     (fn_genkey := fn_genkey) (fn_encap := fn_encap) (fn_decap := fn_decap)
-    (tmem := tmem)
-    (trip := trip)
-    (trsp := trsp)
-    (trm  := trm)
-    (trxm := trxm)
-    (txrm := txrm)
-    (trfm := trfm)
+    (entriesE := entriesE)
     (Source (R := R) p q).
 
 Let Target :=
@@ -1480,13 +1438,7 @@ Let Target :=
     (ctbytes := MLKEM_INDCPA_CIPHERTEXTBYTES)
     (msgbytes := MLKEM_INDCPA_MSGBYTES)
     (fn_genkey := fn_genkey) (fn_encap := fn_encap) (fn_decap := fn_decap)
-    (tmem := tmem)
-    (trip := trip)
-    (trsp := trsp)
-    (trm  := trm)
-    (trxm := trxm)
-    (txrm := txrm)
-    (trfm := trfm)
+    (entriesE := entriesE)
     (Target
        (R := R)
        (call_conv := x86_linux_call_conv)
