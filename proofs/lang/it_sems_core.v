@@ -23,6 +23,7 @@ Context
   {syscall_state : Type}
   {ep : EstateParams syscall_state}
   {spp : SemPexprParams}
+  {wg : WithGhost}
   {wa: WithAssert}
   {sip : SemInstrParams asm_op syscall_state}
   {pT : progT}
@@ -762,4 +763,4 @@ End CoreLemmas.
 
 End WSW.
 
-Arguments sem_assgn {asm_op wsw syscall_state ep spp sip pT} p !x tg ty e s /.
+Arguments sem_assgn {asm_op wsw syscall_state ep spp wg sip pT} p !x tg ty e s /.

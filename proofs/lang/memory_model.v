@@ -933,7 +933,7 @@ Class memory (mem: Type) (CM: coreMem pointer mem) (CG : coreGhost CM) : Type :=
     }.
 
 #[ global ] Arguments Memory {mem CM} _ _ _ _ _ _ _ _.
-#[ global ] Arguments top_stack_below_root {mem CM} _.
+#[ global ] Arguments top_stack_below_root {mem CM CG} _.
 
 Section WITH_MEM.
 
@@ -1071,16 +1071,16 @@ Section SPEC.
 
 End SPEC.
 
-#[ global ] Arguments alloc_stack_spec {_ _ _} _ _ _ _ _.
-#[ global ] Arguments stack_stable {_ _ _} _ _.
-#[ global ] Arguments free_stack_spec {_ _ _} _ _.
+#[ global ] Arguments alloc_stack_spec {_ _ _ _} _ _ _ _ _.
+#[ global ] Arguments stack_stable {_ _ _ _} _ _.
+#[ global ] Arguments free_stack_spec {_ _ _ _} _ _.
 
-Definition is_stack_stable mem {CM : coreMem pointer mem} {M : memory CM} m m' :=
+Definition is_stack_stable mem {CM : coreMem pointer mem} {CG : coreGhost CM} {M : memory CG} m m' :=
   [&& stack_root m == stack_root m'
     , stack_limit m == stack_limit m'
     & frames m == frames m'].
 
-Lemma stack_stableP mem {CM : coreMem pointer mem} {M : memory CM} m m' :
+Lemma stack_stableP mem {CM : coreMem pointer mem} {CG : coreGhost CM} {M : memory CG} m m' :
   reflect (stack_stable m m') (is_stack_stable m m').
 Proof.
   apply: (equivP and3P); split.
@@ -1088,11 +1088,11 @@ Proof.
   by move=> [-> -> ->]; rewrite !eqxx.
 Qed.
 
-Lemma stack_stable_trans mem {CM : coreMem pointer mem} {M : memory CM} m2 m1 m3 :
+Lemma stack_stable_trans mem {CM : coreMem pointer mem} {CG : coreGhost CM} {M : memory CG} m2 m1 m3 :
    stack_stable m1 m2 -> stack_stable m2 m3 -> stack_stable m1 m3.
 Proof. by move=> [???] [???]; split; congruence. Qed.
 
-Lemma stack_stable_sym mem {CM : coreMem pointer mem} {M : memory CM} m1 m2 : stack_stable m1 m2 -> stack_stable m2 m1.
+Lemma stack_stable_sym mem {CM : coreMem pointer mem} {CG : coreGhost CM} {M : memory CG} m1 m2 : stack_stable m1 m2 -> stack_stable m2 m1.
 Proof. by case; constructor. Qed.
 
 Lemma top_stack_after_aligned_alloc p ws sz :
@@ -1144,7 +1144,8 @@ Section WITH_POINTER_DATA.
 Context {pd: PointerData}.
 
 #[ global ] Declare Instance CM : coreMem pointer mem.
-#[ global ] Declare Instance M : memory CM.
+#[ global ] Declare Instance CG : coreGhost CM.
+#[ global ] Declare Instance M : memory CG.
 
 (*Parameter readV : forall m p s v,
   read m p s = ok v -> validw m p s. *)

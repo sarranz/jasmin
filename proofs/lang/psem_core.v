@@ -83,6 +83,7 @@ Definition init_stk_state (sf : stk_fun_extra) (pe:sprog_extra) (wrip:pointer) (
   let m1   := s.(emem) in
   let vm1  := s.(evm) in
   Let m1' := alloc_stack m1 sf.(sf_align) sf.(sf_stk_sz) sf.(sf_stk_ioff) sf.(sf_stk_extra_sz) in
+  let m1' := ghost_zeroize_region m1'
   write_vars (wdb := true) [:: vid pe.(sp_rsp) ; vid pe.(sp_rip)]
              [:: Vword (top_stack m1'); Vword wrip] (Estate scs1 m1' Vm.init).
 
@@ -274,6 +275,7 @@ Section WITH_SCS.
     {ep : EstateParams syscall_state}
     {spp : SemPexprParams}
     {wdb : enforce_defined_variables}
+    {wg : WithGhost}
     (gd : glob_decls)
     (s1 : estate)
     (scs : syscall_state).
@@ -326,7 +328,9 @@ Section WITH_PARAMS.
 Context
   {asm_op syscall_state : Type}
   {ep : EstateParams syscall_state}
-  {spp : SemPexprParams}.
+  {spp : SemPexprParams}
+  {wg : WithGhost}
+.
 
 Definition write_var_Spec {wdb : enforce_defined_variables} (x : var) (v : value) (s : estate) (s' : estate) : Prop :=
    [/\ s' = with_vm s (evm s).[x <- v],
@@ -1025,7 +1029,7 @@ Proof.
     t_xrbindP => >.
     move=> /Hp[] ? ->
       /[swap] /to_wordI[? [? [-> /word_uincl_truncate h]]]
-      /value_uinclE [? [? [-> /h{h} /= ->]]] ? /= -> /= ->.
+      /value_uinclE [? [? [-> /h{h} /= ->]]] ? /= -> /= -> -> /=.
     by eauto.
   + by move => op e Hp v1; rewrite read_eE => /uincl_on_union_and[] /Hp{}Hp Hu; t_xrbindP =>
       ve1 /Hp [] ve1' -> /vuincl_sem_sop1 Hvu1 /Hvu1; exists v1.
@@ -1357,7 +1361,7 @@ Proof.
     by move=> len a ha /get_gvar_wdb -> ?? /he -> /= -> ? /= -> <-.
   + move=> aa ws len x e he v; apply on_arr_gvarP; t_xrbindP; rewrite /on_arr_var.
     by move=> ??? /get_gvar_wdb -> ?? /he -> /= -> ? /= -> <-.
-  + by t_xrbindP => > he > /he -> /= -> /= > -> <-.
+  + by t_xrbindP => > he > /he -> /= -> /= > -> /= -> <-.
   + by t_xrbindP => > he > /he -> /= ->.
   + by t_xrbindP => > he1 > he2 > /he1 -> > /he2 -> /= ->.
   + by t_xrbindP => > hes > /hes; rewrite -/(sem_pexprs _ _ _) => -> /= <-.

@@ -108,6 +108,7 @@ Module MemoryI : MemoryT.
 
   Record mem_ := {
     data      : Mz.t u8;
+    ghost     : Mz.t u8; (* ghost contents, written along with [data] *)
     alloc     : Mz.t unit;
     stk_root  : pointer; (* root of the stack *)
     stk_limit : pointer; (* limit of the stack *)
@@ -137,6 +138,7 @@ Module MemoryI : MemoryT.
   Definition set (sm : SemMode) (m:mem) (p:pointer) (w:u8) :=
     Let _ := assert (is_total (SemMode := sm) || is_alloc m p) ErrAddrInvalid in
     ok {| data      := Mz.set m.(data) (wunsigned p) w ;
+          ghost     := Mz.set m.(ghost) (wunsigned p) w ;
           alloc     := m.(alloc);
           stk_root  := m.(stk_root);
           stk_limit := m.(stk_limit);
@@ -226,6 +228,59 @@ Module MemoryI : MemoryT.
     memory_model.valid8_set_total := @is_alloc_set total;
     memory_model.valid8_set_dom := valid8_set_dom;
     memory_model.set_dom_set := set_dom_set;
+  |}.
+
+  (* The ghost contents are a second byte map: a write updates it like [data],
+     and [ghost_zeroize_byte] resets one of its bytes without touching [data]. *)
+  Definition ghost_get (sm : SemMode) (m:mem) (p:pointer) : u8 :=
+    odflt 0%w (Mz.get m.(ghost) (wunsigned p)).
+
+  Definition ghost_zeroize_byte (sm : SemMode) (m:mem) (p:pointer) : mem :=
+    {| data      := m.(data);
+       ghost     := Mz.set m.(ghost) (wunsigned p) 0%w;
+       alloc     := m.(alloc);
+       stk_root  := m.(stk_root);
+       stk_limit := m.(stk_limit);
+       frames    := m.(frames);
+       framesP   := m.(framesP);
+       stk_allocP   := m.(stk_allocP);
+       stk_freeP    := m.(stk_freeP);
+    |}.
+
+  Lemma ghost_zeroize_byteP m p p' :
+    ghost_get partial (ghost_zeroize_byte partial m p) p' =
+      if p == p' then 0%R else ghost_get partial m p'.
+  Proof.
+    rewrite /ghost_get /ghost_zeroize_byte /= Mz.setP.
+    have -> : (wunsigned p == wunsigned p') = (p == p').
+    + apply: sameP; first by apply eqP.
+      by apply (iffP eqP) => [-> | /wunsigned_inj].
+    by case: eqP.
+  Qed.
+
+  Lemma not_ghost_zeroize_byteP m p p' :
+    get partial (ghost_zeroize_byte partial m p) p' = get partial m p'.
+  Proof. by []. Qed.
+
+  Lemma ghost_setP m p w p' m' :
+    set partial m p w = ok m' ->
+    ghost_get partial m' p' = if p == p' then w else ghost_get partial m p'.
+  Proof.
+    rewrite /set; t_xrbindP => _ <-.
+    rewrite /ghost_get /= Mz.setP.
+    have -> : (wunsigned p == wunsigned p') = (p == p').
+    + apply: sameP; first by apply eqP.
+      by apply (iffP eqP) => [-> | /wunsigned_inj].
+    by case: eqP.
+  Qed.
+
+  #[ global ]
+  Instance CG : coreGhost CM := {|
+    memory_model.ghost_get := ghost_get;
+    memory_model.ghost_zeroize_byte := ghost_zeroize_byte;
+    memory_model.ghost_zeroize_byteP := ghost_zeroize_byteP;
+    memory_model.not_ghost_zeroize_byteP := not_ghost_zeroize_byteP;
+    memory_model.ghost_setP := ghost_setP;
   |}.
 
   Lemma is_align_wunsigned_add ptr ws i :
@@ -397,6 +452,7 @@ Module MemoryI : MemoryT.
     | left C =>
       ok
         {| data := clear_data m.(data) (wunsigned m.(stk_root) - (footprint_of_frame f + footprint_of_stack m.(frames)) + frame_off f) (f.(frame_size) - frame_off f);
+           ghost := m.(ghost);
            alloc := set_alloc true m.(alloc) (wunsigned m.(stk_root) - (footprint_of_frame f + footprint_of_stack m.(frames)) + frame_off f) (f.(frame_size) - frame_off f);
            stk_root := m.(stk_root);
            stk_limit := m.(stk_limit);
@@ -452,6 +508,7 @@ Module MemoryI : MemoryT.
   Definition free_stack (m: mem) : mem :=
     let sz := odflt 0 (omap footprint_of_frame (ohead m.(frames))) in
     {| data := m.(data);
+       ghost := m.(ghost);
        alloc := set_alloc false m.(alloc) (wunsigned m.(stk_root) - (footprint_of_stack m.(frames))) sz;
        stk_root := m.(stk_root);
        stk_limit := m.(stk_limit);
@@ -512,6 +569,7 @@ Module MemoryI : MemoryT.
     | left stk_below =>
       ok
         {| data := Mz.empty _;
+           ghost := Mz.empty _;
            alloc := init_mem_alloc s;
            stk_limit := 0%w;
            stk_root := stk;
@@ -563,8 +621,8 @@ Module MemoryI : MemoryT.
   Proof. by []. Qed.
 
   #[ global ]
-  Instance M : memory CM  :=
-    Memory stk_root stk_limit stack_frames alloc_stack free_stack init_mem stack_region_is_free
+  Instance M : memory CG  :=
+    Memory CG stk_root stk_limit stack_frames alloc_stack free_stack init_mem stack_region_is_free
       top_stack_below_root set_dom_mem.
 
   Lemma top_stackE (m: mem) :
@@ -575,6 +633,7 @@ Module MemoryI : MemoryT.
     (∀ m p v,
       is_alloc m p →
       P {| data := Mz.set (data m) (wunsigned p) v;
+           ghost := Mz.set (ghost m) (wunsigned p) v;
            alloc := alloc m;
            stk_root := stk_root m;
            stk_limit := stk_limit m;

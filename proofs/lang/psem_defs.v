@@ -13,6 +13,8 @@ Local Open Scope Z_scope.
 Local Open Scope seq_scope.
 Open Scope vm_scope.
 
+Class WithGhost := { with_ghost : bool }.
+
 (* ** Parameter expressions
  * -------------------------------------------------------------------- *)
 
@@ -121,7 +123,16 @@ Context
   {spp : SemPexprParams}
   {sm : SemMode}
   {wdb : enforce_defined_variables}
+  {wg : WithGhost}
   (gd : glob_decls).
+
+(* TODO move *)
+Definition ghost_read (m: mem) (ptr: pointer) (sz: wsize) : word sz :=
+  let l := map (fun k => ghost_get m (add ptr k)) (ziota 0 (wsize_size sz)) in
+  LE.decode sz l.
+
+Definition check_ghost_load sz (m : mem) (p : pointer) (w : word sz) : bool :=
+  ~~ with_ghost || (w == ghost_read m p sz).
 
 Fixpoint sem_pexpr (s:estate) (e : pexpr) : exec value :=
   match e with
@@ -144,6 +155,7 @@ Fixpoint sem_pexpr (s:estate) (e : pexpr) : exec value :=
   | Pload al sz e =>
     Let w2 := sem_pexpr s e >>= to_pointer in
     Let w  := read s.(emem) al w2 sz in
+    Let _ := assert (check_ghost_load s.(emem) w2 w) ErrSemUndef in
     ok (@to_val (cword sz) w)
   | Papp1 o e1 =>
     Let v1 := sem_pexpr s e1 in
@@ -213,6 +225,7 @@ Context
   {ep : EstateParams syscall_state}
   {spp : SemPexprParams}
   {sm : SemMode}
+  {wg : WithGhost}
   (gd : glob_decls).
 
 Fixpoint sem_eassert (s : estate) (e : eassert) : exec bool :=
@@ -246,7 +259,9 @@ Context
   {asm_op syscall_state : Type}
   {ep : EstateParams syscall_state}
   {spp : SemPexprParams}
-  {asmop : asmOp asm_op}.
+  {asmop : asmOp asm_op}
+  {wg : WithGhost}
+.
 
 Definition exec_sopn {sm : SemMode} (o:sopn) (vs:values) : exec values :=
   Let semi := sopn_sem o in
