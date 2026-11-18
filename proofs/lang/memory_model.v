@@ -181,6 +181,29 @@ Class coreMem (core_mem: Type) := CoreMem {
   set_dom_set : forall m p w m' p', set (sm := total) m p w = ok m' -> set_dom m' p' = set_dom m p';
 }.
 
+Class coreGhost (core_mem : Type) {CM : coreMem core_mem} := {
+  ghost_get : forall {sm : SemMode}, core_mem -> pointer -> u8;
+  ghost_zeroize_byte : forall {sm : SemMode}, core_mem -> pointer -> core_mem;
+
+  ghost_zeroize_byteP :
+    forall m p p',
+      let: m' := ghost_zeroize_byte (sm := partial) m p in
+      ghost_get (sm := partial) m' p' =
+        if p == p' then 0%R else ghost_get (sm := partial) m p';
+
+  not_ghost_zeroize_byteP :
+    forall m p p',
+      let: m' := ghost_zeroize_byte (sm := partial) m p in
+      get (sm := partial) m' p' = get (sm := partial) m p';
+
+  ghost_setP :
+    forall m p w p' m',
+      set (sm := partial) m p w = ok m' ->
+      ghost_get (sm := partial) m' p' =
+        if p == p' then w else ghost_get (sm := partial) m p';
+
+}.
+
 End POINTER.
 
 (* -------------------------------------------------------------------- *)
@@ -891,7 +914,10 @@ Proof.
   by lia.
 Qed.
 
-Class memory (mem: Type) (CM: coreMem pointer mem) : Type :=
+#[global]
+Arguments coreGhost {_ _}.
+
+Class memory (mem: Type) (CM: coreMem pointer mem) (CG : coreGhost CM) : Type :=
   Memory {
       stack_root : mem -> pointer
     ; stack_limit : mem -> pointer
@@ -909,11 +935,17 @@ Class memory (mem: Type) (CM: coreMem pointer mem) : Type :=
 #[ global ] Arguments Memory {mem CM} _ _ _ _ _ _ _ _.
 #[ global ] Arguments top_stack_below_root {mem CM} _.
 
-Definition top_stack {mem: Type} {CM: coreMem pointer mem} {M: memory CM} (m: mem) : pointer :=
-  head (stack_root m) (frames m).
+Section WITH_MEM.
+
+Context
+  {mem: Type} {CM: coreMem pointer mem} {CG : coreGhost CM} {M: memory CG}.
+
+Definition top_stack (m: mem) : pointer := head (stack_root m) (frames m).
+
+End WITH_MEM.
 
 Section SPEC.
-  Context mem (CM: coreMem pointer mem) (M: memory CM)
+  Context mem (CM: coreMem pointer mem) (CG : coreGhost CM) (M: memory CG)
     (m: mem) (ws:wsize) (sz: Z) (ioff:Z) (sz': Z) (m': mem) .
   Let pstk := top_stack m'.
 
