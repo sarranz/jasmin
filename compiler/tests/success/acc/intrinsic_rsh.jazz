@@ -1,0 +1,13 @@
+export
+fn main(reg u256 x y) -> reg u256 {
+    reg u32 sh_amt;
+    reg u256 r;
+
+    sh_amt = 0;
+    r = #BN_RSH(x, y, sh_amt);
+    sh_amt = 1;
+    r = #BN_RSH(r, y, sh_amt);
+    sh_amt = 255;
+    r = #BN_RSH(x, r, sh_amt);
+    return r;
+}

@@ -27,7 +27,14 @@ Definition acc_xreg_size : wsize := U256.
 (* -------------------------------------------------------------------------- *)
 (* ACC has 30 general purpose registers: x2, ..., x31.
    Register x0 always reads zero, so we don't include it.
-   Register x1 reads the top of the call stack, so we don't include it. *)
+   Register x1 reads the top of the call stack, so we don't include it.
+
+   The 32-bit special register [KMAC_PARTIAL_WRITE] (written through a CSR, see
+   [KMAC_PARTIAL_WRITEW]) is modeled as an additional register, in the same way
+   as the wide special registers [ACC], [MOD], ... are modeled as additional
+   wide registers. Instructions that take general purpose registers avoid it
+   (see [ERa] in [acc_instr_decl.v]), so the register allocator only uses it
+   where an instruction requires it. *)
 
 #[only(eqbOK)] derive
 Variant register : Type :=
@@ -35,6 +42,7 @@ Variant register : Type :=
 | X03 | X04 | X05 | X06 | X07 | X08 | X09 | X10 | X11 | X12 | X13 | X14 | X15
 | X16 | X17 | X18 | X19 | X20 | X21 | X22 | X23 | X24 | X25 | X26 | X27 | X28
 | X29 | X30 | X31
+| KMAC_PARTIAL_WRITE
 .
 
 #[export]
@@ -45,6 +53,7 @@ Canonical acc_register_eqType := @ceqT_eqType _ eqTC_register.
 Definition registers :=
   [:: X02; X03; X04; X05; X06; X07; X08; X09; X10; X11; X12; X13; X14; X15; X16
     ; X17; X18; X19; X20; X21; X22; X23; X24; X25; X26; X27; X28; X29; X30; X31
+    ; KMAC_PARTIAL_WRITE (* TODO_ACC this should be an extra register *)
   ].
 
 Lemma register_fin_axiom : Finite.axiom registers.
@@ -88,6 +97,7 @@ Definition register_to_string (r : register) : string :=
   | X29 => "x29"
   | X30 => "x30"
   | X31 => "x31"
+  | KMAC_PARTIAL_WRITE => "kmac_partial_write"
   end.
 
 #[export] Instance reg_toS : ToString (lword acc_reg_size) register :=
@@ -110,7 +120,7 @@ Variant wide_register : Type :=
 | W00 | W01 | W02 | W03 | W04 | W05 | W06 | W07 | W08 | W09 | W10 | W11 | W12
 | W13 | W14 | W15 | W16 | W17 | W18 | W19 | W20 | W21 | W22 | W23 | W24 | W25
 | W26 | W27 | W28 | W29 | W30 | W31
-| ACC | ACCH | MOD
+| ACC | ACCH | MOD | KMAC_DIG | KMAC_CFG | KMAC_MSG
 .
 
 #[export]
@@ -123,7 +133,7 @@ Definition wide_registers : seq wide_register :=
   [:: W00; W01; W02; W03; W04; W05; W06; W07; W08; W09; W10; W11; W12; W13; W14
     ; W15; W16; W17; W18; W19; W20; W21; W22; W23; W24; W25; W26; W27; W28; W29
     ; W30; W31
-    ; ACC; ACCH; MOD (* TODO_ACC these should be extra registers *)
+    ; ACC; ACCH; MOD; KMAC_DIG; KMAC_CFG; KMAC_MSG (* TODO_ACC these should be extra registers *)
   ].
 
 Lemma wide_register_fin_axiom : Finite.axiom wide_registers.
@@ -172,6 +182,9 @@ Definition wide_register_to_string (w : wide_register) : string :=
   | ACC => "acc"
   | ACCH => "acch"
   | MOD => "mod"
+  | KMAC_DIG => "kmac_digest"
+  | KMAC_CFG => "kmac_cfg"
+  | KMAC_MSG => "kmac_msg"
   end.
 
 #[export]

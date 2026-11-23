@@ -285,6 +285,7 @@ Definition vec_size_to_string (vs : vec_size) : string :=
 
 #[only(eqbOK)] derive
 Variant trn_size :=
+| T32B  (* [.32B]: 32 lanes of  8 bits.  *)
 | T16H  (* [.16H]: 16 lanes of 16 bits.  *)
 | T8S   (* [.8S]:   8 lanes of 32 bits.  *)
 | T4D   (* [.4D]:   4 lanes of 64 bits.  *)
@@ -298,6 +299,7 @@ Canonical trn_size_eqType := ceqT_eqType (ceqT := eqTC_trn_size).
 
 Definition ve_of_trn_size (ts : trn_size) : wsize :=
   match ts with
+  | T32B => U8
   | T16H => U16
   | T8S => U32
   | T4D => U64
@@ -306,6 +308,7 @@ Definition ve_of_trn_size (ts : trn_size) : wsize :=
 
 Definition trn_size_to_string (ts : trn_size) : string :=
   match ts with
+  | T32B => ".32B"
   | T16H => ".16H"
   | T8S => ".8S"
   | T4D => ".4D"
@@ -464,6 +467,7 @@ Variant acc_op : Type :=
 
 | BN_MOV                   (* Copy content between wide registers. *)
 | BN_RSHI                  (* Concatenate and right shift immediate. *)
+| BN_RSH                   (* Concatenate and right shift register. *)
 | BN_SEL of bn_flag_group  (* Flag Select. *)
 
 | BN_ADDM  (* Pseudo-modulo add. *)
@@ -523,8 +527,8 @@ Variant acc_op : Type :=
 | BN_GFMUL_8_VV        (* Multiply pointwise. *)
 | BN_GFMUL_8_ACC_VV    (* Write to accumulator. *)
 | BN_GFMUL_8_ACCH_VV   (* Write to accumulator. *)
-| BN_GFMUL_8_ACC_VV_Z  (* Set to zero and write to accumulator. *)
-| BN_GFMUL_8_ACCH_VV_Z (* Set to zero and write to accumulator. *)
+| BN_GFMUL_8_ACC_Z_VV  (* Set to zero and write to accumulator. *)
+| BN_GFMUL_8_ACCH_Z_VV (* Set to zero and write to accumulator. *)
 
 (* Wrappers for WSRR and WSRW. *)
 | BN_ACCR  (* Read from ACC register to wide register. *)
@@ -533,6 +537,9 @@ Variant acc_op : Type :=
 | BN_MODW  (* Write from wide register to MOD register. *)
 | BN_ACCHR (* Read from ACCH register to wide register. *)
 | BN_ACCHW (* Write from wide register to ACCH register. *)
+| BN_KMAC_DIGR  (* Read from KMAC digest register to wide register. *)
+| BN_KMAC_CFGW  (* Write from wide register to KMAC config register. *)
+| BN_KMAC_MSGW  (* Write from wide register to KMAC message register. *)
 
 (* Write a 32-bit word into the low ([MOD0W]) or next ([MOD1W]) word of
    [MOD], via a CSR write whose read result is discarded.
@@ -542,6 +549,11 @@ Variant acc_op : Type :=
 | MOD0Wzero
 | MOD1W
 | MOD1Wzero
+
+(* Write a 32-bit word into the 32-bit special register [KMAC_PARTIAL_WRITE],
+   via a CSR write whose read result is discarded.
+   Compiles to [csrrw x0, kmac_partial_write, rs]. *)
+| KMAC_PARTIAL_WRITEW
 
 (* Direct load and store. *)
 | BN_LD
@@ -576,6 +588,7 @@ Definition acc_op_to_string (op : acc_op) : string :=
   | BN_SUBI _ => "BN.SUBI"
   | BN_MOV => "BN.MOV"
   | BN_RSHI => "BN.RSHI"
+  | BN_RSH => "BN.RSH"
   | BN_SEL _ => "BN.SEL"
   | BN_ADDM => "BN.ADDM"
   | BN_SUBM => "BN.SUBM"
@@ -610,18 +623,22 @@ Definition acc_op_to_string (op : acc_op) : string :=
   | BN_GFMUL_8_VV => "BN.GFMUL.8.VV"
   | BN_GFMUL_8_ACC_VV => "BN.GFMUL.8.ACC.VV"
   | BN_GFMUL_8_ACCH_VV => "BN.GFMUL.8.ACCH.VV"
-  | BN_GFMUL_8_ACC_VV_Z => "BN.GFMUL.8.ACC.VV.Z"
-  | BN_GFMUL_8_ACCH_VV_Z => "BN.GFMUL.8.ACCH.VV.Z"
+  | BN_GFMUL_8_ACC_Z_VV => "BN.GFMUL.8.ACC.Z.VV"
+  | BN_GFMUL_8_ACCH_Z_VV => "BN.GFMUL.8.ACCH.Z.VV"
   | BN_ACCR => "BN.ACCR"
   | BN_ACCW => "BN.ACCW"
   | BN_MODR => "BN.MODR"
   | BN_MODW => "BN.MODW"
   | BN_ACCHR => "BN.ACCHR"
   | BN_ACCHW => "BN.ACCHW"
+  | BN_KMAC_DIGR => "BN.KMAC.DIGR"
+  | BN_KMAC_CFGW => "BN.KMAC.CFGW"
+  | BN_KMAC_MSGW => "BN.KMAC.MSGW"
   | MOD0W => "MOD0W"
   | MOD0Wzero => "MOD0Wzero"
   | MOD1W => "MOD1W"
   | MOD1Wzero => "MOD1Wzero"
+  | KMAC_PARTIAL_WRITEW => "KMAC_PARTIAL_WRITEW"
   | BN_LD => "BN.LD"
   | BN_SD => "BN.SD"
   | BN_LD_INC => "BN.LD.INC"
@@ -690,6 +707,9 @@ Section I_ARGS_KINDS.
   Definition ak_xreg_xreg_xreg_shift : i_args_kinds :=
     [:: [:: xreg; xreg; xreg; imm_u8 ] ].
 
+  Definition ak_xreg_xreg_xreg_reg : i_args_kinds :=
+    [:: [:: xreg; xreg; xreg; [:: CAreg] ] ].
+
   Definition ak_xreg_q_xreg_q_shift : i_args_kinds :=
     [:: [:: xreg; imm_q; xreg; imm_q; imm_mulqacc_shift ] ].
 
@@ -721,6 +741,9 @@ Section PP_ASM_OP.
   Let wsr_code_MOD : asm_arg := Imm (wrepr U8 0x0).
   Let wsr_code_ACC : asm_arg := Imm (wrepr U8 0x3).
   Let wsr_code_ACCH : asm_arg := Imm (wrepr U8 0xB).
+  Let wsr_code_KMAC_DIG : asm_arg := Imm (wrepr U8 0xA).
+  Let wsr_code_KMAC_CFG : asm_arg := Imm (wrepr U8 0x8).
+  Let wsr_code_KMAC_MSG : asm_arg := Imm (wrepr U8 0x9).
 
   Definition pp_acc_op (op : acc_op) (args : seq asm_arg) : pp_asm_op :=
     match op with
@@ -730,6 +753,9 @@ Section PP_ASM_OP.
     | BN_ACCW => mk "bn.wsrw" (wsr_code_ACC :: args)
     | BN_ACCHR => mk "bn.wsrr" (rcons args wsr_code_ACCH)
     | BN_ACCHW => mk "bn.wsrw" (wsr_code_ACCH :: args)
+    | BN_KMAC_DIGR => mk "bn.wsrr" (rcons args wsr_code_KMAC_DIG)
+    | BN_KMAC_CFGW => mk "bn.wsrw" (wsr_code_KMAC_CFG :: args)
+    | BN_KMAC_MSGW => mk "bn.wsrw" (wsr_code_KMAC_MSG :: args)
     (* The shift direction is rendered as a [<<]/[>>] operand (see [pp_acc.ml]),
        so the assembly mnemonic only carries the element size. *)
     | BN_SHV vs _ => mk ("BN.SHV" ++ vec_size_to_string vs)%string args
@@ -753,9 +779,17 @@ Proof. by case: adout. Qed.
    These instructions are unary or binary word operations, so we define generic
    instruction descriptions [desc_rv_unop] and [desc_rv_binop]. *)
 
-Definition acc_mod := [:: ACC; MOD; ACCH ].
+Definition acc_mod := [:: ACC; MOD; ACCH; KMAC_DIG; KMAC_CFG; KMAC_MSG ].
 Definition EXa n := ADExplicit (AK_mem Aligned) n (ACR_avoid_xreg acc_mod).
 Definition EXc n := ADExplicit AK_compute n (ACR_avoid_xreg acc_mod).
+
+(* 32-bit special registers, modeled as additional general purpose registers.
+   Explicit arguments that can only be general purpose registers use [ERa],
+   so that these registers are only used where an instruction requires them
+   (through an implicit argument). [ERa] must not be used for arguments that
+   may be immediates or addresses, which [ACR_subset] rejects. *)
+Definition acc_reg_special := [:: KMAC_PARTIAL_WRITE ].
+Definition ERa n := ADExplicit (AK_mem Aligned) n (ACR_subset acc_reg_special).
 
 Section RV_DESC.
 
@@ -786,6 +820,13 @@ Definition rv_last_ak : arg_kind :=
   | NOP => CAreg (* absurd *)
   end.
 
+(* Argument description of the last argument: [ERa] if it is a register. *)
+Definition rv_last_ad (n : nat) : arg_desc :=
+  match mn with
+  | ADD | SUB | NEG | AND | OR | XOR | SLL | SRL | SRA => ERa n
+  | _ => Ea n
+  end.
+
 Definition _desc_rv_unop
   (ad_in ad_out : arg_desc) (semi : word ws -> word ws) : instr_desc_t :=
   {|
@@ -809,7 +850,7 @@ Definition _desc_rv_unop
     id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
   |}.
 
-Let desc_rv_unop := _desc_rv_unop (Ea 1) (Ea 0).
+Let desc_rv_unop := _desc_rv_unop (rv_last_ad 1) (ERa 0).
 
 (* All instructions raise errors when using [x1] if the call stack is empty,
    but this is impossible with our model.
@@ -819,9 +860,9 @@ Definition desc_rv_binop {wsa : wsize}
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := [:: lword ws; lword wsa ];
-    id_in := [:: Ea 1; Ea 2 ];
+    id_in := [:: ERa 1; rv_last_ad 2 ];
     id_tout := [:: lword ws ];
-    id_out := [:: Ea 0 ];
+    id_out := [:: ERa 0 ];
     id_semi := fun x y => ok (semi x y);
     id_args_kinds := ak_binary rv_last_ak;
     id_nargs := 3;
@@ -881,10 +922,10 @@ Definition _desc_rv_mnemonic : instr_desc_t :=
   | LUI => desc_rv_unop (fun x => wshl x 12)
   (* TODO_ACC: LW/SW must check addr = (grs1 + offset) mod 2^32 is a valid
      4-byte aligned DMEM address; otherwise raise BAD_DATA_ADDR. *)
-  | LW => _desc_rv_unop (Eu 1) (Ea 0) id (* TODO_ACC it should fail on unaligned *)
-  | SW => _desc_rv_unop (Ea 0) (Eu 1) id (* TODO_ACC it should fail on unaligned *)
+  | LW => _desc_rv_unop (Eu 1) (ERa 0) id (* TODO_ACC it should fail on unaligned *)
+  | SW => _desc_rv_unop (ERa 0) (Eu 1) id (* TODO_ACC it should fail on unaligned *)
   | LI => desc_rv_unop id
-  | LA => _desc_rv_unop (Ec 1) (Ea 0) id
+  | LA => _desc_rv_unop (Ec 1) (ERa 0) id
   | NOP => desc_nop
   end.
 
@@ -1531,6 +1572,36 @@ Definition desc_BN_RSHI : instr_desc_t :=
     id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
   |}.
 
+(* TODO_ACC we are not modeling the semantics exactly as specified because we
+   don't have a [u512] type. *)
+Definition semi_BN_RSH (x y : u256) (wsham : u32) : exec u256 :=
+  let sham := wunsigned wsham in
+  let lo_part := wshr y sham in
+  let hi_part := wshl x (256 - sham) in
+  ok (wor hi_part lo_part).
+
+Definition desc_BN_RSH : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := [:: lword256; lword256; lword32 ];
+    id_in := [:: EXa 1; EXa 2; ERa 3 ];
+    id_tout := [:: lword256 ];
+    id_out := [:: EXa 0 ];
+    id_semi := semi_BN_RSH;
+    id_args_kinds := ak_xreg_xreg_xreg_reg;
+    id_nargs := 4;
+    id_str_jas := pp_s (acc_op_to_string BN_RSH);
+    id_pp_asm := pp_acc_op BN_RSH;
+    id_valid := true;
+    id_safe := [::];
+    id_doit := DOIT; (* TODO_ACC: check *)
+    id_eq_size := refl_equal;
+    id_check_dest := refl_equal;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+  |}.
+
 
 (* -------------------------------------------------------------------------- *)
 (* [MULQACC]. *)
@@ -1872,7 +1943,6 @@ Definition desc_BN_MULV_L
 
 End MULV.
 
-(* This is used to read and write [MOD], [ACC] and [ACCH].
 Section GFMUL.
 Let base_gfmul_tin :=
   [:: lword256; lword256; lword256 ].
@@ -2168,18 +2238,18 @@ Definition desc_BN_GFMUL_8_ACCH_VV : instr_desc_t :=
     id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
   |}.
 
-Definition desc_BN_GFMUL_8_ACC_VV_Z : instr_desc_t :=
+Definition desc_BN_GFMUL_8_ACC_Z_VV : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := base_gfmul_tin;
     id_in := [:: EXa 1; EXa 2; Xreg MOD ];
     id_tout := [:: lword256; lword256 ];
     id_out := [:: EXa 0; Xreg ACC ];
-    id_semi := fun _ _ _ => ok (ACC_ADMIT "BN_GFMUL_8_ACC_VV_Z semi");
+    id_semi := fun _ _ _ => ok (ACC_ADMIT "BN_GFMUL_8_ACC_Z_VV semi");
     id_args_kinds := ak_xreg_xreg_xreg;
     id_nargs := 3;
-    id_str_jas := pp_s "BN_GFMUL8_ACC_VV_Z";
-    id_pp_asm := pp_acc_op BN_GFMUL_8_ACC_VV_Z;
+    id_str_jas := pp_s "BN_GFMUL8_ACC_Z_VV";
+    id_pp_asm := pp_acc_op BN_GFMUL_8_ACC_Z_VV;
     id_valid := true;
     id_safe := [::];
     id_doit := DOIT; (* TODO_OTBN: check *)
@@ -2190,18 +2260,18 @@ Definition desc_BN_GFMUL_8_ACC_VV_Z : instr_desc_t :=
     id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
   |}.
 
-Definition desc_BN_GFMUL_8_ACCH_VV_Z : instr_desc_t :=
+Definition desc_BN_GFMUL_8_ACCH_Z_VV : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := base_gfmul_tin;
     id_in := [:: EXa 1; EXa 2; Xreg MOD ];
     id_tout := [:: lword256; lword256 ];
     id_out := [:: EXa 0; Xreg ACCH ];
-    id_semi := fun _ _ _ => ok (ACC_ADMIT "desc_BN_GFMUL_8_ACCH_VV_Z semi");
+    id_semi := fun _ _ _ => ok (ACC_ADMIT "desc_BN_GFMUL_8_ACCH_Z_VV semi");
     id_args_kinds := ak_xreg_xreg_xreg;
     id_nargs := 3;
-    id_str_jas := pp_s "BN_GFMUL8_ACCH_VV_Z";
-    id_pp_asm := pp_acc_op BN_GFMUL_8_ACCH_VV_Z;
+    id_str_jas := pp_s "BN_GFMUL8_ACCH_Z_VV";
+    id_pp_asm := pp_acc_op BN_GFMUL_8_ACCH_Z_VV;
     id_valid := true;
     id_safe := [::];
     id_doit := DOIT; (* TODO_OTBN: check *)
@@ -2241,6 +2311,35 @@ Definition desc_BN_WSR op xr is_read : instr_desc_t :=
     id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
   |}.
 
+(* [BN_KMAC_DIGR] reads the KMAC digest. In hardware the digest depends on what
+   was previously written to [KMAC_CFG], [KMAC_MSG] and [KMAC_PARTIAL_WRITE],
+   so these registers are implicit inputs: otherwise writes to them would be
+   removed as dead code.
+   The semantics only returns the current value of [KMAC_DIG]; the KMAC
+   computation itself is not modeled. *)
+Definition desc_BN_KMAC_DIGR : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := [:: lword256; lword256; lword256; lword32 ];
+    id_in :=
+      [:: Xreg KMAC_DIG; Xreg KMAC_CFG; Xreg KMAC_MSG; R KMAC_PARTIAL_WRITE ];
+    id_tout := [:: lword256 ];
+    id_out := [:: EXa 0 ];
+    id_semi := fun dig _ _ _ => ok dig;
+    id_nargs := 1;
+    id_args_kinds := ak_xreg;
+    id_str_jas := pp_s (acc_op_to_string BN_KMAC_DIGR);
+    id_pp_asm := pp_acc_op BN_KMAC_DIGR;
+    id_valid := true;
+    id_safe := [::];
+    id_doit := DOIT; (* TODO_ACC: check *)
+    id_eq_size := refl_equal;
+    id_check_dest := check_dest_unop_lword;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+  |}.
+
 (* Replace the 32-bit word of [r] starting at bit [shift] with [w], keeping
    every other bit of [r] unchanged. Used to model [MOD0W]/[MOD1W] (and their
    [zero] variants), which each set one 32-bit word of [MOD] via a CSR write,
@@ -2253,7 +2352,7 @@ Definition desc_MOD_word32W (op : acc_op) (shift : Z) : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := [:: lword256; lword U32 ];
-    id_in := [:: Xreg MOD; Ea 0 ];
+    id_in := [:: Xreg MOD; ERa 0 ];
     id_tout := [:: lword256 ];
     id_out := [:: Xreg MOD ];
     id_semi := fun r w => ok (write_mod_word32 shift r w);
@@ -2283,6 +2382,30 @@ Definition desc_MOD_word32Wzero (op : acc_op) (shift : Z) : instr_desc_t :=
     id_args_kinds := [:: [::] ];
     id_str_jas := pp_s (acc_op_to_string op);
     id_pp_asm := pp_acc_op op;
+    id_valid := true;
+    id_safe := [::];
+    id_doit := DOIT; (* TODO_ACC: check *)
+    id_eq_size := refl_equal;
+    id_check_dest := check_dest_unop_lword;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+  |}.
+
+(* Writing the 32-bit special register [KMAC_PARTIAL_WRITE] is a 32-bit move
+   from a general purpose register. *)
+Definition desc_KMAC_PARTIAL_WRITEW : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := [:: lword32 ];
+    id_in := [:: ERa 0 ];
+    id_tout := [:: lword32 ];
+    id_out := [:: R KMAC_PARTIAL_WRITE ];
+    id_semi := fun w => ok w;
+    id_nargs := 1;
+    id_args_kinds := ak_reg;
+    id_str_jas := pp_s (acc_op_to_string KMAC_PARTIAL_WRITEW);
+    id_pp_asm := pp_acc_op KMAC_PARTIAL_WRITEW;
     id_valid := true;
     id_safe := [::];
     id_doit := DOIT; (* TODO_ACC: check *)
@@ -2348,9 +2471,9 @@ Definition desc_BN_LD_INC : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := [:: lword256; lword U32 ];
-    id_in := [:: Eu 1; Ea 2 ]; (* TODO_ACC: this should be aligned *)
+    id_in := [:: Eu 1; ERa 2 ]; (* TODO_ACC: this should be aligned *)
     id_tout := [:: lword256; lword U32 ];
-    id_out := [:: Ea 0; Ea 2 ];
+    id_out := [:: Ea 0; ERa 2 ];
     id_semi := fun x p => ok (x, (p + wrepr U32 (wsize_size U256))%R);
     id_args_kinds := ak_xreg_mem_reg;
     id_nargs := 3;
@@ -2374,9 +2497,9 @@ Definition desc_BN_SD_INC : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
     id_tin := [:: lword256; lword U32 ];
-    id_in := [:: Ea 0; Ea 2 ];
+    id_in := [:: Ea 0; ERa 2 ];
     id_tout := [:: lword256; lword U32 ];
-    id_out := [:: Eu 1; Ea 2 ]; (* TODO_ACC: this should be aligned *)
+    id_out := [:: Eu 1; ERa 2 ]; (* TODO_ACC: this should be aligned *)
     id_semi := fun x p => ok (x, (p + wrepr U32 (wsize_size U256))%R);
     id_args_kinds := ak_xreg_mem_reg;
     id_nargs := 3;
@@ -2420,7 +2543,7 @@ Definition desc_BN_LID (i : nat) : instr_desc_t :=
     id_valid := Z.of_nat i <? 32;
     id_msb_flag := MSB_MERGE;
     id_tin := [:: lword U32; lword256 ];
-    id_in := [:: Ea 1; Ea 2 ];
+    id_in := [:: ERa 1; Ea 2 ];
     id_tout := [:: lword256 ];
     id_out := [:: ADExplicit (AK_mem Aligned) 0 (ACR_vector wi) ];
     id_semi := BN_LID_semi i;
@@ -2465,7 +2588,7 @@ Definition desc_BN_SID (i : nat) : instr_desc_t :=
     id_valid := Z.of_nat i <? 32;
     id_msb_flag := MSB_MERGE;
     id_tin := [:: lword256; lword U32 ];
-    id_in := [:: ADExplicit (AK_mem Aligned) 0 (ACR_vector wi); Ea 1 ];
+    id_in := [:: ADExplicit (AK_mem Aligned) 0 (ACR_vector wi); ERa 1 ];
     id_tout := [:: lword256 ];
     id_out := [:: Ea 2 ];
     id_semi := BN_SID_semi i;
@@ -2490,6 +2613,7 @@ Definition desc_acc_op (op : acc_op) : instr_desc_t :=
   | BN_ADDI fg => desc_bn_binopI op fg wadd Z.add
   | BN_SUBI fg => desc_bn_binopI op fg wsub Z.sub
   | BN_MOV => desc_BN_MOV
+  | BN_RSH => desc_BN_RSH
   | BN_RSHI => desc_BN_RSHI
   | BN_SEL fg => desc_BN_SEL fg
   | BN_ADDM => desc_BN_ADDM
@@ -2521,8 +2645,8 @@ Definition desc_acc_op (op : acc_op) : instr_desc_t :=
   | BN_GFMUL_8_VV => desc_BN_GFMUL_8_VV
   | BN_GFMUL_8_ACC_VV => desc_BN_GFMUL_8_ACC_VV
   | BN_GFMUL_8_ACCH_VV => desc_BN_GFMUL_8_ACCH_VV
-  | BN_GFMUL_8_ACC_VV_Z => desc_BN_GFMUL_8_ACC_VV_Z
-  | BN_GFMUL_8_ACCH_VV_Z => desc_BN_GFMUL_8_ACCH_VV_Z
+  | BN_GFMUL_8_ACC_Z_VV => desc_BN_GFMUL_8_ACC_Z_VV
+  | BN_GFMUL_8_ACCH_Z_VV => desc_BN_GFMUL_8_ACCH_Z_VV
 
   | BN_ACCR => desc_BN_WSR BN_ACCR ACC true
   | BN_ACCW => desc_BN_WSR BN_ACCW ACC false
@@ -2530,10 +2654,14 @@ Definition desc_acc_op (op : acc_op) : instr_desc_t :=
   | BN_MODW => desc_BN_WSR BN_MODW MOD false
   | BN_ACCHR => desc_BN_WSR BN_ACCHR ACCH true
   | BN_ACCHW => desc_BN_WSR BN_ACCHW ACCH false
+  | BN_KMAC_DIGR => desc_BN_KMAC_DIGR
+  | BN_KMAC_CFGW => desc_BN_WSR BN_KMAC_CFGW KMAC_CFG false
+  | BN_KMAC_MSGW => desc_BN_WSR BN_KMAC_MSGW KMAC_MSG false
   | MOD0W => desc_MOD_word32W MOD0W 0
   | MOD0Wzero => desc_MOD_word32Wzero MOD0Wzero 0
   | MOD1W => desc_MOD_word32W MOD1W 32
   | MOD1Wzero => desc_MOD_word32Wzero MOD1Wzero 32
+  | KMAC_PARTIAL_WRITEW => desc_KMAC_PARTIAL_WRITEW
   | BN_LD => desc_BN_LD
   | BN_SD => desc_BN_SD
   | BN_LD_INC => desc_BN_LD_INC
@@ -2576,9 +2704,9 @@ Section PRIM_STRING.
     map_prim_string
       acc_op_to_string
       prim_acc_none
-      [:: BN_MOV; BN_RSHI; BN_ADDM; BN_SUBM; BN_ACCR; BN_ACCW; BN_MODR; BN_MODW
-        ; BN_ACCHR; BN_ACCHW
-        ; MOD0W; MOD0Wzero; MOD1W; MOD1Wzero
+      [:: BN_MOV; BN_RSH; BN_RSHI; BN_ADDM; BN_SUBM; BN_ACCR; BN_ACCW; BN_MODR
+        ; BN_MODW; BN_ACCHR; BN_ACCHW; BN_KMAC_DIGR; BN_KMAC_CFGW; BN_KMAC_MSGW
+        ; MOD0W; MOD0Wzero; MOD1W; MOD1Wzero; KMAC_PARTIAL_WRITEW
         ; BN_LD; BN_SD; BN_LD_INC; BN_SD_INC ].
 
   (* The element size, modular flag and shift direction are all encoded in the
@@ -2593,8 +2721,9 @@ Section PRIM_STRING.
         ; BN_SUBV V8S true; BN_SUBV V16H true
         ; BN_SHV V8S RS_left; BN_SHV V8S RS_right
         ; BN_SHV V16H RS_left; BN_SHV V16H RS_right
-        ; BN_TRN T16H TRNMeven; BN_TRN T8S TRNMeven
-        ; BN_TRN T4D TRNMeven; BN_TRN T2Q TRNMeven
+        ; BN_TRN T32B TRNMeven; BN_TRN T16H TRNMeven
+        ; BN_TRN T8S TRNMeven; BN_TRN T4D TRNMeven
+        ; BN_TRN T2Q TRNMeven; BN_TRN T32B TRNModd
         ; BN_TRN T16H TRNModd; BN_TRN T8S TRNModd
         ; BN_TRN T4D TRNModd; BN_TRN T2Q TRNModd ].
 
@@ -2667,8 +2796,8 @@ Section PRIM_STRING.
       ; (get_name BN_GFMUL_8_VV, prim_acc_none BN_GFMUL_8_VV)
       ; (get_name BN_GFMUL_8_ACC_VV, prim_acc_none BN_GFMUL_8_ACC_VV)
       ; (get_name BN_GFMUL_8_ACCH_VV, prim_acc_none BN_GFMUL_8_ACCH_VV)
-      ; (get_name BN_GFMUL_8_ACC_VV_Z, prim_acc_none BN_GFMUL_8_ACC_VV_Z)
-      ; (get_name BN_GFMUL_8_ACCH_VV_Z, prim_acc_none BN_GFMUL_8_ACCH_VV_Z)
+      ; (get_name BN_GFMUL_8_ACC_Z_VV, prim_acc_none BN_GFMUL_8_ACC_Z_VV)
+      ; (get_name BN_GFMUL_8_ACCH_Z_VV, prim_acc_none BN_GFMUL_8_ACCH_Z_VV)
     ].
 
   Definition acc_prim_string : seq (string * prim_constructor acc_op) :=

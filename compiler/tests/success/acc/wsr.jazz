@@ -14,3 +14,16 @@ fn wsr_acch(reg u256 x) -> reg u256 {
     x = #BN_ACCHR(acch);
     return x;
 }
+
+// KMAC_CFG, KMAC_MSG and KMAC_PARTIAL_WRITE are write-only; KMAC_DIG is
+// read-only.
+export
+fn wsr_kmac(reg u256 cfg msg, reg u32 pw) -> reg u256 {
+    reg u256 kcfg kmsg kdig x;
+    reg u32 kpw;
+    kcfg = #BN_KMAC_CFGW(cfg);
+    kmsg = #BN_KMAC_MSGW(msg);
+    kpw = #KMAC_PARTIAL_WRITEW(pw); // csrrw x0, kmac_partial_write, pw
+    x = #BN_KMAC_DIGR(kdig, kcfg, kmsg, kpw);
+    return x;
+}

@@ -815,15 +815,18 @@ case hws: (ws <= reg_size)%CMP in hops.
     have hxrI := xreg_of_varI hxr.
     case: r hxr hxrI hca1 hca2 => [r|r|r|||] hxr hxrI hca1 hca2;
       try (by move: hxrI).
-    + move: hca1 hca2; rewrite andbT /compat_imm /= => /orP [/eqP ha1|//] /orP [/eqP ha2|//].
-      rewrite orbF in ha2. move: ha2 => /eqP/eqP ha2.
+    + (* The sources are [ERa] arguments: also unpack [r \notin
+         acc_reg_special]. *)
+      move: hca1 hca2 => /andP [hc1 hnotin1] /andP [hc2 _].
+      move: hc1 hc2; rewrite /compat_imm /= => /orP [/eqP ha1|//] /orP [/eqP ha2|//].
+      rewrite -ha1 /= in hnotin1.
       rewrite -ha1 -ha2.
       rewrite /arch_sem.eval_op /arch_sem.exec_instr_op /arch_sem.eval_instr_op /=.
       have hcheck : (check_arg_kind a0 CAreg || false) && true || false = true.
       { rewrite /= /= /= in hidc.
         move: hidc => /and3P [h0 _ _].
         by rewrite /= h0. }
-      rewrite /assert hcheck /= !truncate_word_u /= wxor_xx /=.
+      rewrite /assert hcheck /= hnotin1 /= !truncate_word_u /= wxor_xx /=.
       rewrite -ha1 -ha2 in hcd.
       set id := instr_desc (None, RV32 XOR).
       have hsize : size (id_out id) = size (id_tout id)
@@ -835,7 +838,8 @@ case hws: (ws <= reg_size)%CMP in hops.
     + (* x compiles to XReg: contradicts check_arg_kind a1 CAreg *)
       move=> hca2'.
       move: hidc; rewrite /= /= /= => /and3P [h0 h1 h2].
-      move: hca2; rewrite /compat_imm /= andbT => /orP [/eqP heq|//].
+      move: hca2 => /andP [hc2 _].
+      move: hc2; rewrite /compat_imm /= => /orP [/eqP heq|//].
       by move: h1; rewrite -heq /check_arg_kind.
   + by rewrite /= /= /= in hidc; move: hidc; rewrite !andbF.
 (* Wide case: ws > reg_size, op = BN_basic BN_XOR FG0, x is the destination *)

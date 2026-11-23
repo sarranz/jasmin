@@ -138,20 +138,22 @@ let indirect_args pp =
 
 (* [MOD0W]/[MOD1W] and their [zero] variants are syntax sugar for a CSR
    write that discards the read result (destination [x0]); see
-   [Acc_instr_decl.desc_MOD_word32W]/[desc_MOD_word32Wzero]. This translation
-   is not verified. *)
+   [Acc_instr_decl.desc_MOD_word32W]/[desc_MOD_word32Wzero]. The same holds
+   for [KMAC_PARTIAL_WRITEW] ([Acc_instr_decl.desc_KMAC_PARTIAL_WRITEW]).
+   This translation is not verified. *)
 let is_MODnW = function
-  | MOD0W | MOD0Wzero | MOD1W | MOD1Wzero -> true
+  | MOD0W | MOD0Wzero | MOD1W | MOD1Wzero | KMAC_PARTIAL_WRITEW -> true
   | _ -> false
 
 let dst_of_MODnW = function
   | MOD0W | MOD0Wzero -> "mod0"
   | MOD1W | MOD1Wzero -> "mod1"
+  | KMAC_PARTIAL_WRITEW -> "kmac_partial_write"
   | _ -> E.invalid_args ()
 
 let src_of_MODnW op pp =
   match (op, pp.pp_aop_args) with
-  | (MOD0W | MOD1W), [ (_, Reg r) ] -> pp_register r
+  | (MOD0W | MOD1W | KMAC_PARTIAL_WRITEW), [ (_, Reg r) ] -> pp_register r
   | (MOD0Wzero | MOD1Wzero), [] -> x0
   | _ -> E.invalid_args ()
 
@@ -210,7 +212,7 @@ let pp_args_shift op args =
   in
   match op with
   | Acc_instr_decl.BN_basic_shift (_, _, sh) -> pp_shift sh
-  | BN_RSHI -> pp_shift Acc_options.RS_right
+  | BN_RSHI | BN_RSH -> pp_shift Acc_options.RS_right
   | BN_SHV (_, sh) -> pp_shift sh
   | _ -> args
 

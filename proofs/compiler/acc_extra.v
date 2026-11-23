@@ -79,7 +79,9 @@ Import sopn.
 
 Context {atoI : arch_toIdent}.
 
-Let acc_mod : seq var := map to_var acc_mod.
+(* Avoid the special registers, both wide ([acc_mod]) and 32-bit
+   ([acc_reg_special]). *)
+Let acc_mod : seq var := map to_var acc_mod ++ map to_var acc_reg_special.
 Let E n := ADExplicit n (sopn.ACR_subset acc_mod).
 Let F (f : rflag) := ADImplicit (to_var f).
 
