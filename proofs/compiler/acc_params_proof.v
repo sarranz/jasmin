@@ -562,7 +562,7 @@ Proof.
 Qed.
 
 Lemma acc_lstore_correct :
-  lstore_correct_aux (lip_check_ws (ap_lip acc_params))
+  lstore_correct_aux (lip_check_store_ws (ap_lip acc_params))
                      (lip_lstore (ap_lip acc_params)).
 Proof.
   move=> xd xs ofs [] // w wp s m _.
@@ -591,9 +591,15 @@ Proof using atoI call_conv sc_sem syscall_state vinfo.
   by right => h; exact (hne h).
 Qed.
 
+Lemma acc_check_store_ws_correct ws :
+  lip_check_ws (ap_lip acc_params) ws ->
+  lip_check_store_ws (ap_lip acc_params) ws.
+Proof. done. Qed.
+
 Lemma acc_lstores_correct : lstores_correct (ap_lip acc_params).
 Proof using atoI call_conv sc_sem syscall_state vinfo.
 apply/lstores_imm_dfl_correct; first exact: acc_lstore_correct.
+- exact: acc_check_store_ws_correct.
 exact: acc_smart_addi_correct.
 Qed.
 
@@ -626,6 +632,7 @@ Definition acc_hliparams :
     spec_lip_lloads               := acc_lloads_correct;
     spec_lip_tmp                  := acc_tmp_correct;
     spec_lip_check_ws             := acc_check_ws_correct;
+    spec_lip_check_store_ws       := acc_check_store_ws_correct;
   |}.
 
 Lemma acc_ok_lip_tmp :

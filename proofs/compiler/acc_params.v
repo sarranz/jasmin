@@ -191,6 +191,8 @@ Section LIPARAMS.
 
   Definition check_ws ws := ws == reg_size.
 
+  Definition check_store_ws ws := ws == reg_size.
+
   Definition lstore (ws : wsize) (xd : var_i) (ofs : Z) (xs : var_i) : fopn_args :=
     let e := faddv Uptr xd (fconst ws ofs) in
     fopn_args_of_opn_args (ACCFopn_core.sw ws e xs).
@@ -218,6 +220,7 @@ Section LIPARAMS.
       lip_set_up_sp_register := set_up_sp_register;
       lip_lmove := fun _ => lmove;
       lip_check_ws := check_ws;
+      lip_check_store_ws := check_store_ws;
       lip_lstore  := lstore;
       lip_lload := lload;
       lip_lstores := lstores;
