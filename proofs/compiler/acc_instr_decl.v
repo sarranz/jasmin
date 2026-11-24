@@ -670,13 +670,13 @@ Section I_ARGS_KINDS.
     [:: [:: xreg; xreg; imm_q; xreg; imm_q; imm_mulqacc_shift ] ].
 
   Definition ak_xreg_mem : i_args_kinds :=
-    [:: [:: xreg; [:: CAmem false None ] ]].
+    [:: [:: xreg; [:: CAmem tt ] ]].
 
   Definition ak_xreg_reg_mem : i_args_kinds :=
-    [:: [:: xreg; [:: CAreg ]; [:: CAmem false None ] ]].
+    [:: [:: xreg; [:: CAreg ]; [:: CAmem tt ] ]].
 
   Definition ak_xreg_mem_reg : i_args_kinds :=
-    [:: [:: xreg; [:: CAmem false None ]; [:: CAreg ] ]].
+    [:: [:: xreg; [:: CAmem tt ]; [:: CAreg ] ]].
 
   Definition ak_xreg_reg_xreg_reg : i_args_kinds :=
     [:: [:: xreg; [:: CAreg ]; xreg; [:: CAreg ] ]].
@@ -691,7 +691,7 @@ Section PP_ASM_OP.
     {|
       pp_aop_name := name;
       pp_aop_ext := PP_name;
-      pp_aop_args := [seq (reg_size, a) | a <- args];
+      pp_aop_args := [seq PPa_full reg_size a | a <- args];
     |}.
 
   Let wsr_code_MOD : asm_arg := Imm (wrepr U8 0x0).
@@ -768,9 +768,9 @@ Definition rv_last_ak : arg_kind :=
   | ADDI | ANDI | ORI | XORI => ak_s12
   | SLLI | SRLI | SRAI => CAimm (Some (CAimmC_acc_nbits Unsigned 5)) U8
   | LUI => CAimm (Some (CAimmC_acc_nbits Unsigned 20)) U32
-  | LW | SW => CAmem false None
+  | LW | SW => CAmem tt
   | LI => CAimm (Some (CAimmC_acc_nbits Signed 32)) U32
-  | LA => CAmem true None
+  | LA => CAmem tt
   | NOP => CAreg (* absurd *)
   end.
 
@@ -794,7 +794,6 @@ Definition _desc_rv_unop
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := check_dest_unop_lword;
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -823,7 +822,6 @@ Definition desc_rv_binop {wsa : wsize}
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -846,7 +844,6 @@ Definition desc_nop :=
     id_doit :=DOIT;
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -1028,7 +1025,6 @@ Definition desc_bn_basic_unop
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := ltac:(by case: fg);
     id_check_dest := ltac:(by case: fg);
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -1052,7 +1048,6 @@ Definition desc_bn_basic_binop
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := ltac:(by case: fg);
     id_check_dest := ltac:(by case: fg);
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -1078,7 +1073,6 @@ Definition desc_bn_basic_carry_binop
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := ltac:(by case: fg);
     id_check_dest := ltac:(by case: fg);
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -1101,7 +1095,6 @@ Definition desc_BN_CMP : instr_desc_t :=
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := ltac:(by case: fg);
     id_check_dest := ltac:(by case: fg);
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -1125,7 +1118,6 @@ Definition desc_BN_CMPB : instr_desc_t :=
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := ltac:(by case: fg);
     id_check_dest := ltac:(by case: fg);
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -1231,7 +1223,6 @@ Definition _desc_acc_op_modular_binop
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -1292,7 +1283,6 @@ Definition desc_bn_vec_binop
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -1318,7 +1308,6 @@ Definition desc_bn_vec_binop_mod
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -1343,7 +1332,6 @@ Definition desc_bn_shv
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -1403,7 +1391,6 @@ Definition desc_bn_trn
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -1445,7 +1432,6 @@ Definition desc_bn_binopI
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := ltac:(by case: fg);
     id_check_dest := ltac:(by case: fg);
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -1468,7 +1454,6 @@ Definition desc_BN_MOV : instr_desc_t :=
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -1491,7 +1476,6 @@ Definition desc_BN_SEL (fg : bn_flag_group) : instr_desc_t :=
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -1522,7 +1506,6 @@ Definition desc_BN_RSHI : instr_desc_t :=
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -1587,7 +1570,6 @@ Definition desc_BN_MULQACC : instr_desc_t :=
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -1610,7 +1592,6 @@ Definition desc_BN_MULQACC_Z : instr_desc_t :=
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -1644,7 +1625,6 @@ Definition desc_BN_MULQACC_WO : instr_desc_t :=
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := ltac:(by case: fg);
     id_check_dest := ltac:(by case: fg);
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -1667,7 +1647,6 @@ Definition desc_BN_MULQACC_WO_Z : instr_desc_t :=
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := ltac:(by case: fg);
     id_check_dest := ltac:(by case: fg);
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -1726,7 +1705,6 @@ Definition desc_BN_MULQACC_SO : instr_desc_t :=
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := ltac:(by case: fg);
     id_check_dest := ltac:(by case: fg);
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -1751,7 +1729,6 @@ Definition desc_BN_MULQACC_SO_Z : instr_desc_t :=
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := ltac:(by case: fg);
     id_check_dest := ltac:(by case: fg);
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -1820,7 +1797,6 @@ Definition desc_BN_MULV (sh : mulv_shape) (am : mulv_acc) : instr_desc_t :=
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := ltac:(by case: am);
     id_check_dest := ltac:(by case: am);
-    id_safe_wf := refl_equal;
     id_wf := ltac:(by case: am);
   |}.
 
@@ -1868,7 +1844,6 @@ Definition desc_BN_MULV_L
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := ltac:(by case: am);
     id_check_dest := ltac:(by case: am);
-    id_safe_wf := refl_equal;
     id_wf := ltac:(by case: am);
   |}.
 
@@ -1899,7 +1874,6 @@ Definition desc_BN_WSR op xr is_read : instr_desc_t :=
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := check_dest_unop_lword;
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -1930,7 +1904,6 @@ Definition desc_MOD_word32W (op : acc_op) (shift : Z) : instr_desc_t :=
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := check_dest_unop_lword;
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -1953,7 +1926,6 @@ Definition desc_MOD_word32Wzero (op : acc_op) (shift : Z) : instr_desc_t :=
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := check_dest_unop_lword;
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -1976,7 +1948,6 @@ Definition desc_BN_LD : instr_desc_t :=
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := check_dest_unop_lword;
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -1999,7 +1970,6 @@ Definition desc_BN_SD : instr_desc_t :=
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := check_dest_unop_lword;
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -2029,7 +1999,6 @@ Definition desc_BN_LD_INC : instr_desc_t :=
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -2056,7 +2025,6 @@ Definition desc_BN_SD_INC : instr_desc_t :=
     id_doit :=DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := refl_equal;
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -2079,12 +2047,11 @@ Definition desc_BN_LID (i : nat) : instr_desc_t :=
     id_nargs := 3;
     id_str_jas := fun _ => str;
     id_pp_asm := pp_acc_op (BN_LID i);
-    id_safe := [:: UGe U32 (Z.of_nat i) 0; ULt U32 0 ((Z.of_nat i) + 1) ];
+    id_safe := [:: sc_uge U32 (Z.of_nat i) 0; sc_ult U32 0 ((Z.of_nat i) + 1) ];
     id_err := ErrSemUndef;
     id_doit := DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := check_dest_unop_lword;
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -2107,12 +2074,11 @@ Definition desc_BN_SID (i : nat) : instr_desc_t :=
     id_nargs := 3;
     id_str_jas := fun _ => str;
     id_pp_asm := pp_acc_op (BN_SID i);
-    id_safe := [:: UGe U32 (Z.of_nat i) 1; ULt U32 1 ((Z.of_nat i) + 1) ];
+    id_safe := [:: sc_uge U32 (Z.of_nat i) 1; sc_ult U32 1 ((Z.of_nat i) + 1) ];
     id_err := ErrSemUndef;
     id_doit := DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := check_dest_unop_lword;
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 
@@ -2146,13 +2112,12 @@ Definition desc_BN_MOVR (i j : nat) : instr_desc_t :=
     id_str_jas := fun _ => str;
     id_pp_asm := pp_acc_op (BN_MOVR i j);
     id_safe :=
-      [:: UGe U32 (Z.of_nat i) 0; ULt U32 0 ((Z.of_nat i) + 1)
-        ; UGe U32 (Z.of_nat j) 2; ULt U32 2 ((Z.of_nat j) + 1) ];
+      [:: sc_uge U32 (Z.of_nat i) 0; sc_ult U32 0 ((Z.of_nat i) + 1)
+        ; sc_uge U32 (Z.of_nat j) 2; sc_ult U32 2 ((Z.of_nat j) + 1) ];
     id_err := ErrSemUndef;
     id_doit := DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
     id_check_dest := check_dest_unop_lword;
-    id_safe_wf := refl_equal;
     id_wf := refl_equal;
   |}.
 

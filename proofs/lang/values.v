@@ -88,6 +88,16 @@ Definition undef_addr t :=
   | t0 => undef_v t0 erefl
   end.
 
+(* The default value of a type: what an uninitialised variable reads as in
+   the [total] mode. *)
+Definition dfl_val (t : ctype) : value :=
+  match t with
+  | cbool => Vbool false
+  | cint => Vint 0
+  | cword ws => Vword (0%w : word ws)
+  | carr n => Varr (WArray.empty n)
+  end.
+
 Definition values := seq value.
 
 Definition is_defined v := if v is Vundef _ _ then false else true.
@@ -151,7 +161,10 @@ Definition is_word v := is_cword (type_of_val v).
 Lemma is_wordI v : is_word v → subctype (cword U8) (type_of_val v).
 Proof. by case: v => // [> | [] > //] _; exact: wsize_le_U8. Qed.
 
-Definition DB wdb v :=
+Class enforce_defined_variables := wdb: bool.
+Definition do_enforce_defined_variables : enforce_defined_variables := true.
+
+Definition DB {wdb: enforce_defined_variables} v :=
   ~~wdb || (is_defined v || (type_of_val v == cbool)).
 
 (* ** Test for extension of values
@@ -518,8 +531,8 @@ Proof.
   by move=> [? [? [-> _]]].
 Qed.
 
-Lemma value_uincl_DB wdb v1 v2 :
-  value_uincl v1 v2 -> DB wdb v1 -> DB wdb v2.
+Lemma value_uincl_DB {wdb: enforce_defined_variables} v1 v2 :
+  value_uincl v1 v2 -> DB v1 -> DB v2.
 Proof.
   case: wdb => //.
   case: v1 => [b | z| len t| ws w | t i] /value_uinclE; try by move=> ->.
@@ -651,7 +664,7 @@ Qed.
 Lemma truncate_val_defined ty v v' : truncate_val ty v = ok v' -> is_defined v'.
 Proof. by move=> /truncate_valI; case: v'. Qed.
 
-Lemma truncate_val_DB wdb ty v v' : truncate_val ty v = ok v' -> DB wdb v'.
+Lemma truncate_val_DB {wdb: enforce_defined_variables} ty v v' : truncate_val ty v = ok v' -> DB v'.
 Proof. by case: wdb => //; move=> /truncate_valI; case: v'. Qed.
 
 (* ----------------------------------------------------------------------- *)
@@ -858,64 +871,6 @@ Section FORALL.
   Qed.
 
 End FORALL.
-
-Fixpoint sc_needed_args (sc : safe_cond) : nat :=
-  match sc with
-  | NotZero _ k | InRangeMod32 _ _ _ k | AllInit _ _ k | ULt _ k _ | UGe _ _ k
-  | IsZero _ k => S k
-  | UaddLe _ k1 k2 _ => S (if ssrnat.leq k1 k2 then k2 else k1)
-  | X86Division sz sign => 3
-  | ScFalse => 0
-  | Guarded k sc => ssrnat.maxn (S k) (sc_needed_args sc)
-  end.
-
-(* The conditions of an instruction, decided on the values of its arguments:
-   a condition is vacuously true when the argument it speaks about cannot be
-   read at the expected type. *)
-Fixpoint check_safe_cond (vs : values) (sc : safe_cond) : bool :=
-  match sc with
-  | NotZero ws k =>
-    if to_word ws (nth undef_b vs k) is Ok w then w != 0%w else true
-  | X86Division sz sign =>
-    if mapM (to_word sz) (take 3 vs) is Ok [:: hi; lo; dv] then
-      match sign with
-      | Signed =>
-        let dd := wdwords hi lo in
-        let dv := wsigned dv in
-        let q  := (Z.quot dd dv)%Z in
-        let ov := (q <? wmin_signed sz)%Z || (q >? wmax_signed sz)%Z in
-        ~~ ((dv == 0)%Z || ov)
-      | Unsigned =>
-        let dd := wdwordu hi lo in
-        let dv := wunsigned dv in
-        let q  := (dd  /  dv)%Z in
-        let ov := (q >? wmax_unsigned sz)%Z in
-        ~~ ((dv == 0)%Z || ov)
-      end
-    else true
-  | InRangeMod32 ws i j k =>
-    if to_word ws (nth undef_b vs k) is Ok w
-    then (i <=? (wunsigned w) mod 32)%Z && ((wunsigned w) mod 32 <=? j)%Z
-    else true
-  | ULt ws k z =>
-    if to_word ws (nth undef_b vs k) is Ok w then (wunsigned w <? z)%Z else true
-  | UGe ws z k =>
-    if to_word ws (nth undef_b vs k) is Ok w then (z <=? wunsigned w)%Z else true
-  | UaddLe ws k1 k2 z =>
-    if to_word ws (nth undef_b vs k1) is Ok w1 then
-      if to_word ws (nth undef_b vs k2) is Ok w2
-      then (wunsigned w1 + wunsigned w2 <=? z)%Z else true
-    else true
-  | AllInit ws n k =>
-    if to_arr (arr_size ws n) (nth undef_b vs k) is Ok t
-    then all (fun i => is_ok (WArray.get Unaligned AAscale ws t i)) (ziota 0 n)
-    else true
-  | ScFalse => false
-  | IsZero ws k =>
-    if to_word ws (nth undef_b vs k) is Ok w then w == 0%w else true
-  | Guarded k sc =>
-    if to_bool (nth undef_b vs k) is Ok true then check_safe_cond vs sc else true
-  end.
 
 Definition value_eqb (v1 v2:value) :=
   match v1, v2 with

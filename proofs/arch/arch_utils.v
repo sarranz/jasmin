@@ -27,6 +27,14 @@ Instance eqTC_empty : eqTypeC empty :=
     ceqP := ltac:(done);
   }.
 
+(* Unit type for architectures whose conditions are trivial. *)
+#[export]
+Instance eqTC_unit : eqTypeC unit :=
+  {
+    beq := fun _ _ => true;
+    ceqP := ltac:(by case; case; apply: ReflectT);
+  }.
+
 #[export]
 Instance finTC_empty : finTypeC empty :=
   {
@@ -62,9 +70,6 @@ Definition ak_reg_imm8 : i_args_kinds :=
   [:: [:: [:: CAreg ]; [:: CAimm_sz U8 ] ] ].
 Definition ak_reg_imm16 : i_args_kinds :=
   [:: [:: [:: CAreg ]; [:: CAimm_sz U16 ] ] ].
-
-Definition ak_reg_addr : i_args_kinds :=
-  [:: [:: [:: CAreg ]; [:: CAmem true None ] ] ].
 
 Definition ak_reg_imm8_imm8 : i_args_kinds :=
   [:: [:: [:: CAreg ]; [:: CAimm_sz U8 ]; [:: CAimm_sz U8 ] ] ].
@@ -168,11 +173,12 @@ Lemma all_beheadn {A} {p : A -> bool} {n : nat} {xs : seq A} :
 Proof. by move=> h; elim: n => //= n' hn; apply: all_behead hn. Qed.
 
 #[local]
-Lemma drop_id_wf {A B} {p} {b : bool} {n : nat} {xs : seq A} {ys : seq B} :
-  [&& all p xs, ssrnat.eqn (size xs) (size ys) & b] ->
-  [&& all p (beheadn n xs), ssrnat.eqn (size (beheadn n xs)) (size (beheadn n ys)) & b].
+Lemma drop_id_wf {A B C} {p} {q} {b : bool} {n : nat} {zs : seq C} {xs : seq A} {ys : seq B} :
+  [&& all q zs, all p xs, ssrnat.eqn (size xs) (size ys) & b] ->
+  [&& all q zs, all p (beheadn n xs),
+      ssrnat.eqn (size (beheadn n xs)) (size (beheadn n ys)) & b].
 Proof.
-  move=> /and3P [h1 h2 h3]; rewrite all_beheadn //= h3 andbT.
+  move=> /and4P [h0 h1 h2 h3]; rewrite h0 all_beheadn //= h3 andbT.
   by apply/eqnP/eqP; apply: (size_beheadn (n:=n)); apply/eqP; apply/eqnP.
 Qed.
 
@@ -202,7 +208,6 @@ Notation idt_dropn semi_dropn_t :=
        id_init := beheadn _ (id_init idt);
        id_doit := id_doit idt;
        id_pp_asm := id_pp_asm idt;
-       id_safe_wf := id_safe_wf idt;
        id_wf := drop_id_wf (id_wf idt);
      |}).
 
@@ -257,20 +262,14 @@ Lemma mk_shifted_eq_size {A B x y p} {xs0 : seq A} {ys0 : seq B} :
   [&& size (xs0 ++ [:: x ]) == size (ys0 ++ [:: y ]) & p ].
 Proof. by rewrite !size_cat /= !addn1 eqSS. Qed.
 
-Lemma safe_wf_cat (tin tin' : seq ltype) sc :
-  all (fun sc => sc_needed_args sc <= size tin) sc ->
-  all (fun sc => sc_needed_args sc <= size (tin ++ tin')) sc.
-Proof.
-  apply: sub_all => c h; rewrite size_cat; exact/(leq_trans h)/leq_addr.
-Qed.
-
 Lemma arch_shifted_wf (idt : instr_desc_t) :
-  [&& all (safety_cond_wt (map eval_ltype (id_tin idt ++ [:: lword8 ]))) (id_init idt),
+  [&& all (safety_cond_wt (map eval_ltype (id_tin idt ++ [:: lword8 ]))) (id_safe idt),
+      all (safety_cond_wt (map eval_ltype (id_tin idt ++ [:: lword8 ]))) (id_init idt),
       ssrnat.eqn (size (id_init idt)) (size (id_tout idt))
     & ~~ is_ErrType (id_err idt)].
 Proof.
-  have /and3P [h1 h2 h3] := id_wf idt.
-  by rewrite map_cat (all_safety_cond_wt_cat _ h1) h2 h3.
+  have /and4P [h0 h1 h2 h3] := id_wf idt.
+  by rewrite map_cat (all_safety_cond_wt_cat _ h0) (all_safety_cond_wt_cat _ h1) h2 h3.
 Qed.
 
 Definition arch_mk_shifted
@@ -293,7 +292,6 @@ Definition arch_mk_shifted
     id_doit := id_doit idt;
     id_pp_asm := id_pp_asm idt;
     id_valid := id_valid idt;
-    id_safe_wf := safe_wf_cat _ (id_safe_wf idt);
     id_wf := arch_shifted_wf idt;
   |}.
 

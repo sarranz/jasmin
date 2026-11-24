@@ -109,11 +109,11 @@ Proof.
 Qed.
 
 Lemma Hassgn_op2_generic s e1 e2 v1 v2 op2 v ws v' lv s1 (op2' : sopn) :
-  sem_pexpr true gd s e1 = ok v1 ->
-  sem_pexpr true gd s e2 = ok v2 ->
+  sem_pexpr (wdb := true) gd s e1 = ok v1 ->
+  sem_pexpr (wdb := true) gd s e2 = ok v2 ->
   sem_sop2 op2 v1 v2 = ok v ->
   truncate_val (cword ws) v = ok v' ->
-  write_lval true gd lv v' s = ok s1 ->
+  write_lval (wdb := true) gd lv v' s = ok s1 ->
   i_valid (sopn.get_instr_desc op2') ->
   forall ws1 ws2 ws3 ws1' ws2'
     (eq1 : type_of_op2 op2 = (aword ws1, aword ws2, aword ws3))
@@ -126,8 +126,8 @@ Lemma Hassgn_op2_generic s e1 e2 v1 v2 op2 v ws v' lv s1 (op2' : sopn) :
       forall e1' e2' w1' w2'
         (hcmp1 : (ws1' <= ws1)%CMP)
         (hcmp2 : (ws2' <= ws2)%CMP),
-        sem_pexpr true gd s e1' >>= to_word ws1 = ok w1' ->
-        sem_pexpr true gd s e2' >>= to_word ws2 = ok w2' ->
+        sem_pexpr (wdb := true) gd s e1' >>= to_word ws1 = ok w1' ->
+        sem_pexpr (wdb := true) gd s e2' >>= to_word ws2 = ok w2' ->
         Let w := ecast t (let t := t in _) eq1 (sem_sop2_typed op2) w1 w2 in
         ok (zero_extend ws w)
         = ecast l (sem_prod (map eval_atype l) _) eq2
@@ -156,11 +156,11 @@ Proof.
 Qed.
 
 Lemma Hassgn_op2 s e1 e2 v1 v2 op2 v v' lv s1 (op2' : sopn) :
-  sem_pexpr true gd s e1 = ok v1 ->
-  sem_pexpr true gd s e2 = ok v2 ->
+  sem_pexpr (wdb := true) gd s e1 = ok v1 ->
+  sem_pexpr (wdb := true) gd s e2 = ok v2 ->
   sem_sop2 op2 v1 v2 = ok v ->
   truncate_val (cword U32) v = ok v' ->
-  write_lval true gd lv v' s = ok s1 ->
+  write_lval (wdb := true) gd lv v' s = ok s1 ->
   i_valid (sopn.get_instr_desc op2') ->
   forall ws
     (eq1 : type_of_op2 op2 = (aword ws, aword ws, aword ws))
@@ -189,11 +189,11 @@ Proof.
 Qed.
 
 Lemma Hassgn_op2_shift s e1 e2 v1 v2 op2 v v' lv s1 (op2' : sopn) :
-  sem_pexpr true gd s e1 = ok v1 ->
-  sem_pexpr true gd s e2 = ok v2 ->
+  sem_pexpr (wdb := true) gd s e1 = ok v1 ->
+  sem_pexpr (wdb := true) gd s e2 = ok v2 ->
   sem_sop2 op2 v1 v2 = ok v ->
   truncate_val (cword U32) v = ok v' ->
-  write_lval true gd lv v' s = ok s1 ->
+  write_lval (wdb := true) gd lv v' s = ok s1 ->
   i_valid (sopn.get_instr_desc op2') ->
   forall ws
     (eq1 : type_of_op2 op2 = (aword ws, aword U8, aword ws))
@@ -204,7 +204,7 @@ Lemma Hassgn_op2_shift s e1 e2 v1 v2 op2 v v' lv s1 (op2' : sopn) :
       to_word ws v1 = ok w1,
       to_word U8 v2 = ok w2 &
       forall e2' w2',
-        sem_pexpr true gd s e2' >>= to_word U8 = ok w2' ->
+        sem_pexpr (wdb := true) gd s e2' >>= to_word U8 = ok w2' ->
         Let w := ecast t (let t := t in _) eq1 (sem_sop2_typed op2) w1 w2 in
         ok (zero_extend U32 w)
         = ecast l (sem_prod (map eval_atype l) _) eq2
@@ -247,6 +247,12 @@ Proof. by move=> hsem; rewrite esem1 /= /sem_assgn hglob; exact: hsem. Qed.
 End LOWERING_SEM_ID.
 
 (* Patterns shared by the lowering passes of the back-ends. *)
+
+Definition isLnone x : bool :=
+  match x with
+  | Lnone _ _ => true
+  | _ => false
+  end.
 
 (* A complemented operand [!a], at any width: the operator that consumes it
    truncates it to its own width, which commutes with the complement. *)

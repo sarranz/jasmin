@@ -53,14 +53,16 @@ Notation p' := (lower_prog p).
 Lemma lower_progE pp : mlower_prog pp = ok (lower_prog pp).
 Proof. by apply: (lower_prog_ext (gi := lower_i)). Qed.
 
+#[local] Existing Instance do_enforce_defined_variables.
+
 (* -------------------------------------------------------------------- *)
 
 Lemma check_shift_amountP e sa s z w :
   check_shift_amount e = Some sa ->
-  sem_pexpr true (p_globs p) s e = ok z ->
+  sem_pexpr (p_globs p) s e = ok z ->
   to_word U8 z = ok w ->
   Sv.Subset (read_e sa) (read_e e) /\
-  exists2 n, sem_pexpr true (p_globs p) s sa >>= to_word U8 = ok n & forall f (a: word U32), sem_shift f a w = sem_shift f a (wand n (wrepr U8 31)).
+  exists2 n, sem_pexpr (p_globs p) s sa >>= to_word U8 = ok n & forall f (a: word U32), sem_shift f a w = sem_shift f a (wand n (wrepr U8 31)).
 Proof.
   rewrite /check_shift_amount.
   case en: is_wconst => [ n | ].
@@ -88,8 +90,8 @@ Proof.
 Qed.
 
 Lemma decide_op_reg_immP s e1 e2 v1 v2 op_reg_reg op_reg_imm o es lv s1 :
-  sem_pexpr true (p_globs p) s e1 = ok v1 ->
-  sem_pexpr true (p_globs p) s e2 = ok v2 ->
+  sem_pexpr (p_globs p) s e1 = ok v1 ->
+  sem_pexpr (p_globs p) s e2 = ok v2 ->
   decide_op_reg_imm U32 e1 e2 (op_reg_reg) (op_reg_imm) = Some (o, es) ->
   sem_sopn (p_globs p) (Oasm op_reg_reg) = sem_sopn (p_globs p) (Oasm op_reg_imm) ->
   sem_sopn (p_globs p) (Oasm op_reg_reg) s [:: lv] [:: e1; e2] = ok s1 ->

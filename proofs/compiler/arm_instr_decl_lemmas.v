@@ -29,47 +29,46 @@ Proof.
 Qed.
 
 Lemma mk_cond_aux (tin tout : seq ltype) (ts : seq ctype) (vs0 : values)
-    (safe : seq safe_cond) (err : error) (init : seq safety_cond)
+    (safe : seq safety_cond) (err : error) (init : seq safety_cond)
     (semi : sem_lprod tin (exec (sem_ltuple tout)))
     (f : sem_lprod tin (sem_ltuple_t tout)) :
   List.Forall2 (fun t v => exists x : sem_t t, v = to_val x) ts vs0 ->
   size init = size tout ->
   all (safety_cond_wt (ts ++ map eval_ltype tin)) init ->
-  all (fun sc => sc_needed_args sc <= size ts + size tin) safe ->
+  all (safety_cond_wt (ts ++ map eval_ltype tin)) safe ->
   sem_prod_eq (map eval_ltype tin) semi
-    (mk_semi_aux (fun vs t => Let _ := check_safe_conds vs safe err in
+    (mk_semi_aux (fun vs t => Let _ := check_safe vs safe err in
         ok (filter_tuple (map eval_ltype tout) (map (safety_cond_holds vs) init) t))
        vs0 (map eval_ltype tin) f) ->
   sem_prod_eq (map eval_ltype (tin ++ lbool :: tout))
     (mk_semi_cond semi)
     (mk_semi_aux (fun vs t =>
-        Let _ := check_safe_conds vs (map (Guarded (size ts + size tin)) safe) err in
+        Let _ := check_safe vs (map (sc_guarded (size ts + size tin)) safe) err in
         ok (filter_tuple (map eval_ltype tout)
-              (map (safety_cond_holds vs) (map (cond_init (size ts + size tin)) init)) t))
+              (map (safety_cond_holds vs) (map (sc_guarded (size ts + size tin)) init)) t))
        vs0 (map eval_ltype (tin ++ lbool :: tout)) (mk_semi_cond_t f)).
 Proof.
   elim: tin ts vs0 semi f.
-  + move=> ts vs0 semi f hall hsz hwt hswf heq.
-    move: hwt hswf; rewrite cats0 addn0 => hwt hswf.
-    have hszv : size vs0 = size ts := esym (Forall2_size hall).
-    have heq' : semi = (Let _ := check_safe_conds vs0 safe err in
+  + move=> ts vs0 semi f hall hsz hwt hswt heq.
+    move: hwt hswt; rewrite cats0 addn0 => hwt hswt.
+    have heq' : semi = (Let _ := check_safe vs0 safe err in
                         ok (filter_tuple (map eval_ltype tout) (map (safety_cond_holds vs0) init) f)) := heq.
     have hchk : forall (b : bool) vs2,
-        check_safe_conds (rcons vs0 (Vbool b) ++ vs2) (map (Guarded (size ts)) safe) err
-        = if b then check_safe_conds vs0 safe err else ok tt.
-    + move=> b vs2; rewrite /check_safe_conds (check_safe_cond_all_guarded vs2 b hszv hswf).
+        check_safe (rcons vs0 (Vbool b) ++ vs2) (map (sc_guarded (size ts)) safe) err
+        = if b then check_safe vs0 safe err else ok tt.
+    + move=> b vs2; rewrite /check_safe (safety_cond_holds_all_guarded b vs2 hall hswt).
       by case: b.
     rewrite /mk_semi_cond /mk_semi_cond_t !add_arguments_nil.
     move=> b; simpl sem_prod_app; simpl mk_semi_aux.
     case: b.
     + apply: sem_prod_eq_sym.
       apply: mk_semi_aux_const => vs2.
-      by rewrite (cond_init_mask true vs2 hall hwt hsz) hchk -heq'.
+      by rewrite (safety_cond_holds_guarded_map true vs2 hall hwt hsz) hchk -heq'.
     apply: sem_prod_eq_sym.
     apply: sem_prod_eq_trans;
       first by apply: (mk_semi_aux_ok_cat
                 (g := filter_tuple (map eval_ltype tout) (nseq (size tout) true))) => vs2 t;
-               rewrite (cond_init_mask false vs2 hall hwt hsz) hchk.
+               rewrite (safety_cond_holds_guarded_map false vs2 hall hwt hsz) hchk.
     apply: sem_prod_eq_trans; first by apply: sem_prod_ok_app.
     apply: sem_prod_eq_trans; first by apply: sem_prod_app_comp.
     apply: sem_prod_eq_trans.
@@ -78,7 +77,7 @@ Proof.
       + by rewrite size_nseq size_map.
       by [].
     by apply: sem_prod_eq_sym; apply: sem_prod_ok_app.
-  move=> t tin ih ts vs0 semi f hall hsz hwt hswf heq v.
+  move=> t tin ih ts vs0 semi f hall hsz hwt hswt heq v.
   rewrite /mk_semi_cond /mk_semi_cond_t !add_arguments_app.
   simpl sem_prod_app; simpl mk_semi_aux.
   rewrite add_arguments_app.
@@ -88,7 +87,7 @@ Proof.
   + by rewrite -!cats1; apply: List.Forall2_app => //; constructor => //; exists v.
   + done.
   + by rewrite cat_rcons.
-  + by rewrite size_rcons addSnnS.
+  + by rewrite cat_rcons.
   by apply: heq.
 Qed.
 
@@ -99,13 +98,12 @@ Lemma mk_cond_semi_eq (single_cycle : bool) (idt : instr_desc_t) :
     (mk_semi_cond (id_semi idt))
     (id_semi (mk_cond single_cycle idt)).
 Proof.
-  have /and3P [hok /eqnP hsz _] := id_wf idt.
+  have /and4P [hsok hok /eqnP hsz _] := id_wf idt.
   apply: (mk_cond_aux (ts := [::]) (vs0 := [::])) => //.
-  + by apply: id_safe_wf.
   by apply: sem_prod_eq_refl.
 Qed.
 
-Lemma ignore_has_shift mn sf ic hs hs' :
+Lemma ignore_has_shift {core : arm_core} mn sf ic hs hs' :
   mn \notin has_shift_mnemonics
   -> let opts :=
        {| set_flags := sf; is_conditional := ic; has_shift := hs; |}
@@ -124,11 +122,14 @@ Section WITH_PARAMS.
 
 Context
   {wsw : WithSubWord}
+  {core : arm_core}
   {atoI : arch_toIdent}
   {syscall_state : Type}
   {sc_sem : syscall_sem syscall_state}
   {pT : progT}
   {sCP : semCallParams}.
+
+#[local] Existing Instance do_enforce_defined_variables.
 
 Definition truncate_args
   (op : sopn) (vargs : seq value) : exec (seq value) :=
@@ -171,7 +172,7 @@ Proof.
                 (h2 : id_tout (mn_desc fflags mn) = id_tout (mn_desc tflags mn)),
          cast_op h1 h2 (id_semi (mn_desc fflags mn)) = id_semi (mn_desc tflags mn).
   + move: hvalid; rewrite /fflags /tflags.
-    by case: mn; case sf; case osk => [s | ] //; split => //;
+    by case: mn; case sf; case osk => [s | ] //=; rewrite ?andbF //; split => //;
          exists erefl, erefl.
   move=> [-> [hin [hout hcast]]].
   rewrite /semi /semi_to_atype_t /=.
@@ -218,14 +219,14 @@ Lemma sem_i_conditional
   in
   let aop := Oarm (ARM_op mn opts) in
   id_valid (mn_desc (set_is_conditional opts) mn)
-  -> sem_pexprs true (p_globs p) s0 args = ok vargs
-  -> sem_pexpr true (p_globs p) s0 c = ok (Vbool b)
-  -> sem_pexprs true (p_globs p) s0 prev = ok vprev
+  -> sem_pexprs (p_globs p) s0 args = ok vargs
+  -> sem_pexpr (p_globs p) s0 c = ok (Vbool b)
+  -> sem_pexprs (p_globs p) s0 prev = ok vprev
   -> truncate_args aop vprev = ok vprev'
   -> exec_sopn aop vargs = ok vres
   -> (if b
-      then write_lvals true (p_globs p) s0 lvs vres = ok s1
-      else write_lvals true (p_globs p) s0 lvs vprev' = ok s1)
+      then write_lvals (p_globs p) s0 lvs vres = ok s1
+      else write_lvals (p_globs p) s0 lvs vprev' = ok s1)
   -> let aop' := Oarm (ARM_op mn (set_is_conditional opts)) in
      let ir := Copn lvs tag aop' (args ++ c :: prev) in
      esem_i p ev (MkI ii ir) s0 = ok s1.
@@ -233,7 +234,7 @@ Proof.
   move=> opts aop hvalid hsemargs hsemc hsemprev htruncprev hexec hwrite.
 
   rewrite /= /sem_sopn /=.
-  rewrite /sem_pexprs mapM_cat /= -2![mapM _ _]/(sem_pexprs _ _ _ _).
+  rewrite /sem_pexprs mapM_cat /= -2![mapM _ _]/(sem_pexprs _ _ _).
   rewrite hsemargs hsemc hsemprev {hsemargs hsemc hsemprev} /=.
 
   case: b hwrite => hwrite.

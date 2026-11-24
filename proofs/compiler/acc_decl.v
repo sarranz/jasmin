@@ -374,6 +374,23 @@ Definition acc_caimm_cond_pp (checker : acc_caimm_cond) : string :=
   | CAimmC_acc_mulqacc_shift => "[0, 192] in steps of 64"
   end%string.
 
+(* Memory operands have no index register: [base] or [base + imm]. An address
+   relative to the instruction pointer (a global) is accepted.
+   TODO_ACC: Is this correct? It can be simplified *)
+Definition acc_check_CAmem (_ : unit) (a : address_ register acc_reg_size) : bool :=
+  match a with
+  | Arip _ => true
+  | Areg addr =>
+    match addr.(ad_disp) != 0%R, isSome addr.(ad_offset), ~~ Nat.eqb addr.(ad_scale) 0 with
+    | false, false, false => true
+    | true, false, false => true
+    | _, _, _ => false
+    end
+  end.
+
+Definition acc_camem_cond_pp (_ : unit) : seq string :=
+  [:: "[base]"; "[base + imm]" ]%string.
+
 (* -------------------------------------------------------------------------- *)
 (* Architecture declaration. *)
 
@@ -395,10 +412,10 @@ Instance acc_decl : arch_decl register empty wide_register rflag condition :=
     caimm_cond_eqC := eqTC_acc_caimm_cond;
     caimm_cond_pp := acc_caimm_cond_pp;
     check_CAimm := acc_check_CAimm;
-    camem_cond := empty;
-    camem_cond_eqC := eqTC_empty;
-    camem_cond_pp := of_empty _;
-    check_CAmem := fun c _ _ _ _ => of_empty _ c;
+    camem_cond := unit;
+    camem_cond_eqC := eqTC_unit;
+    camem_cond_pp := acc_camem_cond_pp;
+    check_CAmem := acc_check_CAmem;
   }.
 
 Definition acc_call_conv : calling_convention :=
@@ -409,6 +426,8 @@ Definition acc_call_conv : calling_convention :=
     callee_saved := map ARReg callee_saved_registers;
     callee_saved_not_bool := refl_equal;
     callee_saved_has_rsp := refl_equal;
+    syscall_preserved := map ARReg callee_saved_registers;
+    syscall_preserved_subset := refl_equal;
     call_reg_args := [:: X10; X11; X12; X13; X14; X15; X16; X17 ];
     call_xreg_args := [:: W00; W01; W02; W03; W04; W05; W06; W07 ];
     call_reg_ret := [:: X10; X11 ];

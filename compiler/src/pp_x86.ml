@@ -188,7 +188,7 @@ module type X86AsmSyntax = sig
   val reg_pre         : string
   val indirect_pre    : string
 
-  val pp_address       : wsize -> (register, 'a, 'b, 'c, 'd) Arch_decl.address -> string
+  val pp_address       : wsize -> register Arch_decl.address_ -> string
   val rev_args        : 'a list -> 'a list
   val pp_iname_ext    : wsize -> string
 
@@ -207,7 +207,7 @@ module ATTSyntax : X86AsmSyntax = struct
   let indirect_pre = "*"
 
   (* -------------------------------------------------------------------- *)
-  let pp_reg_address (addr : (_, _, _, _, _) Arch_decl.reg_address) =
+  let pp_reg_address (addr : _ Arch_decl.reg_address_) =
     let disp = Conv.z_of_int64 addr.ad_disp in
     let base = addr.ad_base in
     let off  = addr.ad_offset in
@@ -230,7 +230,7 @@ module ATTSyntax : X86AsmSyntax = struct
           Format.asprintf "%s(%s,%s,%s)" disp base off (pp_scale scal)
     end
 
-  let pp_address _ws (addr : (_, _, _, _, _) Arch_decl.address) =
+  let pp_address _ws (addr : _ Arch_decl.address_) =
     match addr with
     | Areg ra -> pp_reg_address ra
     | Arip d ->
@@ -260,7 +260,7 @@ module IntelSyntax : X86AsmSyntax = struct
   let reg_pre = ""
   let indirect_pre = ""
 
-  let pp_reg_address (addr : (_, _, _, _, _) Arch_decl.reg_address) =
+  let pp_reg_address (addr : _ Arch_decl.reg_address_) =
     let disp = Conv.z_of_int64 addr.ad_disp in
     let base = addr.ad_base in
     let off  = addr.ad_offset in
@@ -288,7 +288,7 @@ module IntelSyntax : X86AsmSyntax = struct
       | U128 -> "xmmword"
       | U256 -> "ymmword"
 
-  let pp_address ws (addr : (_, _, _, _, _) Arch_decl.address) =
+  let pp_address ws (addr : _ Arch_decl.address_) =
     match addr with
     | Areg ra -> Format.asprintf "%s ptr[%s]" (pp_address_size ws) (pp_reg_address ra)
     | Arip d ->
@@ -338,7 +338,7 @@ and type asm_op = X86_instr_decl.x86_op
     | Reg r      -> pp_register ~reg_pre (rsize_of_wsize ws) r
     | Regx r     -> pp_register_ext ~reg_pre ws r
     | Addr addr  -> pp_address ws addr
-    | ImmRip _   -> assert false (* Only on ARMv7-M. *)
+    | ImmRip _   -> assert false (* Only on the ARM M-profile. *)
     | XReg r     -> pp_xmm_register ~reg_pre ws r
 
   let pp_asm_args args = List.map pp_asm_arg (rev_args args)
@@ -407,7 +407,7 @@ and type asm_op = X86_instr_decl.x86_op
       let id = instr_desc X86_decl.x86_decl X86_instr_decl.x86_op_decl (None, op) in
       let pp = id.id_pp_asm args in
       let name = pp_name_ext pp in
-      [Instr(name, (pp_asm_args pp.pp_aop_args))]
+      [Instr(name, (pp_asm_args (pp_full_args pp)))]
 
   let function_directives = []
 

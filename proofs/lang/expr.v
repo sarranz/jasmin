@@ -13,13 +13,6 @@ Local Unset Elimination Schemes.
 Definition uint_of_word ws := Oint_of_word Unsigned ws.
 Definition sint_of_word ws := Oint_of_word Signed ws.
 
-(* Type of the predicates of the safety conditions: inputs, output *)
-Definition type_of_opN_safety (op: opN_safety) : seq atype * atype :=
-  (match op with
-   | Ois_arr_init len | Ois_barr_init len => [:: aarr U8 len; aint; aint]
-   end, abool).
-
-
 (* ** Expressions
  * -------------------------------------------------------------------- *)
 (* Used only by the ocaml compiler *)
@@ -99,6 +92,9 @@ Definition eeq e1 e2 : pexpr := Papp2 Obeq e1 e2.
 Definition eneq e1 e2 : pexpr := enot (eeq e1 e2).
 Definition eaddw w e1 e2 : pexpr := Papp2 (Oadd (Op_w w)) e1 e2.
 Definition enegw w e : pexpr := Papp1 (Oneg (Op_w w)) e.
+Definition eaddi e1 e2 : pexpr := Papp2 (Oadd Op_int) e1 e2.
+Definition esubi e1 e2 : pexpr := Papp2 (Osub Op_int) e1 e2.
+Definition elti e1 e2 : pexpr := Papp2 (Olt Cmp_int) e1 e2.
 
 Definition cf_of_condition (op : sop2) : option (combine_flags * wsize) :=
   match op with

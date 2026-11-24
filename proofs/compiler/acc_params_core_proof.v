@@ -37,6 +37,7 @@ Context
   {atoI : arch_toIdent}.
 
 #[local] Existing Instance withsubword.
+#[local] Existing Instance do_enforce_defined_variables.
 
 Definition sem_fopn_args (p : seq lexpr * acc_op * seq rexpr) (s : estate) :=
   let: (xs,o,es) := p in
@@ -60,8 +61,8 @@ Ltac t_acc_op :=
 (* [R[x] := R[y] + R[z]]. *)
 Lemma add_sem_fopn_args {s} {xi:var_i} {y} {wy : word Uptr} {z} {wz : word Uptr} :
   convertible xi.(vtype) (aword acc_reg_size) ->
-  get_var true (evm s) (v_var y) >>= to_word Uptr = ok wy ->
-  get_var true (evm s) (v_var z) >>= to_word Uptr = ok wz ->
+  get_var (wdb := true) (evm s) (v_var y) >>= to_word Uptr = ok wy ->
+  get_var (wdb := true) (evm s) (v_var z) >>= to_word Uptr = ok wz ->
   let: wx' := Vword (s:=reg_size) ((wy + wz : word reg_size)) in
   let: vm' := (evm s).[xi <- wx'] in
   sem_fopn_args (ACCFopn_core.add xi y z) s = ok (with_vm s vm').
@@ -74,7 +75,7 @@ Qed.
 (* [R[x] := R[y] + imm % 2^32]. *)
 Lemma addi_sem_fopn_args {s} {xi:var_i} {y imm wy} :
   convertible xi.(vtype) (aword acc_reg_size) ->
-  get_var true (evm s) (v_var y) >>= to_word Uptr = ok wy ->
+  get_var (wdb := true) (evm s) (v_var y) >>= to_word Uptr = ok wy ->
   let: wx' := Vword (s:=reg_size) ((wy + wrepr reg_size imm : word reg_size)) in
   let: vm' := (evm s).[xi <- wx'] in
   sem_fopn_args (ACCFopn_core.addi xi y imm) s = ok (with_vm s vm').
@@ -87,8 +88,8 @@ Qed.
 (* [R[x] := R[y] - R[z]]. *)
 Lemma sub_sem_fopn_args {s} {xi:var_i} {y} {wy : word Uptr} {z} {wz : word Uptr} :
   convertible xi.(vtype) (aword acc_reg_size) ->
-  get_var true (evm s) (v_var y) >>= to_word Uptr = ok wy ->
-  get_var true (evm s) (v_var z) >>= to_word Uptr = ok wz ->
+  get_var (wdb := true) (evm s) (v_var y) >>= to_word Uptr = ok wy ->
+  get_var (wdb := true) (evm s) (v_var z) >>= to_word Uptr = ok wz ->
   let: wx' := Vword (s:=reg_size) ((wy - wz : word reg_size)) in
   let: vm' := (evm s).[xi <- wx'] in
   sem_fopn_args (ACCFopn_core.sub xi y z) s = ok (with_vm s vm').
@@ -101,7 +102,7 @@ Qed.
 (* [R[x] := R[y] - imm % 2^32]. *)
 Lemma subi_sem_fopn_args {s} {xi:var_i} {y imm wy} :
   convertible xi.(vtype) (aword acc_reg_size) ->
-  get_var true (evm s) (v_var y) >>= to_word Uptr = ok wy ->
+  get_var (wdb := true) (evm s) (v_var y) >>= to_word Uptr = ok wy ->
   let: wx' := Vword (s:=reg_size) ((wy - wrepr reg_size imm : word reg_size)) in
   let: vm' := (evm s).[xi <- wx'] in
   sem_fopn_args (ACCFopn_core.subi xi y imm) s = ok (with_vm s vm').
@@ -115,7 +116,7 @@ Qed.
 (* [R[x] := R[y]] (implemented as [addi x y 0]). *)
 Lemma mov_sem_fopn_args {s} {xi:var_i} {y} {wy : word Uptr} :
   convertible xi.(vtype) (aword acc_reg_size) ->
-  get_var true (evm s) (v_var y) >>= to_word Uptr = ok wy ->
+  get_var (wdb := true) (evm s) (v_var y) >>= to_word Uptr = ok wy ->
   let: vm' := (evm s).[xi <- Vword wy] in
   sem_fopn_args (ACCFopn_core.mov xi y) s = ok (with_vm s vm').
 Proof.
@@ -129,7 +130,7 @@ Qed.
 (* [R[x] := R[y] ^ imm % 2^32]. *)
 Lemma xori_sem_fopn_args {s} {xi:var_i} {y imm wy} :
   convertible xi.(vtype) (aword acc_reg_size) ->
-  get_var true (evm s) (v_var y) >>= to_word Uptr = ok wy ->
+  get_var (wdb := true) (evm s) (v_var y) >>= to_word Uptr = ok wy ->
   let: wx' := Vword (s:=reg_size) (wxor wy (wrepr reg_size imm)) in
   let: vm' := (evm s).[xi <- wx'] in
   sem_fopn_args (ACCFopn_core.xori xi y imm) s = ok (with_vm s vm').
@@ -142,7 +143,7 @@ Qed.
 (* [R[x] := ~ R[y]] (implemented as [XORI x, y, -1]). *)
 Lemma not_sem_fopn_args {s} {xi:var_i} {y} {wy : word Uptr} :
   convertible xi.(vtype) (aword acc_reg_size) ->
-  get_var true (evm s) (v_var y) >>= to_word Uptr = ok wy ->
+  get_var (wdb := true) (evm s) (v_var y) >>= to_word Uptr = ok wy ->
   let: vm' := (evm s).[xi <- Vword (wnot wy)] in
   sem_fopn_args (ACCFopn_core.not xi y) s = ok (with_vm s vm').
 Proof.
@@ -165,7 +166,7 @@ Qed.
 (* [R[x] := R[y] & imm % 2^32]. *)
 Lemma andi_sem_fopn_args {s} {xi:var_i} {y imm wy} :
   convertible xi.(vtype) (aword acc_reg_size) ->
-  get_var true (evm s) (v_var y) >>= to_word Uptr = ok wy ->
+  get_var (wdb := true) (evm s) (v_var y) >>= to_word Uptr = ok wy ->
   let: wx' := Vword (s:=reg_size) (wand wy (wrepr reg_size imm)) in
   let: vm' := (evm s).[xi <- wx'] in
   sem_fopn_args (ACCFopn_core.andi xi y imm) s = ok (with_vm s vm').
@@ -179,7 +180,7 @@ Qed.
    as [ANDI x, y, -(wsize_size al)]). *)
 Lemma align_sem_fopn_args {s} {xi:var_i} {y al wy} :
   convertible xi.(vtype) (aword acc_reg_size) ->
-  get_var true (evm s) (v_var y) >>= to_word Uptr = ok wy ->
+  get_var (wdb := true) (evm s) (v_var y) >>= to_word Uptr = ok wy ->
   let: wx' := Vword (align_word al wy) in
   let: vm' := (evm s).[xi <- wx'] in
   sem_fopn_args (ACCFopn_core.align xi y al) s = ok (with_vm s vm').
@@ -209,11 +210,11 @@ Opaque ACCFopn_core.align.
 Lemma smart_mov_sem_fopns_args s (w : wreg) (xi:var_i) y :
   convertible xi.(vtype) (aword acc_reg_size) ->
   let: lc := ACCFopn_core.smart_mov xi y in
-  get_var true (evm s) y >>= to_word Uptr = ok w ->
+  get_var (wdb := true) (evm s) y >>= to_word Uptr = ok w ->
   exists vm,
     [/\ sem_fopns_args s lc = ok (with_vm s vm)
       , vm =[\ Sv.singleton xi ] evm s
-      & get_var true vm xi >>= to_word Uptr = ok w ].
+      & get_var (wdb := true) vm xi >>= to_word Uptr = ok w ].
 Proof.
   move=> hc hgety.
   rewrite /ACCFopn_core.smart_mov /=.
@@ -242,15 +243,15 @@ Lemma gen_smart_opi_sem_fopn_args
   (op_sem_fopn_args :
     forall {s} {xi:var_i} {y} {wy : word Uptr} {z} {wz : word Uptr},
       convertible xi.(vtype) (aword acc_reg_size) ->
-      get_var true (evm s) (v_var y) >>= to_word Uptr = ok wy
-      -> get_var true (evm s) (v_var z) >>= to_word Uptr = ok wz
+      get_var (wdb := true) (evm s) (v_var y) >>= to_word Uptr = ok wy
+      -> get_var (wdb := true) (evm s) (v_var z) >>= to_word Uptr = ok wz
       -> let: wx' := Vword (op wy wz) in
       let: vm' := (evm s).[xi <- wx'] in
       sem_fopn_args (on_reg xi y z) s = ok (with_vm s vm'))
   (opi_sem_fopn_args :
     forall {s} {xi:var_i} {y imm wy},
       convertible xi.(vtype) (aword acc_reg_size) ->
-      get_var true (evm s) (v_var y) >>= to_word Uptr = ok wy
+      get_var (wdb := true) (evm s) (v_var y) >>= to_word Uptr = ok wy
       -> let: wx' := Vword (op wy (wrepr reg_size imm)) in
      let: vm' := (evm s).[xi <- wx'] in
      sem_fopn_args (on_imm xi y imm) s = ok (with_vm s vm'))
@@ -259,11 +260,11 @@ Lemma gen_smart_opi_sem_fopn_args
   convertible (vtype tmp) (aword Uptr) ->
   convertible xi.(vtype) (aword acc_reg_size) ->
   ACCFopn_core.gen_smart_opi on_reg on_imm is_small neutral tmp xi y imm = Some lc ->
-  get_var true (evm s) (v_var y) >>= to_word Uptr = ok w ->
+  get_var (wdb := true) (evm s) (v_var y) >>= to_word Uptr = ok w ->
   exists vm',
     [/\ sem_fopns_args s lc = ok (with_vm s vm')
       , vm' =[\ Sv.add xi (Sv.singleton tmp) ] evm s
-      & get_var true vm' xi = ok (Vword (op w (wrepr reg_size imm))) ].
+      & get_var (wdb := true) vm' xi = ok (Vword (op w (wrepr reg_size imm))) ].
 Proof.
   move=> hc1 hc2 hlc hgety.
   rewrite /ACCFopn_core.gen_smart_opi /ACCFopn_core.gen_unsafe_smart_opi in hlc.
@@ -353,7 +354,7 @@ Qed.
 (* [R[x] := R[y]] (implemented as [addi x y 0]). *)
 Lemma mov_eval_instr {lp ls ii} {xi:var_i} {y} {wy : word Uptr} :
   convertible xi.(vtype) (aword acc_reg_size) ->
-  get_var true (lvm ls) (v_var y) = ok (Vword wy) ->
+  get_var (wdb := true) (lvm ls) (v_var y) = ok (Vword wy) ->
   let: (les, op, res) := ACCFopn_core.mov xi y in
   let: li := MkLI ii (Lopn les (Oacc op) res) in
   let: vm' := (lvm ls).[xi <- Vword wy] in
@@ -382,7 +383,7 @@ Qed.
 (* [R[x] := R[y] aligned down to a multiple of [wsize_size al]]. *)
 Lemma align_eval_instr {lp ls ii} {xi:var_i} {y al} {wy : word Uptr} :
   convertible xi.(vtype) (aword acc_reg_size) ->
-  get_var true (lvm ls) (v_var y) = ok (Vword wy) ->
+  get_var (wdb := true) (lvm ls) (v_var y) = ok (Vword wy) ->
   let: (les, op, res) := ACCFopn_core.align xi y al in
   let: li := MkLI ii (Lopn les (Oacc op) res) in
   let: vm' := (lvm ls).[xi <- Vword (align_word al wy)] in
@@ -398,8 +399,8 @@ Qed.
 (* [R[x] := R[y] - R[z]]. *)
 Lemma sub_eval_instr {lp ls ii} {xi:var_i} {y z} {wy wz : word Uptr} :
   convertible xi.(vtype) (aword acc_reg_size) ->
-  get_var true (lvm ls) (v_var y) = ok (Vword wy) ->
-  get_var true (lvm ls) (v_var z) = ok (Vword wz) ->
+  get_var (wdb := true) (lvm ls) (v_var y) = ok (Vword wy) ->
+  get_var (wdb := true) (lvm ls) (v_var z) = ok (Vword wz) ->
   let: (les, op, res) := ACCFopn_core.sub xi y z in
   let: li := MkLI ii (Lopn les (Oacc op) res) in
   let: vm' := (lvm ls).[xi <- Vword (wy - wz)] in
@@ -415,7 +416,7 @@ Qed.
 (* [R[x] := R[y] - imm % 2^32]. *)
 Lemma subi_eval_instr {lp ls ii} {xi:var_i} {y imm} {wy : word Uptr} :
   convertible xi.(vtype) (aword acc_reg_size) ->
-  get_var true (lvm ls) (v_var y) = ok (Vword wy) ->
+  get_var (wdb := true) (lvm ls) (v_var y) = ok (Vword wy) ->
   let: (les, op, res) := ACCFopn_core.subi xi y imm in
   let: li := MkLI ii (Lopn les (Oacc op) res) in
   let: vm' := (lvm ls).[xi <- Vword (wy - wrepr reg_size imm)] in
@@ -431,7 +432,7 @@ Qed.
 (* [R[x] := R[y] + imm % 2^32]. *)
 Lemma addi_eval_instr {lp ls ii} {xi:var_i} {y imm} {wy : word Uptr} :
   convertible xi.(vtype) (aword acc_reg_size) ->
-  get_var true (lvm ls) (v_var y) = ok (Vword wy) ->
+  get_var (wdb := true) (lvm ls) (v_var y) = ok (Vword wy) ->
   let: (les, op, res) := ACCFopn_core.addi xi y imm in
   let: li := MkLI ii (Lopn les (Oacc op) res) in
   let: vm' := (lvm ls).[xi <- Vword (wy + wrepr reg_size imm)] in
@@ -447,8 +448,8 @@ Qed.
 (* [R[x] := R[y] + R[z]]. *)
 Lemma add_eval_instr {lp ls ii} {xi:var_i} {y z} {wy wz : word Uptr} :
   convertible xi.(vtype) (aword acc_reg_size) ->
-  get_var true (lvm ls) (v_var y) = ok (Vword wy) ->
-  get_var true (lvm ls) (v_var z) = ok (Vword wz) ->
+  get_var (wdb := true) (lvm ls) (v_var y) = ok (Vword wy) ->
+  get_var (wdb := true) (lvm ls) (v_var z) = ok (Vword wz) ->
   let: (les, op, res) := ACCFopn_core.add xi y z in
   let: li := MkLI ii (Lopn les (Oacc op) res) in
   let: vm' := (lvm ls).[xi <- Vword (wy + wz)] in

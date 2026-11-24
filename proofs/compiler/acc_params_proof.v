@@ -54,6 +54,7 @@ Context
 
 #[local] Existing Instance withsubword.
 #[local] Existing Instance direct_c.
+#[local] Existing Instance do_enforce_defined_variables.
 
 (* ------------------------------------------------------------------------ *)
 (* Stack alloc hypotheses. *)
@@ -66,10 +67,10 @@ Lemma add_imm_opP
   (P' : sprog) (tag : assgn_tag) (x : lval) (base : var_i)
   (imm : Z) (s1 : estate) (vb : value) (wb : word U32) :
   p_globs P' = [::] ->
-  get_var true (evm s1) base = ok vb ->
+  get_var (wdb := true) (evm s1) base = ok vb ->
   to_word U32 vb = ok wb ->
   sem_sopn (p_globs P') (Oasm (add_imm_op base imm).1) s1 [:: x] (add_imm_op base imm).2
-  = write_lval true (p_globs P') x (Vword (wadd wb (wrepr U32 imm))) s1.
+  = write_lval (wdb := true) (p_globs P') x (Vword (wadd wb (wrepr U32 imm))) s1.
 Proof.
   move=> P'_globs ok_vb ok_wb.
   rewrite /add_imm_op.
@@ -77,14 +78,14 @@ Proof.
   - subst imm.
     rewrite /sem_sopn P'_globs /= /get_gvar /= ok_vb /= /exec_sopn /= ok_wb /=.
     rewrite /wadd wrepr0 GRing.addr0.
-    by case: (write_lval true [::] x (Vword wb) s1).
+    by case: (write_lval (wdb := true) [::] x (Vword wb) s1).
   case: ifP => hsmall.
   - rewrite /sem_sopn P'_globs /= /get_gvar /= ok_vb /= /exec_sopn /= ok_wb
       truncate_word_u /=.
-    by case: (write_lval true [::] x (Vword (wadd wb (wrepr U32 imm)))).
+    by case: (write_lval (wdb := true) [::] x (Vword (wadd wb (wrepr U32 imm)))).
   rewrite /sem_sopn P'_globs /= /get_gvar /= ok_vb /= /exec_sopn /= ok_wb
     truncate_word_u /=.
-  by case: (write_lval true [::] x (Vword (wadd wb (wrepr U32 imm)))).
+  by case: (write_lval (wdb := true) [::] x (Vword (wadd wb (wrepr U32 imm)))).
 Qed.
 
 Lemma acc_mov_ofsP : mov_ofs_correct (ap_sap acc_params).(sap_mov_ofs).
@@ -121,7 +122,7 @@ Proof.
     (* [mk_lea] on [e + ofs]: dispatch on [lea_base]/[lea_offset]. *)
     case hlea: mk_lea => [[disp base0 scale offset]|] //=.
     case: base0 hlea => [base|//] hlea.
-    have lea_sem: sem_pexpr true [::] s1 (add e ofs) = ok (Vword (w + pofs)).
+    have lea_sem: sem_pexpr (wdb := true) [::] s1 (add e ofs) = ok (Vword (w + pofs)).
     - by rewrite /= ok_ve ok_vofs /= /sem_sop2 /= ok_w ok_pofs /=.
     have /(_ (cmp_le_refl _)) /(_ (cmp_le_refl _)) := mk_leaP _ _ hlea lea_sem.
     rewrite zero_extend_u /sem_lea /=.
@@ -218,7 +219,7 @@ Lemma acc_smart_subi_tmp_sem_fopns (rspi tmp : var_i) (sz : Z) s (ts : wreg) :
   v_var rspi <> v_var tmp ->
   convertible (vtype rspi) (aword Uptr) ->
   convertible (vtype tmp) (aword Uptr) ->
-  get_var true (evm s) (v_var rspi) >>= to_word Uptr = ok ts ->
+  get_var (wdb := true) (evm s) (v_var rspi) >>= to_word Uptr = ok ts ->
   exists vm',
     [/\ sem_fopns_args s (map fopn_args_of_opn_args
           (odflt [:: acc_params_core.ACCFopn_core.subi rspi rspi sz]
@@ -265,7 +266,7 @@ Lemma acc_smart_addi_tmp_sem_fopns (rspi tmp : var_i) (sz : Z) s (ts : wreg) :
   v_var rspi <> v_var tmp ->
   convertible (vtype rspi) (aword Uptr) ->
   convertible (vtype tmp) (aword Uptr) ->
-  get_var true (evm s) (v_var rspi) >>= to_word Uptr = ok ts ->
+  get_var (wdb := true) (evm s) (v_var rspi) >>= to_word Uptr = ok ts ->
   exists vm',
     [/\ sem_fopns_args s (map fopn_args_of_opn_args
           (odflt [:: acc_params_core.ACCFopn_core.addi rspi rspi sz]
@@ -311,11 +312,11 @@ Arguments acc_smart_addi_tmp_sem_fopns rspi tmp sz s ts _ _ _ _ : clear implicit
 Lemma acc_smart_addi_sem_fopns (xi : var_i) y imm s (w : wreg) :
   convertible xi.(vtype) (aword acc_reg_size) ->
   acc_params_core.is_arith_small imm \/ v_var xi <> v_var y ->
-  get_var true (evm s) (v_var y) >>= to_word Uptr = ok w ->
+  get_var (wdb := true) (evm s) (v_var y) >>= to_word Uptr = ok w ->
   exists vm',
     [/\ sem_fopns_args s (smart_addi_fopn xi y imm) = ok (with_vm s vm')
       , vm' =[\ Sv.singleton xi ] evm s
-      & get_var true vm' xi = ok (Vword (w + wrepr reg_size imm)%R) ].
+      & get_var (wdb := true) vm' xi = ok (Vword (w + wrepr reg_size imm)%R) ].
 Proof using atoI call_conv sc_sem syscall_state vinfo.
   move=> hc hor hget.
   rewrite /smart_addi_fopn /smart_addi
@@ -369,7 +370,7 @@ Proof using atoI call_conv sc_sem syscall_state vinfo.
         tmp sz s ts h1 erefl h2 (to_word_get_var hget).
     by exists vm'; split => //.
   (* None: direct subi *)
-  + have hget2 : get_var true (evm s) {| vtype := aword U32; vname := sp_rsp |} =
+  + have hget2 : get_var (wdb := true) (evm s) {| vtype := aword U32; vname := sp_rsp |} =
         ok (Vword (s:=U32) ts).
     { move: hget; exact. }
     rewrite hget2 /= /exec_sopn /= !truncate_word_u /=.
@@ -392,7 +393,7 @@ Proof using atoI call_conv sc_sem syscall_state vinfo.
         tmp sz s ts h1 erefl h2 (to_word_get_var hget).
     by exists vm'; split => //.
   (* None: direct addi *)
-  + have hget2 : get_var true (evm s) {| vtype := aword U32; vname := sp_rsp |} =
+  + have hget2 : get_var (wdb := true) (evm s) {| vtype := aword U32; vname := sp_rsp |} =
         ok (Vword (s:=U32) ts).
     { move: hget; exact. }
     rewrite hget2 /= /exec_sopn /= !truncate_word_u /=.
@@ -409,11 +410,11 @@ Definition smart_subi_fopn (x y : var_i) imm :=
 Lemma acc_smart_subi_sem_fopns (xi : var_i) y imm s (w : wreg) :
   convertible xi.(vtype) (aword acc_reg_size) ->
   acc_params_core.is_arith_small_neg imm \/ v_var xi <> v_var y ->
-  get_var true (evm s) (v_var y) >>= to_word Uptr = ok w ->
+  get_var (wdb := true) (evm s) (v_var y) >>= to_word Uptr = ok w ->
   exists vm',
     [/\ sem_fopns_args s (smart_subi_fopn xi y imm) = ok (with_vm s vm')
       , vm' =[\ Sv.singleton xi ] evm s
-      & get_var true vm' xi = ok (Vword (w - wrepr reg_size imm)%R) ].
+      & get_var (wdb := true) vm' xi = ok (Vword (w - wrepr reg_size imm)%R) ].
 Proof using atoI call_conv sc_sem syscall_state vinfo.
   move=> hc hor hget.
   rewrite /smart_subi_fopn /smart_subi
@@ -477,7 +478,7 @@ rewrite smart_mov_eq map_cat map_cat sem_fopns_args_cat.
 set vm0 := (evm s).[r <- Vword ts].
 (* Step 1: mov r rsp *)
 have hrc : convertible (vtype r) (aword acc_reg_size) := hc.
-have hget_ts : get_var true (evm s) (v_var rsp) >>= to_word Uptr = ok ts :=
+have hget_ts : get_var (wdb := true) (evm s) (v_var rsp) >>= to_word Uptr = ok ts :=
   to_word_get_var hget.
 have step1 : ACCFopn_coreP.sem_fopns_args s [:: acc_params_core.ACCFopn_core.mov r rsp] =
     ok (with_vm s vm0).
@@ -488,7 +489,7 @@ have step1 : ACCFopn_coreP.sem_fopns_args s [:: acc_params_core.ACCFopn_core.mov
 rewrite -(acc_sem_fopns_equiv s) step1 /=.
 (* Step 2: smart_subi rsp r sz on with_vm s vm0 *)
 set s0 := with_vm s vm0.
-have hget_r_s0 : get_var true (evm s0) (v_var r) >>= to_word Uptr = ok ts.
+have hget_r_s0 : get_var (wdb := true) (evm s0) (v_var r) >>= to_word Uptr = ok ts.
 { rewrite /s0 /= /vm0 /get_var Vm.setP_eq.
   by rewrite (convertible_eval_atype hrc) /= truncate_word_u. }
 have hcond_sub : acc_params_core.is_arith_small_neg sz \/ v_var rsp <> v_var r.
@@ -972,7 +973,7 @@ case: les => //= -[?]; subst m'.
 case: res => //=; last by t_xrbindP.
 move=> hv1 _.
 have hc : convertible ai.(v_var).(vtype) (aword reg_size) by [].
-have hget : get_var true (evm m) b >>= to_word Uptr = ok v0.
+have hget : get_var (wdb := true) (evm m) b >>= to_word Uptr = ok v0.
 - by rewrite hv1 /= hv0.
 set vm' := (evm m).[v_var ai <- Vword v0].
 have hsem := ACCFopn_coreP.mov_sem_fopn_args hc hget.
@@ -1027,7 +1028,7 @@ case: les => //= -[?]; subst m'.
 case: res => //=; last by t_xrbindP.
 move=> hv1 _.
 have hc : convertible ai.(v_var).(vtype) (aword reg_size) by [].
-have hget : get_var true (evm m) b >>= to_word Uptr = ok v0.
+have hget : get_var (wdb := true) (evm m) b >>= to_word Uptr = ok v0.
 - by rewrite hv1 /= hv0.
 set vm' := (evm m).[v_var ai <- Vword (wnot v0)].
 have hsem := ACCFopn_coreP.not_sem_fopn_args hc hget.
@@ -1118,11 +1119,11 @@ Proof using atoI call_conv sc_sem syscall_state vinfo.
   change (to_word U32) with (to_word Uptr).
   t_xrbindP => tval wyv hvyw wiv htr hsub heqys.
   subst tval; subst ys.
-  case heq: (set_var true (evm m) {| vtype := xt; vname := xn |}
+  case heq: (set_var (wdb := true) (evm m) {| vtype := xt; vname := xn |}
                        (Vword (wyv - wiv)%R))
     => [vm1 |] /= // [<-] hmap hlom.
   have hc' : convertible xi.(vtype) (aword acc_reg_size) := hc.
-  have hget : get_var true (evm m) y >>= to_word U32 = ok wyv
+  have hget : get_var (wdb := true) (evm m) y >>= to_word U32 = ok wyv
     by rewrite hvy /=; exact hvyw.
   have hsome : acc_params_core.ACCFopn_core.smart_subi xi y imm = Some args0
     := o2rP hsmart.
@@ -1167,7 +1168,7 @@ Proof using atoI call_conv sc_sem syscall_state vinfo.
   case: ys hexec hwle => [| b [| b0 lb]] hexec hwle.
   - move: hexec; rewrite /exec_sopn /sopn_sem /sopn_sem_ /=; by t_xrbindP.
   - move: hwle; rewrite /write_lexprs /=.
-    by case: (set_var true (evm m) {| vtype := xt; vname := xn |} b).
+    by case: (set_var (wdb := true) (evm m) {| vtype := xt; vname := xn |} b).
   - by move: hexec; rewrite /exec_sopn /sopn_sem /sopn_sem_ /=; t_xrbindP.
 Qed.
 
@@ -1210,11 +1211,11 @@ Proof using atoI call_conv sc_sem syscall_state vinfo.
   change (to_word U32) with (to_word Uptr).
   t_xrbindP => tval wyv hvyw wiv htr hadd heqys.
   subst tval; subst ys.
-  case heq: (set_var true (evm m) {| vtype := xt; vname := xn |}
+  case heq: (set_var (wdb := true) (evm m) {| vtype := xt; vname := xn |}
                        (Vword (wyv + wiv)%R))
     => [vm1 |] /= // [<-] hmap hlom.
   have hc' : convertible xi.(vtype) (aword acc_reg_size) := hc.
-  have hget : get_var true (evm m) y >>= to_word U32 = ok wyv
+  have hget : get_var (wdb := true) (evm m) y >>= to_word U32 = ok wyv
     by rewrite hvy /=; exact hvyw.
   have hsome : acc_params_core.ACCFopn_core.smart_addi xi y imm = Some args0
     := o2rP hsmart.
@@ -1253,7 +1254,7 @@ Proof using atoI call_conv sc_sem syscall_state vinfo.
   case: ys hexec hwle => [| b [| b0 lb]] hexec hwle.
   - move: hexec; rewrite /exec_sopn /sopn_sem /sopn_sem_ /=; by t_xrbindP.
   - move: hwle; rewrite /write_lexprs /=.
-    by case: (set_var true (evm m) {| vtype := xt; vname := xn |} b).
+    by case: (set_var (wdb := true) (evm m) {| vtype := xt; vname := xn |} b).
   - by move: hexec; rewrite /exec_sopn /sopn_sem /sopn_sem_ /=; t_xrbindP.
 Qed.
 
@@ -1633,7 +1634,7 @@ case: fc => [z|fv|o e|o e1 e2|e1 e2 e3] //=.
   move: hrex; rewrite /sem_rexprs /=.
   case Eha: (sem_rexpr (emem m) (evm m) a) => [va|] //=.
   case Ehb: (sem_rexpr (emem m) (evm m) b) => [vb|] //=.
-  case Ehfv: (get_var true (evm m) fv) => [vfv|] //=.
+  case Ehfv: (get_var (wdb := true) (evm m) fv) => [vfv|] //=.
   move=> [hxs]; subst xs.
   move: hexec hwle; rewrite /exec_sopn /sopn_sem /sopn_sem_ /=.
   case Ewa: (to_word U256 va) => [wa|] //=.
@@ -1662,7 +1663,7 @@ move=> [<-] hrex hmap.
 move: hrex.
 case Eha: (sem_rexpr (emem m) (evm m) a) => [va|] //=.
 case Ehb: (sem_rexpr (emem m) (evm m) b) => [vb|] //=.
-case Ehfv: (get_var true (evm m) fv) => [vfv|] //=.
+case Ehfv: (get_var (wdb := true) (evm m) fv) => [vfv|] //=.
 case Ebfv: (sem_sop1 Onot vfv) => [vc|] //=.
 move=> [hxs]; subst xs.
 move: Ebfv hexec; rewrite /sem_sop1 /=.

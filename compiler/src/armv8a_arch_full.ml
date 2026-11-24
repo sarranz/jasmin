@@ -27,7 +27,7 @@ module Armv8a (Lowering_params : Armv8a_input) = struct
   type asm_op = Armv8a_instr_decl.armv8a_asm_op
   type extra_op = Armv8a_extra.armv8a_extra_op
 
-  let arch = Utils.ARMv8A
+  let arch = Architecture.ARMv8A
 
   let atoI = atoI AD.armv8a_decl
 

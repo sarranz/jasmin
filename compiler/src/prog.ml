@@ -131,7 +131,7 @@ and ('len, 'info, 'asm) gstmt = ('len, 'info, 'asm) ginstr list
 
 type 'asm arch_info = {
   (* Info for pretyping *)
-  arch : Utils.architecture;
+  arch : Architecture.architecture;
   pd : Wsize.wsize;
   asmOp : 'asm Sopn.sopn Sopn.asmOp;
   zero_extend_op : 'asm -> Wsize.wsize -> 'asm option;

@@ -20,7 +20,7 @@ module ACC_core = struct
   type asm_op = Acc_instr_decl.acc_op
   type extra_op = Acc_extra.extra_op
 
-  let arch = Utils.ACC
+  let arch = Architecture.ACC
 
   (* TODO_ACC why is this in x86? *)
   let atoI = X86_arch_full.atoI acc_decl

@@ -45,9 +45,9 @@ Variables
 
 Definition sem_Ind_assgn : Prop :=
   forall (s1 s2 : estate) (x : lval) (tag : assgn_tag) ty (e : pexpr) v v',
-    sem_pexpr true gd s1 e = ok v →
+    sem_pexpr (wdb := true) gd s1 e = ok v →
     truncate_val (eval_atype ty) v = ok v' →
-    write_lval true gd x v' s1 = ok s2 →
+    write_lval (wdb := true) gd x v' s1 = ok s2 →
     Pi_r s1 (Cassgn x tag ty e) s2.
 
 Definition sem_Ind_opn : Prop :=
@@ -57,9 +57,9 @@ Definition sem_Ind_opn : Prop :=
 
 Definition sem_Ind_syscall : Prop :=
   forall  s1 scs m s2 o xs es ves vs,
-    sem_pexprs true gd s1 es = ok ves →
+    sem_pexprs (wdb := true) gd s1 es = ok ves →
     exec_syscall s1.(escs) s1.(emem) o ves = ok (scs, m, vs) →
-    write_lvals true gd (with_scs (with_mem s1 m) scs) xs vs = ok s2 →
+    write_lvals (wdb := true) gd (with_scs (with_mem s1 m) scs) xs vs = ok s2 →
     Pi_r s1 (Csyscall xs o es) s2.
 
 End SEM.
@@ -89,25 +89,25 @@ Context (p p': prog) (ev ev': extra_val_t).
 
 Context (eq_globs: p_globs p = p_globs p').
 
-Lemma st_eq_sem_pexpr wdb d e :
-  wrequiv (st_eq d) ((sem_pexpr wdb (p_globs p))^~ e) ((sem_pexpr wdb (p_globs p'))^~ e) eq.
+Lemma st_eq_sem_pexpr (wdb: enforce_defined_variables) d e :
+  wrequiv (st_eq d) ((sem_pexpr (p_globs p))^~ e) ((sem_pexpr (p_globs p'))^~ e) eq.
 Proof using eq_globs.
   move=> s t v /st_relP [-> /=] hvm; rewrite eq_globs.
   rewrite -sem_pexpr_ext_eq //; eauto.
 Qed.
 
-Lemma st_eq_sem_pexprs wdb d es :
-  wrequiv (st_eq d) ((sem_pexprs wdb (p_globs p))^~ es) ((sem_pexprs wdb (p_globs p'))^~ es) eq.
+Lemma st_eq_sem_pexprs (wdb: enforce_defined_variables) d es :
+  wrequiv (st_eq d) ((sem_pexprs (p_globs p))^~ es) ((sem_pexprs (p_globs p'))^~ es) eq.
 Proof using eq_globs.
   move=> s t v /st_relP [-> /=] hvm; rewrite eq_globs.
   rewrite -sem_pexprs_ext_eq //; eauto.
 Qed.
 
-Lemma st_eq_write_lvals wdb d x v d':
-  wrequiv (st_eq d) (fun s => write_lvals wdb (p_globs p) s x v) (fun s => write_lvals wdb (p_globs p') s x v) (st_eq d').
+Lemma st_eq_write_lvals (wdb: enforce_defined_variables) d x v d':
+  wrequiv (st_eq d) (fun s => write_lvals (p_globs p) s x v) (fun s => write_lvals (p_globs p') s x v) (st_eq d').
 Proof using eq_globs.
   rewrite eq_globs => s t s' /st_relP [-> /=] h1 h2.
-  by have [vm2 h ->] := write_lvars_ext_eq h1 h2; eexists; eauto.
+  by have [vm2 h ->] := write_lvals_ext_eq h1 h2; eexists; eauto.
 Qed.
 
 Lemma st_eq_sem_eassert d e :
@@ -164,10 +164,10 @@ End FUN.
 
 Section ITERATION.
 
-Context (wdb : bool).
+Context {wdb : enforce_defined_variables}.
 
 Lemma init_iteration_estateP s oi z s' :
-  init_iteration wdb s oi z = ok s' ->
+  init_iteration s oi z = ok s' ->
   exists2 vm, s' = with_vm s vm & evm s =[\ sv_of_ovar_i oi ] vm.
 Proof.
 rewrite (surj_estate s').
@@ -185,17 +185,17 @@ Section REL.
   Let preserves_vm :=
     forall s s' vm x z,
       rel None (evm s) vm ->
-      write_var wdb x (Vint z) s = ok s' ->
+      write_var x (Vint z) s = ok s' ->
       exists2 vm',
-        write_var wdb x (Vint z) (with_vm s vm) = ok (with_vm s' vm')
+        write_var x (Vint z) (with_vm s vm) = ok (with_vm s' vm')
         & rel (Some x) (evm s') vm'.
 
   Lemma init_iteration_preserves_vm s s' vm oi z :
     preserves_vm ->
     rel None (evm s) vm ->
-    init_iteration wdb s oi z = ok s' ->
+    init_iteration s oi z = ok s' ->
     exists2 vm',
-      init_iteration wdb (with_vm s vm) oi z = ok (with_vm s' vm')
+      init_iteration (with_vm s vm) oi z = ok (with_vm s' vm')
       & rel oi (evm s') vm'.
   Proof.
   case: oi => [i|] /=; first by move=> /[apply] /[apply] -[? -> ?]; eexists.
@@ -206,9 +206,9 @@ End REL.
 
 Lemma init_iteration_eq_on s s' oi z xs vm :
   evm s =[ xs ] vm ->
-  init_iteration wdb s oi z = ok s' ->
+  init_iteration s oi z = ok s' ->
   exists2 vm',
-    init_iteration wdb (with_vm s vm) oi z = ok (with_vm s' vm')
+    init_iteration (with_vm s vm) oi z = ok (with_vm s' vm')
     & evm s' =[ Sv.union (sv_of_ovar_i oi) xs ] vm'.
 Proof.
   set rel := fun oi vm vm' => vm =[ Sv.union (sv_of_ovar_i oi) xs ] vm'.
@@ -220,8 +220,8 @@ Qed.
 
 Lemma sem_fi_uincl gd s vm rn fi :
   evm s <=1 vm ->
-  sem_fi wdb gd s fi = ok rn ->
-  sem_fi wdb gd (with_vm s vm) fi = ok rn.
+  sem_fi gd s fi = ok rn ->
+  sem_fi gd (with_vm s vm) fi = ok rn.
 Proof.
   move=> hvm; case: fi => [i d elo ehi | e] /=; rewrite /sem_fi /sem_pexpr_int /=.
   - t_xrbindP => zlo vlo hvlo hzlo zhi vhi hvhi hzhi <-.
@@ -240,9 +240,9 @@ Qed.
 
 Lemma init_iteration_uincl s1 s2 vm1 oi z :
   evm s1 <=1 vm1 ->
-  init_iteration wdb s1 oi z = ok s2 ->
+  init_iteration s1 oi z = ok s2 ->
   exists2 vm2,
-    init_iteration wdb (with_vm s1 vm1) oi z = ok (with_vm s2 vm2)
+    init_iteration (with_vm s1 vm1) oi z = ok (with_vm s2 vm2)
     & evm s2 <=1 vm2.
 Proof.
   set rel := fun (_ : option var_i) vm vm' => vm <=1 vm'.
@@ -253,14 +253,14 @@ Qed.
 
 Lemma init_iteration_ext_eq s s' vm1 oi z :
   (evm s =1 vm1)%vm ->
-  init_iteration wdb s oi z = ok s' ->
+  init_iteration s oi z = ok s' ->
   exists2 vm2, (evm s' =1 vm2)%vm &
-    init_iteration wdb (with_vm s vm1) oi z = ok (with_vm s' vm2).
+    init_iteration (with_vm s vm1) oi z = ok (with_vm s' vm2).
 Proof using spp.
   case: oi => [i|] /= heq.
   - move=> hw.
     have [vm2 heq2 hw2] :=
-      [elaborate write_lvar_ext_eq (x := Lvar i) (v := Vint z) (gd := [::]) heq hw].
+      [elaborate write_lval_ext_eq (x := Lvar i) (v := Vint z) (gd := [::]) heq hw].
     by exists vm2.
   - by move=> [<-]; exists vm1.
 Qed.
@@ -295,23 +295,23 @@ Proof using eq_globs.
     by have [vm1' -> /=] := hi _ _ _ hsi heq; apply: hc hsc.
   + move=> x tg ty e ii s1 s2 vm1 /=; rewrite /sem_assgn -eq_globs; t_xrbindP.
     move=> v he v' htr hw heq.
-    rewrite -(sem_pexpr_ext_eq true (p_globs p) _ heq) he /= htr /=.
-    by have [vm2 ??] := write_lvar_ext_eq heq hw; exists vm2.
+    rewrite -(sem_pexpr_ext_eq (p_globs p) _ heq) he /= htr /=.
+    by have [vm2 ??] := write_lval_ext_eq heq hw; exists vm2.
   + move=> xs t o es ii s1 s2 vm1 /=; rewrite /sem_sopn -eq_globs; t_xrbindP.
     move=> vs' vs hes hop hw heq.
-    rewrite -(sem_pexprs_ext_eq true (p_globs p) _ heq) hes /= hop /=.
-    by have [vm2 ??] := write_lvars_ext_eq heq hw; exists vm2.
+    rewrite -(sem_pexprs_ext_eq (p_globs p) _ heq) hes /= hop /=.
+    by have [vm2 ??] := write_lvals_ext_eq heq hw; exists vm2.
   + move=> xs o es ii s1 s2 vm1 /=; rewrite /sem_syscall -eq_globs /upd_estate; t_xrbindP.
     move=> vs hes fs ho hw heq.
-    rewrite -(sem_pexprs_ext_eq true (p_globs p) _ heq) hes /= ho /= /upd_estate.
-    by have /(_ _ heq) [vm2 ??]:= write_lvars_ext_eq _ hw; exists vm2.
+    rewrite -(sem_pexprs_ext_eq (p_globs p) _ heq) hes /= ho /= /upd_estate.
+    by have /(_ _ heq) [vm2 ??]:= write_lvals_ext_eq _ hw; exists vm2.
   + move=> e c1 c2 hc1 hc2 ii s1 s2 vm1 /=; rewrite /sem_cond -eq_globs; t_xrbindP.
     move=> b v he hb hc heq.
-    rewrite -(sem_pexpr_ext_eq true (p_globs p) _ heq) he /= hb /= => {hb}.
+    rewrite -(sem_pexpr_ext_eq (p_globs p) _ heq) he /= hb /= => {hb}.
     by case: b hc heq; [apply hc1 | apply hc2].
   move=> fi c hc ii s1 s2 vm1 /=; t_xrbindP => rn hfi hf heq.
   have hvm : evm s1 <=1 vm1 by move=> x; rewrite heq.
-  have hfi' : sem_fi true (p_globs p') (with_vm s1 vm1) fi = ok rn.
+  have hfi' : sem_fi (wdb := true) (p_globs p') (with_vm s1 vm1) fi = ok rn.
   + by rewrite -eq_globs; exact: sem_fi_uincl hvm hfi.
   rewrite /= hfi' /= {hvm hfi hfi'}.
   elim: rn s1 vm1 hf heq => [ | j js hrec] s1 vm1 /=.
@@ -353,7 +353,7 @@ Proof using spp. (* FIXME: can probably be proved without spp *)
   rewrite /finalize_funcall => <- <- <- s t fs' [h1 h2 h3].
   t_xrbindP => vs.
   rewrite -!(sem_pexprs_get_var _ [::]).
-  rewrite (sem_pexprs_ext_eq _ _ _ h3).
+  rewrite (sem_pexprs_ext_eq _ _ h3).
   case: s t h1 h2 h3 => scs mem vm1 [/= _ _ vm2] <- <- h3 -> /= ? -> <- /=.
   eexists; eauto.
 Qed.
@@ -384,9 +384,9 @@ Context
 
 Definition st_eq_on X := st_rel eq_on X.
 
-Lemma read_es_st_eq_on gd wdb es X :
+Lemma read_es_st_eq_on gd (wdb: enforce_defined_variables) es X :
   Sv.Subset (read_es es) X ->
-  wrequiv (st_eq_on X) ((sem_pexprs wdb gd)^~ es) ((sem_pexprs wdb gd)^~ es) eq.
+  wrequiv (st_eq_on X) ((sem_pexprs gd)^~ es) ((sem_pexprs gd)^~ es) eq.
 Proof.
   move=> hsub s t v [???];rewrite (eq_on_sem_pexprs _ (s' := t)) //.
   + by move => ->; eauto.
@@ -402,11 +402,11 @@ Proof.
   by apply: (eq_onI hsub).
 Qed.
 
-Lemma write_lvals_st_eq_on gd wdb xs vs X :
+Lemma write_lvals_st_eq_on gd (wdb: enforce_defined_variables) xs vs X :
   Sv.Subset (read_rvs xs) X ->
   wrequiv
     (st_eq_on X)
-    (λ s1 : estate, write_lvals wdb gd s1 xs vs) (λ s2 : estate, write_lvals wdb gd s2 xs vs)
+    (λ s1 : estate, write_lvals gd s1 xs vs) (λ s2 : estate, write_lvals gd s2 xs vs)
     (st_eq_on (Sv.union (vrvs xs) X)).
 Proof.
   move=> hsub s [?? vm] s' [/= <- <- hvm] hw.
@@ -441,20 +441,20 @@ Definition checker_a_st_eq_on : Checker_a (st_rel eq_on) :=
 
 Definition st_uincl_on X := st_rel uincl_on X.
 
-Lemma read_es_st_uincl_on gd wdb es X :
+Lemma read_es_st_uincl_on gd (wdb: enforce_defined_variables) es X :
   Sv.Subset (read_es es) X ->
-  wrequiv (st_uincl_on X) ((sem_pexprs wdb gd)^~ es) ((sem_pexprs wdb gd)^~ es) (values_uincl).
+  wrequiv (st_uincl_on X) ((sem_pexprs gd)^~ es) ((sem_pexprs gd)^~ es) (values_uincl).
 Proof.
   move=> hsub s t v /st_relP [-> /= h].
   by apply: sem_pexprs_uincl_on; apply: uincl_onI h.
 Qed.
 
-Lemma write_lvals_st_uincl_on gd wdb xs X vs1 vs2 :
+Lemma write_lvals_st_uincl_on gd (wdb: enforce_defined_variables) xs X vs1 vs2 :
   Sv.Subset (read_rvs xs) X ->
   values_uincl vs1 vs2 ->
   wrequiv
     (st_uincl_on X)
-    (λ s1 : estate, write_lvals wdb gd s1 xs vs1) (λ s2 : estate, write_lvals wdb gd s2 xs vs2)
+    (λ s1 : estate, write_lvals gd s1 xs vs1) (λ s2 : estate, write_lvals gd s2 xs vs2)
     (st_uincl_on (Sv.union (vrvs xs) X)).
 Proof.
   move=> hsub hu s t s' /st_relP [-> /= h] hw.
@@ -674,19 +674,19 @@ Context
   {pT : progT}
   {sCP : semCallParams}.
 
-Lemma read_es_st_uincl d gd wdb es :
-  wrequiv (st_uincl d) ((sem_pexprs wdb gd)^~ es) ((sem_pexprs wdb gd)^~ es) (values_uincl).
+Lemma read_es_st_uincl d gd (wdb: enforce_defined_variables) es :
+  wrequiv (st_uincl d) ((sem_pexprs gd)^~ es) ((sem_pexprs gd)^~ es) (values_uincl).
 Proof. by move=> s t vs /st_relP [/= -> h]; apply sem_pexprs_uincl. Qed.
 
-Lemma write_lvals_st_uincl d d' gd wdb xs vs1 vs2 :
+Lemma write_lvals_st_uincl d d' gd (wdb: enforce_defined_variables) xs vs1 vs2 :
   values_uincl vs1 vs2 ->
   wrequiv
     (st_uincl d)
-    (λ s1 : estate, write_lvals wdb gd s1 xs vs1) (λ s2 : estate, write_lvals wdb gd s2 xs vs2)
+    (λ s1 : estate, write_lvals gd s1 xs vs1) (λ s2 : estate, write_lvals gd s2 xs vs2)
     (st_uincl d').
 Proof.
   move=> hu s t s' /st_relP [/= -> h] hw.
-  by have [vm' -> ?] := writes_uincl h hu hw; eexists; eauto.
+  by have [vm' -> ?] := write_lvals_uincl h hu hw; eexists; eauto.
 Qed.
 
 Section PROG.
@@ -869,7 +869,7 @@ Proof using eq_globs.
     rewrite (eq_exprsP _ _ _ hes) in hvs2.
     by exists vs2.
   move=> wdb _ d xs1 xs2 d' /wdb_ok_eq <- hxs vs1 vs2 hincl s t s' /st_relP [-> /= huincl] hs'.
-  have [vm2 {}hs' {}huincl] := writes_uincl huincl hincl hs'.
+  have [vm2 {}hs' {}huincl] := write_lvals_uincl huincl hincl hs'.
   rewrite (eq_lvalsP _ _ _ _ hxs) in hs'.
   by exists (with_vm s' vm2).
 Qed.

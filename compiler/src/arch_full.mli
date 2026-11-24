@@ -29,7 +29,7 @@ module type Core_arch = sig
   type asm_op
   type extra_op
 
-  val arch : Utils.architecture
+  val arch : Architecture.architecture
 
   val asm_e : (reg, regx, xreg, rflag, cond, asm_op, extra_op) asm_extra
   val aparams : (reg, regx, xreg, rflag, cond, asm_op, extra_op) Arch_params.architecture_params

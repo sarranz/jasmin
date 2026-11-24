@@ -28,7 +28,7 @@ module X86_core = struct
   type asm_op = X86_instr_decl.x86_op
   type extra_op = X86_extra.x86_extra_op
 
-  let arch = Utils.X86_64
+  let arch = Architecture.X86_64
 
   let atoI = atoI x86_decl
   let asm_e = X86_extra.x86_extra atoI

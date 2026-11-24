@@ -203,10 +203,10 @@ Section LIPARAMS.
     [seq fopn_args_of_opn_args a | a <- smart_addi x y imm ].
 
   Definition lstores :=
-    lstores_imm_dfl vtmp2.(vname) lstore smart_addi_fopn is_arith_small.
+    lstores_imm_dfl vtmp2.(vname) lstore smart_addi_fopn (fun _ => is_arith_small).
 
   Definition lloads :=
-    lloads_imm_dfl vtmp2.(vname) lload smart_addi_fopn is_arith_small.
+    lloads_imm_dfl vtmp2.(vname) lload smart_addi_fopn (fun _ => is_arith_small).
 
   Definition liparams : linearization_params :=
     {|
@@ -289,18 +289,9 @@ Section AGPARAMS.
     | _ => Error (err ii fe)
     end.
 
-  (* TODO_ACC: Is this correct? It can be simplified *)
-  Definition is_valid_address (addr : reg_address) :=
-    match addr.(ad_disp) != 0%w, isSome addr.(ad_offset), addr.(ad_scale) != 0%N with
-    | false, false, false => true
-    | true, false, false => true
-    | _, _, _ => false
-    end.
-
   Definition agparams : asm_gen_params :=
     {|
       agp_assemble_cond := assemble_cond;
-      agp_is_valid_address := is_valid_address;
     |}.
 
 End AGPARAMS.

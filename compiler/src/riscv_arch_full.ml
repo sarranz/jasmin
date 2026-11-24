@@ -15,7 +15,7 @@ module Riscv_core = struct
   type asm_op = Riscv_instr_decl.riscv_op
   type extra_op = Riscv_extra.riscv_extra_op
 
-  let arch = Utils.RISCV
+  let arch = Architecture.RISCV
 
   let atoI = X86_arch_full.atoI riscv_decl
 

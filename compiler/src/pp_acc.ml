@@ -134,17 +134,17 @@ let pp_mnemonic_ext ext =
 (* TODO_ACC: Remove. *)
 let indirect_args pp =
   match pp.pp_aop_name with
-  | "BN.LID" | "BN.SID" -> List.tl pp.pp_aop_args
+  | "BN.LID" | "BN.SID" -> List.tl (pp_full_args pp)
   (* [bn.movr grd, grs]: the destination and source wide-register operands
      ([Acc_instr_decl.desc_BN_MOVR]'s positions 0 and 2) exist only to give
      Jasmin explicit, register-allocated variables; the real instruction
      only names the two general-purpose registers that select them. *)
   | "BN.MOVR" -> begin
-      match pp.pp_aop_args with
+      match pp_full_args pp with
       | [ _; grd; _; grs ] -> [ grd; grs ]
       | _ -> E.invalid_args ()
     end
-  | _ -> pp.pp_aop_args
+  | _ -> pp_full_args pp
 
 (* [MOD0W]/[MOD1W] and their [zero] variants are syntax sugar for a CSR
    write that discards the read result (destination [x0]); see
@@ -160,7 +160,7 @@ let dst_of_MODnW = function
   | _ -> E.invalid_args ()
 
 let src_of_MODnW op pp =
-  match (op, pp.pp_aop_args) with
+  match (op, pp_full_args pp) with
   | (MOD0W | MOD1W), [ (_, Reg r) ] -> pp_register r
   | (MOD0Wzero | MOD1Wzero), [] -> x0
   | _ -> E.invalid_args ()
@@ -173,7 +173,7 @@ let src_of_MODnW op pp =
 let is_inc_op = function BN_LD_INC | BN_SD_INC -> true | _ -> false
 
 let pp_inc_args pp =
-  match pp.pp_aop_args with
+  match pp_full_args pp with
   | [ (_, XReg w); (_, Addr addr); (_, Reg r) ] ->
       let ra =
         match addr with
@@ -185,7 +185,7 @@ let pp_inc_args pp =
 
 let pp_acc_op op pp =
   if op = RV32 NEG then
-    match pp.pp_aop_args with
+    match pp_full_args pp with
     | [ (_, Reg r1); (_, Reg r2) ] ->
         ("sub", [ pp_register r1; x0; pp_register r2 ])
     | _ -> E.invalid_args ()

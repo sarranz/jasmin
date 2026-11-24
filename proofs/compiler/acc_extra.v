@@ -184,11 +184,10 @@ Definition desc_ADD_LARGE_IMM : instruction_desc :=
    ; i_init := [:: IBool true ]
    ; i_valid := true
    ; i_doit := DOIT
-   ; i_safe_wf := refl_equal
    ; i_wf := refl_equal
    ; semu :=
        @values.vuincl_app_sopn_v ctin [:: cty ]
-         (@mk_semi ctin [:: cty ] [::] ErrSemUndef [:: IBool true ] semi)
+         (@mk_semi _ ctin [:: cty ] [::] ErrSemUndef [:: IBool true ] semi)
          refl_equal
    |}.
 
@@ -220,11 +219,10 @@ Definition desc_BN_SELECT_MASKED : instruction_desc :=
     i_init := [:: IBool true ];
     i_valid := true;
     i_doit := DOIT;
-    i_safe_wf := refl_equal;
     i_wf := refl_equal;
     semu :=
       @values.vuincl_app_sopn_v ctin [:: cty ]
-        (@mk_semi ctin [:: cty ] [::] ErrSemUndef [:: IBool true ] semi)
+        (@mk_semi _ ctin [:: cty ] [::] ErrSemUndef [:: IBool true ] semi)
         refl_equal;
   |}.
 
@@ -250,11 +248,10 @@ Definition desc_zeroize_masked_small : instruction_desc :=
    ; i_init := [:: IBool true ]
    ; i_valid := true
    ; i_doit := DOIT
-   ; i_safe_wf := refl_equal
    ; i_wf := refl_equal
    ; semu :=
        @values.vuincl_app_sopn_v ctin [:: cty ]
-         (@mk_semi ctin [:: cty ] [::] ErrSemUndef [:: IBool true ] semi)
+         (@mk_semi _ ctin [:: cty ] [::] ErrSemUndef [:: IBool true ] semi)
          refl_equal
    |}.
 
@@ -277,11 +274,10 @@ Definition desc_zeroize_masked_large : instruction_desc :=
    ; i_init := nseq 4 (IBool true)
    ; i_valid := true
    ; i_doit := DOIT
-   ; i_safe_wf := refl_equal
    ; i_wf := refl_equal
    ; semu :=
        @values.vuincl_app_sopn_v ctin [:: cbool; cbool; cbool; cty ]
-         (@mk_semi ctin [:: cbool; cbool; cbool; cty ] [::] ErrSemUndef
+         (@mk_semi _ ctin [:: cbool; cbool; cbool; cty ] [::] ErrSemUndef
             (nseq 4 (IBool true)) semi)
          refl_equal
    |}.

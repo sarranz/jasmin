@@ -55,6 +55,8 @@ Variant wiop2 :=
 | WIsub
 | WIdiv
 | WImod
+| WImax
+| WImin
 | WIshl
 | WIshr
 | WIeq
@@ -76,6 +78,10 @@ Variant sop2 :=
 | Osub  of op_kind
 | Odiv  of signedness & op_kind
 | Omod  of signedness & op_kind
+
+| Omin  of signedness & op_kind
+| Omax  of signedness & op_kind
+
 
 | Oland of wsize
 | Olor  of wsize
@@ -123,6 +129,17 @@ Variant opN :=
 | Ocombine_flags of combine_flags
 .
 
+(* The predicates of the safety conditions. Both take an array of [len] bytes,
+   the index of a first cell and a number of cells, and hold when these cells
+   are all initialised.
+   [Ois_arr_init len] reads the array itself: its cells carry whether they are
+   initialised.
+   [Ois_barr_init len] reads an initialisation mask instead: an array of the
+   same length, whose cells hold the byte 0xFF where the array it stands for
+   is initialised ([WArray.is_initb]). The extraction to EasyCrypt turns
+   [Ois_arr_init] on an array into [Ois_barr_init] on its mask, which it
+   maintains along the writes to the array, so that EasyCrypt reasons about
+   initialisation with ordinary arrays. *)
 #[only(eqbOK)] derive
 Variant opN_safety :=
 | Ois_arr_init of Z
@@ -208,7 +225,7 @@ Definition type_of_op1 (o: sop1) : atype * atype :=
 Definition etype_of_wiop2 {len} s sz (o : wiop2) :
   extended_type len * extended_type len * extended_type len :=
   match o with
-  | WIadd | WImul | WIsub | WIdiv | WImod =>
+  | WIadd | WImul | WIsub | WIdiv | WImod | WImax | WImin =>
     let t := twint s sz in (t, t, t)
 
   | WIshl | WIshr =>
@@ -223,7 +240,7 @@ Definition etype_of_wiop2 {len} s sz (o : wiop2) :
 Definition type_of_wiop2 sz (o : wiop2) :
   atype * atype * atype :=
   match o with
-  | WIadd | WImul | WIsub | WIdiv | WImod =>
+  | WIadd | WImul | WIsub | WIdiv | WImod | WImax | WImin =>
     let t := aword sz in (t, t, t)
 
   | WIshl | WIshr =>
@@ -251,7 +268,7 @@ Definition opk_of_cmpk k :=
 Definition etype_of_op2 {len} (o : sop2) : extended_type len * extended_type len * extended_type len :=
  match o with
   | Obeq | Oand | Oor => (tbool, tbool, tbool)
-  | Oadd k | Omul k | Osub k | Odiv _ k | Omod _ k =>
+  | Oadd k | Omul k | Osub k | Odiv _ k | Omod _ k | Omax _ k | Omin _ k =>
     let t := etype_of_opk k in (t, t, t)
   | Olsl k | Oasr k =>
     let t1 := etype_of_opk k in
@@ -275,7 +292,7 @@ Definition etype_of_op2 {len} (o : sop2) : extended_type len * extended_type len
 Definition type_of_op2 (o : sop2) : atype * atype * atype :=
  match o with
   | Obeq | Oand | Oor => (abool, abool, abool)
-  | Oadd k | Omul k | Osub k | Odiv _ k | Omod _ k =>
+  | Oadd k | Omul k | Osub k | Odiv _ k | Omod _ k | Omax _ k | Omin _ k =>
     let t := type_of_opk k in (t, t, t)
   | Olsl k | Oasr k =>
     let t1 := type_of_opk k in
@@ -308,3 +325,9 @@ Definition type_of_opN (op: opN) : seq atype * atype :=
   | Oarray len => (nseq (Z.to_nat len) (aword U8), aarr U8 len)
   | Ocombine_flags c => (tin_combine_flags, abool)
   end.
+
+(* Type of the predicates of the safety conditions: inputs, output *)
+Definition type_of_opN_safety (op: opN_safety) : seq atype * atype :=
+  (match op with
+   | Ois_arr_init len | Ois_barr_init len => [:: aarr U8 len; aint; aint]
+   end, abool).

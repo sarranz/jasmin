@@ -210,13 +210,18 @@ Definition sext_mn (ws ws' : wsize) : option armv8a_mnemonic :=
   | _ => None
   end.
 
-Definition uext_mn (ws ws' : wsize) : option armv8a_mnemonic :=
+Definition uext_mn (ws' : wsize) : option armv8a_mnemonic :=
   match ws' with
   | U8 => Some UXTB
   | U16 => Some UXTH
-  | U32 => if ws == U64 then Some UXTW else None
   | _ => None
   end.
+
+(* The zero extension of a word to 64 bits is a MOV in the W form, whose
+   result is zero-extended: writing a W register clears the upper 32 bits of
+   the X register. *)
+Definition zext_word_op : sopn :=
+  Oasm (BaseOp (Some U64, ARMv8A_op MOV (opts_at U32))).
 
 Definition lower_Papp1 (ws : wsize) (op : sop1) (e : pexpr) : low_expr :=
   let%opt _ := chk_ws_reg ws in
@@ -242,8 +247,10 @@ Definition lower_Papp1 (ws : wsize) (op : sop1) (e : pexpr) : low_expr :=
       then
         let%opt mn := uload_mn ws ws' in
         le_issue mn ws [:: e ]
+      else if (ws == U64) && (ws' == U32)
+      then le_issue_sopn zext_word_op [:: e ]
       else
-        let%opt mn := uext_mn ws ws' in
+        let%opt mn := uext_mn ws' in
         le_issue mn ws [:: e ]
   | Olnot ws0 =>
       let%opt _ := oassert (ws0 == ws) in
@@ -264,6 +271,28 @@ Definition is_mul (ws : wsize) (e : pexpr) : option (pexpr * pexpr) :=
   if e is Papp2 (Omul (Op_w ws')) x y
   then if (ws <= ws')%CMP then Some (x, y) else None
   else None.
+
+(* Recognize the operands of a long product at width 64: two 32-bit operands
+   both zero-extended (UMULL) or both sign-extended (SMULL). *)
+Definition is_mull_args
+  (ws ws' : wsize) (e0 e1 : pexpr) : option (signedness * pexpr * pexpr) :=
+  let%opt _ := oassert ((ws == U64) && (ws' == U64)) in
+  match e0, e1 with
+  | Papp1 (Ozeroext U64 U32) x, Papp1 (Ozeroext U64 U32) y =>
+      Some (Unsigned, x, y)
+  | Papp1 (Osignext U64 U32) x, Papp1 (Osignext U64 U32) y =>
+      Some (Signed, x, y)
+  | _, _ => None
+  end.
+
+Definition is_mull (ws : wsize) (e : pexpr) : option (signedness * pexpr * pexpr) :=
+  if e is Papp2 (Omul (Op_w ws')) e0 e1 then is_mull_args ws ws' e0 e1 else None.
+
+Definition mull_mn (s : signedness) : armv8a_mnemonic :=
+  if s is Signed then SMULL else UMULL.
+
+Definition maddl_mn (s : signedness) : armv8a_mnemonic :=
+  if s is Signed then SMADDL else UMADDL.
 
 (* Accept a shift amount that is either a compile-time constant already in
    [0, wsize) or an expression explicitly masked to the operand size
@@ -289,14 +318,20 @@ Definition lower_Papp2_op
   let%opt _ := chk_ws_reg ws in
   match op with
   | Oadd (Op_w _) =>
-      if is_mul ws e0 is Some (x, y)
+      if is_mull ws e0 is Some (s, x, y)
+      then Some (maddl_mn s, x, [:: y; e1 ])
+      else if is_mull ws e1 is Some (s, x, y)
+      then Some (maddl_mn s, x, [:: y; e0 ])
+      else if is_mul ws e0 is Some (x, y)
       then Some (MADD, x, [:: y; e1 ])
       else if is_mul ws e1 is Some (x, y)
       then Some (MADD, x, [:: y; e0 ])
       else
       Some (ADD, e0, [:: e1 ])
-  | Omul (Op_w _) =>
-      Some (MUL, e0, [:: e1 ])
+  | Omul (Op_w ws') =>
+      if is_mull_args ws ws' e0 e1 is Some (s, x, y)
+      then Some (mull_mn s, x, [:: y ])
+      else Some (MUL, e0, [:: e1 ])
   | Osub (Op_w _) =>
       if is_mul ws e1 is Some (x, y)
       then Some (MSUB, x, [:: y; e0 ])
@@ -512,8 +547,6 @@ Definition lower_cassgn_bool (lv : lval) (tag : assgn_tag) (e : pexpr) : option 
 
 (* -------------------------------------------------------------------- *)
 (* Lowering of architecture-specific operations. *)
-
-Definition isLnone x : bool := if x is Lnone _ _ then true else false.
 
 Definition lower_add_carry
   (lvs : seq lval) (es : seq pexpr) : option copn_args :=

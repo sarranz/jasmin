@@ -25,8 +25,23 @@ let pp_instr fmt name params =
   | [] -> Format.fprintf fmt "\t%s" name (* In case there is no params, we do not print a tab*)
   | _ ->  Format.fprintf fmt "\t%-*s\t%s" iwidth name (String.concat ", " params)
 
-let pp_comment ~prefix fmt comment =
-  Format.fprintf fmt "%s %s" prefix comment
+(* A block comment is the one comment syntax that GNU as and LLVM accept on
+   every target. A "*/" in the text would end it early and the rest of the
+   line would be read as code, so it is refused. A target whose assembler
+   only accepts line comments gives their [prefix]. *)
+let pp_comment ?prefix fmt comment =
+  match prefix with
+  | Some prefix ->
+    (* a line comment: every line of a multi-line comment needs the prefix *)
+    String.split_on_char '\n' comment
+    |> List.map (Format.sprintf "%s %s" prefix)
+    |> String.concat "\n"
+    |> Format.pp_print_string fmt
+  | None ->
+    if String.exists comment "*/" then
+      hierror ~loc:Lnone ~kind:"assembly printing"
+        "the comment “%s” contains “*/”" comment;
+    Format.fprintf fmt "/* %s */" comment
 
 let pp_bytes fmt =
   List.iteri (fun i byte ->
@@ -40,7 +55,7 @@ let pp_bytes fmt =
 let pp_dwarf fmt (dwarf: string) =
   Format.fprintf fmt "\t%s" dwarf
 
-let pp_asm_element ~comment_prefix fmt asm_element =
+let pp_asm_element ?comment_prefix fmt asm_element =
   match asm_element with
   | Header (name, params) ->
     pp_header fmt name params
@@ -51,12 +66,12 @@ let pp_asm_element ~comment_prefix fmt asm_element =
   | Instr (name, params) ->
     pp_instr fmt name params
   | Comment content ->
-    pp_comment ~prefix:comment_prefix fmt content
+    pp_comment ?prefix:comment_prefix fmt content
   | Bytes data ->
     pp_bytes fmt data
 
-let pp_asm_line ~comment_prefix fmt =
-  Format.fprintf fmt "%a\n%!" (pp_asm_element ~comment_prefix)
+let pp_asm_line ?comment_prefix fmt =
+  Format.fprintf fmt "%a\n%!" (pp_asm_element ?comment_prefix)
 
-let pp_asm ?(comment_prefix = "//") fmt asm =
-  List.iter (pp_asm_line ~comment_prefix fmt) asm
+let pp_asm ?comment_prefix fmt asm =
+  List.iter (pp_asm_line ?comment_prefix fmt) asm

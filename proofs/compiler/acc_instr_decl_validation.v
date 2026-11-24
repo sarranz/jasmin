@@ -593,7 +593,8 @@ Section VALIDATION_SEM.
   (* The safety conditions of [BN_LID] and [BN_SID] truncate their argument,
      which does not reduce by computation alone. *)
   Ltac t_check_safe :=
-    rewrite /id_semi /= /check_safe_conds /= ?truncate_word_u.
+    rewrite /id_semi /mk_semi /check_safe /safety_cond_holds /sc_uge /sc_ult /=
+      ?truncate_word_u /=.
 
   (* Success: first arg equals the instruction's register index. *)
   Goal is_ok (id_semi (desc_acc_op (BN_LID 5)) (wrepr U32 5) (wrepr U256 42)).

@@ -81,8 +81,8 @@ Let vzf := mk_var_i (to_var ZF0).
 (* Per-instruction semantics, small clear step ([sw x7, off(v)]). *)
 Lemma store_zero_small_eval_instr lp ii (v : var_i) off (ls : lstate)
     (w1 : word Uptr) m' :
-  get_var true (lvm ls) (v_var vzero) = ok (@Vword U32 0) ->
-  get_var true (lvm ls) (v_var v) = ok (Vword w1) ->
+  get_var (wdb := true) (lvm ls) (v_var vzero) = ok (@Vword U32 0) ->
+  get_var (wdb := true) (lvm ls) (v_var v) = ok (Vword w1) ->
   write (lmem ls) Aligned (w1 + wrepr _ off)%R (sz := U32) 0 = ok m' ->
   let: i := MkLI ii (store_zero U32 v off) in
   linear_sem.eval_instr lp i ls = ok (lnext_pc (lset_mem ls m')).
@@ -98,8 +98,8 @@ Qed.
 (* Per-instruction semantics, large clear step ([bn.sd w31, off(v)]). *)
 Lemma store_zero_large_eval_instr lp ii (v : var_i) off (ls : lstate)
     (w1 : word Uptr) m' :
-  get_var true (lvm ls) (v_var vwzero) = ok (@Vword U256 0) ->
-  get_var true (lvm ls) (v_var v) = ok (Vword w1) ->
+  get_var (wdb := true) (lvm ls) (v_var vwzero) = ok (@Vword U256 0) ->
+  get_var (wdb := true) (lvm ls) (v_var v) = ok (Vword w1) ->
   write (lmem ls) Aligned (w1 + wrepr _ off)%R (sz := U256) 0 = ok m' ->
   let: i := MkLI ii (store_zero U256 v off) in
   linear_sem.eval_instr lp i ls = ok (lnext_pc (lset_mem ls m')).

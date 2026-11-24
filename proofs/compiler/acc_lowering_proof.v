@@ -60,6 +60,8 @@ Notation lower_prog :=
      warning
      fv).
 
+#[local] Existing Instance do_enforce_defined_variables.
+
 (* [lower_cmp]/[lower_Pif]/[lower_copn]/[lower_cassgn_bool] (transitively,
    through [lower_cmp]) and [lower_pexpr]/[lower_cassgn_word] (transitively,
    through [lower_Pif]) all depend on [fv] after [End WITH_PARAMS] in
@@ -135,10 +137,10 @@ Proof. by rewrite /lower_prog; t_xrbindP=> fns hfns <-. Qed.
    [is_wconstP], [wand_zero_extend]. *)
 Lemma check_shift_amountP e sa s z w :
   check_shift_amount e = Some sa ->
-  sem_pexpr true (p_globs p) s e = ok z ->
+  sem_pexpr (wdb := true) (p_globs p) s e = ok z ->
   to_word U8 z = ok w ->
   Sv.Subset (read_e sa) (read_e e) /\
-  exists2 n, sem_pexpr true (p_globs p) s sa >>= to_word U8 = ok n
+  exists2 n, sem_pexpr (wdb := true) (p_globs p) s sa >>= to_word U8 = ok n
     & forall f (a : word U32),
         sem_shift f a w = sem_shift f a (wand n (wrepr U8 31)).
 Proof.
@@ -163,9 +165,9 @@ Proof.
   t_xrbindP=> wa ok_wa wb ok_wb <-{z} ok_w.
   have hc := (is_wconstP true (p_globs p) s en).
   specialize (hc _).
-  have ok_vb_abs : sem_pexpr true (p_globs p) s b = ok vb by exact ok_vb.
+  have ok_vb_abs : sem_pexpr (wdb := true) (p_globs p) s b = ok vb by exact ok_vb.
   rewrite ok_vb_abs /= in hc.
-  have ok_va_abs : sem_pexpr true (p_globs p) s a = ok va by exact ok_va.
+  have ok_va_abs : sem_pexpr (wdb := true) (p_globs p) s a = ok va by exact ok_va.
   have hwa : to_word U8 va = ok (zero_extend U8 wa)
     by case/to_wordI': ok_wa => sz0 [wa0 [hsz0 -> ->]];
        rewrite /to_word /= truncate_word_le ?zero_extend_idem //; exact: wsize_le_U8.
@@ -182,11 +184,11 @@ Proof.
 Qed.
 
 Lemma Hassgn_op2_generic s e1 e2 v1 v2 op2 v ws v' lv s1 (op2' : sopn) :
-  sem_pexpr true (p_globs p) s e1 = ok v1 ->
-  sem_pexpr true (p_globs p) s e2 = ok v2 ->
+  sem_pexpr (wdb := true) (p_globs p) s e1 = ok v1 ->
+  sem_pexpr (wdb := true) (p_globs p) s e2 = ok v2 ->
   sem_sop2 op2 v1 v2 = ok v ->
   truncate_val (cword ws) v = ok v' ->
-  write_lval true (p_globs p) lv v' s = ok s1 ->
+  write_lval (wdb := true) (p_globs p) lv v' s = ok s1 ->
   i_valid (sopn.get_instr_desc op2') ->
   forall ws1 ws2 ws3 ws1' ws2'
     (eq1 : type_of_op2 op2 = (aword ws1, aword ws2, aword ws3))
@@ -199,8 +201,8 @@ Lemma Hassgn_op2_generic s e1 e2 v1 v2 op2 v ws v' lv s1 (op2' : sopn) :
       forall e1' e2' w1' w2'
         (hcmp1 : (ws1' <= ws1)%CMP)
         (hcmp2 : (ws2' <= ws2)%CMP),
-        sem_pexpr true (p_globs p) s e1' >>= to_word ws1 = ok w1' ->
-        sem_pexpr true (p_globs p) s e2' >>= to_word ws2 = ok w2' ->
+        sem_pexpr (wdb := true) (p_globs p) s e1' >>= to_word ws1 = ok w1' ->
+        sem_pexpr (wdb := true) (p_globs p) s e2' >>= to_word ws2 = ok w2' ->
         Let w := ecast t (let t := t in _) eq1 (sem_sop2_typed op2) w1 w2 in
         ok (zero_extend ws w)
         = ecast l (sem_prod (map eval_atype l) _) eq2
@@ -250,9 +252,9 @@ Qed.
    to memory [lv]; no flags ([lvs = [::]]), [es = [:: e]]. *)
 Lemma lower_storeP ii ws e lv v v' s0 s1 lvs op es :
   lower_store ii ws e = ok (Some (lvs, op, es)) ->
-  sem_pexpr true (p_globs p) s0 e = ok v ->
+  sem_pexpr (wdb := true) (p_globs p) s0 e = ok v ->
   truncate_val (cword ws) v = ok v' ->
-  write_lval true (p_globs p) lv v' s0 = ok s1 ->
+  write_lval (wdb := true) (p_globs p) lv v' s0 = ok s1 ->
   sem_sopn (p_globs p) (Oasm op) s0 (lvs ++ [:: lv]) es = ok s1.
 Proof.
 move=> + he htr hw.
@@ -277,13 +279,13 @@ Qed.
    [is_var_in_memory].  [lvs = [::]], [es = [:: Pvar gv]]. *)
 Lemma lower_PvarP ws gv lv v v' s0 s1 lvs op es :
   lower_Pvar ws gv = ok (Some (lvs, op, es)) ->
-  sem_pexpr true (p_globs p) s0 (Pvar gv) = ok v ->
+  sem_pexpr (wdb := true) (p_globs p) s0 (Pvar gv) = ok v ->
   truncate_val (cword ws) v = ok v' ->
-  write_lval true (p_globs p) lv v' s0 = ok s1 ->
+  write_lval (wdb := true) (p_globs p) lv v' s0 = ok s1 ->
   sem_sopn (p_globs p) (Oasm op) s0 (lvs ++ [:: lv]) es = ok s1.
 Proof.
 move=> + he htr hw.
-have hge : get_gvar true (p_globs p) (evm s0) gv = ok v := he.
+have hge : get_gvar (wdb := true) (p_globs p) (evm s0) gv = ok v := he.
 rewrite /lower_Pvar.
 case: eqP => [?|_].
 - subst ws.
@@ -316,9 +318,9 @@ Qed.
    ([get_mem_disp], [chk_*_displacement]) are asserts, semantics-free. *)
 Lemma lower_loadP ii ws e lv v v' s0 s1 lvs op es :
   lower_load ii ws e = ok (Some (lvs, op, es)) ->
-  sem_pexpr true (p_globs p) s0 e = ok v ->
+  sem_pexpr (wdb := true) (p_globs p) s0 e = ok v ->
   truncate_val (cword ws) v = ok v' ->
-  write_lval true (p_globs p) lv v' s0 = ok s1 ->
+  write_lval (wdb := true) (p_globs p) lv v' s0 = ok s1 ->
   sem_sopn (p_globs p) (Oasm op) s0 (lvs ++ [:: lv]) es = ok s1.
 Proof.
 move=> + he htr hw.
@@ -348,9 +350,9 @@ Qed.
    Other [sop1] are errors (not reached). *)
 Lemma lower_Papp1P ii ws op1 e1 lv v v' s0 s1 lvs op es :
   lower_Papp1 ii ws op1 e1 = ok (Some (lvs, op, es)) ->
-  sem_pexpr true (p_globs p) s0 (Papp1 op1 e1) = ok v ->
+  sem_pexpr (wdb := true) (p_globs p) s0 (Papp1 op1 e1) = ok v ->
   truncate_val (cword ws) v = ok v' ->
-  write_lval true (p_globs p) lv v' s0 = ok s1 ->
+  write_lval (wdb := true) (p_globs p) lv v' s0 = ok s1 ->
   sem_sopn (p_globs p) (Oasm op) s0 (lvs ++ [:: lv]) es = ok s1.
 Proof.
 move=> + he htr hw.
@@ -424,9 +426,9 @@ Qed.
    [ADDI/.../XORI], with [Osub] materialized as [ADDI (- w)]); [lvs = [::]]. *)
 Lemma lower_Papp2_smallP ii op2 a b lv v v' s0 s1 lvs op es :
   lower_Papp2 ii reg_size op2 a b = ok (Some (lvs, op, es)) ->
-  sem_pexpr true (p_globs p) s0 (Papp2 op2 a b) = ok v ->
+  sem_pexpr (wdb := true) (p_globs p) s0 (Papp2 op2 a b) = ok v ->
   truncate_val (cword reg_size) v = ok v' ->
-  write_lval true (p_globs p) lv v' s0 = ok s1 ->
+  write_lval (wdb := true) (p_globs p) lv v' s0 = ok s1 ->
   sem_sopn (p_globs p) (Oasm op) s0 (lvs ++ [:: lv]) es = ok s1.
 Proof.
 move=> hlow he htr hw.
@@ -582,9 +584,9 @@ Qed.
    width [U32]. *)
 Lemma lower_Papp2_largeP ii op2 a b lv v v' s0 s1 lvs op es :
   lower_Papp2 ii xreg_size op2 a b = ok (Some (lvs, op, es)) ->
-  sem_pexpr true (p_globs p) s0 (Papp2 op2 a b) = ok v ->
+  sem_pexpr (wdb := true) (p_globs p) s0 (Papp2 op2 a b) = ok v ->
   truncate_val (cword xreg_size) v = ok v' ->
-  write_lval true (p_globs p) lv v' s0 = ok s1 ->
+  write_lval (wdb := true) (p_globs p) lv v' s0 = ok s1 ->
   sem_sopn (p_globs p) (Oasm op) s0 (lvs ++ [:: lv]) es = ok s1.
 Proof.
 move=> hlow he htr hw.
@@ -663,9 +665,9 @@ Qed.
 
 Lemma lower_Papp2P ii ws op2 a b lv v v' s0 s1 lvs op es :
   lower_Papp2 ii ws op2 a b = ok (Some (lvs, op, es)) ->
-  sem_pexpr true (p_globs p) s0 (Papp2 op2 a b) = ok v ->
+  sem_pexpr (wdb := true) (p_globs p) s0 (Papp2 op2 a b) = ok v ->
   truncate_val (cword ws) v = ok v' ->
-  write_lval true (p_globs p) lv v' s0 = ok s1 ->
+  write_lval (wdb := true) (p_globs p) lv v' s0 = ok s1 ->
   sem_sopn (p_globs p) (Oasm op) s0 (lvs ++ [:: lv]) es = ok s1.
 Proof.
 rewrite /lower_Papp2.
@@ -777,9 +779,9 @@ Proof. by rewrite /ZF_of_word GRing.subr_eq0. Qed.
    sets [ad_fcp := acc_fcp]), so the two pins agree up to conversion and
    [empty_const_prop_eP] applies directly. *)
 Lemma norm_condP e s v b :
-  sem_pexpr true (p_globs p) s e = ok v ->
+  sem_pexpr (wdb := true) (p_globs p) s e = ok v ->
   to_bool v = ok b ->
-  sem_pexpr true (p_globs p) s (@empty_const_prop_e acc_fcp e) = ok (Vbool b).
+  sem_pexpr (wdb := true) (p_globs p) s (@empty_const_prop_e acc_fcp e) = ok (Vbool b).
 Proof.
   move=> he /to_boolI ?; subst v.
   by have [v' [-> /value_uinclE ->]] := empty_const_prop_eP he.
@@ -798,10 +800,10 @@ Qed.
    defined between the two positions. *)
 Lemma get_arg_shiftP ii ws e ebase sh esham s v :
   get_arg_shift ii ws e = ok (Some (ebase, sh, esham)) ->
-  sem_pexpr true (p_globs p) s e = ok v ->
+  sem_pexpr (wdb := true) (p_globs p) s e = ok v ->
   exists (wb : word ws) (wa : word U8),
-    [/\ sem_pexpr true (p_globs p) s ebase = ok (Vword wb)
-      , sem_pexpr true (p_globs p) s esham = ok (Vword wa)
+    [/\ sem_pexpr (wdb := true) (p_globs p) s ebase = ok (Vword wb)
+      , sem_pexpr (wdb := true) (p_globs p) s esham = ok (Vword wa)
       & to_word ws v = ok (word_shift_of_reg_shift sh wb (wunsigned wa)) ].
 Proof.
 move=> hshift hsem.
@@ -919,10 +921,10 @@ Definition sem_cf (cf : combine_flags) (ws : wsize) (x y : word ws) : bool :=
    inversion into the exact [Vword] shape [sem_cf]'s statement needs. *)
 Lemma sem_cf_of_conditionP op cf e0 e1 s0 (b : bool) :
   cf_of_condition op = Some (cf, U256) ->
-  sem_pexpr true (p_globs p) s0 (Papp2 op e0 e1) = ok (Vbool b) ->
+  sem_pexpr (wdb := true) (p_globs p) s0 (Papp2 op e0 e1) = ok (Vbool b) ->
   exists (w0 w1 : u256),
-    [/\ sem_pexpr true (p_globs p) s0 e0 = ok (Vword w0)
-      , sem_pexpr true (p_globs p) s0 e1 = ok (Vword w1)
+    [/\ sem_pexpr (wdb := true) (p_globs p) s0 e0 = ok (Vword w0)
+      , sem_pexpr (wdb := true) (p_globs p) s0 e1 = ok (Vword w1)
       & b = sem_cf cf w0 w1 ].
 Proof.
 move=> hcf.
@@ -1049,8 +1051,8 @@ Qed.
    (outermost [Vm.set]), reading [C] peels [Z], [L], [M]; reading [M]
    peels [Z], [L]; reading [L] peels only [Z]. *)
 Lemma sem_BN_CMP ii fg op args e0 e1 t (w0 w1 : u256) :
-  sem_pexpr true (p_globs p) t e0 = ok (Vword w0) ->
-  sem_pexpr true (p_globs p) t e1 = ok (Vword w1) ->
+  sem_pexpr (wdb := true) (p_globs p) t e0 = ok (Vword w0) ->
+  sem_pexpr (wdb := true) (p_globs p) t e1 = ok (Vword w1) ->
   (op = BN_basic BN_CMP fg /\ args = [:: e0; e1 ])
   \/ (exists base sh sham,
         [/\ op = BN_basic_shift BN_CMP fg sh, args = [:: e0; base; sham ]
@@ -1063,20 +1065,20 @@ Lemma sem_BN_CMP ii fg op args e0 e1 t (w0 w1 : u256) :
       args
     = ok t'
   & [/\ eq_fv t t'
-      , get_var true (evm t') (fvCF1 fv) = ok (Vbool (wlt Unsigned w0 w1))
-      , get_var true (evm t') (fvZF1 fv) = ok (Vbool (w0 == w1))
-      , exists m, get_var true (evm t') (fvMF1 fv) = ok (Vbool m)
-      & exists l, get_var true (evm t') (fvLF1 fv) = ok (Vbool l) ].
+      , get_var (wdb := true) (evm t') (fvCF1 fv) = ok (Vbool (wlt Unsigned w0 w1))
+      , get_var (wdb := true) (evm t') (fvZF1 fv) = ok (Vbool (w0 == w1))
+      , exists m, get_var (wdb := true) (evm t') (fvMF1 fv) = ok (Vbool m)
+      & exists l, get_var (wdb := true) (evm t') (fvLF1 fv) = ok (Vbool l) ].
 Proof using atoI fv fv_correct p pT sc_sem syscall_state wsw.
 move=> he0 he1 hcase.
 have hplain : exists2 t',
     sem_sopn (p_globs p) (Oasm (BaseOp (None, BN_basic BN_CMP fg))) t
       [seq Lvar {| v_var := x; v_info := var_info_of_ii ii |} | x <- fresh_flags fv]
       [:: e0; e1] = ok t'
-  & [/\ eq_fv t t', get_var true (evm t') (fvCF1 fv) = ok (Vbool (wlt Unsigned w0 w1))
-    , get_var true (evm t') (fvZF1 fv) = ok (Vbool (w0 == w1))
-    , exists m, get_var true (evm t') (fvMF1 fv) = ok (Vbool m)
-    & exists l, get_var true (evm t') (fvLF1 fv) = ok (Vbool l)].
+  & [/\ eq_fv t t', get_var (wdb := true) (evm t') (fvCF1 fv) = ok (Vbool (wlt Unsigned w0 w1))
+    , get_var (wdb := true) (evm t') (fvZF1 fv) = ok (Vbool (w0 == w1))
+    , exists m, get_var (wdb := true) (evm t') (fvMF1 fv) = ok (Vbool m)
+    & exists l, get_var (wdb := true) (evm t') (fvLF1 fv) = ok (Vbool l)].
 2: case: hcase => [[-> ->] | [base [sh [sham [-> -> hgas]]]]].
 2: exact: hplain.
 2: case: hplain => t0 hplain_sem [heq hCF hZF hM hL].
@@ -1133,12 +1135,12 @@ Qed.
    reduces via [PappN]/[sem_opN]/[get_gvar] to [sem_combine_flags cf c M L
    z], and [hmix] then rewrites that to [bres]. *)
 Lemma sem_pexpr_of_cfP2 (ii : instr_info) cf t' (c z bres : bool) :
-  get_var true (evm t') (fvCF1 fv) = ok (Vbool c) ->
-  get_var true (evm t') (fvZF1 fv) = ok (Vbool z) ->
-  (exists m, get_var true (evm t') (fvMF1 fv) = ok (Vbool m)) ->
-  (exists l, get_var true (evm t') (fvLF1 fv) = ok (Vbool l)) ->
+  get_var (wdb := true) (evm t') (fvCF1 fv) = ok (Vbool c) ->
+  get_var (wdb := true) (evm t') (fvZF1 fv) = ok (Vbool z) ->
+  (exists m, get_var (wdb := true) (evm t') (fvMF1 fv) = ok (Vbool m)) ->
+  (exists l, get_var (wdb := true) (evm t') (fvLF1 fv) = ok (Vbool l)) ->
   (forall M L : bool, @sem_combine_flags acc_fcp cf c M L z = bres) ->
-  sem_pexpr true (p_globs p) t' (pexpr_of_cf cf (var_info_of_ii ii) (fresh_flags fv))
+  sem_pexpr (wdb := true) (p_globs p) t' (pexpr_of_cf cf (var_info_of_ii ii) (fresh_flags fv))
   = ok (Vbool bres).
 Proof.
 move=> hc hz [m hm] [l hl] hmix.
@@ -1168,8 +1170,8 @@ Lemma lower_cmp_finishP (ii : instr_info) (tag : assgn_tag)
   (cf : combine_flags) (ee0 ee3 errsrc : pexpr)
   (wa wb : u256) (bres : bool) t0 pre e' :
   (cf = CF_EQ \/ cf = CF_NEQ \/ cf = CF_LT Unsigned \/ cf = CF_GE Unsigned) ->
-  sem_pexpr true (p_globs p) t0 ee0 = ok (Vword wa) ->
-  sem_pexpr true (p_globs p) t0 ee3 = ok (Vword wb) ->
+  sem_pexpr (wdb := true) (p_globs p) t0 ee0 = ok (Vword wa) ->
+  sem_pexpr (wdb := true) (p_globs p) t0 ee3 = ok (Vword wb) ->
   bres = sem_cf cf wa wb ->
   (Let osh0 := get_arg_shift ii U256 ee0
    in Let osh1 := get_arg_shift ii U256 ee3
@@ -1197,7 +1199,7 @@ Lemma lower_cmp_finishP (ii : instr_info) (tag : assgn_tag)
   = ok (Some (pre, e')) ->
   exists2 t : estate,
     esem p ev [seq low_instr_i ii tag i | i <- pre] t0 = ok t
-    & eq_fv t0 t /\ sem_pexpr true (p_globs p) t e' = ok (Vbool bres).
+    & eq_fv t0 t /\ sem_pexpr (wdb := true) (p_globs p) t e' = ok (Vbool bres).
 Proof using atoI ev fv fv_correct p pT sCP sc_sem syscall_state wsw.
 move=> hcf4 hwa hwb hbres.
 t_xrbindP=> osh0 hosh0 osh1 hosh1.
@@ -1283,11 +1285,11 @@ Lemma lower_cmpP ii tag e pre e' s s' v b :
   lower_cmp ii e = ok (Some (pre, e')) ->
   eq_fv s s' ->
   disj_fvars (read_e e) ->
-  sem_pexpr true (p_globs p) s e = ok v ->
+  sem_pexpr (wdb := true) (p_globs p) s e = ok v ->
   to_bool v = ok b ->
   exists2 t,
     esem p ev (map (low_instr_i ii tag) pre) s' = ok t
-    & eq_fv s t /\ sem_pexpr true (p_globs p) t e' = ok (Vbool b).
+    & eq_fv s t /\ sem_pexpr (wdb := true) (p_globs p) t e' = ok (Vbool b).
 Proof using atoI ev fv fv_correct p pT sCP sc_sem syscall_state wsw.
 move=> hlow heq hdisj he htb.
 have he' := eeq_exc_sem_pexpr hdisj heq he.
@@ -1304,7 +1306,7 @@ case: ee hn => // op e1 e2 hn //=.
   move: hn; rewrite /=; t_xrbindP=> va hva vb hvb v0 hv0 hsop1.
   move: hsop1; rewrite /sem_sop1 /=; t_xrbindP=> bx hbx <-.
   move: hbx => /to_boolI ?; subst va.
-  have hcomb : sem_pexpr true (p_globs p) s' (Papp2 op e1 e2) = ok (Vbool bx).
+  have hcomb : sem_pexpr (wdb := true) (p_globs p) s' (Papp2 op e1 e2) = ok (Vbool bx).
     by rewrite /= vb v0 /= hv0.
   have [w0 [w1 [hw0 hw1 hbxeq]]] := sem_cf_of_conditionP Ecf hcomb.
   have hb1 : sem_cf (negate_cf cf) w0 w1 = ~~ bx.
@@ -1373,9 +1375,9 @@ Lemma lower_PifP (p' : prog) (hglob : p_globs p' = p_globs p)
   lower_Pif ii ws econd e0 e1 = ok (Some (pre, lvs, op, es)) ->
   disj_fvars (read_e (Pif (aword ws) econd e0 e1)) ->
   disj_fvars (vars_lval lv) ->
-  sem_pexpr true (p_globs p) s0 (Pif (aword ws) econd e0 e1) = ok v ->
+  sem_pexpr (wdb := true) (p_globs p) s0 (Pif (aword ws) econd e0 e1) = ok v ->
   truncate_val (cword ws) v = ok v' ->
-  write_lval true (p_globs p) lv v' s0 = ok s1 ->
+  write_lval (wdb := true) (p_globs p) lv v' s0 = ok s1 ->
   exists2 s1',
     esem p' ev (low_cmd_c ii tag (pre, lvs ++ [:: lv], op, es)) s0 = ok s1'
     & eq_fv s1 s1'.
@@ -1464,9 +1466,9 @@ Lemma lower_cassgn_wordP (p' : prog) (hglob : p_globs p' = p_globs p)
   lower_cassgn_word ii lv ws e = ok (Some (pre, lvs, op, es)) ->
   disj_fvars (read_e e) ->
   disj_fvars (vars_lval lv) ->
-  sem_pexpr true (p_globs p) s0 e = ok v ->
+  sem_pexpr (wdb := true) (p_globs p) s0 e = ok v ->
   truncate_val (cword ws) v = ok v' ->
-  write_lval true (p_globs p) lv v' s0 = ok s1 ->
+  write_lval (wdb := true) (p_globs p) lv v' s0 = ok s1 ->
   exists2 s1',
     esem p' ev (low_cmd_c ii tag (pre, lvs, op, es)) s0 = ok s1'
     & eq_fv s1 s1'.

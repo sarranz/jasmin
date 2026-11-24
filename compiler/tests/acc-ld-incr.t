@@ -76,18 +76,18 @@ argument); when both stay live, register allocation rejects the program.
   warning: support of the ACC architecture is VERY experimental. The loop instruction is not part of the verified compiler. The compiler does NOT check whether the loop stack overflow/underflows. The compiler does NOT check that memory accesses are aligned.
   "fail/acc/bn_ld_inc_ptr_live.jazz", line 11 (4-45):
   compilation error:
-  register allocation: conflicting variables “p.310” and “q.312” must be merged due to:
+  register allocation: conflicting variables “p.291” and “q.293” must be merged due to:
     at "fail/acc/bn_ld_inc_ptr_live.jazz", line 11 (4-45):
-      x.311, q.312 = #BN.LD.INC([#aligned :u256 p.310], p.310);
+      x.292, q.293 = #BN.LD.INC([#aligned :u256 p.291], p.291);
   [1]
 
   $ ../jasminc -arch acc -o out.s fail/acc/bn_sd_inc_ptr_live.jazz
   warning: support of the ACC architecture is VERY experimental. The loop instruction is not part of the verified compiler. The compiler does NOT check whether the loop stack overflow/underflows. The compiler does NOT check that memory accesses are aligned.
   "fail/acc/bn_sd_inc_ptr_live.jazz", line 10 (4-45):
   compilation error:
-  register allocation: conflicting variables “p.308” and “q.310” must be merged due to:
+  register allocation: conflicting variables “p.289” and “q.291” must be merged due to:
     at "fail/acc/bn_sd_inc_ptr_live.jazz", line 10 (4-45):
-      [#aligned :u256 p.308], q.310 = #BN.SD.INC(v.309, p.308);
+      [#aligned :u256 p.289], q.291 = #BN.SD.INC(v.290, p.289);
   [1]
 
 Arity: two inputs (address, pointer) and two outputs (value, updated pointer).
