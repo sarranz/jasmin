@@ -91,7 +91,6 @@ module Armv8a (Lowering_params : Armv8a_input) = struct
     | SXTW -> ToRocq.pp_bare fmt "SXTW"
     | UXTB -> ToRocq.pp_bare fmt "UXTB"
     | UXTH -> ToRocq.pp_bare fmt "UXTH"
-    | UXTW -> ToRocq.pp_bare fmt "UXTW"
     | CMP -> ToRocq.pp_bare fmt "CMP"
     | TST -> ToRocq.pp_bare fmt "TST"
     | CSEL -> ToRocq.pp_bare fmt "CSEL"

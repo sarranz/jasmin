@@ -343,6 +343,8 @@ let pp_wiop2 fmt = function
   | WIle -> F.fprintf fmt "WIle"
   | WIgt -> F.fprintf fmt "WIgt"
   | WIge -> F.fprintf fmt "WIge"
+  | WImax -> F.fprintf fmt "WImax"
+  | WImin -> F.fprintf fmt "WImin"
 
 let pp_sop2 fmt = function
   | Obeq -> F.fprintf fmt "Obeq"
@@ -375,6 +377,8 @@ let pp_sop2 fmt = function
   | Ovasr (ve, ws) -> F.fprintf fmt "Ovasr %a %a" pp_velem ve pp_wsize ws
   | Owi2 (sg, ws, o) ->
       F.fprintf fmt "Owi2 %a %a %a" pp_signedness sg pp_wsize ws pp_wiop2 o
+  | Omax (sg, k) -> F.fprintf fmt "Omax %a (%a)" pp_signedness sg pp_op_kind k
+  | Omin (sg, k) -> F.fprintf fmt "Omin %a (%a)" pp_signedness sg pp_op_kind k
 
 let pp_combine_flags fmt = function
   | CF_LT s -> F.fprintf fmt "CF_LT %a" pp_signedness s
@@ -690,15 +694,18 @@ let pp_oracles fmt =
   pp_rocq_existing_instance fmt "IdO"
 
 let suff_of_arch = function
-  | X86_64 -> "x86"
-  | ARM_M4 -> "arm"
+  | Architecture.X86_64 -> "x86"
+  | ARM_M _ -> "arm"
   | RISCV -> "riscv"
   | ARMv8A -> "armv8a"
 
 let pp_arch_imports fmt a =
   let s = suff_of_arch a in
   pp_rocq_require_import fmt (s ^ "_decl " ^ s ^ "_instr_decl " ^ s ^ "_extra");
-  pp_rocq_existing_instance fmt (s ^ "_atoI")
+  pp_rocq_existing_instance fmt (s ^ "_atoI");
+  match a with
+  | Architecture.ARM_M c -> pp_rocq_existing_instance fmt c.Arm_mcore.rocq_core
+  | _ -> ()
 
 (* -------------------------------------------------------------------------- *)
 (* Entry point *)

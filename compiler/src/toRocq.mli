@@ -26,7 +26,7 @@ val pp_s_ws :
   Format.formatter -> string -> Wsize.signedness * Wsize.wsize -> unit
 
 val extract :
-  Utils.architecture ->
+  Architecture.architecture ->
   (Format.formatter ->
   ('reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op) Arch_extra.extended_op ->
   unit) ->
@@ -45,7 +45,7 @@ val extract :
   unit
 
 val extract_split :
-  Utils.architecture ->
+  Architecture.architecture ->
   (Format.formatter ->
   ('reg, 'regx, 'xreg, 'rflag, 'cond, 'asm_op, 'extra_op) Arch_extra.extended_op ->
   unit) ->

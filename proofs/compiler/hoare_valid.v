@@ -43,9 +43,6 @@ Context
   {spec : HoareSpec}
 .
 
-Lemma hoare_fun_rec ii fn : hoare_f_rec p ev spec preF ii fn postF.
-Proof. by move=> fs hpre /=; apply lutt_trigger. Qed.
-
 Definition hoare_io_rec P c Q :=
   hoare_io (wa := wa) (iE0 := invEvent_recCall spec) p ev P c Q.
 
@@ -162,13 +159,13 @@ Let Pc c := ihoare_io_rec PredT c post.
 Let Pi i := ihoare_io_rec PredT [::i] post.
 Let Pi_r ir := forall ii, Pi (MkI ii ir).
 
-Lemma write_lval_mem_equiv wdb gd x v s s' :
-  write_lval wdb gd x v s = ok s' ->
+Lemma write_lval_mem_equiv (wdb: enforce_defined_variables) gd x v s s' :
+  write_lval gd x v s = ok s' ->
   post s s'.
 Proof. by move=> /[dup] /write_lval_validw ? /write_lval_stack_stable ?. Qed.
 
-Lemma write_lvals_mem_equiv wdb gd xs vs s s' :
-  write_lvals wdb gd s xs vs = ok s' ->
+Lemma write_lvals_mem_equiv (wdb: enforce_defined_variables) gd xs vs s s' :
+  write_lvals gd s xs vs = ok s' ->
   post s s'.
 Proof. by move=> /[dup] /write_lvals_validw ? /write_lvals_stack_stable ?. Qed.
 

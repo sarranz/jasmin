@@ -29,7 +29,7 @@ Require Import
   arm_stack_zeroization.
 
 Section Section.
-Context {atoI : arch_toIdent}.
+Context {core : arm_core} {atoI : arch_toIdent}.
 
 (* ------------------------------------------------------------------------ *)
 (* Stack alloc parameters. *)
@@ -136,13 +136,16 @@ Definition arm_lmove (_: wsize) (xd xs : var_i) :=
 
 Definition arm_check_ws ws := ws == reg_size.
 
+(* STRB and STRH store the low byte or halfword of a register. *)
+Definition arm_check_store_ws ws := (ws <= reg_size)%CMP.
+
 Definition arm_lstore (ws: wsize) (xd : var_i) (ofs : Z) (xs : var_i) :=
-  let mn := STR in
-  ([:: Store Aligned ws (faddv Uptr xd (fconst ws ofs))], Oarm (ARM_op mn default_opts), [:: Rexpr (Fvar xs)]).
+  let mn := match ws with U8 => STRB | U16 => STRH | _ => STR end in
+  ([:: Store Aligned ws (faddv Uptr xd (fconst Uptr ofs))], Oarm (ARM_op mn default_opts), [:: Rexpr (Fvar xs)]).
 
 Definition arm_lload (ws: wsize) (xd : var_i) (xs: var_i) (ofs : Z) :=
   let mn := LDR in
-  ([:: LLvar xd], Oarm (ARM_op mn default_opts), [:: Load Aligned ws (faddv Uptr xs (fconst ws ofs))]).
+  ([:: LLvar xd], Oarm (ARM_op mn default_opts), [:: Load Aligned ws (faddv Uptr xs (fconst Uptr ofs))]).
 
 Definition arm_liparams : linearization_params :=
   {|
@@ -154,10 +157,14 @@ Definition arm_liparams : linearization_params :=
     lip_set_up_sp_register := arm_set_up_sp_register;
     lip_lmove := arm_lmove;
     lip_check_ws := arm_check_ws;
+    lip_check_store_ws := arm_check_store_ws;
     lip_lstore  := arm_lstore;
     lip_lload := arm_lload;
-    lip_lstores := lstores_imm_dfl arm_tmp2 arm_lstore ARMFopn.smart_addi is_arith_small;
-    lip_lloads  := lloads_imm_dfl arm_tmp2 arm_lload  ARMFopn.smart_addi is_arith_small;
+    (* A save slot is reached directly from SP when LDR and STR encode its
+       offset (the condition checked in assembly generation), otherwise
+       through [arm_tmp2]. *)
+    lip_lstores := lstores_imm_dfl arm_tmp2 arm_lstore ARMFopn.smart_addi (fun _ => is_ldst_offset);
+    lip_lloads  := lloads_imm_dfl arm_tmp2 arm_lload  ARMFopn.smart_addi (fun _ => is_ldst_offset);
   |}.
 
 End LINEARIZATION.
@@ -276,19 +283,9 @@ Fixpoint assemble_cond ii (e : fexpr) : cexec condt :=
       Error (E.berror ii e "Can't assemble condition.")
   end.
 
-Definition is_valid_address (addr : reg_address) :=
-  match addr.(ad_disp) != 0%w, isSome addr.(ad_offset), addr.(ad_scale) != 0 with
-  | false, false, false => true
-  | true, false, false => true
-  | false, true, false => true
-  | false, true, true => true
-  | _, _, _ => false
-  end.
-
 Definition arm_agparams : asm_gen_params :=
   {|
     agp_assemble_cond := assemble_cond;
-    agp_is_valid_address := is_valid_address;
   |}.
 
 (* ------------------------------------------------------------------------ *)

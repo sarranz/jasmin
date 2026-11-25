@@ -332,19 +332,19 @@ let prog_of_csprog p =
 
 
 (* ---------------------------------------------------------------------------- *)
-let arr_get signed len s ws t i =
+let arr_get signed len al s ws t i =
   let of_word = if signed then z_of_word else z_unsigned_of_word in
-  match Warray_.WArray.get len Aligned s ws t (cz_of_int i) with
+  match Warray_.WArray.get Utils0.partial len al s ws t (cz_of_int i) with
   | Utils0.Ok w -> of_word ws w
   | _ -> assert false
 
 let to_array ?(signed = true) ty len t =
   let ws, n = array_kind ty in
-  ws, Array.init n (arr_get signed len Warray_.AAscale ws t)
+  ws, Array.init n (arr_get signed len Aligned Warray_.AAscale ws t)
 
 let to_array8 ?(signed = true) ty len t =
   let ws, n = array_kind ty in
-  Array.init (arr_size ws n) (arr_get signed len Warray_.AAdirect U8 t)
+  Array.init (arr_size ws n) (arr_get signed len Aligned Warray_.AAdirect U8 t)
 
 (* ---------------------------------------------------------------------------- *)
 

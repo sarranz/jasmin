@@ -91,6 +91,15 @@ let hash_to_string (to_string : 'a -> string) =
       Hashtbl.add tbl r s;
       s
 
+(* The operands of an instruction whose description prints each of them in
+   the form of a size ([PPa_full]), paired with that size. *)
+let pp_full_args (pp : _ pp_asm_op) =
+  List.map
+    (function
+      | PPa_full (ws, a) -> (ws, a)
+      | PPa_shift _ -> assert false)
+    pp.pp_aop_args
+
 let pp_imm imm_pre imm = Format.asprintf "%s%s" imm_pre (Z.to_string imm)
 
 let pp_rip_address p : string =
@@ -107,7 +116,10 @@ type parsed_reg_address = {
 
 let parse_reg_address (arch : ('a, 'b, 'c, 'd, 'e) arch_decl) addr =
   match addr.ad_base with
-  | None -> failwith (Format.asprintf "TODO_RISC: pp_reg_address")
+  | None ->
+      (* The conditions on the memory arguments require a base register. *)
+      hierror ~loc:Lnone ~kind:"assembly printing" ~internal:true
+        "address without a base register"
   | Some r ->
       let base = pp_register arch r in
       let displacement = Conv.z_of_word (arch_pd arch) addr.ad_disp in

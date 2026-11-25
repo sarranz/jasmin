@@ -56,8 +56,14 @@ let pp_ge_aux ~debug (pp_len: 'len pp) (pp_var: 'len gvar pp) : associativity ->
      let p = priority_of_op1 o in
      optparent fmt prio side p "%s %a" (string_of_op1 ~debug o) (pp_expr Right p) e
   | Papp2(op,e1,e2) ->
+    begin
      let p = priority_of_op2 op in
-     optparent fmt prio side p "%a %s %a" (pp_expr Left p) e1 (string_of_op2 op) (pp_expr Right p) e2
+     match notation_of_op2 op with
+     | OpNinfix ->
+       optparent fmt prio side p "%a %s %a" (pp_expr Left p) e1 (string_of_op2 op) (pp_expr Right p) e2
+     | OpNcall ->
+       F.fprintf fmt "@[%s(%a,@ %a)@]" (string_of_op2 op) (pp_expr NoAssoc priority_min) e1 (pp_expr NoAssoc priority_min) e2
+    end
   | PappN (Opack(_sz, pe), es) ->
     F.fprintf fmt "@[(%du%n)[%a]@]" (List.length es) (int_of_pe pe) (pp_list ",@ " (pp_expr NoAssoc priority_min)) es
   | PappN (Ocombine_flags c, es) ->
@@ -570,5 +576,6 @@ let pp_err ~debug fmt (pp_e : Compiler_util.pp_error) =
       | Compiler_util.Nobox -> Format.fprintf fmt "%a" (pp_list "" pp_err) pp_e
       end
     | Compiler_util.PPEbreak -> Format.fprintf fmt "@ "
+    | Compiler_util.PPEhighlight pp_e -> pp_print_bold_red pp_err fmt pp_e
   in
   pp_err fmt pp_e

@@ -19,6 +19,10 @@ val format_glob_data :
   PrintASM.asm_element list
 
 val hash_to_string : ('a -> string) -> 'a -> string
+val pp_full_args :
+  ('reg, 'regx, 'xreg, 'rflag, 'cond) Arch_decl.pp_asm_op ->
+  (Wsize.wsize * ('reg, 'regx, 'xreg, 'rflag, 'cond) Arch_decl.asm_arg) list
+
 val pp_imm : string -> Z.t -> string
 val pp_rip_address : Word0.word -> string
 val pp_register : ('reg, _, _, _, _) Arch_decl.arch_decl -> 'reg -> string
@@ -32,13 +36,13 @@ type parsed_reg_address = {
 
 val parse_reg_address :
   ('reg, _, _, _, _) Arch_decl.arch_decl ->
-  ('reg, _, _, _, _) Arch_decl.reg_address ->
+  'reg Arch_decl.reg_address_ ->
   parsed_reg_address
 
 val declassify_mem :
    ('a, 'b, 'c, 'd, 'e) Arch_decl.arch_decl ->
    BinNums.coq_Z ->
-   ('a, 'f, 'g, 'h, 'i) Arch_decl.address ->
+   'a Arch_decl.address_ ->
    PrintASM.asm
 
 val declassify_val : (Type.ltype -> 'a -> string) -> Type.ltype -> 'a -> PrintASM.asm

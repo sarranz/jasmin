@@ -125,11 +125,14 @@ Definition riscv_lmove (_: wsize) (xd xs : var_i) :=
 
 Definition riscv_check_ws ws := ws == reg_size.
 
+(* [STORE ws] stores the low [ws] bits of a register. *)
+Definition riscv_check_store_ws ws := (ws <= reg_size)%CMP.
+
 Definition riscv_lstore (ws: wsize) (xd : var_i) (ofs : Z) (xs : var_i) :=
-  ([:: Store Aligned ws (faddv Uptr xd (fconst ws ofs))], Oriscv (STORE ws), [:: Rexpr (Fvar xs)]).
+  ([:: Store Aligned ws (faddv Uptr xd (fconst Uptr ofs))], Oriscv (STORE ws), [:: Rexpr (Fvar xs)]).
 
 Definition riscv_lload (ws: wsize) (xd : var_i) (xs: var_i) (ofs : Z) :=
-  ([:: LLvar xd], Oriscv (LOAD Signed ws), [:: Load Aligned ws (faddv Uptr xs (fconst ws ofs))]).
+  ([:: LLvar xd], Oriscv (LOAD Signed ws), [:: Load Aligned ws (faddv Uptr xs (fconst Uptr ofs))]).
 
 Definition riscv_liparams : linearization_params :=
   {|
@@ -141,10 +144,11 @@ Definition riscv_liparams : linearization_params :=
     lip_set_up_sp_register := riscv_set_up_sp_register;
     lip_lmove := riscv_lmove;
     lip_check_ws := riscv_check_ws;
+    lip_check_store_ws := riscv_check_store_ws;
     lip_lstore  := riscv_lstore;
     lip_lload := riscv_lload;
-    lip_lstores := lstores_imm_dfl riscv_tmp2 riscv_lstore RISCVFopn.smart_addi is_arith_small;
-    lip_lloads  := lloads_imm_dfl riscv_tmp2 riscv_lload  RISCVFopn.smart_addi is_arith_small;
+    lip_lstores := lstores_imm_dfl riscv_tmp2 riscv_lstore RISCVFopn.smart_addi (fun _ => is_arith_small);
+    lip_lloads  := lloads_imm_dfl riscv_tmp2 riscv_lload  RISCVFopn.smart_addi (fun _ => is_arith_small);
   |}.
 
 End LINEARIZATION.
@@ -226,17 +230,9 @@ Fixpoint assemble_cond ii (e : fexpr) : cexec condt :=
       Error (E.berror ii e "Can't assemble condition.")
   end.
 
-Definition is_valid_address (addr : reg_address) :=
-  match addr.(ad_disp) != 0%w, isSome addr.(ad_offset), addr.(ad_scale) != 0 with
-  | false, false, false => true
-  | true, false, false => true
-  | _, _, _ => false
-  end.
-
 Definition riscv_agparams : asm_gen_params :=
   {|
     agp_assemble_cond := assemble_cond;
-    agp_is_valid_address := is_valid_address;
   |}.
 
 (* ------------------------------------------------------------------------ *)

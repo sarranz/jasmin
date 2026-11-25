@@ -191,24 +191,25 @@ Definition armv8a_lmove (_ : wsize) (xd xs : var_i) :=
 
 Definition armv8a_check_ws ws := ws == reg_size.
 
+(* STRB and STRH store the low byte or halfword of a register, STR on a
+   32-bit register its low word (see [store_mn_of_wsize]). *)
+Definition armv8a_check_store_ws ws := (ws <= reg_size)%CMP.
+
 Definition armv8a_lstore (ws : wsize) (xd : var_i) (ofs : Z) (xs : var_i) :=
-  let mn := STR in
-  ([:: Store Aligned ws (faddv Uptr xd (fconst ws ofs))], Oarmv8a (ARMv8A_op mn default_opts), [:: Rexpr (Fvar xs)]).
+  let mn := odflt STR (store_mn_of_wsize ws) in
+  let opts := {| has_shift := None; opts_size := if (ws <= U16)%CMP then U64 else ws |} in
+  ([:: Store Aligned ws (faddv Uptr xd (fconst Uptr ofs))], Oarmv8a (ARMv8A_op mn opts), [:: Rexpr (Fvar xs)]).
 
 Definition armv8a_lload (ws : wsize) (xd : var_i) (xs : var_i) (ofs : Z) :=
   let mn := LDR in
-  ([:: LLvar xd], Oarmv8a (ARMv8A_op mn default_opts), [:: Load Aligned ws (faddv Uptr xs (fconst ws ofs))]).
+  ([:: LLvar xd], Oarmv8a (ARMv8A_op mn default_opts), [:: Load Aligned ws (faddv Uptr xs (fconst Uptr ofs))]).
 
-(* A saved register is stored to or loaded from [SP + ofs] directly only when
-   LDR and STR can encode [ofs]: for an X register, "a multiple of 8 in the
-   range 0 to 32760" (ARM DDI 0487 M.d, C6.2.216 LDR (immediate) and C6.2.415
-   STR (immediate), unsigned offset). The saved registers are X registers
-   ([armv8a_check_ws]) in 8-byte aligned slots; a wider saved register needs
-   this test revised. Otherwise the address of the first slot is computed
-   into X17 and the slots are reached from it with small offsets. Keeping
-   [is_arith_small] changes only the code that did not assemble. *)
-Definition is_save_slot_offset (ofs : Z) : bool :=
-  is_arith_small ofs && ((0 <=? ofs) && (ofs <=? 32760) && (ofs mod 8 =? 0))%Z.
+(* A saved register of size [ws] is stored to or loaded from [SP + ofs]
+   directly only when LDR and STR can encode [ofs] for that size, the
+   condition checked in assembly generation ([CAmemC_armv8a_ldst] in
+   armv8a_decl.v). Otherwise the address of the first slot is computed into
+   X17 and the slots are reached from it with small offsets. *)
+Definition is_save_slot_offset (ws : wsize) (ofs : Z) : bool := is_ldst_offset ws ofs.
 
 (* Restore saved values from the stack. Unlike ARMv7 (where SP/R13 is an
    ordinary register that LDR can target), an A64 load writes its result through
@@ -222,7 +223,7 @@ Definition is_save_slot_offset (ofs : Z) : bool :=
 Definition armv8a_lloads (rspi : var_i) (to_restore : seq (var * Z)) (spofs : Z) :
     seq fopn_args :=
   let restore_regs :=
-    if all (fun '(_, ofs) => is_save_slot_offset ofs) to_restore then
+    if all (fun '(x, ofs) => is_save_slot_offset (wsize_of_atype (vtype x)) ofs) to_restore then
       map (fun '(x, ofs) =>
              armv8a_lload (wsize_of_atype (vtype x)) (VarI x dummy_var_info) rspi ofs)
           to_restore
@@ -235,7 +236,7 @@ Definition armv8a_lloads (rspi : var_i) (to_restore : seq (var * Z)) (spofs : Z)
                to_restore
   in
   let restore_sp :=
-    if is_save_slot_offset spofs then
+    if is_save_slot_offset Uptr spofs then
       [:: armv8a_lload Uptr vtmp2i rspi spofs; armv8a_lmove Uptr rspi vtmp2i ]
     else
       ARMv8AFopn_smart_addi vtmp2i rspi spofs
@@ -253,6 +254,7 @@ Definition armv8a_liparams : linearization_params :=
     lip_set_up_sp_register := armv8a_set_up_sp_register;
     lip_lmove := armv8a_lmove;
     lip_check_ws := armv8a_check_ws;
+    lip_check_store_ws := armv8a_check_store_ws;
     lip_lstore  := armv8a_lstore;
     lip_lload := armv8a_lload;
     lip_lstores := lstores_imm_dfl armv8a_tmp2 armv8a_lstore ARMv8AFopn_smart_addi is_save_slot_offset;
@@ -403,19 +405,9 @@ Fixpoint assemble_cond ii (e : fexpr) : cexec condt :=
       Error (E.berror ii e "Can't assemble condition.")
   end.
 
-Definition is_valid_address (addr : reg_address) :=
-  match addr.(ad_disp) != 0%w, isSome addr.(ad_offset), addr.(ad_scale) != 0 with
-  | false, false, false => true
-  | true, false, false => true
-  | false, true, false => true
-  | false, true, true => true
-  | _, _, _ => false
-  end.
-
 Definition armv8a_agparams : asm_gen_params :=
   {|
     agp_assemble_cond := assemble_cond;
-    agp_is_valid_address := is_valid_address;
   |}.
 
 (* ------------------------------------------------------------------------ *)

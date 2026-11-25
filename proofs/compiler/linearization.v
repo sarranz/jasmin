@@ -128,6 +128,11 @@ Record linearization_params {asm_op : Type} {asmop : asmOp asm_op} :=
        i.e if an operation exists for that size. *)
     lip_check_ws : wsize -> bool;
 
+    (* Sizes of the words that [lip_lstore] can store: the sizes accepted by
+       [lip_check_ws] and, on the architectures that have narrow store
+       instructions, the smaller ones. *)
+    lip_check_store_ws : wsize -> bool;
+
     (* Return the arguments for a linear instruction that corresponds to
        a store to memory.
        In symbols, the linear instruction derived from [lip_lstore xd ofs xs]
@@ -250,13 +255,18 @@ Context (lip_tmp2 : Ident.ident).
 Context (lip_lstore  : wsize -> var_i -> Z -> var_i -> fopn_args)
         (lip_lload   : wsize -> var_i -> var_i -> Z -> fopn_args)
         (lip_add_imm : var_i -> var_i -> Z -> seq fopn_args)
-        (lip_imm_small : Z -> bool).
+        (lip_imm_small : wsize -> Z -> bool).
+
+(* [lip_imm_small ws ofs] holds when a register of size [ws] can be stored
+   to or loaded from [SP + ofs] directly. *)
+Definition imm_small_slot (xofs : var * Z) : bool :=
+  lip_imm_small (wsize_of_atype (vtype xofs.1)) xofs.2.
 
 Definition lstores_dfl (rsp: var_i) (to_save : seq (var * Z)) :=
   map (fun '(x,ofs) => lip_lstore (wsize_of_atype (vtype x)) rsp ofs (VarI x dummy_var_info)) to_save.
 
 Definition lstores_imm_dfl (rsp : var_i) (to_save : seq (var * Z)) :=
-  if all (fun '(_,ofs) => lip_imm_small ofs) to_save then
+  if all imm_small_slot to_save then
     lstores_dfl rsp to_save
   else
     let ofs0 := snd (head (v_var rsp, 0%Z) to_save) in
@@ -272,7 +282,7 @@ Definition lloads_dfl (rsp:var_i) (to_restore : seq (var * Z)) (spofs:Z) :=
 
 Definition lloads_imm_dfl (rsp:var_i) (to_restore : seq (var * Z)) (spofs:Z) :=
   let to_restore := to_restore ++ [:: (v_var rsp, spofs)] in
-  if all (fun '(_,ofs) => lip_imm_small ofs) to_restore then
+  if all imm_small_slot to_restore then
     lloads_aux rsp to_restore
   else
     let ofs0 := snd (head (v_var rsp, 0%Z) to_restore) in
@@ -467,7 +477,7 @@ Definition classify_cassgn (x: lval) (ty: atype) (e: pexpr) : cassign_kind :=
         Cassgn_load ws rd rs ofs
       else Cassgn_invalid
   | Lmem Aligned ws _ (Papp2 (Oadd (Op_w _)) (Pvar {| gs := Slocal; gv := rd |}) (Papp1 (Oword_of_int _) (Pconst ofs))), Pvar {| gs := Slocal ; gv := rs |} =>
-      if [&& ty == aword ws & lip_check_ws liparams ws ] then
+      if [&& ty == aword ws & lip_check_store_ws liparams ws ] then
         Cassgn_store ws rd rs ofs
       else Cassgn_invalid
   | _, _ => Cassgn_invalid
