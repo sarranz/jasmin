@@ -54,7 +54,7 @@ module Armv8a (Lowering_params : Armv8a_input) = struct
     | SROR -> ToRocq.pp_bare fmt "SROR"
 
   let pp_armv8a_options fmt (o : Armv8a_instr_decl.armv8a_options) =
-    Format.fprintf fmt "{| has_shift := (%a); opts_size := %a |}"
+    Format.fprintf fmt "{| has_shift := %a; opts_size := %a |}"
       (ToRocq.pp_rocq_option pp_shift_kind)
       o.has_shift ToRocq.pp_wsize o.opts_size
 
@@ -140,7 +140,7 @@ module Armv8a (Lowering_params : Armv8a_input) = struct
 
   let pp_asm_op_for_rocq fmt (o : asm_op) =
     let (Armv8a_instr_decl.ARMv8A_op (m, opts)) = o in
-    Format.fprintf fmt "(ARMv8A_op %a %a)" pp_armv8a_mnemonic m
+    Format.fprintf fmt "ARMv8A_op %a %a" pp_armv8a_mnemonic m
       pp_armv8a_options opts
 
   let pp_extra_op_for_rocq fmt (o : extra_op) =

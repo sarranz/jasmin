@@ -111,6 +111,12 @@ let rocq_sanitize_s s =
 (* -------------------------------------------------------------------------- *)
 (* Printing helpers *)
 
+(* Parenthesization convention: printers emit a bare term, and the caller wraps
+   it in parentheses when printing it as an argument of an application.
+   Printers whose output is always atomic are not wrapped: identifiers,
+   constructors without arguments, projections, integers, and the
+   self-delimiting [pp_rocq_z], [pp_rocq_string], and [pp_rocq_seq]. *)
+
 let pp_print_nothing _fmt () = ()
 let pp_newline fmt = F.fprintf fmt "@ "
 
@@ -162,6 +168,7 @@ let pp_rocq_seq pp fmt xs =
     in
     F.fprintf fmt "@[<hv>[:: %a ]@]" (F.pp_print_list ~pp_sep pp) xs
 
+(* [pp] must print an atomic term. *)
 let pp_rocq_option pp =
   let none fmt () = F.fprintf fmt "None" in
   let some fmt a = F.fprintf fmt "Some %a" pp a in
@@ -280,28 +287,28 @@ let pp_word ws fmt w = F.fprintf fmt "%a" (pp_wrepr ws) (Conv.z_of_word ws w)
    Used by architecture-specific asm_op printers. *)
 
 let pp_bare fmt name = F.fprintf fmt "%s" name
-let pp_with_ws fmt name ws = F.fprintf fmt "(%s %a)" name pp_wsize ws
+let pp_with_ws fmt name ws = F.fprintf fmt "%s %a" name pp_wsize ws
 
 let pp_with_ws2 fmt name (ws1, ws2) =
-  F.fprintf fmt "(%s %a %a)" name pp_wsize ws1 pp_wsize ws2
+  F.fprintf fmt "%s %a %a" name pp_wsize ws1 pp_wsize ws2
 
-let pp_ve fmt name ve = F.fprintf fmt "(%s %a)" name pp_velem ve
+let pp_ve fmt name ve = F.fprintf fmt "%s %a" name pp_velem ve
 
 let pp_ve_ws fmt name (ve, ws) =
-  F.fprintf fmt "(%s %a %a)" name pp_velem ve pp_wsize ws
+  F.fprintf fmt "%s %a %a" name pp_velem ve pp_wsize ws
 
 let pp_s_ws fmt name (s, ws) =
-  F.fprintf fmt "(%s %a %a)" name pp_signedness s pp_wsize ws
+  F.fprintf fmt "%s %a %a" name pp_signedness s pp_wsize ws
 
 let pp_reg_kind fmt = function
   | Wsize.Normal -> F.fprintf fmt "Normal"
   | Extra -> F.fprintf fmt "Extra"
 
 let pp_rk_ws fmt name (rk, ws) =
-  F.fprintf fmt "(%s %a %a)" name pp_reg_kind rk pp_wsize ws
+  F.fprintf fmt "%s %a %a" name pp_reg_kind rk pp_wsize ws
 
 let pp_ve_ws_ve_ws fmt name (ve1, ws1, ve2, ws2) =
-  F.fprintf fmt "(%s %a %a %a %a)" name pp_velem ve1 pp_wsize ws1 pp_velem ve2
+  F.fprintf fmt "%s %a %a %a %a" name pp_velem ve1 pp_wsize ws1 pp_velem ve2
     pp_wsize ws2
 
 (* -------------------------------------------------------------------------- *)
@@ -510,10 +517,9 @@ let rec pp_instr_r ~loc pp_asm_op fmt = function
       match sc with
       | RandomBytes (ws, n) -> (
           match (lvs, es) with
-          | [ lv ], [ e ] ->
-              F.fprintf fmt
-                "@[<h>Csyscall [:: (%a)] (RandomBytes %a %a) [:: (%a)]@]"
-                pp_lval lv pp_wsize ws pp_rocq_cz n pp_expr e
+          | [ _ ], [ _ ] ->
+              F.fprintf fmt "@[<h>Csyscall %a (RandomBytes %a %a) %a@]"
+                pp_lvals lvs pp_wsize ws pp_rocq_cz n pp_exprs es
           | _ -> randombytes_invalid_args loc)
     end
   | Cassert a -> F.fprintf fmt "@[<h>Cassert %a@]" pp_assertion a
@@ -521,7 +527,7 @@ let rec pp_instr_r ~loc pp_asm_op fmt = function
       F.fprintf fmt "@[<hv 2>Cif@ (%a)@ %a@ %a@]" pp_expr e (pp_stmt pp_asm_op)
         c1 (pp_stmt pp_asm_op) c2
   | Cfor (x, (dir, lo, hi), c) ->
-      F.fprintf fmt "@[<hv 2>Cfor@ (%a)@ (%a, %a, %a)@ %a@]" pp_gv_var_i x
+      F.fprintf fmt "@[<hv 2>Cfor@ %a@ (%a, %a, %a)@ %a@]" pp_gv_var_i x
         pp_dir dir pp_expr lo pp_expr hi (pp_stmt pp_asm_op) c
   | Cwhile (_, c1, e, _, c2) ->
       F.fprintf fmt "@[<hv 2>Cwhile Align@ %a@ (%a)@ dummy_instr_info@ %a@]"

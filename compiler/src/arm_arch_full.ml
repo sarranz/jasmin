@@ -55,7 +55,7 @@ module Arm_core (C : Arm_core_sig) = struct
     | SROR -> ToRocq.pp_bare fmt "SROR"
 
   let pp_arm_options fmt (o : Arm_instr_decl.arm_options) =
-    Format.fprintf fmt "{| set_flags := %b; is_conditional := %b; has_shift := (%a) |}"
+    Format.fprintf fmt "{| set_flags := %b; is_conditional := %b; has_shift := %a |}"
       o.set_flags o.is_conditional
       (ToRocq.pp_rocq_option pp_shift_kind)
       o.has_shift
@@ -65,10 +65,10 @@ module Arm_core (C : Arm_core_sig) = struct
     | HWT -> ToRocq.pp_bare fmt "HWT"
 
   let pp_hw2 name fmt (h1, h2) =
-    Format.fprintf fmt "(%s %a %a)" name pp_halfword h1 pp_halfword h2
+    Format.fprintf fmt "%s %a %a" name pp_halfword h1 pp_halfword h2
 
   let pp_hw name fmt h =
-    Format.fprintf fmt "(%s %a)" name pp_halfword h
+    Format.fprintf fmt "%s %a" name pp_halfword h
 
   let pp_arm_mnemonic fmt (m : Arm_instr_decl.arm_mnemonic) =
     let open Arm_instr_decl in
@@ -134,7 +134,7 @@ module Arm_core (C : Arm_core_sig) = struct
 
   let pp_asm_op_for_rocq fmt (o : asm_op) =
     let Arm_instr_decl.ARM_op (m, opts) = o in
-    Format.fprintf fmt "(ARM_op %a %a)" pp_arm_mnemonic m pp_arm_options opts
+    Format.fprintf fmt "ARM_op (%a) %a" pp_arm_mnemonic m pp_arm_options opts
 
   let pp_extra_op_for_rocq fmt (o : extra_op) =
     let open Arm_extra in
