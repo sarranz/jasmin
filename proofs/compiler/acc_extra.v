@@ -384,9 +384,32 @@ Definition assemble_self_xor
   let x := rvar v in
   ok [:: ((None, op), les, [:: x; x ]) ].
 
-Let uncons_LLvar := arm_extra.uncons_LLvar ii.
-Let uncons_rvar := arm_extra.uncons_rvar ii.
-Let uncons_wconst := arm_extra.uncons_wconst ii.
+(* Destructors for the head of a list of arguments. The error message is the
+   prefix [pfx] (the name of the calling assembler) followed by a description
+   of what was expected. *)
+Definition uncons_lexpr
+  (pfx : string) (les : seq lexpr) : cexec (lexpr * seq lexpr) :=
+  if les is le :: les
+  then ok (le, les)
+  else Error (E.internal_error (pfx ++ ": not enough lexprs")%string ii).
+
+Definition uncons_LLvar
+  (pfx : string) (les : seq lexpr) : cexec (var_i * seq lexpr) :=
+  if les is LLvar x :: les
+  then ok (x, les)
+  else Error (E.internal_error (pfx ++ ": not enough Lvars")%string ii).
+
+Definition uncons_rvar
+  (pfx : string) (res : seq rexpr) : cexec (var_i * seq rexpr) :=
+  if res is Rexpr (Fvar x) :: res
+  then ok (x, res)
+  else Error (E.internal_error (pfx ++ ": not enough rvars")%string ii).
+
+Definition uncons_wconst
+  (pfx : string) (res : seq rexpr) : cexec (Z * seq rexpr) :=
+  if res is Rexpr (Fapp1 (Oword_of_int _) (Fconst imm)) :: res'
+  then ok (imm, res')
+  else Error (E.internal_error (pfx ++ ": not enough wconsts")%string ii).
 
 Definition assemble_set0
   (ws : wsize)
@@ -396,7 +419,7 @@ Definition assemble_set0
   cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
   Let x :=
     if les is [:: _; _; _; LLvar x] then ok x
-    else Let: (x, _) := uncons_LLvar les in ok x
+    else Let: (x, _) := uncons_LLvar "set0" les in ok x
   in
   assemble_self_xor ws fg les x.
 
@@ -407,8 +430,8 @@ Definition assemble_MOV
   (les : seq lexpr)
   (res : seq rexpr) :
   cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
-  Let: (x, _) := uncons_LLvar les in
-  Let: (y, _) := uncons_rvar res in
+  Let: (x, _) := uncons_LLvar "mov" les in
+  Let: (y, _) := uncons_rvar "mov" res in
   Let _ := assert (convertible x.(vtype) (aword U32))
                   (E.internal_error "mov: bad register type" ii) in
   ok (asm_args_of_opn_args [:: ACCFopn_core.mov x y ]).
@@ -417,8 +440,8 @@ Definition assemble_NOT
   (les : seq lexpr)
   (res : seq rexpr) :
   cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
-  Let: (x, _) := uncons_LLvar les in
-  Let: (y, _) := uncons_rvar res in
+  Let: (x, _) := uncons_LLvar "not" les in
+  Let: (y, _) := uncons_rvar "not" res in
   Let _ := assert (convertible x.(vtype) (aword U32))
                   (E.internal_error "not: bad register type" ii) in
   ok (asm_args_of_opn_args [:: ACCFopn_core.not x y ]).
@@ -427,9 +450,9 @@ Definition assemble_SUBI
   (les : seq lexpr)
   (res : seq rexpr) :
   cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
-  Let: (x, _) := uncons_LLvar les in
-  Let: (y, res) := uncons_rvar res in
-  Let: (imm, _) := uncons_wconst res in
+  Let: (x, _) := uncons_LLvar "subi" les in
+  Let: (y, res) := uncons_rvar "subi" res in
+  Let: (imm, _) := uncons_wconst "subi" res in
   Let _ := assert (convertible x.(vtype) (aword U32))
                   (E.internal_error "subi: bad register type" ii) in
   Let _ := assert (negb ((imm =? 0)%Z && (v_var x == v_var y)))
@@ -445,9 +468,9 @@ Definition assemble_ADD_LARGE_IMM
   (les : seq lexpr)
   (res : seq rexpr) :
   cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
-  Let: (x, _) := uncons_LLvar les in
-  Let: (y, res) := uncons_rvar res in
-  Let: (imm, _) := uncons_wconst res in
+  Let: (x, _) := uncons_LLvar "add_large_imm" les in
+  Let: (y, res) := uncons_rvar "add_large_imm" res in
+  Let: (imm, _) := uncons_wconst "add_large_imm" res in
   Let _ := assert (v_var x != v_var y)
                   (E.internal_error "add_large_imm: invalid register" ii) in
   Let _ := assert (convertible x.(vtype) (aword U32))
@@ -469,18 +492,23 @@ Definition assemble_swap
   (les : seq lexpr)
   (res : seq rexpr) :
   cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
-  Let: (z, w) :=
-    if res is [:: Rexpr (Fvar z); Rexpr (Fvar w) ] then ok (z, w)
-    else Error (E.bad_swap_rexprs ii)
-  in
+  Let: (z, res) := uncons_rvar "bad swap" res in
+  Let: (w, res) := uncons_rvar "bad swap" res in
+  Let _ := assert (nilp res) (E.bad_swap_rexprs ii) in
   Let: (op, fl, x, y) :=
     if (ws == reg_size)%CMP then
-      if les is [:: LLvar x; LLvar y ] then ok (RV32 XOR, [::], x, y)
-      else Error (E.bad_swap_lexprs ii)
+      Let: (x, les) := uncons_LLvar "bad swap" les in
+      Let: (y, les) := uncons_LLvar "bad swap" les in
+      Let _ := assert (nilp les) (E.bad_swap_lexprs ii) in
+      ok (RV32 XOR, [::], x, y)
     else if (ws == xreg_size)%CMP then
-      if les is [:: fM; fL; fZ; LLvar x; LLvar y ] then
-        ok (BN_basic BN_XOR fg, [:: fM; fL; fZ ], x, y)
-      else Error (E.bad_swap_lexprs ii)
+      Let: (fM, les) := uncons_lexpr "bad swap" les in
+      Let: (fL, les) := uncons_lexpr "bad swap" les in
+      Let: (fZ, les) := uncons_lexpr "bad swap" les in
+      Let: (x, les) := uncons_LLvar "bad swap" les in
+      Let: (y, les) := uncons_LLvar "bad swap" les in
+      Let _ := assert (nilp les) (E.bad_swap_lexprs ii) in
+      ok (BN_basic BN_XOR fg, [:: fM; fL; fZ ], x, y)
     else Error (E.bad_swap_size ws ii)
   in
   Let _ := assert (v_var x != v_var w) (E.bad_swap_dst_arg ii) in
@@ -499,9 +527,9 @@ Definition assemble_bn_select_masked
   (les : seq lexpr)
   (res : seq rexpr) :
   cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
-  Let: (x, _) := uncons_LLvar les in
-  Let: (wn, res1) := uncons_rvar res in
-  Let: (wm, res2) := uncons_rvar res1 in
+  Let: (x, _) := uncons_LLvar "bn_select_masked" les in
+  Let: (wn, res1) := uncons_rvar "bn_select_masked" res in
+  Let: (wm, res2) := uncons_rvar "bn_select_masked" res1 in
   Let _ :=
     assert
       (uniq [:: v_var x; v_var wn; v_var wm ])
@@ -509,7 +537,7 @@ Definition assemble_bn_select_masked
          "bn_select_masked: destination and arguments must be pairwise distinct"
          ii)
   in
-  Let: (fv, _) := uncons_rvar res2 in
+  Let: (fv, _) := uncons_rvar "bn_select_masked" res2 in
   Let flag :=
     o2r
       (E.internal_error "bn_select_masked: condition variable is not a flag" ii)
@@ -523,11 +551,11 @@ Definition assemble_zeroize_masked
   (les : seq lexpr)
   (res : seq rexpr) :
   cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
-  Let: (y1, res) := uncons_rvar res in
-  Let: (y2, _) := uncons_rvar res in
+  Let: (y1, res) := uncons_rvar "zeroize_masked" res in
+  Let: (y2, _) := uncons_rvar "zeroize_masked" res in
   Let x :=
     if les is [:: _; _; _; LLvar x] then ok x
-    else Let: (x, _) := uncons_LLvar les in ok x
+    else Let: (x, _) := uncons_LLvar "zeroize_masked" les in ok x
   in
   Let _ :=
     assert

@@ -1122,7 +1122,7 @@ Proof using atoI call_conv sc_sem syscall_state vinfo.
   move=> f l.
   case: f => //= y.
   (* peel the [wconst] immediate *)
-  rewrite /arm_extra.uncons_wconst.
+  rewrite /uncons_wconst.
   case: l => // -[] // -[] //.
   move=> s0 f0 l0.
   case: s0 => //= ws.
@@ -1213,7 +1213,7 @@ Proof using atoI call_conv sc_sem syscall_state vinfo.
   move=> f l.
   case: f => //= y.
   (* peel the [wconst] immediate *)
-  rewrite /arm_extra.uncons_wconst.
+  rewrite /uncons_wconst.
   case: l => // -[] // -[] //.
   move=> s0 f0 l0.
   case: s0 => //= ws.
@@ -1387,6 +1387,18 @@ Proof.
     first by rewrite ?(negbTE hyx) ?(negbTE hyfz) ?(negbTE hyfl) ?(negbTE hyfm)).
 Qed.
 
+Lemma uncons_LLvarP :
+  forall ii pfx (les : seq lexpr) x les',
+    uncons_LLvar ii pfx les = ok (x, les') ->
+    les = LLvar x :: les'.
+Proof. by move=> ii pfx [|[al ws f|y]] //= l0 z zs [-> ->]. Qed.
+
+Lemma uncons_rvarP :
+  forall ii pfx (res : seq rexpr) x res',
+    uncons_rvar ii pfx res = ok (x, res') ->
+    res = Rexpr (Fvar x) :: res'.
+Proof. by move=> ii pfx [|[|[]]] //= ???? [<- <-]. Qed.
+
 (* [assemble_bn_select_masked] only succeeds when its own [uniq] check on
    the destination [x] and the two selected inputs [wn]/[wm] holds. This
    states that fact directly against the assembled [ops]: whatever
@@ -1404,21 +1416,15 @@ Lemma assemble_bn_select_masked_conflicts ii les res ops :
   then [&& v_var x != v_var wn, v_var x != v_var wm & v_var wn != v_var wm]
   else false.
 Proof.
-  have huncons_LLvar : forall ii' (l : seq lexpr) z zs,
-      arm_extra.uncons_LLvar ii' l = ok (z, zs) -> l = LLvar z :: zs
-    by move=> ii' [|[al ws f|x]] //= l0 z zs [-> ->].
-  have huncons_rvar : forall ii' (r : seq rexpr) z zs,
-      arm_extra.uncons_rvar ii' r = ok (z, zs) -> r = Rexpr (Fvar z) :: zs
-    by move=> ii' [|[|[]]] //= ???? [<- <-].
   rewrite /assemble_bn_select_masked.
   t_xrbindP => -[x le] hx.
   t_xrbindP => -[wn res1] hwn.
   t_xrbindP => -[wm res'] hwm.
   t_xrbindP => huniq -[fv res''] hfv.
   case: (of_var fv : option rflag) => [flag|] //= [<-].
-  have ? := huncons_LLvar _ _ _ _ hx; subst les.
-  have ? := huncons_rvar _ _ _ _ hwn; subst res.
-  have ? := huncons_rvar _ _ _ _ hwm; subst res1.
+  have ? := uncons_LLvarP hx; subst les.
+  have ? := uncons_rvarP hwn; subst res.
+  have ? := uncons_rvarP hwm; subst res1.
   simpl.
   move: huniq => /=; rewrite negb_or => /andP [/andP [hxwn hxwm] hwnwm].
   rewrite orbF in hxwm.
@@ -1530,11 +1536,8 @@ Proof.
   t_xrbindP => x hx hcv hxy1 hxy2.
   rewrite /assemble_self_xor => -[?]; subst ops.
   simpl.
-  have huncons_rvar : forall ii' (r : seq rexpr) z zs,
-      arm_extra.uncons_rvar ii' r = ok (z, zs) -> r = Rexpr (Fvar z) :: zs
-    by move=> ii' [|[|[]]] //= ???? [<- <-].
-  have ? := huncons_rvar _ _ _ _ hy1; subst res.
-  have ? := huncons_rvar _ _ _ _ hy2; subst res1.
+  have ? := uncons_rvarP hy1; subst res.
+  have ? := uncons_rvarP hy2; subst res1.
   simpl.
   by rewrite eqxx hxy2.
 Qed.
@@ -1606,11 +1609,8 @@ t_xrbindP => -[y2 res2] hy2.
 t_xrbindP => x hx hcv hxy1 hxy2.
 rewrite /assemble_self_xor => -[?]; subst ops.
 (* [args] is literally [[:: rvar y1; rvar y2 & res2]]. *)
-have huncons : forall ii' (r : seq rexpr) z zs,
-    arm_extra.uncons_rvar ii' r = ok (z, zs) -> r = Rexpr (Fvar z) :: zs
-  by move=> ii' [|[|[]]] //= ???? [<- <-].
-have ? := huncons _ _ _ _ hy1; subst args.
-have ? := huncons _ _ _ _ hy2; subst res1.
+have ? := uncons_rvarP hy1; subst args.
+have ? := uncons_rvarP hy2; subst res1.
 case hws: (ws <= U32)%CMP in hmap.
 (* Small case: [op = RV32 XOR], [ys = [:: Vword 0]]. [hexec] also pins [xs]
    to exactly two values (the descriptor's [tin] has length two). *)
@@ -1745,17 +1745,17 @@ Proof.
     rewrite /assemble_self_xor /=.
     by move=> [<-].
   + rewrite /assemble_MOV.
-    case: (arm_extra.uncons_LLvar ii lvs) => // -[x ?].
-    case: (arm_extra.uncons_rvar ii args) => // -[y ?].
+    case: (uncons_LLvar ii "mov" lvs) => // -[x ?].
+    case: (uncons_rvar ii "mov" args) => // -[y ?].
     simpl; t_xrbindP => _ <-; done.
   + rewrite /assemble_NOT.
-    case: (arm_extra.uncons_LLvar ii lvs) => // -[x ?].
-    case: (arm_extra.uncons_rvar ii args) => // -[y ?].
+    case: (uncons_LLvar ii "not" lvs) => // -[x ?].
+    case: (uncons_rvar ii "not" args) => // -[y ?].
     simpl; t_xrbindP => _ <-; done.
   + rewrite /assemble_SUBI.
-    case: (arm_extra.uncons_LLvar ii lvs) => // -[x ?].
-    case: (arm_extra.uncons_rvar ii args) => // -[y ?].
-    simpl; case: (arm_extra.uncons_wconst ii _) => // -[imm ?].
+    case: (uncons_LLvar ii "subi" lvs) => // -[x ?].
+    case: (uncons_rvar ii "subi" args) => // -[y ?].
+    simpl; case: (uncons_wconst ii "subi" _) => // -[imm ?].
     simpl; t_xrbindP => _ hne args0 hargs <-.
     rewrite /asm_args_of_opn_args size_map.
     move/o2rP: hargs.
@@ -1773,9 +1773,9 @@ Proof.
        [imm = 0 \/ x <> y]), so the [is_mov]/[smart_mov] branch never hits
        the [x == y] empty-list case; both branches give a singleton list. *)
     rewrite /assemble_ADD_LARGE_IMM.
-    case: (arm_extra.uncons_LLvar ii lvs) => // -[x ?].
-    case: (arm_extra.uncons_rvar ii args) => // -[y ?].
-    simpl; case: (arm_extra.uncons_wconst ii _) => // -[imm ?].
+    case: (uncons_LLvar ii "add_large_imm" lvs) => // -[x ?].
+    case: (uncons_rvar ii "add_large_imm" args) => // -[y ?].
+    simpl; case: (uncons_wconst ii "add_large_imm" _) => // -[imm ?].
     simpl.
     t_xrbindP => hxy hc args0 hargs <-.
     rewrite /asm_args_of_opn_args size_map.
@@ -1790,14 +1790,12 @@ Proof.
     - by rewrite (negbTE hxy).
     - by case: ifP.
   + move=> ws fg; rewrite /assemble_swap.
-    case: args => // -[] // [] // z [] // -[] // [] // w [] //.
-    simpl; case: ifP => _.
-    - case: lvs => // -[] // x [] // -[] // y [] //.
-      simpl; t_xrbindP => _ _ _ <-; done.
-    - case: ifP => _.
-      + case: lvs => // ? [] // ? [] // ? [] // -[] // x [] // -[] // y [] //.
-        simpl; t_xrbindP => _ _ _ <-; done.
-      + done.
+    t_xrbindP => -[z res1] hz.
+    t_xrbindP => -[w res2] hw.
+    t_xrbindP => _.
+    t_xrbindP => -[[[op fl] x] y] hsel.
+    t_xrbindP => _ _ _ <-.
+    done.
   + rewrite /assemble_bn_select_masked.
     t_xrbindP => -[x le] hx.
     t_xrbindP => -[wn res1] hwn.
@@ -1805,8 +1803,8 @@ Proof.
     t_xrbindP => _ -[fv le''] _.
     by case: (of_var fv : option rflag) => [flag|] //= -[<-].
   + move=> ws fg; rewrite /assemble_zeroize_masked.
-    case: (arm_extra.uncons_rvar ii args) => // -[y1 args1].
-    simpl; case: (arm_extra.uncons_rvar ii args1) => // -[y2 ?].
+    case: (uncons_rvar ii "zeroize_masked" args) => // -[y1 args1].
+    simpl; case: (uncons_rvar ii "zeroize_masked" args1) => // -[y2 ?].
     simpl; t_xrbindP => _ _ _ _ _.
     rewrite /assemble_self_xor /=.
     by move=> [<-].
