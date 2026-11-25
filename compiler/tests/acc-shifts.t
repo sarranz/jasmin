@@ -8,6 +8,24 @@ diff against the comments in the test files.
 
   $ ../jasminc -arch acc -o out.s success/acc/bn_shift.jazz && grep -v '^[[:space:]]*\.' out.s
   warning: support of the ACC architecture is VERY experimental. The loop instruction is not part of the verified compiler. The compiler does NOT check whether the loop stack overflow/underflows. The compiler does NOT check that memory accesses are aligned.
+  use_shift_zero_wraps:
+  	bn.xor	w1, w1, w1, FG0
+  	bn.rshi	w0, w1, w0 >> 8
+  	bn.rshi	w0, w0, w1 >> 248
+  	ret
+  use_shift_zero_shared:
+  	bn.xor	w1, w1, w1, FG0
+  	bn.rshi	w0, w1, w0 >> 4
+  	bn.rshi	w0, w0, w1 >> 252
+  	ret
+  use_shl_zero:
+  	bn.xor	w1, w1, w1, FG0
+  	bn.rshi	w0, w0, w1 >> 248
+  	ret
+  use_shr_zero:
+  	bn.xor	w1, w1, w1, FG0
+  	bn.rshi	w0, w1, w0 >> 8
+  	ret
   shift_then_select:
   	bn.xor	w2, w2, w2, FG1
   	bn.rshi	w2, w2, w1 >> 8

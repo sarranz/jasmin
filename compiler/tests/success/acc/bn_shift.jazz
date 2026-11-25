@@ -181,3 +181,80 @@ fn shift_then_select(reg u256 a, reg u256 b) -> reg u256 {
     a = b if !(a <u z);
     return a;
 }
+
+// Hand-written shifts that take the zero register as an argument, for callers
+// that already have one (no #set0_256 inside the shift).
+// The amount must be a constant once inlined. As for the lowered shifts, it
+// wraps modulo 256 (256 is 0, 264 is 8).
+//   shr:  z = x >> i   is   z = #BN_RSHI(zero, x, i)
+//   shl:  z = x << i   is   z = #BN_RSHI(x, zero, 256 - i)
+// (the u8 amount of the intrinsic wraps modulo 256 by itself)
+// A shift by 0 (mod 256) is a move in both (for shl it is required: BN.RSHI
+// by 256 - 0 would wrap to 0 and return the zero register; for shr it lets
+// the move disappear when source and destination share a register).
+inline
+fn shr_zero(reg u256 x zero, inline int i) -> reg u256 {
+    reg u256 z;
+    if (i % 256 == 0) {
+        z = x;
+    } else {
+        z = #BN_RSHI(zero, x, i);
+    }
+    return z;
+}
+
+inline
+fn shl_zero(reg u256 x zero, inline int i) -> reg u256 {
+    reg u256 z;
+    if (i % 256 == 0) {
+        z = x;
+    } else {
+        z = #BN_RSHI(x, zero, 256 - i);
+    }
+    return z;
+}
+
+export
+fn use_shr_zero(reg u256 x) -> reg u256 {
+    // bn.xor t, t, t, FG0 ; bn.rshi w0, t, w0 >> 8
+    reg u256 zero;
+    ?{}, zero = #set0_256();
+    x = shr_zero(x, zero, 8);
+    return x;
+}
+
+export
+fn use_shl_zero(reg u256 x) -> reg u256 {
+    // bn.xor t, t, t, FG0 ; bn.rshi w0, w0, t >> 248
+    reg u256 zero;
+    ?{}, zero = #set0_256();
+    x = shl_zero(x, zero, 8);
+    return x;
+}
+
+export
+fn use_shift_zero_shared(reg u256 x) -> reg u256 {
+    // one zero register serves all shifts; the shifts by 0 are moves
+    // bn.xor t, t, t, FG0
+    // bn.rshi w0, t, w0 >> 4 ; bn.rshi w0, w0, t >> 252 ; (shifts by 0: nothing)
+    reg u256 zero;
+    ?{}, zero = #set0_256();
+    x = shr_zero(x, zero, 4);
+    x = shl_zero(x, zero, 4);
+    x = shr_zero(x, zero, 0);
+    x = shl_zero(x, zero, 0);
+    x = shr_zero(x, zero, 256);
+    x = shl_zero(x, zero, 256);
+    return x;
+}
+
+export
+fn use_shift_zero_wraps(reg u256 x) -> reg u256 {
+    // bn.xor t, t, t, FG0
+    // bn.rshi w0, t, w0 >> 8 ; bn.rshi w0, w0, t >> 248
+    reg u256 zero;
+    ?{}, zero = #set0_256();
+    x = shr_zero(x, zero, 264);
+    x = shl_zero(x, zero, 264);
+    return x;
+}
