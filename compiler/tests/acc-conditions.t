@@ -77,7 +77,7 @@ Promote only after checking every diff against the comments in the test files.
   	bn.cmp	w0, w1, FG1
   	bn.sel	w1, w0, w1, FG1.C
   	bn.sel	w0, w0, w2, FG1.C
-  	bn.xor	w0, w1, w0, FG0
+  	bn.xor	w0, w1, w0, FG1
   	ret
   bool_negated_use:
   	bn.cmp	w0, w1, FG1

@@ -137,15 +137,15 @@ Module E.
 End E.
 
 (* Warnings about the extra [set0] introduced by the lowering of a wide
-   shift. It assembles to [bn.xor t, t, t, FG0] and overwrites the flags of
-   FG0. *)
+   shift. It assembles to [bn.xor t, t, t, FG1] and overwrites the flags of
+   FG1. *)
 Definition warning_bn_shr : warning_msg :=
   Extra_assignment
-    "right shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG0".
+    "right shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG1".
 
 Definition warning_bn_shl : warning_msg :=
   Extra_assignment
-    "left shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG0".
+    "left shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG1".
 
 Section WITH_PARAMS.
 
@@ -477,7 +477,7 @@ Section LOWER_OPN.
         else if (sz == xreg_size)%CMP then ok (Some (lnone_mlz ++ lvs))
         else Error (E.not_implemented ii)
       in
-      li_xissue lvs (SWAP sz) es
+      li_xissue lvs (SWAP sz FG1) es
     else skip.
 
   Definition lower_pseudo_operator
@@ -695,8 +695,8 @@ Section LOWER_ASSIGN.
   Definition lower_Papp2_large
     (ws : wsize) (op : sop2) (e0 e1 : pexpr) : low_instr :=
     let%lr (lvs, op) :=
-      if isSome (is_wconst ws e1) then acc_Iop_of_op2 op FG0
-      else acc_op_of_op2 op FG0
+      if isSome (is_wconst ws e1) then acc_Iop_of_op2 op FG1
+      else acc_op_of_op2 op FG1
     in
     li_issue lvs op [:: e0; e1 ].
 
@@ -756,7 +756,7 @@ Section LOWER_ASSIGN.
       let etmp := Pvar (mk_lvar tmp) in
       let imm z := Papp1 (Oword_of_int U8) (Pconst z) in
       let pre :=
-        [:: (lnone_mlz ++ [:: Lvar tmp ], ExtOp (set0 xreg_size), [::]) ]
+        [:: (lnone_mlz ++ [:: Lvar tmp ], ExtOp (set0 xreg_size FG1), [::]) ]
       in
       let es :=
         if is_right then [:: etmp; e0; imm z ]

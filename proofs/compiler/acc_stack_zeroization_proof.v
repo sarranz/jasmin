@@ -67,15 +67,15 @@ Let voff := mk_var_i (to_var X06).
 Let vzero := mk_var_i (to_var X07).
 Let vtmp := mk_var_i (to_var X12).
 Let vwzero := mk_var_i (to_var W31).
-Let vflags := map (fun f => mk_var_i (to_var f)) [:: MF0; LF0; ZF0 ].
+Let vflags := map (fun f => mk_var_i (to_var f)) [:: MF1; LF1; ZF1 ].
 
 (* Convenience projections of [vflags]'s three entries, used to state
    [set0_wide_eval_instr]'s conclusion without indexing into the list.  Not
    present in [acc_stack_zeroization.v] itself (that file only needs
    [vflags] as a whole); added here for readability. *)
-Let vmf := mk_var_i (to_var MF0).
-Let vlf := mk_var_i (to_var LF0).
-Let vzf := mk_var_i (to_var ZF0).
+Let vmf := mk_var_i (to_var MF1).
+Let vlf := mk_var_i (to_var LF1).
+Let vzf := mk_var_i (to_var ZF1).
 
 (* -------------------------------------------------------------------- *)
 (* Per-instruction semantics, small clear step ([sw x7, off(v)]). *)
@@ -112,8 +112,8 @@ Proof.
   by rewrite hm' /=.
 Qed.
 
-(* Per-instruction semantics of [w31 = #set0_256()], i.e.
-   [bn.xor w31, w31, w31, FG0]. *)
+(* Per-instruction semantics of [w31 = #set0_256()] on FG1, i.e.
+   [bn.xor w31, w31, w31, FG1]. *)
 Lemma set0_wide_eval_instr lp (ls : lstate) :
   let: vm' :=
     ((((lvm ls).[vmf <- Vbool false])

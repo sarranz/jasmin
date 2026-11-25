@@ -9,24 +9,24 @@ diff against the comments in the test files.
   $ ../jasminc -arch acc -o out.s success/acc/bn_shift.jazz && grep -v '^[[:space:]]*\.' out.s
   warning: support of the ACC architecture is VERY experimental. The loop instruction is not part of the verified compiler. The compiler does NOT check whether the loop stack overflow/underflows. The compiler does NOT check that memory accesses are aligned.
   shift_then_select:
-  	bn.xor	w2, w2, w2, FG0
+  	bn.xor	w2, w2, w2, FG1
   	bn.rshi	w2, w2, w1 >> 8
   	bn.cmp	w0, w2, FG1
   	bn.sel	w0, w0, w1, FG1.C
   	ret
   shr_keeps_source:
-  	bn.xor	w2, w2, w2, FG0
+  	bn.xor	w2, w2, w2, FG1
   	bn.rshi	w2, w2, w0 >> 8
-  	bn.add	w0, w0, w2, FG0
+  	bn.add	w0, w0, w2, FG1
   	ret
   shr_then_shl:
-  	bn.xor	w2, w2, w2, FG0
+  	bn.xor	w2, w2, w2, FG1
   	bn.rshi	w0, w2, w0 >> 8
-  	bn.xor	w2, w2, w2, FG0
+  	bn.xor	w2, w2, w2, FG1
   	bn.rshi	w0, w0, w2 >> 240
   	ret
   shl_wraps:
-  	bn.xor	w2, w2, w2, FG0
+  	bn.xor	w2, w2, w2, FG1
   	bn.rshi	w0, w0, w2 >> 248
   	ret
   shr_wraps_to_zero:
@@ -44,51 +44,51 @@ diff against the comments in the test files.
   	bn.mov	w0, w1
   	ret
   shl_255:
-  	bn.xor	w2, w2, w2, FG0
+  	bn.xor	w2, w2, w2, FG1
   	bn.rshi	w0, w0, w2 >> 1
   	ret
   shr_255:
-  	bn.xor	w2, w2, w2, FG0
+  	bn.xor	w2, w2, w2, FG1
   	bn.rshi	w0, w2, w0 >> 255
   	ret
   shl_3:
-  	bn.xor	w2, w2, w2, FG0
+  	bn.xor	w2, w2, w2, FG1
   	bn.rshi	w0, w0, w2 >> 253
   	ret
   shr_3:
-  	bn.xor	w2, w2, w2, FG0
+  	bn.xor	w2, w2, w2, FG1
   	bn.rshi	w0, w2, w0 >> 3
   	ret
   shl_1:
-  	bn.xor	w2, w2, w2, FG0
+  	bn.xor	w2, w2, w2, FG1
   	bn.rshi	w0, w0, w2 >> 255
   	ret
   shr_1:
-  	bn.xor	w2, w2, w2, FG0
+  	bn.xor	w2, w2, w2, FG1
   	bn.rshi	w0, w2, w0 >> 1
   	ret
   shl_other:
-  	bn.xor	w2, w2, w2, FG0
+  	bn.xor	w2, w2, w2, FG1
   	bn.rshi	w0, w1, w2 >> 192
   	ret
   shr_other:
-  	bn.xor	w2, w2, w2, FG0
+  	bn.xor	w2, w2, w2, FG1
   	bn.rshi	w0, w2, w1 >> 64
   	ret
   shl_in_place:
-  	bn.xor	w2, w2, w2, FG0
+  	bn.xor	w2, w2, w2, FG1
   	bn.rshi	w0, w0, w2 >> 240
   	ret
   shr_in_place:
-  	bn.xor	w2, w2, w2, FG0
+  	bn.xor	w2, w2, w2, FG1
   	bn.rshi	w0, w2, w0 >> 16
   	ret
   shl_8:
-  	bn.xor	w2, w2, w2, FG0
+  	bn.xor	w2, w2, w2, FG1
   	bn.rshi	w0, w0, w2 >> 248
   	ret
   shr_8:
-  	bn.xor	w2, w2, w2, FG0
+  	bn.xor	w2, w2, w2, FG1
   	bn.rshi	w0, w2, w0 >> 8
   	ret
 
@@ -101,39 +101,39 @@ reported.
   $ ../jasminc -wea -arch acc -o out.s success/acc/bn_shift.jazz
   warning: support of the ACC architecture is VERY experimental. The loop instruction is not part of the verified compiler. The compiler does NOT check whether the loop stack overflow/underflows. The compiler does NOT check that memory accesses are aligned.
   "success/acc/bn_shift.jazz", line 180 (4-15)
-  warning: right shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG0
+  warning: right shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG1
   "success/acc/bn_shift.jazz", line 169 (4-15)
-  warning: right shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG0
+  warning: right shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG1
   "success/acc/bn_shift.jazz", line 159 (4-15)
-  warning: right shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG0
+  warning: right shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG1
   "success/acc/bn_shift.jazz", line 160 (4-16)
-  warning: left shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG0
+  warning: left shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG1
   "success/acc/bn_shift.jazz", line 150 (4-17)
-  warning: left shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG0
+  warning: left shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG1
   "success/acc/bn_shift.jazz", line 95 (4-17)
-  warning: left shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG0
+  warning: left shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG1
   "success/acc/bn_shift.jazz", line 88 (4-17)
-  warning: right shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG0
+  warning: right shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG1
   "success/acc/bn_shift.jazz", line 81 (4-15)
-  warning: left shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG0
+  warning: left shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG1
   "success/acc/bn_shift.jazz", line 74 (4-15)
-  warning: right shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG0
+  warning: right shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG1
   "success/acc/bn_shift.jazz", line 67 (4-15)
-  warning: left shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG0
+  warning: left shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG1
   "success/acc/bn_shift.jazz", line 60 (4-15)
-  warning: right shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG0
+  warning: right shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG1
   "success/acc/bn_shift.jazz", line 51 (4-16)
-  warning: left shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG0
+  warning: left shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG1
   "success/acc/bn_shift.jazz", line 44 (4-16)
-  warning: right shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG0
+  warning: right shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG1
   "success/acc/bn_shift.jazz", line 37 (4-16)
-  warning: left shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG0
+  warning: left shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG1
   "success/acc/bn_shift.jazz", line 30 (4-16)
-  warning: right shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG0
+  warning: right shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG1
   "success/acc/bn_shift.jazz", line 23 (4-15)
-  warning: left shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG0
+  warning: left shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG1
   "success/acc/bn_shift.jazz", line 15 (4-15)
-  warning: right shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG0
+  warning: right shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG1
 
 The amount of a wide shift must be a constant.
 

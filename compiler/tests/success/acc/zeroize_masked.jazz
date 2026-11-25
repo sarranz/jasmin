@@ -1,10 +1,19 @@
 // ZEROIZE_MASKED forces the first input to be allocated as a destination, and
 // performs an XOR of the second input with itself (i.e., writing zero).
 // The first and second inputs are guaranteed to be different.
+// Its (dummy) flags are written to FG0 by default; the [_FG1] version (with
+// the size suffix last, e.g. [ZEROIZE_MASKED_FG1_256]) writes them to FG1.
 
 export
 fn zeroize_masked_u32(reg u32 a b) -> reg u32 {
     reg u32 x = #ZEROIZE_MASKED(a, b);
+    return x;
+}
+
+// The flag group is ignored for narrow registers.
+export
+fn zeroize_masked_u32_fg1(reg u32 a b) -> reg u32 {
+    reg u32 x = #ZEROIZE_MASKED_FG1_32(a, b);
     return x;
 }
 
@@ -13,6 +22,37 @@ fn zeroize_masked_u256(reg u256 a b) -> reg u256 {
     reg u256 x;
 
     ?{}, x = #ZEROIZE_MASKED_256(a, b);
+
+    return x;
+}
+
+export
+fn zeroize_masked_u256_fg1(reg u256 a b) -> reg u256 {
+    reg u256 x;
+
+    ?{}, x = #ZEROIZE_MASKED_FG1_256(a, b);
+
+    return x;
+}
+
+// Explicit flag destinations: M, L, Z of FG0 ...
+export
+fn zeroize_masked_u256_flags(reg u256 a b) -> reg u256 {
+    reg u256 x;
+    reg bool mf0 lf0 zf0;
+
+    ?{mf0, lf0, zf0}, x = #ZEROIZE_MASKED_256(a, b);
+
+    return x;
+}
+
+// ... or of FG1.
+export
+fn zeroize_masked_u256_fg1_flags(reg u256 a b) -> reg u256 {
+    reg u256 x;
+    reg bool mf1 lf1 zf1;
+
+    ?{mf1, lf1, zf1}, x = #ZEROIZE_MASKED_FG1_256(a, b);
 
     return x;
 }
@@ -46,6 +86,23 @@ fn zeroize_masked_u256_example(reg u256 a1 a2 b1 b2) -> reg u256, reg u256 {
     reg u256 z;
     ?{}, z = #set0_256(); // will XOR z with itself
     ?{}, x = #ZEROIZE_MASKED_256(x, z); // whitening before next computation
+
+    x = a2 + b2;
+    reg u256 r2 = x; // second computation
+
+    return r1, r2;
+}
+
+// Same example, with the whitening on FG1 so that the flags of FG0 are not
+// touched.
+export
+fn zeroize_masked_u256_example_fg1(reg u256 a1 a2 b1 b2) -> reg u256, reg u256 {
+    reg u256 x = a1 + b1;
+    reg u256 r1 = x; // first computation
+
+    reg u256 z;
+    ?{}, z = #set0_FG1_256(); // will XOR z with itself
+    ?{}, x = #ZEROIZE_MASKED_FG1_256(x, z); // whitening before next computation
 
     x = a2 + b2;
     reg u256 r2 = x; // second computation

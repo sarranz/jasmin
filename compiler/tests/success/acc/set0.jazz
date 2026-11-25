@@ -1,3 +1,6 @@
+// [set0] writes its (dummy) flags to FG0 by default; the [_FG1] version (with
+// the size suffix last, e.g. [set0_FG1_256]) writes them to FG1 instead.
+
 export
 fn set0_u32() -> reg u32 {
     reg u32 x;
@@ -12,9 +15,60 @@ fn set0_default() -> reg u32 {
     return x;
 }
 
+// The flag group is ignored for narrow registers.
+export
+fn set0_u32_fg1() -> reg u32 {
+    reg u32 x;
+    x = #set0_FG1_32();
+    return x;
+}
+
 export
 fn set0_u256() -> reg u256 {
     reg u256 x;
     ?{}, x = #set0_256();
     return x;
+}
+
+export
+fn set0_u256_fg1() -> reg u256 {
+    reg u256 x;
+    ?{}, x = #set0_FG1_256();
+    return x;
+}
+
+// Explicit flag destinations: M, L, Z of FG0 ...
+export
+fn set0_u256_flags() -> reg u256 {
+    reg u256 x;
+    reg bool mf0 lf0 zf0;
+    ?{mf0, lf0, zf0}, x = #set0_256();
+    return x;
+}
+
+// ... or of FG1.
+export
+fn set0_u256_fg1_flags() -> reg u256 {
+    reg u256 x;
+    reg bool mf1 lf1 zf1;
+    ?{mf1, lf1, zf1}, x = #set0_FG1_256();
+    return x;
+}
+
+// [set0_256] kills the flags of FG0 but not those of FG1, and the other way
+// around for [set0_FG1_256]: the comparison flag survives the [set0].
+export
+fn set0_keeps_other_group(reg u256 a b) -> reg u256 {
+    reg bool c0 c1;
+    reg u256 x y r;
+
+    ?{ "LF0" = c0 } = #BN_CMP(a, b);
+    ?{}, x = #set0_FG1_256();
+    r = #BN_SELECT_MASKED(a, x, c0);
+
+    ?{ "LF1" = c1 } = #BN_CMP_FG1(a, b);
+    ?{}, y = #set0_256();
+    r = #BN_SELECT_MASKED(r, y, c1);
+
+    return r;
 }

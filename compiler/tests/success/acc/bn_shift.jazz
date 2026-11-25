@@ -10,7 +10,7 @@
 
 export
 fn shr_8(reg u256 x) -> reg u256 {
-    // bn.xor t, t, t, FG0 ; bn.rshi w0, t, w0 >> 8
+    // bn.xor t, t, t, FG1 ; bn.rshi w0, t, w0 >> 8
     reg u256 z;
     z = x >> 8;
     return z;
@@ -18,7 +18,7 @@ fn shr_8(reg u256 x) -> reg u256 {
 
 export
 fn shl_8(reg u256 x) -> reg u256 {
-    // bn.xor t, t, t, FG0 ; bn.rshi w0, w0, t >> 248
+    // bn.xor t, t, t, FG1 ; bn.rshi w0, w0, t >> 248
     reg u256 z;
     z = x << 8;
     return z;
@@ -26,28 +26,28 @@ fn shl_8(reg u256 x) -> reg u256 {
 
 export
 fn shr_in_place(reg u256 x) -> reg u256 {
-    // bn.xor t, t, t, FG0 ; bn.rshi w0, t, w0 >> 16
+    // bn.xor t, t, t, FG1 ; bn.rshi w0, t, w0 >> 16
     x = x >> 16;
     return x;
 }
 
 export
 fn shl_in_place(reg u256 x) -> reg u256 {
-    // bn.xor t, t, t, FG0 ; bn.rshi w0, w0, t >> 240
+    // bn.xor t, t, t, FG1 ; bn.rshi w0, w0, t >> 240
     x = x << 16;
     return x;
 }
 
 export
 fn shr_other(reg u256 a, reg u256 b) -> reg u256 {
-    // bn.xor t, t, t, FG0 ; bn.rshi w0, t, w1 >> 64
+    // bn.xor t, t, t, FG1 ; bn.rshi w0, t, w1 >> 64
     a = b >> 64;
     return a;
 }
 
 export
 fn shl_other(reg u256 a, reg u256 b) -> reg u256 {
-    // bn.xor t, t, t, FG0 ; bn.rshi w0, w1, t >> 192
+    // bn.xor t, t, t, FG1 ; bn.rshi w0, w1, t >> 192
     a = b << 64;
     return a;
 }
@@ -56,42 +56,42 @@ fn shl_other(reg u256 a, reg u256 b) -> reg u256 {
 // to be a multiple of 8.
 export
 fn shr_1(reg u256 x) -> reg u256 {
-    // bn.xor t, t, t, FG0 ; bn.rshi w0, t, w0 >> 1
+    // bn.xor t, t, t, FG1 ; bn.rshi w0, t, w0 >> 1
     x = x >> 1;
     return x;
 }
 
 export
 fn shl_1(reg u256 x) -> reg u256 {
-    // bn.xor t, t, t, FG0 ; bn.rshi w0, w0, t >> 255
+    // bn.xor t, t, t, FG1 ; bn.rshi w0, w0, t >> 255
     x = x << 1;
     return x;
 }
 
 export
 fn shr_3(reg u256 x) -> reg u256 {
-    // bn.xor t, t, t, FG0 ; bn.rshi w0, t, w0 >> 3
+    // bn.xor t, t, t, FG1 ; bn.rshi w0, t, w0 >> 3
     x = x >> 3;
     return x;
 }
 
 export
 fn shl_3(reg u256 x) -> reg u256 {
-    // bn.xor t, t, t, FG0 ; bn.rshi w0, w0, t >> 253
+    // bn.xor t, t, t, FG1 ; bn.rshi w0, w0, t >> 253
     x = x << 3;
     return x;
 }
 
 export
 fn shr_255(reg u256 x) -> reg u256 {
-    // bn.xor t, t, t, FG0 ; bn.rshi w0, t, w0 >> 255
+    // bn.xor t, t, t, FG1 ; bn.rshi w0, t, w0 >> 255
     x = x >> 255;
     return x;
 }
 
 export
 fn shl_255(reg u256 x) -> reg u256 {
-    // bn.xor t, t, t, FG0 ; bn.rshi w0, w0, t >> 1
+    // bn.xor t, t, t, FG1 ; bn.rshi w0, w0, t >> 1
     x = x << 255;
     return x;
 }
@@ -146,7 +146,7 @@ fn shr_wraps_to_zero(reg u256 x) -> reg u256 {
 
 export
 fn shl_wraps(reg u256 x) -> reg u256 {
-    // bn.xor t, t, t, FG0 ; bn.rshi w0, w0, t >> 248
+    // bn.xor t, t, t, FG1 ; bn.rshi w0, w0, t >> 248
     x = x << 264;
     return x;
 }
@@ -154,8 +154,8 @@ fn shl_wraps(reg u256 x) -> reg u256 {
 // Two shifts in a row reuse the fresh register.
 export
 fn shr_then_shl(reg u256 x) -> reg u256 {
-    // bn.xor t, t, t, FG0 ; bn.rshi w0, t, w0 >> 8
-    // bn.xor t, t, t, FG0 ; bn.rshi w0, w0, t >> 240
+    // bn.xor t, t, t, FG1 ; bn.rshi w0, t, w0 >> 8
+    // bn.xor t, t, t, FG1 ; bn.rshi w0, w0, t >> 240
     x = x >> 8;
     x = x << 16;
     return x;
@@ -164,17 +164,17 @@ fn shr_then_shl(reg u256 x) -> reg u256 {
 // The source stays live after the shift.
 export
 fn shr_keeps_source(reg u256 x) -> reg u256 {
-    // bn.xor t, t, t, FG0 ; bn.rshi z, t, w0 >> 8 ; bn.add w0, w0, z, FG0
+    // bn.xor t, t, t, FG1 ; bn.rshi z, t, w0 >> 8 ; bn.add w0, w0, z, FG1
     reg u256 z;
     z = x >> 8;
     x = x + z;
     return x;
 }
 
-// A lowered comparison (on FG1) next to a lowered shift (set0 writes FG0).
+// A lowered comparison (on FG1) next to a lowered shift (set0 writes FG1).
 export
 fn shift_then_select(reg u256 a, reg u256 b) -> reg u256 {
-    // bn.xor t, t, t, FG0 ; bn.rshi z, t, w1 >> 8
+    // bn.xor t, t, t, FG1 ; bn.rshi z, t, w1 >> 8
     // bn.cmp w0, z, FG1 ; bn.sel w0, w0, w1, FG1.C
     reg u256 z;
     z = b >> 8;

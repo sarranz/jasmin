@@ -744,6 +744,22 @@ Proof.
 Qed.
 Arguments acc_sem_sopns_asm_args m lc : clear implicits.
 
+(* The wide [set0]/[SWAP]/[ZEROIZE_MASKED] descriptors destructure the
+   triple of flags of their flag group [fg] with a [match] that is stuck for a
+   variable [fg]. Rewriting the triple with [mlz_flags_surj] turns that [match]
+   into one on a pair of projections, which reduces, so the proofs need not
+   case on [fg]. *)
+Let mlz_flags (fg : acc_options.bn_flag_group) : rflag * rflag * rflag :=
+  match fg with
+  | acc_options.FG0 => (MF0, LF0, ZF0)
+  | acc_options.FG1 => (MF1, LF1, ZF1)
+  end.
+
+Lemma mlz_flags_surj fg :
+  mlz_flags fg =
+  ((mlz_flags fg).1.1, (mlz_flags fg).1.2, (mlz_flags fg).2).
+Proof. by rewrite -!surjective_pairing. Qed.
+
 (* Proof plan (set0 ws) -- follows the x86 Oset0 case.
 
    The assembly is a single op that self-XORs the DESTINATION itself:
@@ -792,8 +808,8 @@ Arguments acc_sem_sopns_asm_args m lc : clear implicits.
      not enough here since [ops] is not yet a literal singleton at that
      point).
    cf. x86_params_proof.v, the Oset0 case of assemble_extra_op. *)
-Lemma acc_assemble_set0_correct ws :
-  assemble_extra_correct (ap_agp acc_params) (set0 ws).
+Lemma acc_assemble_set0_correct ws fg :
+  assemble_extra_correct (ap_agp acc_params) (set0 ws fg).
 Proof.
 move=> rip ii lvs vs m xs ys m' s ops ops'.
 move=> ho hexec hwle hops hmap hlom.
@@ -844,12 +860,13 @@ case hws: (ws <= reg_size)%CMP in hops.
       move: hca2; rewrite /compat_imm /= andbT => /orP [/eqP heq|//].
       by move: h1; rewrite -heq /check_arg_kind.
   + by rewrite /= /= /= in hidc; move: hidc; rewrite !andbF.
-(* Wide case: ws > reg_size, op = BN_basic BN_XOR FG0, x is the destination *)
+(* Wide case: ws > reg_size, op = BN_basic BN_XOR fg, x is the destination *)
 - move: hops; t_xrbindP => x hx heq; subst ops.
   move: hexec ho.
   rewrite /exec_sopn /sopn_sem /sopn_sem_ /=.
   move=> hexec _.
   rewrite /= hws /= in hexec.
+  rewrite /desc_set0_large -/(mlz_flags fg) mlz_flags_surj /= in hexec.
   case: xs hexec => [|//]; move=> hexec.
   simpl in hexec.
   move: hexec => /ok_inj hexeq; rewrite -hexeq in hwle.
@@ -887,9 +904,9 @@ case hws: (ws <= reg_size)%CMP in hops.
         by rewrite /= h0. }
       rewrite /assert hcheck hnotin1 /= !truncate_word_u /= wxor_xx /=.
       rewrite /MF_of_word /LF_of_word /ZF_of_word /lsb w0E msb0 eqxx /=.
-      set id := instr_desc (None, BN_basic BN_XOR acc_options.FG0).
+      set id := instr_desc (None, BN_basic BN_XOR fg).
       have hid_tout : id_tout id = [:: lbool; lbool; lbool; lword256] by rewrite /id /=.
-      have hid_out : id_out id = [:: F MF0; F LF0; F ZF0; EXa 0] by rewrite /id /=.
+      have hid_out : id_out id = ad_mlz fg ++ [:: EXa 0] by rewrite /id /=.
       rewrite hid_out hid_tout in hcd.
       have hsize : size (id_out id) = size (id_tout id)
         by exact: eqP (andP (id_eq_size id)).2.
@@ -1265,8 +1282,8 @@ Proof using atoI call_conv sc_sem syscall_state vinfo.
   - by move: hexec; rewrite /exec_sopn /sopn_sem /sopn_sem_ /=; t_xrbindP.
 Qed.
 
-Lemma acc_assemble_swap_correct ws :
-  assemble_extra_correct (ap_agp acc_params) (SWAP ws).
+Lemma acc_assemble_swap_correct ws fg :
+  assemble_extra_correct (ap_agp acc_params) (SWAP ws fg).
 Proof.
   move=> rip ii lvs args m xs ys m' s ops ops' /= h ++ h'.
   move: h h'.
@@ -1301,6 +1318,7 @@ Proof.
   move=> -[[[_ _] _] _] [<- <- <- <-] + hex hwr.
   move: hex hwr.
   rewrite /exec_sopn /= /sopn_sem /sopn_sem_ /=.
+  rewrite /desc_swap_large -/(mlz_flags fg) mlz_flags_surj /=.
   t_xrbindP=> /= _ wz hvz ww hvw <- <- /=; t_xrbindP.
   move=> z0 hM z1 hL z2 hZ z3 z4 hsx ? z5 z6 hsy ? ?; subst z3 z5 m'.
   move: hM hL hZ.
@@ -1396,7 +1414,8 @@ Proof.
   t_xrbindP => -[x le] hx.
   t_xrbindP => -[wn res1] hwn.
   t_xrbindP => -[wm res'] hwm.
-  t_xrbindP => huniq ?; subst ops.
+  t_xrbindP => huniq -[fv res''] hfv.
+  case: (of_var fv : option rflag) => [flag|] //= [<-].
   have ? := huncons_LLvar _ _ _ _ hx; subst les.
   have ? := huncons_rvar _ _ _ _ hwn; subst res.
   have ? := huncons_rvar _ _ _ _ hwm; subst res1.
@@ -1470,16 +1489,19 @@ rewrite /to_asm /= /assemble_extra /assemble_bn_select_masked in hops.
 move: hops; t_xrbindP => -[x le] hx.
 t_xrbindP => -[wn res1] hwn.
 t_xrbindP => -[wm le'] hwm.
-t_xrbindP => huniq ?; subst ops.
+t_xrbindP => huniq -[fv le''] hfv.
+case Eflag: (of_var fv : option rflag) => [flag|] //= -[?]; subst ops.
 have h := assemble_opsP acc_eval_assemble_cond hmap erefl _ hlom.
 case: (h m') => {h}.
-(* [sem_sopns] on the single assembled [BN_SEL FG0]: the [sem_rexprs] part is
+(* [sem_sopns] on the single assembled [BN_SEL], with [fg] the flag group of the
+   flag argument: the [sem_rexprs] part is
    [ho], the [write_lexprs] part is [hwle], and the [exec_sopn] in between is
    convertible to the extra op's own [exec_sopn] ([semi_to_atype]'s
    [computational_eq] cast reduces, both descriptors being concrete). *)
 - rewrite /sem_sopns /= /sem_sopn_t ho /=.
   have hbase :
-    exec_sopn (Oasm (BaseOp (None, BN_SEL acc_options.FG0))) xs = ok ys
+    exec_sopn
+      (Oasm (BaseOp (None, BN_SEL (bn_flag_group_of_rflag flag)))) xs = ok ys
     by exact: hexec.
   by rewrite hbase /= hwle.
 by move=> s' hfold hlom'; exists s'.
@@ -1494,8 +1516,8 @@ Qed.
    states the fact against both the pre-assembly [res] (source of [y1]) and
    the assembled [ops] (source of [y2]), tying them together via [y2]'s
    coincidence between the two. *)
-Lemma assemble_zeroize_masked_conflicts ii ws les res ops :
-  assemble_zeroize_masked ii ws les res = ok ops ->
+Lemma assemble_zeroize_masked_conflicts ii ws fg les res ops :
+  assemble_zeroize_masked ii ws fg les res = ok ops ->
   if res is Rexpr (Fvar y1) :: Rexpr (Fvar y2) :: _ then
     if ops is [:: (_, _, [:: Rexpr (Fvar y2'); _])] then
       [&& v_var y2 == v_var y2' & v_var y1 != v_var y2]
@@ -1573,8 +1595,8 @@ Qed.
      part of the original [args]) is likewise never otherwise used. Keep the
      small/wide case split consistent between [hexec] (which fixes [ys])
      and [assemble_self_xor]'s own [(ws <= reg_size)%CMP] test for [op]. *)
-Lemma acc_assemble_ZEROIZE_MASKED_correct ws :
-  assemble_extra_correct (ap_agp acc_params) (ZEROIZE_MASKED ws).
+Lemma acc_assemble_ZEROIZE_MASKED_correct ws fg :
+  assemble_extra_correct (ap_agp acc_params) (ZEROIZE_MASKED ws fg).
 Proof.
 move=> rip ii lvs args m xs ys m' s ops ops'.
 move=> ho hexec hwle hops hmap hlom.
@@ -1604,9 +1626,10 @@ case hws: (ws <= U32)%CMP in hmap.
   + rewrite /sem_sopns /= /sem_sopn_t /= hgy2 /=.
     by rewrite /exec_sopn /sopn_sem /sopn_sem_ /= hw2 /= wxor_xx /= hwle.
   by move=> s' hfold hlom'; exists s'.
-(* Wide case: [op = BN_basic BN_XOR FG0], three flag outputs before the word;
+(* Wide case: [op = BN_basic BN_XOR fg], three flag outputs before the word;
    at [0] they are [(false, false, true)]. *)
 move: hexec; rewrite /exec_sopn /sopn_sem /sopn_sem_ /= hws /=.
+rewrite /desc_zeroize_masked_large -/(mlz_flags fg) mlz_flags_surj /=.
 case: xs ho => [|v1 [|v2 [|v3 xs3]]] ho //=; [by t_xrbindP | | by t_xrbindP].
 t_xrbindP => t w1 hw1 w2 hw2 ? ?; subst t ys.
 rewrite /= in hwle.
@@ -1717,7 +1740,7 @@ Lemma acc_assemble_extra_sz ii op lvs args ops :
 Proof.
   rewrite /to_asm /= /assemble_extra /=.
   case: op.
-  + move=> ws; rewrite /assemble_set0.
+  + move=> ws fg; rewrite /assemble_set0.
     t_xrbindP => x hx.
     rewrite /assemble_self_xor /=.
     by move=> [<-].
@@ -1766,7 +1789,7 @@ Proof.
     case: ifP => hmov.
     - by rewrite (negbTE hxy).
     - by case: ifP.
-  + move=> ws; rewrite /assemble_swap.
+  + move=> ws fg; rewrite /assemble_swap.
     case: args => // -[] // [] // z [] // -[] // [] // w [] //.
     simpl; case: ifP => _.
     - case: lvs => // -[] // x [] // -[] // y [] //.
@@ -1779,8 +1802,9 @@ Proof.
     t_xrbindP => -[x le] hx.
     t_xrbindP => -[wn res1] hwn.
     t_xrbindP => -[wm le'] hwm.
-    by t_xrbindP => _ <-.
-  + move=> ws; rewrite /assemble_zeroize_masked.
+    t_xrbindP => _ -[fv le''] _.
+    by case: (of_var fv : option rflag) => [flag|] //= -[<-].
+  + move=> ws fg; rewrite /assemble_zeroize_masked.
     case: (arm_extra.uncons_rvar ii args) => // -[y1 args1].
     simpl; case: (arm_extra.uncons_rvar ii args1) => // -[y2 ?].
     simpl; t_xrbindP => _ _ _ _ _.
@@ -1833,7 +1857,7 @@ Proof.
   case: op => [[msb o] | eo] /=.
   - case: msb => //; case: o => // _.
     rewrite /exec_sopn /sopn_sem /sopn_sem_ /=.
-    t_xrbindP=> wx hwx hto [<-] <-.
+    t_xrbindP=> wx hwx hto <- <-.
     constructor=> //.
     move/to_wordI: hto => [ws [w0 [-> htr]]].
     exact: (truncate_word_uincl htr).

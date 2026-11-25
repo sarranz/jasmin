@@ -1,5 +1,7 @@
 // The destination and source registers of `BN_SELECT_MASKED` are forced to
 // different registers.
+// It has no flag group suffix: it always uses the flag group of its flag
+// argument (FG0 or FG1).
 
 export
 fn bn_select_masked(reg u256 arg0 arg1) -> reg u256 {
@@ -11,6 +13,28 @@ fn bn_select_masked(reg u256 arg0 arg1) -> reg u256 {
 
     ?{ "LF1" = b } = #BN_CMP_FG1(x, arg1);
     x = #BN_SELECT_MASKED(arg0, x, b);
+
+    return x;
+}
+
+export
+fn bn_select_masked_zf0(reg u256 arg0 arg1) -> reg u256 {
+    reg bool b;
+    reg u256 x;
+
+    ?{ "ZF0" = b } = #BN_CMP_FG0(arg0, arg1);
+    x = #BN_SELECT_MASKED(arg0, arg1, b);
+
+    return x;
+}
+
+export
+fn bn_select_masked_cf1(reg u256 arg0 arg1) -> reg u256 {
+    reg bool b;
+    reg u256 x;
+
+    ?{ "CF1" = b } = #BN_CMP_FG1(arg0, arg1);
+    x = #BN_SELECT_MASKED(arg0, arg1, b);
 
     return x;
 }

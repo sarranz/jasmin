@@ -85,16 +85,21 @@ Let F (f : rflag) := ADImplicit (to_var f).
 
 #[only(eqbOK)] derive
 Variant extra_op :=
-| set0 of wsize
+| set0 of wsize & bn_flag_group (* The flag group receives the flags of a wide
+                                   [set0]; it is ignored for narrow ones. *)
 | MOV  (* [ADDI x, y, 0]. *)
 | NOT  (* [XORI x, y, -1]. *)
 | SUBI (* [ADDI x, y, -imm]. *)
 | ADD_LARGE_IMM (* [LI x, imm; ADD x, x, y]. *)
-| SWAP of wsize (* Three [XOR]s. *)
-| BN_SELECT_MASKED (* [BN_SEL] with its three arguments in different
-                      registers *)
-| ZEROIZE_MASKED of wsize (* [set0] forcing first argument to be allocated to
-                             output register *)
+| SWAP of wsize & bn_flag_group (* Three [XOR]s. The flag group receives the
+                                   flags of the wide [XOR]s; it is ignored for
+                                   narrow swaps. *)
+| BN_SELECT_MASKED (* [BN_SEL fg] with its three arguments in different
+                      registers; the flag group [fg] is that of the flag
+                      argument *)
+| ZEROIZE_MASKED of wsize & bn_flag_group (* [set0] forcing first argument to
+                                             be allocated to output
+                                             register *)
 | SELECT (* [BN_SEL fg] with the flag group taken from the condition flag; a
             negated condition swaps the sources. *)
 .
@@ -104,35 +109,47 @@ HB.instance Definition _ := hasDecEq.Build extra_op extra_op_eqb_OK.
 #[export]
 Instance eqTC_acc_extra_op : eqTypeC extra_op := { ceqP := extra_op_eqb_OK }.
 
+Definition fg_suffix (fg : bn_flag_group) : string :=
+  match fg with
+  | FG0 => ""
+  | FG1 => "_FG1"
+  end.
+
 Definition string_of_extra_op (eo : extra_op) : string :=
   match eo with
-  | set0 _ => "set0"
+  | set0 _ fg => ("set0" ++ fg_suffix fg)%string
   | MOV => "MOV"
   | NOT => "NOT"
   | SUBI => "SUBI"
   | ADD_LARGE_IMM => "add_large_imm"
-  | SWAP _ => "swap"
+  | SWAP _ fg => ("swap" ++ fg_suffix fg)%string
   | BN_SELECT_MASKED => "BN_SELECT_MASKED"
-  | ZEROIZE_MASKED _ => "ZEROIZE_MASKED"
+  | ZEROIZE_MASKED _ fg => ("ZEROIZE_MASKED" ++ fg_suffix fg)%string
   | SELECT => "BN_SEL"
   end.
 
 Definition desc_set0_small : instruction_desc :=
   mk_instr_desc_safe
-    (pp_s (string_of_extra_op (set0 U8)))
+    (pp_s (string_of_extra_op (set0 U8 FG0)))
     [::] [::]
     [:: aword U32 ] [:: E 0 ]
     0%R
     [:: IBool true ]
     true DOIT.
 
-Definition desc_set0_large : instruction_desc :=
+Definition desc_set0_large (fg : bn_flag_group) : instruction_desc :=
   let vf := false in
   let vt := true in
+  let '(mf, lf, zf) :=
+    match fg with
+    | FG0 => (MF0, LF0, ZF0)
+    | FG1 => (MF1, LF1, ZF1)
+    end
+  in
   mk_instr_desc_safe
-    (pp_s (string_of_extra_op (set0 U8)))
+    (pp_s (string_of_extra_op (set0 U8 fg)))
     [::] [::]
-    [:: abool; abool; abool; aword U256 ] ([:: F MF0; F LF0; F ZF0; E 0 ])
+    [:: abool; abool; abool; aword U256 ] ([:: F mf; F lf; F zf; E 0 ])
     (:: vf, vf, vt & 0%R)
     (nseq 4 (IBool true))
     true DOIT.
@@ -191,12 +208,18 @@ Definition desc_ADD_LARGE_IMM : instruction_desc :=
          refl_equal
    |}.
 
-Definition desc_swap_large : instruction_desc :=
+Definition desc_swap_large (fg : bn_flag_group) : instruction_desc :=
+  let '(mf, lf, zf) :=
+    match fg with
+    | FG0 => (MF0, LF0, ZF0)
+    | FG1 => (MF1, LF1, ZF1)
+    end
+  in
   mk_instr_desc_safe
-    (pp_s (string_of_extra_op (SWAP U256)))
+    (pp_s (string_of_extra_op (SWAP U256 fg)))
     [:: aword U256; aword U256 ] [:: E 0; E 1 ]
     [:: abool; abool; abool; aword U256; aword U256 ]
-    [:: F MF1; F LF1; F ZF1; E 0; E 1 ]
+    [:: F mf; F lf; F zf; E 0; E 1 ]
     (fun z w => (:: MF_of_word w, LF_of_word w, ZF_of_word w, w & z))
     (nseq 5 (IBool true))
     true DOIT.
@@ -236,7 +259,7 @@ Definition desc_zeroize_masked_small : instruction_desc :=
   let cty := eval_atype ty in
   let ctin := [:: cty; cty ] in
   let semi := fun (_ _ : word U32) => 0%R in
-  {| str := pp_s (string_of_extra_op (ZEROIZE_MASKED U8))
+  {| str := pp_s (string_of_extra_op (ZEROIZE_MASKED U8 FG0))
    ; tin := [:: ty; ty ]
    ; i_in := [:: E 0; E 1 ]
    ; tout := [:: ty ]
@@ -255,18 +278,24 @@ Definition desc_zeroize_masked_small : instruction_desc :=
          refl_equal
    |}.
 
-Definition desc_zeroize_masked_large : instruction_desc :=
+Definition desc_zeroize_masked_large (fg : bn_flag_group) : instruction_desc :=
   let vf := false in
   let vt := true in
+  let '(mf, lf, zf) :=
+    match fg with
+    | FG0 => (MF0, LF0, ZF0)
+    | FG1 => (MF1, LF1, ZF1)
+    end
+  in
   let ty := aword U256 in
   let cty := eval_atype ty in
   let ctin := [:: cty; cty ] in
   let semi := fun (_ _ : word U256) => (:: vf, vf, vt & 0%R) in
-  {| str := pp_s (string_of_extra_op (ZEROIZE_MASKED U8))
+  {| str := pp_s (string_of_extra_op (ZEROIZE_MASKED U8 fg))
    ; tin := [:: ty; ty ]
    ; i_in := [:: E 0; E 1 ]
    ; tout := [:: abool; abool; abool; ty ]
-   ; i_out := [:: F MF0; F LF0; F ZF0; E 0 ]
+   ; i_out := [:: F mf; F lf; F zf; E 0 ]
    ; conflicts := [:: (APin 0, APin 1) ]
    ; i_semi_total := semi
    ; i_safe := [::]
@@ -296,26 +325,33 @@ Definition desc_SELECT : instruction_desc :=
 
 Definition get_instr_desc (eo : extra_op) : instruction_desc :=
   match eo with
-  | set0 ws => if (ws <= reg_size)%CMP then desc_set0_small else desc_set0_large
+  | set0 ws fg =>
+      if (ws <= reg_size)%CMP then desc_set0_small else desc_set0_large fg
   | MOV => desc_MOV
   | NOT => desc_NOT
   | SUBI => desc_SUBI
   | ADD_LARGE_IMM => desc_ADD_LARGE_IMM
-  | SWAP ws => if (ws <= reg_size)%CMP then Oswap_instr (aword ws) else desc_swap_large
+  | SWAP ws fg =>
+      if (ws <= reg_size)%CMP then Oswap_instr (aword ws)
+      else desc_swap_large fg
   | BN_SELECT_MASKED => desc_BN_SELECT_MASKED
-  | ZEROIZE_MASKED ws =>
+  | ZEROIZE_MASKED ws fg =>
       if (ws <= reg_size)%CMP then desc_zeroize_masked_small
-      else desc_zeroize_masked_large
+      else desc_zeroize_masked_large fg
   | SELECT => desc_SELECT
   end.
 
 Definition prim_string : seq (string * prim_constructor extra_op) :=
-  [:: (string_of_extra_op (set0 U8), prim_acc_ws set0)
+  [:: (string_of_extra_op (set0 U8 FG0), prim_acc_ws (fun ws => set0 ws FG0))
+    ; (string_of_extra_op (set0 U8 FG1), prim_acc_ws (fun ws => set0 ws FG1))
     ; (string_of_extra_op MOV, prim_acc_none MOV)
     ; (string_of_extra_op NOT, prim_acc_none NOT)
     ; (string_of_extra_op SUBI, prim_acc_none SUBI)
     ; (string_of_extra_op BN_SELECT_MASKED, prim_acc_none BN_SELECT_MASKED)
-    ; (string_of_extra_op (ZEROIZE_MASKED U8), prim_acc_ws ZEROIZE_MASKED)
+    ; (string_of_extra_op (ZEROIZE_MASKED U8 FG0),
+       prim_acc_ws (fun ws => ZEROIZE_MASKED ws FG0))
+    ; (string_of_extra_op (ZEROIZE_MASKED U8 FG1),
+       prim_acc_ws (fun ws => ZEROIZE_MASKED ws FG1))
     ; (string_of_extra_op SELECT, prim_acc_none SELECT)
   ].
 
@@ -336,13 +372,15 @@ Context (ii : instr_info).
 
 (* Zero [les] by XOR-ing register [v] with itself. Shared by [assemble_set0]
    (where [v] is the destination itself) and [assemble_zeroize_masked]
-   (where [v] is the op's second argument). *)
+   (where [v] is the op's second argument). A wide XOR writes the flags of
+   [fg]. *)
 Definition assemble_self_xor
   (ws : wsize)
+  (fg : bn_flag_group)
   (les : seq lexpr)
   (v : var_i) :
   cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
-  let op := if (ws <= reg_size)%CMP then RV32 XOR else BN_basic BN_XOR FG0 in
+  let op := if (ws <= reg_size)%CMP then RV32 XOR else BN_basic BN_XOR fg in
   let x := rvar v in
   ok [:: ((None, op), les, [:: x; x ]) ].
 
@@ -352,6 +390,7 @@ Let uncons_wconst := arm_extra.uncons_wconst ii.
 
 Definition assemble_set0
   (ws : wsize)
+  (fg : bn_flag_group)
   (les : seq lexpr)
   (res : seq rexpr) :
   cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
@@ -359,7 +398,7 @@ Definition assemble_set0
     if les is [:: _; _; _; LLvar x] then ok x
     else Let: (x, _) := uncons_LLvar les in ok x
   in
-  assemble_self_xor ws les x.
+  assemble_self_xor ws fg les x.
 
 (* [MOV x x] is removed by dead code elimination already with [is_move_op], and
    we need to produce at least one instruction for the proof, so we should not
@@ -421,11 +460,12 @@ Definition assemble_ADD_LARGE_IMM
    - [y = x ^ w = z];
    - [x = x ^ y = w].
    A 32-bit swap uses [RV32 XOR] with no flag dests ([fl] empty). A wide swap
-   uses [BN_XOR]; its M/L/Z flag dests [fl] are the swap op's implicit FG1
-   outputs, already materialized by register allocation (discarded -- they were
-   [Lnone] in the lowering). *)
+   uses [BN_XOR]; its M/L/Z flag dests [fl] are the swap op's implicit
+   outputs (those of the flag group [fg]), already materialized by register
+   allocation (discarded -- they were [Lnone] in the lowering). *)
 Definition assemble_swap
   (ws : wsize)
+  (fg : bn_flag_group)
   (les : seq lexpr)
   (res : seq rexpr) :
   cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
@@ -439,7 +479,7 @@ Definition assemble_swap
       else Error (E.bad_swap_lexprs ii)
     else if (ws == xreg_size)%CMP then
       if les is [:: fM; fL; fZ; LLvar x; LLvar y ] then
-        ok (BN_basic BN_XOR FG1, [:: fM; fL; fZ ], x, y)
+        ok (BN_basic BN_XOR fg, [:: fM; fL; fZ ], x, y)
       else Error (E.bad_swap_lexprs ii)
     else Error (E.bad_swap_size ws ii)
   in
@@ -461,7 +501,7 @@ Definition assemble_bn_select_masked
   cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
   Let: (x, _) := uncons_LLvar les in
   Let: (wn, res1) := uncons_rvar res in
-  Let: (wm, _) := uncons_rvar res1 in
+  Let: (wm, res2) := uncons_rvar res1 in
   Let _ :=
     assert
       (uniq [:: v_var x; v_var wn; v_var wm ])
@@ -469,10 +509,17 @@ Definition assemble_bn_select_masked
          "bn_select_masked: destination and arguments must be pairwise distinct"
          ii)
   in
-  ok [:: ((None, BN_SEL FG0), les, res) ].
+  Let: (fv, _) := uncons_rvar res2 in
+  Let flag :=
+    o2r
+      (E.internal_error "bn_select_masked: condition variable is not a flag" ii)
+      (of_var (v_var fv) : option rflag)
+  in
+  ok [:: ((None, BN_SEL (bn_flag_group_of_rflag flag)), les, res) ].
 
 Definition assemble_zeroize_masked
   (ws : wsize)
+  (fg : bn_flag_group)
   (les : seq lexpr)
   (res : seq rexpr) :
   cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
@@ -497,7 +544,7 @@ Definition assemble_zeroize_masked
       (E.internal_error
          "zeroize_masked: arguments must be different registers" ii)
   in
-  assemble_self_xor ws les y2.
+  assemble_self_xor ws fg les y2.
 
 (* [x = a if c] / [x = #BN_SEL(a, b, c)]: the condition [c] is either a bare
    flag [f] or its negation [!f]; a negated condition swaps the two sources
@@ -535,14 +582,14 @@ Definition assemble_extra
   (res : seq rexpr) :
   cexec (seq (asm_op_msb_t * seq lexpr * seq rexpr)) :=
   match eo with
-  | set0 ws => assemble_set0 ws les res
+  | set0 ws fg => assemble_set0 ws fg les res
   | MOV => assemble_MOV les res
   | NOT => assemble_NOT les res
   | SUBI => assemble_SUBI les res
   | ADD_LARGE_IMM => assemble_ADD_LARGE_IMM les res
-  | SWAP ws => assemble_swap ws les res
+  | SWAP ws fg => assemble_swap ws fg les res
   | BN_SELECT_MASKED => assemble_bn_select_masked les res
-  | ZEROIZE_MASKED ws => assemble_zeroize_masked ws les res
+  | ZEROIZE_MASKED ws fg => assemble_zeroize_masked ws fg les res
   | SELECT => assemble_SELECT les res
   end.
 

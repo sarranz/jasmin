@@ -15,6 +15,7 @@ Require Import
   lea
 .
 Require Import
+  acc_options
   acc_decl
   acc_extra
   acc_instr_decl
@@ -125,7 +126,7 @@ Section SAPARAMS.
     Copn [:: Lvar x ] AT_none (Oacc (RV32 LI)) [:: cast_const imm ].
 
   Definition swap (t : assgn_tag) (x y z w : var_i) : instr_r :=
-    Copn [:: Lvar x; Lvar y ] t (Oasm (ExtOp (SWAP reg_size))) [:: Plvar z; Plvar w ].
+    Copn [:: Lvar x; Lvar y ] t (Oasm (ExtOp (SWAP reg_size FG1))) [:: Plvar z; Plvar w ].
 
   Definition saparams : stack_alloc_params :=
     {|

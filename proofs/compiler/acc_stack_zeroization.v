@@ -7,6 +7,7 @@ Require Import
   stack_zero_strategy
   arch_decl
   arch_extra
+  acc_options
   acc_decl
   acc_extra
   acc_instr_decl
@@ -69,7 +70,7 @@ Let voff := mk_var_i (to_var X06).
 Let vzero := mk_var_i (to_var X07).
 Let vtmp := mk_var_i (to_var X12).
 Let vwzero := mk_var_i (to_var W31).
-Let vflags := map (fun f => mk_var_i (to_var f)) [:: MF0; LF0; ZF0 ].
+Let vflags := map (fun f => mk_var_i (to_var f)) [:: MF1; LF1; ZF1 ].
 
 (* [ACCFopn_core.*] return [opn_args] (an [acc_op], not a [sopn]), unlike
    [RISCVFopn.*]/[li_of_fopn_args]; this wraps the operation with [Oacc]. *)
@@ -109,12 +110,12 @@ Definition sz_init : lcmd :=
   in
   map (li_of_opn_args dummy_instr_info) args.
 
-(* [w31 = #set0_256()], i.e. [bn.xor w31, w31, w31, FG0]. *)
+(* [w31 = #set0_256()] on FG1, i.e. [bn.xor w31, w31, w31, FG1]. *)
 Definition set0_wide : linstr :=
   mkli
     (Lopn
        (map LLvar vflags ++ [:: LLvar vwzero ])
-       (Oasm (ExtOp (set0 U256)))
+       (Oasm (ExtOp (set0 U256 FG1)))
        [::]).
 
 Definition sz_init_ws : lcmd :=

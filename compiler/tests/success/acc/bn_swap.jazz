@@ -15,6 +15,18 @@ fn bn_swap_twice(reg u256 a b) -> reg u256 {
   return c;
 }
 
+// The wide swap is lowered to three [BN.XOR] on FG1 (it has no flag group
+// suffix), so a live FG0 flag survives it.
+export
+fn bn_swap_keeps_fg0_flags(reg u256 a b) -> reg u256 {
+  reg bool c;
+  reg u256 r;
+  ?{ "LF0" = c } = #BN_CMP(a, b);
+  a, b = #swap(a, b);
+  r = #BN_SELECT_MASKED(a, b, c);
+  return r;
+}
+
 export
 fn reg_swap(reg u32 a b) -> reg u32 {
   reg u32 c;
