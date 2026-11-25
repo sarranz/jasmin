@@ -329,7 +329,12 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
 
   let warning ii msg =
     (let loc, _ = ii in
-     warning UseLea loc "%a" Printer.pp_warning_msg msg);
+     let kind =
+       match msg with
+       | Compiler_util.Use_lea -> UseLea
+       | Compiler_util.Extra_assignment _ -> ExtraAssignment
+     in
+     warning kind loc "%a" Printer.pp_warning_msg msg);
     ii
   in
 

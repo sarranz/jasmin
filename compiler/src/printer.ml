@@ -552,6 +552,7 @@ let pp_sprog ~debug pd msfsize asmOp fmt ((funcs, p_extra):('info, 'asm) Prog.sp
 
 let pp_warning_msg fmt = function
   | Compiler_util.Use_lea -> Format.fprintf fmt "LEA instruction is used"
+  | Compiler_util.Extra_assignment s -> Format.fprintf fmt "%s" s
 
 let pp_err ~debug fmt (pp_e : Compiler_util.pp_error) =
   let pp_var =

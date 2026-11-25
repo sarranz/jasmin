@@ -48,7 +48,7 @@ Context
   (fv : lowering.fresh_vars)
   (fv_correct : fvars_correct fv (p_funcs p)).
 
-Notation lower_i := (lower_i fv).
+Notation lower_i := (lower_i warning fv).
 Notation lower_cmd :=
   (lower_cmd
      (fun _ _ => lower_i)
@@ -68,9 +68,9 @@ Notation lower_prog :=
    acc_lowering.v; abbreviate them here so every statement below can spell
    them as before Stage A. *)
 Notation lower_cmp := (lower_cmp fv).
-Notation lower_pexpr := (lower_pexpr fv).
-Notation lower_bn_shift := (lower_bn_shift fv).
-Notation lower_cassgn_word := (lower_cassgn_word fv).
+Notation lower_pexpr := (lower_pexpr warning fv).
+Notation lower_bn_shift := (lower_bn_shift warning fv).
+Notation lower_cassgn_word := (lower_cassgn_word warning fv).
 Notation lower_Pif := (lower_Pif fv).
 Notation lower_copn := (lower_copn fv).
 Notation lower_cassgn_bool := (lower_cassgn_bool fv).
@@ -1573,8 +1573,8 @@ have hd0 : disj_fvars (read_e e0).
   have e0u := read_eE e0 (read_e_rec Sv.empty e1).
   by apply: disjoint_w hdisj'; SvD.fsetdec.
 have he0t := eeq_exc_sem_pexpr hd0 heqt hv0.
-have htmp : sem_pexpr (wdb := true) (p_globs p) t
-    (mk_lvar {| v_var := fvTMP fv; v_info := var_info_of_ii ii |})
+have htmp vi : sem_pexpr (wdb := true) (p_globs p) t
+    (mk_lvar {| v_var := fvTMP fv; v_info := vi |})
   = ok (Vword (0 : u256)).
 - by rewrite /= /get_gvar /get_var /t /= Vm.setP_eq /=; rewrite orbT.
 have himm z' : sem_pexpr (wdb := true) (p_globs p) t

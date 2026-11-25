@@ -8,7 +8,8 @@ Local Unset Elimination Schemes.
  * -------------------------------------------------------------------------- *)
 
 Variant warning_msg : Set :=
-  | Use_lea.
+  | Use_lea
+  | Extra_assignment of string.
 
 (* ** Compiler error
  * -------------------------------------------------------------------------- *)

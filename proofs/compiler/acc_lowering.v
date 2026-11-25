@@ -136,10 +136,21 @@ Module E.
 
 End E.
 
+(* Warnings about the extra [set0] introduced by the lowering of a wide
+   shift. It assembles to [bn.xor t, t, t, FG0] and overwrites the flags of
+   FG0. *)
+Definition warning_bn_shr : warning_msg :=
+  Extra_assignment
+    "right shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG0".
+
+Definition warning_bn_shl : warning_msg :=
+  Extra_assignment
+    "left shift of a wide register introduces an extra set0 and kills the flags M, L, Z of FG0".
 
 Section WITH_PARAMS.
 
 Context {atoI : arch_toIdent}.
+Context (warning : instr_info -> warning_msg -> instr_info).
 Context (fv : fresh_vars).
 
 (* -------------------------------------------------------------------------- *)
@@ -738,6 +749,9 @@ Section LOWER_ASSIGN.
     let z := wunsigned n in
     if z == 0 then lc_issue [::] [::] BN_MOV [:: e0 ]
     else
+      let ii :=
+        warning ii (if is_right then warning_bn_shr else warning_bn_shl)
+      in
       let tmp := {| v_var := fvTMP; v_info := var_info_of_ii ii |} in
       let etmp := Pvar (mk_lvar tmp) in
       let imm z := Papp1 (Oword_of_int U8) (Pconst z) in

@@ -233,7 +233,7 @@ Section LOPARAMS.
 
   Definition loparams : lowering_params :=
     {|
-      lop_lower_i := fun _ fv => lower_i fv;
+      lop_lower_i := fun warning fv => lower_i warning fv;
       lop_fvars_correct := fun fv _ fds => fvars_correct fv fds;
     |}.
 
