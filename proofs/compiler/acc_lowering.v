@@ -82,6 +82,15 @@ Module E.
       in
       user_error err ii.
 
+    Definition invalid_bn_shift_amount (e : pexpr) : pp_error_loc :=
+      let err := pp_box
+        [:: pp_s "invalid shift amount:"
+         ; pp_e e
+         ; pp_s ". The amount of a wide shift must be a constant."
+        ]
+      in
+      user_error err ii.
+
     Definition imm_out_of_range {ws : wsize} (w : word ws) : pp_error_loc :=
       let err :=
         pp_box [:: pp_s "immediate out of range:"; pp_e (wconst w) ]
@@ -142,19 +151,22 @@ Definition fv_MF1 : Ident.ident := fv "__mf1__"%string abool.
 Definition fv_LF1 : Ident.ident := fv "__lf1__"%string abool.
 Definition fv_ZF1 : Ident.ident := fv "__zf1__"%string abool.
 
+Definition fv_TMP : Ident.ident := fv "__bn_tmp__"%string (aword xreg_size).
+
 Definition all_fresh_vars : seq Ident.ident :=
-  [:: fv_CF1; fv_MF1; fv_LF1; fv_ZF1 ].
+  [:: fv_CF1; fv_MF1; fv_LF1; fv_ZF1; fv_TMP ].
 
 Definition fvCF1 : var := vbool fv_CF1.
 Definition fvMF1 : var := vbool fv_MF1.
 Definition fvLF1 : var := vbool fv_LF1.
 Definition fvZF1 : var := vbool fv_ZF1.
+Definition fvTMP : var := {| vtype := aword xreg_size; vname := fv_TMP |}.
 
 (* In C, M, L, Z order, matching [ad_cmlz] and the [FCVar0..3] contract of
    [acc_decl.v]. *)
 Definition fresh_flags : seq var := [:: fvCF1; fvMF1; fvLF1; fvZF1 ].
 
-Definition fvars : Sv.t := sv_of_list id fresh_flags.
+Definition fvars : Sv.t := sv_of_list id (rcons fresh_flags fvTMP).
 
 Definition fvars_correct {pT : progT} (fds : seq fun_decl) : bool :=
   lowering.fvars_correct all_fresh_vars fvars fds.
@@ -708,11 +720,43 @@ Section LOWER_ASSIGN.
     else
       lc_xissue [::] [::] SELECT [:: e0; e1; econd ].
 
+  (* [true] for a right shift. *)
+  Definition bn_shift_dir (op : sop2) : option bool :=
+    match op with
+    | Olsr U256 => Some true
+    | Olsl (Op_w U256) => Some false
+    | _ => None
+    end.
+
+  (* Lower a logical shift of a wide register by a constant amount to a
+     [BN.RSHI] with a zeroed fresh register; a shift by zero is a move. *)
+  Definition lower_bn_shift (ws : wsize) (e : pexpr) : low_cmd :=
+    let%lr (op, e0, e1) := ok (is_Papp2 e) in
+    let%lr _ := if ws == xreg_size then issue tt else skip in
+    let%lr is_right := ok (bn_shift_dir op) in
+    Let n := o2r (E.invalid_bn_shift_amount ii e1) (is_wconst U8 e1) in
+    let z := wunsigned n in
+    if z == 0 then lc_issue [::] [::] BN_MOV [:: e0 ]
+    else
+      let tmp := {| v_var := fvTMP; v_info := var_info_of_ii ii |} in
+      let etmp := Pvar (mk_lvar tmp) in
+      let imm z := Papp1 (Oword_of_int U8) (Pconst z) in
+      let pre :=
+        [:: (lnone_mlz ++ [:: Lvar tmp ], ExtOp (set0 xreg_size), [::]) ]
+      in
+      let es :=
+        if is_right then [:: etmp; e0; imm z ]
+        else [:: e0; etmp; imm (256 - z) ]
+      in
+      lc_issue pre [::] BN_RSHI es.
+
   Definition lower_pexpr (ws : wsize) (e : pexpr) : low_cmd :=
     if e is Pif (aword ws') econd e0 e1 then
       Let _ := assert (ws == ws') (E.invalid_wsize ii) in
       lower_Pif ws econd e0 e1
-    else no_pre (lower_pexpr_aux ws e).
+    else
+      Let osh := lower_bn_shift ws e in
+      if osh is Some c then issue c else no_pre (lower_pexpr_aux ws e).
 
   Definition destruct_Lmem (e : pexpr) : option (var_i * wreg) :=
     match e with

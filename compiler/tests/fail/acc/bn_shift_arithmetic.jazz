@@ -1,0 +1,7 @@
+// Arithmetic right shifts of u256 registers are not lowered (unchanged
+// behavior): only the logical shifts have a BN.RSHI rule.
+export
+fn shift_arithmetic(reg u256 x) -> reg u256 {
+    x = x >>s 8;
+    return x;
+}

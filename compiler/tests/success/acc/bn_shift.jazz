@@ -1,0 +1,183 @@
+// Logical shifts of u256 registers by a constant amount.
+//
+// ACC has no plain wide shift; lowering uses BN.RSHI (concatenate and shift
+// right) with a zeroed fresh register:
+//   z = x >> i   becomes   tmp = #set0_256(); z = #BN_RSHI(tmp, x, i);
+//   z = x << i   becomes   tmp = #set0_256(); z = #BN_RSHI(x, tmp, 256 - i);
+// A shift by zero is a BN.MOV, which disappears when source and destination
+// are allocated to the same register.
+// The amount must be a constant (see fail/acc/bn_shift_variable_amount.jazz).
+
+export
+fn shr_8(reg u256 x) -> reg u256 {
+    // bn.xor t, t, t, FG0 ; bn.rshi w0, t, w0 >> 8
+    reg u256 z;
+    z = x >> 8;
+    return z;
+}
+
+export
+fn shl_8(reg u256 x) -> reg u256 {
+    // bn.xor t, t, t, FG0 ; bn.rshi w0, w0, t >> 248
+    reg u256 z;
+    z = x << 8;
+    return z;
+}
+
+export
+fn shr_in_place(reg u256 x) -> reg u256 {
+    // bn.xor t, t, t, FG0 ; bn.rshi w0, t, w0 >> 16
+    x = x >> 16;
+    return x;
+}
+
+export
+fn shl_in_place(reg u256 x) -> reg u256 {
+    // bn.xor t, t, t, FG0 ; bn.rshi w0, w0, t >> 240
+    x = x << 16;
+    return x;
+}
+
+export
+fn shr_other(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.xor t, t, t, FG0 ; bn.rshi w0, t, w1 >> 64
+    a = b >> 64;
+    return a;
+}
+
+export
+fn shl_other(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.xor t, t, t, FG0 ; bn.rshi w0, w1, t >> 192
+    a = b << 64;
+    return a;
+}
+
+// Unlike the shifted operand of BN.CMP and friends, the amount does not have
+// to be a multiple of 8.
+export
+fn shr_1(reg u256 x) -> reg u256 {
+    // bn.xor t, t, t, FG0 ; bn.rshi w0, t, w0 >> 1
+    x = x >> 1;
+    return x;
+}
+
+export
+fn shl_1(reg u256 x) -> reg u256 {
+    // bn.xor t, t, t, FG0 ; bn.rshi w0, w0, t >> 255
+    x = x << 1;
+    return x;
+}
+
+export
+fn shr_3(reg u256 x) -> reg u256 {
+    // bn.xor t, t, t, FG0 ; bn.rshi w0, t, w0 >> 3
+    x = x >> 3;
+    return x;
+}
+
+export
+fn shl_3(reg u256 x) -> reg u256 {
+    // bn.xor t, t, t, FG0 ; bn.rshi w0, w0, t >> 253
+    x = x << 3;
+    return x;
+}
+
+export
+fn shr_255(reg u256 x) -> reg u256 {
+    // bn.xor t, t, t, FG0 ; bn.rshi w0, t, w0 >> 255
+    x = x >> 255;
+    return x;
+}
+
+export
+fn shl_255(reg u256 x) -> reg u256 {
+    // bn.xor t, t, t, FG0 ; bn.rshi w0, w0, t >> 1
+    x = x << 255;
+    return x;
+}
+
+// Shift by zero to a different register: a move.
+export
+fn shr_0_other(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.mov w0, w1
+    a = b >> 0;
+    return a;
+}
+
+export
+fn shl_0_other(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.mov w0, w1
+    a = b << 0;
+    return a;
+}
+
+// Shift by zero to the same register: nothing.
+export
+fn shr_0_same(reg u256 x) -> reg u256 {
+    // (no instruction)
+    x = x >> 0;
+    return x;
+}
+
+export
+fn shl_0_same(reg u256 x) -> reg u256 {
+    // (no instruction)
+    x = x << 0;
+    return x;
+}
+
+// Different variables that register allocation merges: also nothing.
+export
+fn shr_0_merged(reg u256 x) -> reg u256 {
+    // (no instruction)
+    reg u256 z;
+    z = x >> 0;
+    return z;
+}
+
+// The amount is a u8 literal and wraps modulo 256 like any other u8 literal:
+// 256 is 0 (a move, removed here), 264 is 8.
+export
+fn shr_wraps_to_zero(reg u256 x) -> reg u256 {
+    // (no instruction)
+    x = x >> 256;
+    return x;
+}
+
+export
+fn shl_wraps(reg u256 x) -> reg u256 {
+    // bn.xor t, t, t, FG0 ; bn.rshi w0, w0, t >> 248
+    x = x << 264;
+    return x;
+}
+
+// Two shifts in a row reuse the fresh register.
+export
+fn shr_then_shl(reg u256 x) -> reg u256 {
+    // bn.xor t, t, t, FG0 ; bn.rshi w0, t, w0 >> 8
+    // bn.xor t, t, t, FG0 ; bn.rshi w0, w0, t >> 240
+    x = x >> 8;
+    x = x << 16;
+    return x;
+}
+
+// The source stays live after the shift.
+export
+fn shr_keeps_source(reg u256 x) -> reg u256 {
+    // bn.xor t, t, t, FG0 ; bn.rshi z, t, w0 >> 8 ; bn.add w0, w0, z, FG0
+    reg u256 z;
+    z = x >> 8;
+    x = x + z;
+    return x;
+}
+
+// A lowered comparison (on FG1) next to a lowered shift (set0 writes FG0).
+export
+fn shift_then_select(reg u256 a, reg u256 b) -> reg u256 {
+    // bn.xor t, t, t, FG0 ; bn.rshi z, t, w1 >> 8
+    // bn.cmp w0, z, FG1 ; bn.sel w0, w0, w1, FG1.C
+    reg u256 z;
+    z = b >> 8;
+    a = b if !(a <u z);
+    return a;
+}

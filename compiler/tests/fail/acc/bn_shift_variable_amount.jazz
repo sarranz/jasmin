@@ -1,0 +1,7 @@
+// The amount of a u256 shift must be a constant: BN.RSHI only takes an
+// immediate.
+export
+fn shift_variable_amount(reg u256 x, reg u8 i) -> reg u256 {
+    x = x >> i;
+    return x;
+}

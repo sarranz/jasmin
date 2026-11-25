@@ -69,6 +69,7 @@ Notation lower_prog :=
    them as before Stage A. *)
 Notation lower_cmp := (lower_cmp fv).
 Notation lower_pexpr := (lower_pexpr fv).
+Notation lower_bn_shift := (lower_bn_shift fv).
 Notation lower_cassgn_word := (lower_cassgn_word fv).
 Notation lower_Pif := (lower_Pif fv).
 Notation lower_copn := (lower_copn fv).
@@ -89,6 +90,9 @@ Lemma fvars_LF1 : Sv.In (fvLF1 fv) fvars.
 Proof. by repeat (exact: SvD.F.add_1 || apply: SvD.F.add_2). Qed.
 
 Lemma fvars_ZF1 : Sv.In (fvZF1 fv) fvars.
+Proof. by repeat (exact: SvD.F.add_1 || apply: SvD.F.add_2). Qed.
+
+Lemma fvars_TMP : Sv.In (fvTMP fv) fvars.
 Proof. by repeat (exact: SvD.F.add_1 || apply: SvD.F.add_2). Qed.
 
 (* [i_of_low_instr]/[c_of_low_cmd] (acc_lowering.v) are section-local and do
@@ -1099,7 +1103,7 @@ eexists; first reflexivity.
 have huniq : uniq (all_fresh_vars fv) := (andP fv_correct).2.
 move: huniq.
 rewrite /all_fresh_vars /= !inE !negb_or.
-move=> /and4P[/and3P[hCM hCL hCZ] /andP[hML hMZ] hLZ _].
+move=> /and5P[/and4P[hCM hCL hCZ _] /and3P[hML hMZ _] /andP[hLZ _] _ _].
 have hCMv : fvCF1 fv != fvMF1 fv by [].
 have hCLv : fvCF1 fv != fvLF1 fv by [].
 have hCZv : fvCF1 fv != fvZF1 fv by [].
@@ -1458,6 +1462,143 @@ by rewrite hglob hsem.
 Qed.
 
 (* -------------------------------------------------------------------- *)
+(* Wide logical shifts by a constant: [BN.RSHI] against a zeroed register. *)
+Lemma wshl_0_l (sz : wsize) (n : Z) : wshl (0 : word sz) n = 0%R.
+Proof. rewrite /wshl wunsigned0 Z.shiftl_0_l; exact: wrepr0. Qed.
+
+Lemma wshr_0_l (sz : wsize) (n : Z) : wshr (0 : word sz) n = 0%R.
+Proof. rewrite /wshr wunsigned0 Z.shiftr_0_l; exact: wrepr0. Qed.
+
+Lemma semi_BN_RSHI_0x (y : u256) (n : u8) :
+  semi_BN_RSHI 0%R y n = wshr y (wunsigned n).
+Proof. by rewrite /semi_BN_RSHI wshl_0_l wor0. Qed.
+
+Lemma semi_BN_RSHI_x0 (x : u256) (z : Z) :
+  (0 < z < 256)%Z ->
+  semi_BN_RSHI x 0%R (wrepr U8 (256 - z)) = wshl x z.
+Proof.
+move=> hz.
+rewrite /semi_BN_RSHI wshr_0_l.
+have hb : wbase U8 = 256%Z by vm_compute.
+have -> : wunsigned (wrepr U8 (256 - z)) = (256 - z)%Z.
+- by apply: wunsigned_repr_small; rewrite hb; Lia.lia.
+have -> : (256 - (256 - z))%Z = z by Lia.lia.
+by rewrite worC wor0.
+Qed.
+
+Lemma sem_bn_shiftP op2 is_right v0 v1 n v :
+  bn_shift_dir op2 = Some is_right ->
+  to_word U8 v1 = ok n ->
+  sem_sop2 op2 v0 v1 = ok v ->
+  exists2 w : u256,
+    to_word U256 v0 = ok w
+    & v = Vword (if is_right then wshr w (wunsigned n) else wshl w (wunsigned n)).
+Proof.
+move=> hdir hn.
+case: op2 hdir => // [ws|[|ws]] //=.
+- case: ws => // -[<-].
+  rewrite /sem_sop2 /=; t_xrbindP => w0 hw0 w1 hw1 <-.
+  exists w0 => //.
+  by move: hw1; rewrite hn => -[<-].
+- case: ws => // -[<-].
+  rewrite /sem_sop2 /=; t_xrbindP => w0 hw0 w1 hw1 <-.
+  exists w0 => //.
+  by move: hw1; rewrite hn => -[<-].
+Qed.
+
+Lemma lower_bn_shiftP (p' : prog) (hglob : p_globs p' = p_globs p)
+  ii tag ws e lv v v' s0 s1 pre lvs op es :
+  lower_bn_shift ii ws e = ok (Some (pre, lvs, op, es)) ->
+  disj_fvars (read_e e) ->
+  disj_fvars (vars_lval lv) ->
+  sem_pexpr (wdb := true) (p_globs p) s0 e = ok v ->
+  truncate_val (cword ws) v = ok v' ->
+  write_lval (wdb := true) (p_globs p) lv v' s0 = ok s1 ->
+  exists2 s1',
+    esem p' ev (low_cmd_c ii tag (pre, lvs ++ [:: lv], op, es)) s0 = ok s1'
+    & eq_fv s1 s1'.
+Proof using atoI dc ev fv fv_correct p pT sCP sc_sem syscall_state wsw.
+move=> hlow hdisj hdisjlv he htr hw.
+rewrite /lower_bn_shift in hlow.
+move: hlow; t_xrbindP => -[[[op2 e0] e1]|] hP; last first.
+- by rewrite /skip.
+move/is_Papp2P in hP; subst e.
+t_xrbindP => -[hws|] hws_eq; last first.
+- by move: hws_eq; case: (ws == xreg_size).
+have hxreg : ws = xreg_size.
+- by move: hws_eq; case: eqP => // ?.
+subst ws.
+t_xrbindP => -[is_right|] hdir_eq; last by [].
+t_xrbindP => n /o2rP hc hlow.
+move: he; rewrite /=; t_xrbindP => v0 hv0 v1 hv1 hsop.
+have hton := (is_wconstP true (p_globs p) s0 hc).
+specialize (hton _).
+rewrite hv1 /= in hton.
+have [w hw0 hv] := sem_bn_shiftP hdir_eq hton hsop.
+subst v.
+move: htr; rewrite /truncate_val /= truncate_word_u => -[?]; subst v'.
+set z := wunsigned n in hlow.
+case: eqP hlow => hz hlow.
+- rewrite /lc_issue /lc_sissue /issue in hlow.
+  case: hlow => h1 h2 h3 h4; subst pre lvs op es.
+  apply: (esem_no_pre_of_sem_sopn hglob ii tag).
+  rewrite /sem_sopn /= hv0 /= /exec_sopn /= /sopn_sem /sopn_sem_ /=.
+  rewrite hw0 /=.
+  have hn0 : wunsigned n = 0%Z := hz.
+  rewrite hn0 in hw.
+  have hsh : (if is_right then wshr w 0 else wshl w 0) = w
+    by case: ifP => _; rewrite ?wshr0 ?wshl0.
+  rewrite hsh in hw.
+  by rewrite hw.
+set k := (256 - z)%Z in hlow.
+have hk : k = (256 - z)%Z := erefl.
+clearbody k.
+rewrite /lc_issue /lc_sissue /issue in hlow.
+case: hlow => h1 h2 h3 h4; subst pre lvs op es.
+rewrite /low_cmd_c /low_instr_i /=.
+rewrite /esem_i /= hglob.
+rewrite /sem_sopn /exec_sopn /= /sopn_sem /sopn_sem_ /=.
+have hset :=
+  set_var_eq_type
+    (wdb := true) (x := fvTMP fv) (v := Vword (0 : u256)) erefl erefl (evm s0).
+rewrite /write_var /= hset /=.
+set t := with_vm s0 (evm s0).[fvTMP fv <- Vword 0].
+have heqt : eq_fv s0 t.
+- rewrite /eq_fv /st_eq_ex /st_rel /=; split=> //.
+  move=> x hx.
+  have hne : fvTMP fv != x by apply/eqP=> heq; apply: hx; rewrite -heq; exact: fvars_TMP.
+  by rewrite (Vm.setP_neq _ _ hne).
+have hd0 : disj_fvars (read_e e0).
+- have hdisj' := hdisj; rewrite /read_e /= in hdisj'.
+  have e0u := read_eE e0 (read_e_rec Sv.empty e1).
+  by apply: disjoint_w hdisj'; SvD.fsetdec.
+have he0t := eeq_exc_sem_pexpr hd0 heqt hv0.
+have htmp : sem_pexpr (wdb := true) (p_globs p) t
+    (mk_lvar {| v_var := fvTMP fv; v_info := var_info_of_ii ii |})
+  = ok (Vword (0 : u256)).
+- by rewrite /= /get_gvar /get_var /t /= Vm.setP_eq /=; rewrite orbT.
+have himm z' : sem_pexpr (wdb := true) (p_globs p) t
+    (Papp1 (Oword_of_int U8) (Pconst z')) = ok (Vword (wrepr U8 z')) by [].
+have hwrn : wrepr U8 z = n by rewrite /z wrepr_unsigned.
+clear hdir_eq hsop.
+case: is_right hw => hw.
+- rewrite /sem_pexprs; cbn [mapM].
+  rewrite htmp he0t himm /= hw0 /= !truncate_word_u /= hwrn.
+  rewrite semi_BN_RSHI_0x.
+  have [s1' hw' heq'] := eeq_exc_write_lval hdisjlv heqt hw.
+  by exists s1'; [rewrite hw' | exact: heq'].
+rewrite /sem_pexprs; cbn [mapM].
+rewrite he0t htmp himm /= hw0 /= !truncate_word_u /=.
+have hz' : (0 < z < 256)%Z.
+- have := wunsigned_range n.
+  have hb : wbase U8 = 256%Z by vm_compute.
+  by rewrite hb; move: hz; rewrite /z; Lia.lia.
+rewrite hk semi_BN_RSHI_x0 //.
+have [s1' hw' heq'] := eeq_exc_write_lval hdisjlv heqt hw.
+by exists s1'; [rewrite hw' | exact: heq'].
+Qed.
+
+(* -------------------------------------------------------------------- *)
 (* Dispatch (see plan above).  [pre] is non-empty exactly when [e] is a
    [Pif] whose condition [lower_cmp] rewrites to a [BN.CMP]; every other
    branch keeps [pre = [::]] as before. *)
@@ -1492,7 +1633,7 @@ by [].
 move: hlow; t_xrbindP=> o hlp hmatch.
 case: o hlp hmatch => [[[[pre0 lvs0] op0] es0]|] hlp hmatch //=.
 move: hmatch => [] h1 h2 h3 h4; subst pre lvs op es.
-move: hlp; rewrite /lower_pexpr /=.
+move: hlp; rewrite /lower_pexpr.
 case: e he hdisj => // [gv|al aa ws0 xx ee|al ws0 ee|op1 e1|op2 a b|ty econd e0 e1] he hdisj hlp.
 move: hlp; rewrite /lower_pexpr_aux /no_pre /=; t_xrbindP=> o hlx hmatch2.
 case: o hlx hmatch2 => [[[lvs1 op1] es1]|] hlx.
@@ -1526,14 +1667,20 @@ have [s1' hsem heqfv] := esem_no_pre_of_sem_sopn hglob ii tag (lower_Papp1P hlx 
 exists s1'; last exact: heqfv.
 by move: hsem; rewrite /low_cmd_c /=.
 by [].
-move: hlp; rewrite /lower_pexpr_aux /no_pre /=; t_xrbindP=> o hlx hmatch2.
-case: o hlx hmatch2 => [[[lvsx opx] esx]|] hlx.
-rewrite /lc_sissue /issue => -[] h1 h2 h3 h4; subst pre0 lvs0 op0 es0.
-simpl.
-have [s1' hsem heqfv] := esem_no_pre_of_sem_sopn hglob ii tag (lower_Papp2P hlx he htr hw).
-exists s1'; last exact: heqfv.
-by move: hsem; rewrite /low_cmd_c /=.
-by [].
+move: hlp; case hbs: (lower_bn_shift ii ws (Papp2 op2 a b))
+  => [[[[[pre1 lvs1] op1] es1]|]|err] /= hlp; last by [].
+- move: hlp => -[] h1 h2 h3 h4; subst pre0 lvs0 op0 es0.
+  have [s1' hsem heqfv] := lower_bn_shiftP hglob tag hbs hdisj hdisjlv he htr hw.
+  exists s1'; last exact: heqfv.
+  by move: hsem; rewrite /low_cmd_c /=.
+- move: hlp; rewrite /lower_pexpr_aux /no_pre /=; t_xrbindP=> o hlx hmatch2.
+  case: o hlx hmatch2 => [[[lvsx opx] esx]|] hlx.
+  rewrite /lc_sissue /issue => -[] h1 h2 h3 h4; subst pre0 lvs0 op0 es0.
+  simpl.
+  have [s1' hsem heqfv] := esem_no_pre_of_sem_sopn hglob ii tag (lower_Papp2P hlx he htr hw).
+  exists s1'; last exact: heqfv.
+  by move: hsem; rewrite /low_cmd_c /=.
+  by [].
 case: ty he hdisj hlp => [| | | ws'] he hdisj hlp //=.
 move: hlp; rewrite /assert; t_xrbindP=> heqws hpif.
 case: eqP heqws => [? _ | //]; subst ws'.
