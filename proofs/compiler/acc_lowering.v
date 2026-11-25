@@ -196,6 +196,10 @@ Definition skip {A : Type} : lresult A := ok None.
 Definition lassert (b : bool) (e : pp_error_loc) : lresult unit :=
   Let _ := assert b e in issue tt.
 
+(* Continue if [b] holds, skip the instruction otherwise. *)
+Definition assert_or_skip (b : bool) : lresult unit :=
+  if b then issue tt else skip.
+
 Notation "'let%lr' x ':=' m 'in' body" :=
   (Let o := m in if o is Some x then body else skip)
   (x strict pattern, at level 25, only parsing).
@@ -369,8 +373,7 @@ Section LOWER_CONDITION.
     let '(neg, e) := if e is Papp1 Onot e' then (true, e') else (false, e) in
     if e is Papp2 op e0 e1 then
       if cf_of_condition op is Some (cf, ws) then
-        if ws != U256 then skip
-        else
+        let%lr _ := assert_or_skip (ws == U256) in
           let cf := if neg then negate_cf cf else cf in
           Let _ := assert (~~ is_signed_cf cf) (E.signed_comparison ii e) in
           let '(cf, e0, e1) :=
@@ -576,9 +579,8 @@ Section LOWER_ASSIGN.
   Definition lower_Papp1 (ws : wsize) (op : sop1) (e : pexpr) : low_instr :=
     match op with
     | Oword_of_int _ =>
-        if ws == reg_size then
-          li_simple (RV32 LI) [:: Papp1 op e ]
-        else skip
+        let%lr _ := assert_or_skip (ws == reg_size) in
+        li_simple (RV32 LI) [:: Papp1 op e ]
     | Olnot _ =>
         if ws == xreg_size then
           li_issue lnone_mlz (BN_basic BN_NOT FG1) [:: e ]
@@ -586,9 +588,8 @@ Section LOWER_ASSIGN.
           li_xissue [::] NOT [:: e ]
         else skip
     | Oneg (Op_w _) =>
-        if ws == reg_size then
-          li_simple (RV32 NEG) [:: e]
-        else skip
+        let%lr _ := assert_or_skip (ws == reg_size) in
+        li_simple (RV32 NEG) [:: e]
     | _ => Error (E.not_implemented ii)
     end.
 
@@ -743,7 +744,7 @@ Section LOWER_ASSIGN.
      [BN.RSHI] with a zeroed fresh register; a shift by zero is a move. *)
   Definition lower_bn_shift (ws : wsize) (e : pexpr) : low_cmd :=
     let%lr (op, e0, e1) := ok (is_Papp2 e) in
-    let%lr _ := if ws == xreg_size then issue tt else skip in
+    let%lr _ := assert_or_skip (ws == xreg_size) in
     let%lr is_right := ok (bn_shift_dir op) in
     Let n := o2r (E.invalid_bn_shift_amount ii e1) (is_wconst U8 e1) in
     let z := wunsigned n in

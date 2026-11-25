@@ -360,10 +360,10 @@ Lemma lower_Papp1P ii ws op1 e1 lv v v' s0 s1 lvs op es :
   sem_sopn (p_globs p) (Oasm op) s0 (lvs ++ [:: lv]) es = ok s1.
 Proof.
 move=> + he htr hw.
-rewrite /lower_Papp1.
+rewrite /lower_Papp1 /assert_or_skip.
 case: op1 he => //= ws'; t_xrbindP=> v0.
-- case: eqP => [?|//]; subst ws.
-  move=> he ht [???]; subst lvs op es.
+- move=> he ht z0; case: eqP => [?|_]; last by move=> [<-].
+  subst ws; move=> [<-] /= [???]; subst lvs op es.
   rewrite /sem_sopn /= he /= /exec_sopn /= ht.
   have [w_r [ws'' [w' [htw hv hv']]]] := truncate_val_typeE htr.
   subst v v'.
@@ -404,7 +404,7 @@ case: op1 he => //= ws'; t_xrbindP=> v0.
   rewrite /write_lvals /=.
   by rewrite hw.
 case: ws' => [|ws'] //=.
-case: eqP => [?|//]; subst ws.
+case: eqP => [?|//=]; subst ws.
 move=> ++ [???]; subst lvs op es.
 have [w_r [ws_v [w' [htw hv hv']]]] := truncate_val_typeE htr.
 subst v v'.
