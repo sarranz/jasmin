@@ -23,14 +23,18 @@ Local Open Scope seq_scope.
 
 #[local] Existing Instance withsubword.
 
-(* Hardware call stack.
+(* Hardware call stack and hardware loop stack.
    Some architectures (ACC) save return addresses in a dedicated, bounded
-   hardware stack, distinct from the data stack and from the registers.
-   [hwcs_size] is its number of entries, or [None] when the architecture has
-   no such stack; in that case [Lcall OnHWCallStack] and [Lret_hwcallstack]
-   have no semantics.
+   hardware stack, distinct from the data stack and from the registers, and
+   maintain a separate, bounded stack of active hardware loops.
+   [hwcs_size] is the call stack's number of entries, or [None] when the
+   architecture has no such stack; in that case [Lcall OnHWCallStack] and
+   [Lret_hwcallstack] have no semantics.
+   [hwloop_size] is the loop stack's depth, or [None] when the architecture
+   has no hardware loops; in that case [Lloop_begin] and [Lloop_end] have no
+   semantics.
    TODO_ACC: this belongs to the architecture description (arch_decl). *)
-Class hw_call_stack_info := { hwcs_size : option nat }.
+Class hw_call_stack_info := { hwcs_size : option nat; hwloop_size : option nat }.
 
 Section SEM.
 
@@ -59,28 +63,34 @@ Notation labels := label_in_lprog.
 
 (* [lhwcs] is the hardware call stack (top of the stack first). It is only
    used by [Lcall OnHWCallStack], [Lret_hwcallstack] and [Lsyscall]; it stays
-   empty on architectures without a hardware call stack. *)
+   empty on architectures without a hardware call stack.
+   [lloops] is the hardware loop stack (innermost loop first, see
+   [asm_loops]). It is only used by [Lloop_begin] and [Lloop_end]; it stays
+   empty on architectures without hardware loops. *)
 Record lstate := Lstate
   { lscs : syscall_state_t;
     lmem : mem;
     lvm  : Vm.t;
     lhwcs : seq pointer;
+    lloops : seq (remote_label * nat);
     lfn : funname;
     lpc  : nat; }.
 
 Definition to_estate (s:lstate) : estate := Estate s.(lscs) s.(lmem) s.(lvm).
-Definition of_estate (s:estate) cs fn pc :=
-  Lstate s.(escs) s.(emem) s.(evm) cs fn pc.
+Definition of_estate (s:estate) cs lstk fn pc :=
+  Lstate s.(escs) s.(emem) s.(evm) cs lstk fn pc.
 Definition setpc (s:lstate) pc :=
-  Lstate s.(lscs) s.(lmem) s.(lvm) s.(lhwcs) s.(lfn) pc.
+  Lstate s.(lscs) s.(lmem) s.(lvm) s.(lhwcs) s.(lloops) s.(lfn) pc.
 Definition setc (s:lstate) fn :=
-  Lstate s.(lscs) s.(lmem) s.(lvm) s.(lhwcs) fn s.(lpc).
+  Lstate s.(lscs) s.(lmem) s.(lvm) s.(lhwcs) s.(lloops) fn s.(lpc).
 Definition setcpc (s:lstate) fn pc :=
-  Lstate s.(lscs) s.(lmem) s.(lvm) s.(lhwcs) fn pc.
+  Lstate s.(lscs) s.(lmem) s.(lvm) s.(lhwcs) s.(lloops) fn pc.
 Definition lset_hwcs (s:lstate) cs :=
-  Lstate s.(lscs) s.(lmem) s.(lvm) cs s.(lfn) s.(lpc).
+  Lstate s.(lscs) s.(lmem) s.(lvm) cs s.(lloops) s.(lfn) s.(lpc).
+Definition lset_loops (s:lstate) ls :=
+  Lstate s.(lscs) s.(lmem) s.(lvm) s.(lhwcs) ls s.(lfn) s.(lpc).
 Definition lset_estate' (ls : lstate) (s : estate) : lstate :=
-  Eval hnf in of_estate s ls.(lhwcs) ls.(lfn) ls.(lpc).
+  Eval hnf in of_estate s ls.(lhwcs) ls.(lloops) ls.(lfn) ls.(lpc).
 Definition lset_estate
   (ls : lstate) (scs : syscall_state) (m : mem) (vm : Vm.t) : lstate :=
   Eval hnf in lset_estate' ls {| escs := scs; emem := m; evm := vm; |}.
@@ -93,12 +103,12 @@ Definition lset_vm (ls : lstate) (vm : Vm.t) : lstate :=
 Definition lnext_pc (ls : lstate) : lstate :=
   Eval hnf in setpc ls (lpc ls).+1.
 
-Lemma to_estate_of_estate es cs fn pc:
-  to_estate (of_estate es cs fn pc) = es.
+Lemma to_estate_of_estate es cs lstk fn pc:
+  to_estate (of_estate es cs lstk fn pc) = es.
 Proof. by case: es. Qed.
 
 Lemma of_estate_to_estate ls :
-  of_estate (to_estate ls) (lhwcs ls) (lfn ls) (lpc ls) = ls.
+  of_estate (to_estate ls) (lhwcs ls) (lloops ls) (lfn ls) (lpc ls) = ls.
 Proof. by case: ls. Qed.
 
 
@@ -156,6 +166,19 @@ Definition hwcs_pop (cs : seq pointer) : exec (pointer * seq pointer) :=
 Definition hwcs_check_free (cs : seq pointer) : exec unit :=
   if hwcs_size is Some n then assert (size cs < n) ErrHWCallStack
   else ok tt.
+
+(* Hardware loop stack operations. *)
+Definition loops_push
+  (ls : seq (remote_label * nat)) (e : remote_label * nat) :
+  exec (seq (remote_label * nat)) :=
+  Let n := o2r ErrSemUndef hwloop_size in
+  Let _ := assert (size ls < n) ErrLoop in
+  ok (e :: ls).
+
+Definition loops_pop (ls : seq (remote_label * nat)) :
+  exec ((remote_label * nat) * seq (remote_label * nat)) :=
+  Let _ := assert (isSome hwloop_size) ErrSemUndef in
+  runcons ls ErrLoop.
 
 Definition eval_instr (i : linstr) (s1: lstate) : exec lstate :=
   match li_i i with
@@ -231,7 +254,25 @@ Definition eval_instr (i : linstr) (s1: lstate) : exec lstate :=
     if b then
       eval_jump (s1.(lfn),lbl) s1
     else ok (lnext_pc s1)
-  | Lrepeat_loop _ _ => Error ErrSemUndef
+  | Lloop_begin cnt lbl =>
+    Let n := o2r ErrSemUndef hwloop_size in
+    Let _ := assert (size s1.(lloops) < n) ErrLoop in
+    Let z :=
+      match cnt with
+      | inl x => Let p := get_var true s1.(lvm) x >>= to_pointer in ok (wunsigned p)
+      | inr z => ok z
+      end
+    in
+    Let _ := assert (0 <? z)%Z ErrLoop in
+    Let ls := loops_push s1.(lloops) ((lfn s1, lbl), Z.to_nat (z - 1)) in
+    ok (lnext_pc (lset_loops s1 ls))
+  | Lloop_end lbl =>
+    Let: (e, rest) := loops_pop s1.(lloops) in
+    let: (l, k) := e in
+    Let _ := assert (l == (lfn s1, lbl)) ErrLoop in
+    if k is k'.+1 then
+      eval_jump (lfn s1, lbl) (lset_loops s1 ((l, k') :: rest))
+    else ok (lnext_pc (lset_loops s1 rest))
   end.
 
 Definition step (s: lstate) : exec lstate :=
@@ -241,13 +282,16 @@ Definition step (s: lstate) : exec lstate :=
 
 (* [cs] is the content of the hardware call stack on entry; it contains at
    least the return address pushed by the caller of the export function, so
-   its size constrains how deep the export function may call. *)
-Definition ls_export_initial scs m vm cs fn :=
+   its size constrains how deep the export function may call. [lstk] is the
+   content of the hardware loop stack on entry; it is empty unless this
+   function is itself called from within a loop body. *)
+Definition ls_export_initial scs m vm cs lstk fn :=
   {|
     lscs := scs;
     lmem := m;
     lvm := vm;
     lhwcs := cs;
+    lloops := lstk;
     lfn := fn;
     lpc := 0;
   |}.
@@ -337,16 +381,21 @@ Local Open Scope monad_scope.
 Definition ilsem (cond : lstate -> bool) (s:lstate) :=
   while cond istep s.
 
-(* The export function must leave the hardware call stack as it found it: the
-   caller's return address must be on top when the function returns. *)
-Definition ilsem_exportcall (fn: funname) (cs : seq pointer) (es:estate) :=
-  let s := (ls_export_initial (escs es) (emem es) (evm es) cs fn) in
+(* The export function must leave the hardware call stack and the hardware
+   loop stack as it found them: the caller's return address must be on top
+   of the call stack, and no loop begun before the call may still be open,
+   when the function returns. *)
+Definition ilsem_exportcall
+  (fn: funname) (cs : seq pointer) (lstk : seq (remote_label * nat))
+  (es:estate) :=
+  let s := (ls_export_initial (escs es) (emem es) (evm es) cs lstk fn) in
   fd <-ioget ErrType (get_fundef P.(lp_funcs) fn);;
   _ <- iresult (assert (lfd_export fd) ErrSemUndef);;
   s' <- ilsem (endpc fn) s;;
   let vm' := s'.(lvm) in
   _ <- iresult (assert (all (fun x => value_eqb (evm es).[x] vm'.[x]) (Sv.elements callee_saved)) ErrSemUndef);;
   _ <- iresult (assert (s'.(lhwcs) == cs) ErrSemUndef);;
+  _ <- iresult (assert (s'.(lloops) == lstk) ErrSemUndef);;
   Ret (to_estate s').
 
 Lemma i_lsem_body cond s : while_body cond istep s ≅ iresult (lsem_body cond s).
@@ -453,14 +502,17 @@ Definition mix_ilsem_fun (fn : funname) (ls : lstate) : itree E lstate :=
 Definition mix_ilsem cond s :=
   interp_mrec handle_call (mix_ilsteps cond s).
 
-Definition mix_ilsem_exportcall (fn: funname) (cs : seq pointer) (es:estate) :=
-  let s := ls_export_initial (escs es) (emem es) (evm es) cs fn in
+Definition mix_ilsem_exportcall
+  (fn: funname) (cs : seq pointer) (lstk : seq (remote_label * nat))
+  (es:estate) :=
+  let s := ls_export_initial (escs es) (emem es) (evm es) cs lstk fn in
   fd <-ioget ErrType (get_fundef P.(lp_funcs) fn);;
   _ <- iresult (assert (lfd_export fd) ErrSemUndef);;
   s' <- mix_ilsem_fun fn s;;
   let vm' := s'.(lvm) in
   _ <- iresult (assert (all (fun x => value_eqb (evm es).[x] vm'.[x]) (Sv.elements callee_saved)) ErrSemUndef);;
   _ <- iresult (assert (s'.(lhwcs) == cs) ErrSemUndef);;
+  _ <- iresult (assert (s'.(lloops) == lstk) ErrSemUndef);;
   Ret (to_estate s').
 
 Lemma mix_ilsteps_eq cond s : mix_ilsteps cond s ≈ mix_steps istep is_call check_call cond s.
@@ -515,12 +567,12 @@ Proof.
   apply eqit_Tau_l; reflexivity.
 Qed.
 
-Lemma mix_ilsem_exportcall_ilsem_exportcall fn cs s :
+Lemma mix_ilsem_exportcall_ilsem_exportcall fn cs lstk s :
   xrutt.xrutt
     (core_logics.errcutoff (is_error wE)) core_logics.nocutoff
     rutt_extras.RPre_eq rutt_extras.RPost_eq
     eq
-    (mix_ilsem_exportcall fn cs s) (ilsem_exportcall fn cs s).
+    (mix_ilsem_exportcall fn cs lstk s) (ilsem_exportcall fn cs lstk s).
 Proof.
 rewrite /mix_ilsem_exportcall /ilsem_exportcall.
 apply (xrutt_bind (RR := (fun fd fd' => fd = fd' /\ get_fundef P.(lp_funcs) fn = Some fd))).
@@ -534,6 +586,9 @@ move=> [] [] hfn.
 apply: (xrutt_bind (RR := eq)); last first.
 - move=> s' _ <-; apply: (xrutt_bind (RR := eq)).
   - case: all => /=; first by apply xrutt_Ret.
+    apply: xrutt_Vis => //=; by exists erefl.
+  move=> [] [] _; apply: (xrutt_bind (RR := eq)).
+  - case: (_ == _) => /=; first by apply xrutt_Ret.
     apply: xrutt_Vis => //=; by exists erefl.
   move=> [] [] _; apply: (xrutt_bind (RR := eq)).
   - case: (_ == _) => /=; first by apply xrutt_Ret.

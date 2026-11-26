@@ -669,7 +669,7 @@ Proof.
   case: ffd1 ffd2 => f1 fd1 [] f2 fd2.
   rewrite /check_fundef; t_xrbindP => _ r _ r'.
   rewrite /check_f_extra_s; t_xrbindP => /and4P[] /eqP -> _ _.
-  by case/and5P => _ /eqP -> _ /eqP -> /eqP ->.
+  by case/and5P => _ /eqP -> _ _ /andP[/eqP -> /eqP ->].
 Qed.
 
 Lemma init_alloc_sprogP :

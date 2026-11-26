@@ -73,6 +73,20 @@ Fixpoint isem_cmd_ (c: cmd) : Sv.t * estate -> itree E (Sv.t * estate) :=
    | i :: c => ks' <- sem_i p i ks.2;; isem_cmd_ c (Sv.union ks.1 ks'.1, ks'.2)
    end.
 
+(* One round of a persistent (“repeat”) hardware loop: the body [c] is run
+   afresh (its own write set starts at [Sv.empty]) and its write set is
+   merged into the write set accumulated by the remaining rounds, mirroring
+   [sem_one_varmap.Efor_sov_cons]. *)
+Definition isem_for_loop_round (c : cmd) (w : Z)
+    (k : Sv.t * estate -> itree E (Sv.t * estate)) (ks : Sv.t * estate) :
+    itree E (Sv.t * estate) :=
+  ks' <- isem_cmd_ c (Sv.empty, ks.2);;
+  k (Sv.union ks.1 ks'.1, ks'.2).
+
+Definition isem_for_loop_kill (c : cmd) (ws : seq Z) :
+    Sv.t * estate -> itree E (Sv.t * estate) :=
+  foldr (isem_for_loop_round c) (fun ks => Ret ks) ws.
+
 (* Make global definition *)
 Local Notation continue_loop s := (ret (inl s)).
 Local Notation exit_loop s := (ret (inr s)).
@@ -208,7 +222,16 @@ with isem_ir (p : sprog) (i : instr_r) (s : estate) : itree E (Sv.t * estate) :=
     Ret (Sv.union fs.1 (fd_tmp_call p fn), kill_tmp_call p fn fs.2)
 
   | Cassert _ => Exception.throw ErrSemUndef
-  | Cfor _ _ => Exception.throw ErrSemUndef
+
+  (* Ordinary Jasmin [for] loops are always unrolled before reaching this
+     IR (see [merge_varmaps.check_ir], which statically rejects [FIrange]
+     here), so this arm is unreachable on well-checked programs. *)
+  | Cfor (FIrange _ _ _ _) _ => Exception.throw ErrSemUndef
+
+  (* ACC persistent hardware loops reach this IR without being unrolled. *)
+  | Cfor (FIrepeat _ as fi) c =>
+    rn <- isem_fi (p_globs p) fi s;;
+    isem_for_loop_kill isem_i p c rn (Sv.empty, s)
   end.
 
 Definition isem_cmd (p:sprog) c s :=
@@ -338,7 +361,12 @@ Proof.
     + by move=> *; apply F_throw.
     + move=> e c1 c2 hc1 hc2 s; rewrite interp_bind F_iresult; apply eqit_bind; first reflexivity.
       by move=> []; [apply hc1 | apply hc2].
-    + by move=> *; apply F_throw.
+    + move=> fi c hc s; case: fi => [x d lo hi | e] //=.
+      rewrite /isem_fi interp_bind F_iresult; apply eqit_bind; first reflexivity.
+      move=> rn; elim: rn (Sv.empty, s) => [ | w ws ih] ks /=.
+      + rewrite interp_ret; reflexivity.
+      rewrite interp_bind hc; apply eqit_bind; first reflexivity.
+      move=> ks'; exact: ih.
     + move=> al c e iiw c' hc hc' s.
       rewrite /isem_while_loop; apply interp_iter'_eutt => s1.
       rewrite /isem_while_round !interp_bind hc; apply eqit_bind; first reflexivity.
@@ -391,7 +419,12 @@ Proof.
   + by move=> *; apply F_throw.
   + move=> e c1 c2 hc1 hc2 s; rewrite interp_bind F_iresult; apply eqit_bind; first reflexivity.
     by move=> []; [apply hc1 | apply hc2].
-  + by move=> *; apply F_throw.
+  + move=> fi c hc s; case: fi => [x d lo hi | e] //=.
+    rewrite /isem_fi interp_bind F_iresult; apply eqit_bind; first reflexivity.
+    move=> rn; elim: rn (Sv.empty, s) => [ | w ws ih] ks /=.
+    + rewrite interp_ret; reflexivity.
+    rewrite interp_bind hc; apply eqit_bind; first reflexivity.
+    move=> ks'; exact: ih.
   + move=> al c e iiw c' hc hc' s.
     rewrite /isem_while_loop; apply interp_iter'_eutt => s1.
     rewrite /isem_while_round !interp_bind hc; apply eqit_bind; first reflexivity.

@@ -1,6 +1,7 @@
 From Coq Require Import Lia Uint63.
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype.
 From mathcomp Require Import fintype finfun ssralg.
+
 From ITree Require Import
   Basics
   ITree
@@ -11,12 +12,14 @@ Require Import
   arch_params_proof
   compiler
   call_depth
+  loop_depth
   compiler_util
   psem
   psem_facts
   core_logics
   relational_logic
   sem_one_varmap
+  label
   linear
   linear_sem
   it_sems_one_varmap
@@ -292,7 +295,7 @@ Lemma compiler_back_end_meta entries (p: sprog) (tp: lprog) :
      lp_globs tp = p.(p_extra).(sp_globs)
   ].
 Proof using sc_sem print_linearP.
-  rewrite /compiler_back_end; t_xrbindP => _ _ _ lp ok_lp.
+  rewrite /compiler_back_end; t_xrbindP => _ _ _ _ lp ok_lp.
   rewrite print_linearP => zp ok_zp.
   rewrite print_linearP => tp' ok_tp.
   rewrite print_linearP => ?; subst tp'.
@@ -334,7 +337,7 @@ Lemma enough_stack_space_alloc_ok
   -> alloc_ok sp fn m.
 Proof using print_linearP.
   rewrite /compiler_back_end_to_asm /compiler_back_end.
-  t_xrbindP => ? /allMP ok_export _ _ lp ok_lp.
+  t_xrbindP => ? /allMP ok_export _ _ _ lp ok_lp.
   rewrite print_linearP => zp ok_zp.
   rewrite print_linearP => tp ok_tp.
   rewrite print_linearP => <- ok_xp /InP ok_fn M S.
@@ -385,7 +388,7 @@ Proof using sc_sem print_linearP.
   move: ok_xp; rewrite /compiler_back_end_to_asm.
   t_xrbindP=> lp ok_lp ok_xp.
   move: ok_lp; rewrite /compiler_back_end.
-  t_xrbindP=> hcheck _ _ lp1 ok_lp1 lp2.
+  t_xrbindP=> hcheck _ _ _ lp1 ok_lp1 lp2.
   rewrite print_linearP => ok_lp2 lp3.
   rewrite print_linearP => ok_lp3.
   rewrite print_linearP => ?; subst lp.
@@ -498,16 +501,22 @@ Definition isem_stack
     sp rip fn fs.
 
 (* TODO_ACC: Phase G.1 minimal fix: [isem_linear] now takes the hardware call
-   stack as part of its input pair, so that [wkequiv_io_trans] can compose
-   the back end with a fixed middle program regardless of the call stack
-   value. The composition proofs below ([it_compiler_back_endP] and its
-   helpers) have not been redone for this shape and are admitted. *)
-Definition isem_linear (lp : lprog) (fn : funname) (i : seq pointer * estate)
+   stack and the hardware loop stack as part of its input triple, so that
+   [wkequiv_io_trans] can compose the back end with a fixed middle program
+   regardless of their value. The composition proofs below
+   ([it_compiler_back_endP] and its helpers) have not been redone for this
+   shape and are admitted.
+   [i.1.1] is the hardware call stack, [i.1.2] the hardware loop stack; this
+   stage only threads [i.1.2] through so things typecheck (no invariant
+   about it is established yet, that is Stage 4/7's job). *)
+Definition isem_linear
+  (lp : lprog) (fn : funname)
+  (i : seq pointer * seq (remote_label * nat) * estate)
   : itree ErrEvent estate :=
   ilsem_exportcall
     (ep := ep_of_asm_e) (spp := spp_of_asm_e) (sip := sip_of_asm_e)
     (wE := with_Error0)
-    lp fn i.1 i.2.
+    lp fn i.1.1 i.1.2 i.2.
 
 Definition isem_asm (xp : asm_prog) :=
   iasmsem_exportcall
@@ -999,8 +1008,9 @@ Definition lget_vars (xs : seq var_i) (vm : Vm.t) : seq value :=
 Definition lget_args (lfd : lfundef) := lget_vars lfd.(lfd_arg).
 Definition lget_res  (lfd : lfundef) := lget_vars lfd.(lfd_res).
 
-Definition back_end_pre lfd s (i : seq pointer * estate) :=
-  let: cs := i.1 in
+Definition back_end_pre lfd s (i : seq pointer * seq (remote_label * nat) * estate) :=
+  let: cs := i.1.1 in
+  let: lstk := i.1.2 in
   let: t := i.2 in
   let: args := s.(fvals) in
   let: ms := s.(fmem) in
@@ -1014,11 +1024,16 @@ Definition back_end_pre lfd s (i : seq pointer * estate) :=
     , s.(fscs) = t.(escs)
     , vm_initialized_on vmt lfd.(lfd_callee_saved)
     , allocatable_stack ms (lfd_total_stack lfd)
-    & if hwcs_size is Some n then
+    , (if hwcs_size is Some n then
         (Z.of_nat (size cs) + lfd_max_call_depth lfd <= Z.of_nat n)%Z
+      else True)
+    & if hwloop_size is Some n then
+        (Z.of_nat (size lstk) + lfd_max_loop_depth lfd <= Z.of_nat n)%Z
       else True ].
 
-Definition back_end_post fn lfd s (i : seq pointer * estate) s' (t' : estate) :=
+Definition back_end_post
+  fn lfd s (i : seq pointer * seq (remote_label * nat) * estate) s'
+  (t' : estate) :=
   let: t := i.2 in
   let: ms := s.(fmem) in
   let: mt := t.(emem) in
@@ -1044,7 +1059,7 @@ Definition lin_sz_pre lp fn lfd cs i2 i3 :=
 Definition lin_sz_post szi sp lp fn zfd i1 i3 :=
   rcompose (lin_post sp lp fn i1 i3) (sz_post szi lp fn zfd i3 i3).
 
-Lemma trans_pre_ovm_lin_sz lp fn sfd lfd tfd i1 cs i3 :
+Lemma trans_pre_ovm_lin_sz lp fn sfd lfd tfd i1 cs lstk i3 :
   tp.(lp_rsp) = sp.(p_extra).(sp_rsp) ->
   tp.(lp_rip) = sp.(p_extra).(sp_rip) ->
   tp.(lp_rsp) = lp.(lp_rsp) ->
@@ -1060,13 +1075,13 @@ Lemma trans_pre_ovm_lin_sz lp fn sfd lfd tfd i1 cs i3 :
   tfd.(lfd_max_call_depth) = lfd.(lfd_max_call_depth) ->
   get_fundef (p_funcs sp) fn = Some sfd ->
   get_fundef (lp_funcs lp) fn = Some lfd ->
-  back_end_pre tfd i1 (cs, i3) ->
+  back_end_pre tfd i1 (cs, lstk, i3) ->
   exists2 i2, ovm_pre sp rip fn i1 i2 & lin_sz_pre lp fn lfd cs i2 i3.
 Proof.
 move=> rsp_tp_sp rip_tp_sp rsp_tp_lp rip_tp_lp al_tfd_sfd al_tfd_lfd exp_tfd
   exp_tfd_lfd cs_tfd_lfd stkmax_tfd_sfd stkmax_tfd_lfd args_tfd_sfd
   depth_tfd_lfd get_sfd get_lfd
-  [hrsp hrip uvals mmem hscs init alloc hcs_bound].
+  [hrsp hrip uvals mmem hscs init alloc hcs_bound _].
 set vs' := lget_args tfd i3.(evm) in uvals.
 set i2 := with_vm (estate0 i1) i3.(evm).
 exists i2.
@@ -1170,7 +1185,7 @@ have /= := [elaborate align_word_range lfd.(lfd_align) (top_stack i2.(emem))].
 by t_lia.
 Qed.
 
-Lemma trans_post_ovm_lin szi lp fn sfd lfd zfd tfd i1 i2 i3 cs o1 o4 :
+Lemma trans_post_ovm_lin szi lp fn sfd lfd zfd tfd i1 i2 i3 cs lstk o1 o4 :
   linear_prog (ap_lip aparams) sp = ok lp ->
   stack_zeroization_lfd aparams.(ap_szp) szi lp.(lp_rsp) fn lfd = ok zfd ->
   isSome (szi fn) = isSome (cparams.(stack_zero_info) fn) ->
@@ -1187,7 +1202,7 @@ Lemma trans_post_ovm_lin szi lp fn sfd lfd zfd tfd i1 i2 i3 cs o1 o4 :
   ovm_pre sp rip fn i1 i2 ->
   lin_sz_pre lp fn lfd cs i2 i3 ->
   rcompose (ovm_post' fn i1 i2) (lin_sz_post szi sp lp fn tfd i2 i3) o1 o4 ->
-  back_end_post fn tfd i1 (cs, i3) o1 o4.
+  back_end_post fn tfd i1 (cs, lstk, i3) o1 o4.
 Proof.
 move=> ok_lp ok_zfd hszi get_sfd get_lfd exp_sfd al_lfd_sfd exp_lfd
   stkmax_lfd_sfd fs_lfd_sfd al_tfd_lfd res_tfd_lfd stkmax_tfd_lfd.
@@ -1351,7 +1366,7 @@ Lemma it_compiler_back_endP {fn} :
 Proof using haparams print_linearP rsp_in_callee_saved.
 move=> /[dup] /(compiler_back_end_meta print_linearP)
   [rip_tp_sp rsp_tp_sp gd_tp_sp].
-rewrite /compiler_back_end; t_xrbindP => ok_export hwcs_usage_ok checked_p lp ok_lp.
+rewrite /compiler_back_end; t_xrbindP => ok_export hwcs_usage_ok loop_usage_ok checked_p lp ok_lp.
 rewrite print_linearP => zp ok_zp.
 rewrite print_linearP => tp' ok_tp.
 rewrite print_linearP => ?; subst tp'.
@@ -1412,6 +1427,15 @@ have hwcs_present : forall fn0 fd0, get_fundef (p_funcs sp) fn0 = Some fd0 ->
   move: hwcs_usage_ok; rewrite /check_hwcs_usage E => hall.
   have := allMP (get_fundef_in' ok_fd0) hall.
   by rewrite /= hra.
+have loop_present : forall fn0 fd0, get_fundef (p_funcs sp) fn0 = Some fd0 ->
+    (0 < sf_max_loop_depth (f_extra fd0))%Z -> isSome hwloop_size.
+- move=> fn0 fd0 ok_fd0 hpos.
+  rewrite /hwloop_size /=.
+  case E: ad_loop_depth => [n|] //.
+  move: loop_usage_ok; rewrite /check_loop_usage E => hall.
+  have := allMP (get_fundef_in' ok_fd0) hall.
+  rewrite /= => /assertP /ZleP hle.
+  exfalso; exact: (Z.lt_irrefl _ (Z.lt_le_trans _ _ _ hpos hle)).
 have wlin := [elaborate
   linear_exportcallP
     (hap_hlip haparams) vtmp_not_magic ok_lp cs_not_arr hwcs_present
@@ -1422,12 +1446,12 @@ have [zfd ok_zfd get_zfd] :=
   [elaborate stack_zeroization_lprog_get_fundef ok_zp get_lfd ].
 have [rip_lp_zp rsp_lp_zp _] := [elaborate
   stack_zeroization_lprog_invariants ok_zp].
-have [_ al_zfd _ arg_zfd _ res_zfd exp_zfd cs_zfd stkmax_zfd [_ [_ depth_zfd]]] :=
+have [_ al_zfd _ arg_zfd _ res_zfd exp_zfd cs_zfd stkmax_zfd [_ [_ [depth_zfd loopdepth_zfd]]]] :=
   [elaborate stack_zeroization_lfd_invariants ok_zfd].
 
 have := istack_zeroization_lprogP
-  (wE := with_Error0) (hap_hszp haparams) _ _ ok_zp get_lfd.
-rewrite ([elaborate lp_rspE ok_lp]) -/szi => /(_ _ _ rsp_in_callee_saved) wsz.
+  (wE := with_Error0) (hap_hszp haparams) _ _ _ ok_zp get_lfd.
+rewrite ([elaborate lp_rspE ok_lp]) -/szi => /(_ _ _ _ rsp_in_callee_saved) wsz.
 
 (* Tunneling *)
 have get_tfd := [elaborate get_fundef_tunnel_program ok_tp get_zfd].
@@ -1438,13 +1462,26 @@ set tfd := (X in _ = Some X) in get_tfd.
 exists tfd; split.
 - exact: get_tfd.
 - by rewrite /= -exp_zfd /= exp_sfd.
-have wcombined : forall cs, wkequiv_io
-    (fun i1 i3 => back_end_pre tfd i1 (cs, i3))
+
+(* Source-level static loop-depth bound (Stage 6's [check_fd] asserts,
+   extracted from [linear_ok] the same way [linear_prog_extra_frame_size]
+   extracts the stack-size asserts above), bridged to the linear/tunneled
+   [lfd_max_loop_depth] field via [linear_fd]'s own construction
+   ([lfd_max_loop_depth := sf_max_loop_depth e]) and [tunnel_lfundef]'s
+   field-for-field copy ([setfb] only replaces the body). *)
+have hcheckfd := [elaborate it_linearization_proof.checked_prog ok_lp get_sfd].
+move: hcheckfd; rewrite /check_fd /=.
+t_xrbindP=> _ _ _ _ _ _ hloop0 hloopdepth _ _ _.
+have htfd_ld : lfd_max_loop_depth tfd = sf_max_loop_depth (f_extra fd).
+- by rewrite /tfd /tunneling.tunnel_lfundef /tunneling.setfb /= -loopdepth_zfd /lfd /linear_fd /=.
+
+have wcombined : forall cs lstk, loops_bound_fn sp fn lstk -> wkequiv_io
+    (fun i1 i3 => back_end_pre tfd i1 (cs, lstk, i3))
     (isem_stack sp rip fn)
-    (ilsem_exportcall (ep := ep_of_asm_e) (spp := spp_of_asm_e) (sip := sip_of_asm_e) (wE := with_Error0) tp fn cs)
-    (fun i1 i3 => back_end_post fn tfd i1 (cs, i3)).
-- move=> cs.
-  apply: wkequiv_io_eutt_r (tunnel_funcs ok_tp fn cs) _.
+    (ilsem_exportcall (ep := ep_of_asm_e) (spp := spp_of_asm_e) (sip := sip_of_asm_e) (wE := with_Error0) tp fn cs lstk)
+    (fun i1 i3 => back_end_post fn tfd i1 (cs, lstk, i3)).
+- move=> cs lstk hlstk.
+  apply: wkequiv_io_eutt_r (tunnel_funcs ok_tp fn cs lstk) _.
   apply: (wkequiv_io_trans
     (P12 := ovm_pre sp rip fn) (Q12 := ovm_post' fn)
     (P23 := lin_sz_pre lp fn lfd cs) (Q23 := lin_sz_post szi sp lp fn tfd)
@@ -1462,7 +1499,9 @@ have wcombined : forall cs, wkequiv_io
     + by rewrite -stkmax_zfd.
     by rewrite -arg_zfd.
     by rewrite -depth_zfd.
-  - move=> >; apply: (trans_post_ovm_lin ok_lp ok_zfd _ get_sfd get_lfd).
+  - move=> > hpost_ovm hpost_linsz hpost_rcompose.
+    apply: (trans_post_ovm_lin lstk ok_lp ok_zfd _ get_sfd get_lfd
+      _ _ _ _ _ _ _ _ hpost_ovm hpost_linsz hpost_rcompose).
     + by rewrite /szi; case: stack_zero_info => [[]|].
     + by rewrite exp_sfd.
     + reflexivity.
@@ -1475,7 +1514,7 @@ have wcombined : forall cs, wkequiv_io
   apply: (wkequiv_io_trans
     (P12 := lin_pre sp lp rip fn cs) (Q12 := lin_post sp lp fn)
     (P23 := sz_pre lp lfd) (Q23 := sz_post szi lp fn lfd)
-    _ _ (wlin cs)).
+    _ _ (wlin cs lstk hlstk)).
   - move=> >; apply: (trans_pre_lin_sz_lin_sz ok_lp) get_sfd get_lfd.
     + reflexivity.
     + by rewrite /= exp_sfd.
@@ -1484,9 +1523,30 @@ have wcombined : forall cs, wkequiv_io
     + by rewrite al_zfd.
     + by rewrite stkmax_zfd.
     by rewrite res_zfd.
-  exact: wsz cs.
-move=> i1 [cs i3] pre.
-exact: wcombined cs i1 i3 pre.
+  exact: wsz cs lstk.
+move=> i1 [[cs lstk] i3] pre.
+have hcopy := pre.
+case: hcopy => [_ _ _ _ _ _ _ _ hloops_sp].
+have hlstk : loops_bound_fn sp fn lstk.
+- move=> fd' get_fd'.
+  move: get_fd'; rewrite get_sfd => -[?]; subst fd'.
+  split.
+  + move=> hpos.
+    (* Now discharged for real via [check_loop_usage]/[loop_present]
+       (mirroring [check_hwcs_usage]/[hwcs_present] exactly): [hpos] (this
+       instruction's own positive syntactic loop-nesting) combined with
+       Stage 6's own [check_fd] assert [hloopdepth] gives a positive
+       [sf_max_loop_depth], which [loop_present] turns into [isSome
+       hwloop_size]. *)
+    apply: (loop_present _ _ get_sfd).
+    move/ZleP: hloopdepth => hloopdepth'.
+    exact: (Z.lt_le_trans _ _ _ hpos hloopdepth').
+  + move: hloops_sp hloopdepth.
+    rewrite htfd_ld.
+    case: hwloop_size => [n|] //= hloops_sp' hloopdepth'.
+    move/ZleP: hloopdepth' => hloopdepth''.
+    lia.
+exact: wcombined cs lstk hlstk i1 i3 pre.
 Qed.
 
 End BACK_END.
@@ -1573,8 +1633,11 @@ Definition back_end_to_asm_pre xfd (s : fstate) (t : asmmem) :=
     , match_mem ms mt
     , s.(fscs) = t.(asm_scs)
     , allocatable_stack ms xfd.(asm_fd_total_stack)
-    & if ad_hwcs_size is Some n then
+    , (if ad_hwcs_size is Some n then
         (Z.of_nat (size t.(asm_hwcs)) + asm_fd_max_call_depth xfd <= Z.of_nat n)%Z
+      else True)
+    & if ad_loop_depth is Some n then
+        (Z.of_nat (size t.(asm_loops)) + asm_fd_max_loop_depth xfd <= Z.of_nat n)%Z
       else True
   ].
 
@@ -1629,8 +1692,9 @@ exists xfd; split => //.
 set rip_id := mk_ptr (lp_rip lp).
 apply: (
   wkequiv_io_trans
-    (P23 := fun (i : seq pointer * estate) (xm : asmmem) =>
-      i.1 = asm_hwcs xm /\
+    (P23 := fun (i : seq pointer * seq (remote_label * nat) * estate) (xm : asmmem) =>
+      i.1.1 = asm_hwcs xm /\
+      i.1.2 = asm_loops xm /\
       vm_initialized_on (evm i.2)
         [seq var_of_asm_typed_reg i | i <- arch_decl.callee_saved]
       /\ lom_eqv rip_id i.2 xm)
@@ -1639,10 +1703,10 @@ apply: (
     w_be
     _
 ).
-- move=> fs xm [hrsp hrip hargs hmm hscs hstk hhwcs].
+- move=> fs xm [hrsp hrip hargs hmm hscs hstk hhwcs hloops].
   have Meq :=
     lom_eqv_estate_of_asm_mem (top_stack (fmem fs)) (lp_rsp lp) xm disj_rip.
-  exists (asm_hwcs xm, estate_of_asm_mem (top_stack (fmem fs)) (lp_rip lp) (lp_rsp lp) xm)
+  exists (asm_hwcs xm, asm_loops xm, estate_of_asm_mem (top_stack (fmem fs)) (lp_rip lp) (lp_rsp lp) xm)
     => /=.
   + split => /=.
     * rewrite -hrsp -ok_lp_rsp.
@@ -1661,14 +1725,17 @@ apply: (
     * by move: hstk; rewrite hxfd /=.
     * move: hhwcs; rewrite hxfd /=.
       by case: ad_hwcs_size => //= n.
-  split; first split => //=.
+    * move: hloops; rewrite hxfd /=.
+      by case: ad_loop_depth => //= n.
+  split; first done.
+  split; first done.
   split.
   + exact:
       (vm_init_vmap_of_asm_mem_callee_saved
          (top_stack (fmem fs)) (lp_rip lp) (lp_rsp lp) xm
          callee_saved_not_bool).
   exact: Meq.
-- move=> fs ls xm fs' xm' _ [_ [_ Meq]] [ls' [hvals hmm' hscs' hzero] Meq'].
+- move=> fs ls xm fs' xm' _ [_ [_ [_ Meq]]] [ls' [hvals hmm' hscs' hzero] Meq'].
   split.
   + rewrite hxfd /=.
     apply: (values_uincl_trans hvals).
@@ -1679,8 +1746,8 @@ apply: (
   case: Meq  => /= _ heq_mem  _ _ _ _ _ _.
   case: Meq' => /= _ heq_mem' _ _ _ _ _ _.
   by rewrite -heq_mem -heq_mem'.
-move=> [cs ls] xm [heq [hvm_init Meq]].
-move: heq hvm_init Meq => /= -> hvm_init Meq.
+move=> [[cs lstk] ls] xm [heq1 [heq2 [hvm_init Meq]]].
+move: heq1 heq2 hvm_init Meq => /= -> -> hvm_init Meq.
 rewrite /isem_linear /=.
 exact: (iasm_gen_exportcall (hap_hagp haparams) ok_xp fn hvm_init Meq).
 Qed.
@@ -1714,6 +1781,10 @@ Definition enough_hwcs_space (fn : funname) (t : asmmem) : Prop :=
   if ad_hwcs_size is Some n then (Z.of_nat (size t.(asm_hwcs)) + Z.of_nat (call_depth up fn) <= Z.of_nat n)%Z
   else True.
 
+Definition enough_loop_space (fn : funname) (t : asmmem) : Prop :=
+  if ad_loop_depth is Some n then (Z.of_nat (size t.(asm_loops)) + Z.of_nat (loop_depth up fn) <= Z.of_nat n)%Z
+  else True.
+
 Definition full_pre fn xfd (s : fstate) (t : asmmem) :=
   let: args := s.(fvals) in
   let: ms := s.(fmem) in
@@ -1727,7 +1798,8 @@ Definition full_pre fn xfd (s : fstate) (t : asmmem) :=
       , t.(asm_scs) = s.(fscs)
       , rm ad_rsp = top_stack ms
       , wf_args_x t.(asm_rip) fn ms mi args argt
-      & Forall3 (value_uincl_or_in_mem mt) (get_wptrs up fn) args argt ].
+      , Forall3 (value_uincl_or_in_mem mt) (get_wptrs up fn) args argt
+      & enough_loop_space fn t ].
 
 Definition full_post fn xfd (s : fstate) (t : asmmem) (s' : fstate) (t' : asmmem) :=
   let: args := s.(fvals) in
@@ -1758,13 +1830,13 @@ Lemma it_compile_prog_to_asmP {fn} :
           (full_post fn xfd)
    ].
 Proof using haparams print_uprogP print_sprogP print_linearP.
-rewrite /compile_prog_to_asm; t_xrbindP => asp sp ok_sp ok_xp ok_hwcs ?; subst asp.
+rewrite /compile_prog_to_asm; t_xrbindP => asp sp ok_sp ok_xp ok_hwcs ok_loops ?; subst asp.
 move=> ok_fn.
 have [sfd [xfd [get_sfd get_xfd xfd_export align_args_eq]]] :=
   compiler_back_end_to_asm_get_fundef print_linearP ok_xp ok_fn.
 exists xfd; split => //.
 move=> fs xm hpre.
-case: hpre => mi [hmga hesp hhwcs_sp hscs_eq hrsp_eq hwfa hfuim].
+case: hpre => mi [hmga hesp hhwcs_sp hscs_eq hrsp_eq hwfa hfuim hloops_sp].
 have FE := it_compiler_front_endP ok_sp ok_fn.
 
 have [xfd2 [get_xfd2 _ BE]] :=
@@ -1891,6 +1963,12 @@ have hdepth : (asm_fd_max_call_depth xfd <= Z.of_nat (call_depth up fn))%Z.
   have := allMP ok_fn_in hall.
   by rewrite get_xfd => /assertP /ZleP.
 
+have hdepth_loop : (asm_fd_max_loop_depth xfd <= Z.of_nat (loop_depth up fn))%Z.
+- have ok_fn_in : List.In fn entries by apply/InP.
+  move: ok_loops; rewrite /check_loop_depth => hall.
+  have := allMP ok_fn_in hall.
+  by rewrite get_xfd => /assertP /ZleP.
+
 have /BE h_be : back_end_to_asm_pre (asm_rip xm) xfd fs_sp xm.
 - split.
   - by rewrite -(ss_top_stack hmga.(ma_stack_stable)).
@@ -1905,7 +1983,9 @@ have /BE h_be : back_end_to_asm_pre (asm_rip xm) xfd fs_sp xm.
     split; first by apply: hstk.1.
     apply: Z.le_trans; first exact: hstk.2.
     apply Z.sub_le_mono_l; exact: hrange.
-  move: hhwcs_sp; rewrite /enough_hwcs_space; case: ad_hwcs_size hdepth => [n|] //= hdepth hb.
+  - move: hhwcs_sp; rewrite /enough_hwcs_space; case: ad_hwcs_size hdepth => [n|] //= hdepth hb.
+    by lia.
+  move: hloops_sp; rewrite /enough_loop_space; case: ad_loop_depth hdepth_loop => [n|] //= hdepth_loop hb.
   by lia.
 
 have hinv := [elaborate

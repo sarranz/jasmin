@@ -23,6 +23,8 @@ module E = struct
   let invalid_args = err "invalid arguments"
   let pp_error = err "found PP_error"
   let invalid_pp_aop_ext = err "invalid pp_aop_ext"
+  let malformed_loop_markers =
+    err "malformed ACC hardware-loop begin/end markers"
   let not_implemented = hierror ~loc ~kind ~internal "not implemented: %s"
 
   let address_not_supported base disp off scal =
@@ -239,21 +241,148 @@ let pp_args_mulqacc_selectors op args =
 let pp_args op args =
   pp_args_shift op args |> pp_args_flag_group op |> pp_args_mulqacc_selectors op
 
-let need_nop_i = function
-  | LABEL _ | REPEATLOOP _ | JMP _ | JMPI _ | Jcc _ | JAL _ | CALL _
-  | CALL_HWCS _ | RET_HWCS | POPPC | SysCall _ ->
-      true
-  | ALIGN | STORELABEL _ | Declassify_val _ | Declassify_mem _ | AsmOp _ ->
-      false
+(* -------------------------------------------------------------------------- *)
+(* Hardware-loop body-size counting and end-of-body [nop] elision (Stage 9).
 
-let need_nop c = try need_nop_i (List.last c).asmi_i with Failure _ -> true
+   [BEGINLOOP]/[ENDLOOP] are printed, below in [pp_instr_r], as a
+   placeholder-carrying [loop]/[loopi] instruction and a fixed-tag [Comment]
+   marker. [print_prog] (at the bottom of this file) walks the flat,
+   already-printed [asm_element list] once, with a stack of open loops, to
+   patch each placeholder with the real machine-instruction count of its body
+   and to resolve each marker into either [Instr ("nop", [])] or nothing. *)
 
-(* [la] is a pseudo-instruction that assembles to two real instructions,
-   so it must count as 2 in a loop body. *)
-let loop_instr_count = function
-  | Label _ -> 0
-  | Instr ("la", _) -> 2
-  | _ -> 1
+(* A comment string that nothing else in this printer ever produces: it marks
+   the position of an [ENDLOOP], to be resolved by [acc_resolve_loops] below
+   (replaced by a [nop], or removed) once the whole body it closes has been
+   walked. Never reaches [PrintASM.pp_asm]: always consumed first. *)
+let acc_endloop_marker = "#ACC_ENDLOOP_MARKER#"
+
+(* The body-size argument of a not-yet-resolved [loop]/[loopi] instruction;
+   patched in place by [acc_resolve_loops] once the body's real
+   machine-instruction count is known. *)
+let acc_loop_size_placeholder = "?"
+
+(* Instructions that cannot be the last instruction of a hardware-loop body
+   (the hardware only detects loop-end after a straight-line instruction).
+   [loop]/[loopi] themselves are included: nested loops must not share their
+   last instruction. [ecall] is never actually emitted by this printer today
+   (syscalls print as [jal], see [pp_instr_r] below), kept for robustness. *)
+let acc_control_flow_names =
+  [ "beq"; "bne"; "jal"; "jalr"; "ret"; "loop"; "loopi"; "ecall" ]
+
+(* Mirrors [hw/ip/acc/util/acc_as.py]'s [expand_li]: [li] assembles to one
+   [addi] if its immediate fits 12 signed bits, or one bare [lui] if its low
+   12 bits are zero, and to two instructions otherwise. No [li] is emitted by
+   this printer today (immediate loads only ever go through [la]), but the
+   rule is implemented anyway in case that changes; a parse failure is
+   treated conservatively (2 instructions) rather than crashing. *)
+let acc_li_instr_count imm_str =
+  try
+    let imm = Z.of_string imm_str in
+    if Z.geq imm (Z.of_int (-2048)) && Z.lt imm (Z.of_int 2048) then 1
+    else if Z.equal (Z.logand imm (Z.of_int 0xFFF)) Z.zero then 1
+    else 2
+  with _ -> 2
+
+(* What a printed [asm_element] leaves behind as "the last thing seen so far"
+   in an open loop body, for the elision rule below. *)
+type acc_loop_kind =
+  | ALK_label (* a label, e.g. an if/else merge point *)
+  | ALK_plain (* an ordinary, non-control-flow instruction *)
+  | ALK_control (* a control-flow instruction, or a resolved inner loop *)
+
+(* The classification of a single printed element: how much it counts
+   towards the body size(s) of every loop currently open around it, and
+   what it leaves behind (nothing, for [Dwarf]/[Comment]/[Header]/[Bytes],
+   which are transparent to the elision rule). *)
+type acc_elt_class = ACC_transparent | ACC_significant of int * acc_loop_kind
+
+let acc_loop_classify : asm_element -> acc_elt_class = function
+  | Label _ -> ACC_significant (0, ALK_label)
+  | Instr ("la", _) -> ACC_significant (2, ALK_plain)
+  | Instr ("li", args) ->
+      let imm = match List.rev args with imm :: _ -> imm | [] -> "0" in
+      ACC_significant (acc_li_instr_count imm, ALK_plain)
+  | Instr (name, _) when List.mem name acc_control_flow_names ->
+      ACC_significant (1, ALK_control)
+  | Instr (_, _) -> ACC_significant (1, ALK_plain)
+  | Dwarf _ | Comment _ | Header _ | Bytes _ ->
+      (* [Header]/[Bytes] are not expected inside a loop body (a body is
+         straight-line code within one function); treated as transparent
+         defensively, like [Dwarf]/an ordinary [Comment]. *)
+      ACC_transparent
+
+(* One entry per currently-open loop, innermost last-pushed. *)
+type acc_loop_frame = {
+  alf_begin_index : int; (* position of its [loop]/[loopi] element *)
+  mutable alf_count : int; (* running machine-instruction count of its body *)
+  mutable alf_last_kind : acc_loop_kind option;
+      (* [None]: nothing significant seen yet (an empty body so far). *)
+}
+
+(* Walk the flat, printed program once, patching every [loop]/[loopi]
+   placeholder with its body's final machine-instruction count and resolving
+   every [ENDLOOP] marker into a [nop] or nothing, per the elision rule:
+   walking backwards from the marker over [Dwarf]/[Comment] only, a [nop] is
+   required unless the first element found is a plain (non-control-flow)
+   instruction inside this loop's own body. Implemented as a single forward
+   pass with a mutable stack: every open frame's [alf_last_kind] is kept up
+   to date with "the last significant element seen so far", which at the
+   moment a marker is reached is exactly what a backward walk would find. *)
+let acc_resolve_loops (elts : asm_element list) : asm_element list =
+  let arr = Array.of_list (List.map (fun e -> Some e) elts) in
+  let n = Array.length arr in
+  let stack = ref [] in
+  let touch cost kind frames =
+    List.iter
+      (fun f ->
+        f.alf_count <- f.alf_count + cost;
+        f.alf_last_kind <- Some kind)
+      frames
+  in
+  for i = 0 to n - 1 do
+    match arr.(i) with
+    | None -> ()
+    | Some (Comment s) when String.equal s acc_endloop_marker -> begin
+        match !stack with
+        | [] -> E.malformed_loop_markers ()
+        | frame :: rest ->
+            stack := rest;
+            let need_nop =
+              match frame.alf_last_kind with
+              | None | Some ALK_label | Some ALK_control -> true
+              | Some ALK_plain -> false
+            in
+            arr.(i) <- (if need_nop then Some (Instr ("nop", [])) else None);
+            let final_count =
+              frame.alf_count + (if need_nop then 1 else 0)
+            in
+            (match arr.(frame.alf_begin_index) with
+            | Some (Instr (name, [ count_arg; _ ])) ->
+                arr.(frame.alf_begin_index) <-
+                  Some (Instr (name, [ count_arg; string_of_int final_count ]))
+            | _ -> E.malformed_loop_markers ());
+            (* A resolved inner loop always forces a [nop] on whichever
+               enclosing loop it is the last body element of, whether or not
+               it needed one itself: nested loops must not share their last
+               instruction, and eliding the inner marker would otherwise
+               make the outer loop's last instruction identical to the
+               inner's own. *)
+            touch (if need_nop then 1 else 0) ALK_control !stack
+      end
+    | Some (Instr (("loop" | "loopi"), _) as e) ->
+        (match acc_loop_classify e with
+        | ACC_significant (cost, kind) -> touch cost kind !stack
+        | ACC_transparent -> ());
+        stack :=
+          { alf_begin_index = i; alf_count = 0; alf_last_kind = None }
+          :: !stack
+    | Some e -> (
+        match acc_loop_classify e with
+        | ACC_transparent -> ()
+        | ACC_significant (cost, kind) -> touch cost kind !stack)
+  done;
+  Array.to_list arr |> List.filter_map identity
 
 module ACCTarget :
   AsmTarget
@@ -296,7 +425,7 @@ module ACCTarget :
     if String.equal r ra then Instr ("ret", [])
     else Instr ("jalr", [ x0; r; pp_imm Z.zero ])
 
-  let pp_instr_r fn pp_cmd i =
+  let pp_instr_r fn _pp_cmd i =
     match i with
     | ALIGN -> E.not_implemented "pp_instr ALIGN"
     | LABEL (_, lbl) -> [ Label (pp_label fn lbl) ]
@@ -316,19 +445,21 @@ module ACCTarget :
       end
     | JAL _ -> E.invalid_jal ()
     | CALL _ -> E.invalid_call ()
-    | REPEATLOOP (count, c) ->
+    | BEGINLOOP (count, _lbl) ->
+        (* Body size is a placeholder, patched in place by [acc_resolve_loops]
+           (called from [print_prog] below) once the body's real
+           machine-instruction count is known. *)
         let count, name =
           match count with
           | Datatypes.Coq_inl v -> (pp_register v, "loop")
           | Datatypes.Coq_inr cz -> (Z.to_string (Conv.z_of_cz cz), "loopi")
         in
-        let c' = pp_cmd fn c in
-        let c' = if need_nop c then c' @ [ Instr ("nop", []) ] else c' in
-        let num_c' =
-          Format.sprintf "%i"
-            (List.fold_left (fun acc i -> acc + loop_instr_count i) 0 c')
-        in
-        Instr (name, [ count; num_c' ]) :: c'
+        [ Instr (name, [ count; acc_loop_size_placeholder ]) ]
+    | ENDLOOP _lbl ->
+        (* Resolved into a [nop] or removed entirely by [acc_resolve_loops]
+           (called from [print_prog] below), depending on whether the body
+           can safely end without one. *)
+        [ Comment acc_endloop_marker ]
     | POPPC -> E.invalid_poppc ()
     | CALL_HWCS lbl -> [ Instr ("jal", [ ra; pp_remote_label lbl ]) ]
     | RET_HWCS -> [ Instr ("ret", []) ]
@@ -347,4 +478,5 @@ end
 module ACCPrinter = AsmTargetBuilder.Make (ACCTarget)
 
 let print_prog fmt prog =
-  PrintASM.pp_asm ~comment_prefix:"#" fmt (ACCPrinter.asm_of_prog prog)
+  PrintASM.pp_asm ~comment_prefix:"#" fmt
+    (acc_resolve_loops (ACCPrinter.asm_of_prog prog))

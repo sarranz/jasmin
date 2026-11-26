@@ -1,0 +1,14 @@
+// A repeat with a statically-known count <= 0 emits no loop/loopi at all
+// (source semantics unchanged, per PLAN-acc-loop-impl.md's Stage 5 design).
+export
+fn repeat_const_zero(reg u32 x) -> reg u32 {
+    repeat 0 { x += 1; }
+    repeat (-1) { x += 1; }
+
+    inline int i;
+    for i = 0 to 1 {
+        repeat i { x += 1; }
+    }
+
+    return x;
+}

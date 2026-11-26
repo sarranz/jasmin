@@ -124,7 +124,8 @@ Lemma stack_zeroization_lfd_invariants rspn fn lfd lfd' :
     , lfd_stk_max lfd = lfd_stk_max lfd'
     & lfd_frame_size lfd = lfd_frame_size lfd'
     /\ lfd_align_args lfd = lfd_align_args lfd'
-    /\ lfd_max_call_depth lfd = lfd_max_call_depth lfd'].
+    /\ lfd_max_call_depth lfd = lfd_max_call_depth lfd'
+    /\ lfd_max_loop_depth lfd = lfd_max_loop_depth lfd'].
 Proof.
   rewrite /stack_zeroization_lfd.
   case: szs_of_fn => [[szs ws]|]; last by move=> [<-].
@@ -288,6 +289,15 @@ Proof using hszparams.
   case hlfd: get_fundef => [lfd|//] /=.
   have [lfd' hzero ->] /= := stack_zeroization_lprog_get_fundef hzerolp hlfd.
   by t_xrbindP=> pc /(find_labelP hzero) -> /= ->.
+  move=> l; case: loops_pop => // -[[l0 k] rest] /=.
+  t_xrbindP=> hbl.
+  case: k => [|k'].
+  + by move=> <-; rewrite hbl.
+  move=> heq; rewrite hbl /=.
+  move: heq.
+  case hlfd: get_fundef => [lfd|] //=.
+  have [lfd' hzero ->] /= := stack_zeroization_lprog_get_fundef hzerolp hlfd.
+  by t_xrbindP=> pc /(find_labelP hzero) -> /= ->.
 Qed.
 
 Lemma stack_zeroization_lprog_lsem1 lp lp' s1 s2 :
@@ -366,6 +376,15 @@ Proof.
   move=> ?? [].
   + by move=> *; apply: (eval_jump_in_bound hget); eauto.
   by move=> > _ _ [?]; subst s' => /=; move: hget; rewrite /= hget1 => -[<-].
+  + by move=> *; subst s' => /=; move: hget; rewrite /= hget1 => -[<-].
+  move=> l [[l0 k] rest] hpop.
+  t_xrbindP=> hbl.
+  move: hpop; case: k => [|k'] hpop /=.
+  + by t_xrbindP=> heq; subst s' => /=; move: hget; rewrite /= hget1 => -[<-].
+  case hget2 : get_fundef => [lfd2 |] //=.
+  rewrite /find_label; case: ifP => //=.
+  move=> hlt [?]; subst s' => /=.
+  by move: hget; rewrite /= hget2 => -[<-].
 Qed.
 
 Section ITREE.
@@ -412,7 +431,7 @@ Qed.
 
 End EXPORT.
 
-Lemma istack_zeroization_lprogP_aux lp lp' fn lfd ptr cs :
+Lemma istack_zeroization_lprogP_aux lp lp' fn lfd ptr cs lstk :
   Sv.In (vid (lp_rsp lp)) callee_saved ->
   stack_zeroization_lprog lp = ok lp' ->
   get_fundef lp.(lp_funcs) fn = Some lfd ->
@@ -421,8 +440,8 @@ Lemma istack_zeroization_lprogP_aux lp lp' fn lfd ptr cs :
   wkequiv
     (fun s1 s2 => [/\ s1 = s2, valid_between (emem s1) bottom (lfd_stk_max lfd) &
                       (evm s1).[vid (lp_rsp lp)] = @Vword Uptr ptr])
-    (ilsem_exportcall lp fn cs)
-    (ilsem_exportcall lp' fn cs)
+    (ilsem_exportcall lp fn cs lstk)
+    (ilsem_exportcall lp' fn cs lstk)
     (fun s1 s2 =>
       [/\ escs s1 = escs s2
         , (evm s1) =[sv_of_list v_var lfd.(lfd_res)] (evm s2)
@@ -432,7 +451,7 @@ Proof using hszparams.
   rewrite /ilsem_exportcall hlfd /=.
   have [lfd' hzero hlfd'] := stack_zeroization_lprog_get_fundef hzerolp hlfd.
   rewrite hlfd' /= 2!bind_ret_l.
-  set s1 := (ls_export_initial (escs s) (emem s) (evm s) cs fn).
+  set s1 := (ls_export_initial (escs s) (emem s) (evm s) cs lstk fn).
   have hpre1: s1 = s1 /\ (lfn s1 = fn -> lpc s1 <= size (lfd_body lfd)) by split.
   have []: (lfd = lfd' /\ if szs_of_fn fn is Some _ then ~(lfd_export lfd /\ (0 <? lfd_stk_max lfd)%Z) else True) \/
          exists szs ws,
@@ -459,6 +478,8 @@ Proof using hszparams.
     move=> r _ <-.
     apply xrutt_facts.xrutt_bind with eq.
     + by apply xrutt_iresult => ? ->; eauto.
+    move=> _ _ _; apply xrutt_facts.xrutt_bind with eq.
+    + by apply xrutt_iresult => -[] ->; exists tt.
     move=> _ _ _; apply xrutt_facts.xrutt_bind with eq.
     + by apply xrutt_iresult => -[] ->; exists tt.
     move=> _ _ _; apply xrutt.xrutt_Ret; split => //.
@@ -521,6 +542,8 @@ Proof using hszparams.
   rewrite bind_ret_l.
   apply xrutt_facts.xrutt_bind with eq.
   + by apply xrutt_iresult => -[] ->; exists tt.
+  move=> _ _ _; apply xrutt_facts.xrutt_bind with eq.
+  + by apply xrutt_iresult => -[] ->; exists tt.
   move=> _ _ _; apply xrutt.xrutt_Ret; split => //=.
   apply (eq_ex_disjoint_eq_on heqvm').
   by have [_ /disjoint_sym ?] := disjoint_union (disjoint_sym hdisj).
@@ -546,19 +569,19 @@ Definition sz_post lp fn lfd (s1 s2 s1' s2' : estate) :=
       & match_mem_zero_export (emem s1') (emem s2') bottom lfd.(lfd_stk_max) (szs_of_fn fn)
     ].
 
-Lemma istack_zeroization_lprogP lp lp' fn lfd cs :
+Lemma istack_zeroization_lprogP lp lp' fn lfd cs lstk :
   Sv.In (vid (lp_rsp lp)) callee_saved ->
   stack_zeroization_lprog lp = ok lp' ->
   get_fundef lp.(lp_funcs) fn = Some lfd ->
   wkequiv_io
     (sz_pre lp lfd)
-    (ilsem_exportcall lp fn cs)
-    (ilsem_exportcall lp' fn cs)
+    (ilsem_exportcall lp fn cs lstk)
+    (ilsem_exportcall lp' fn cs lstk)
     (sz_post lp fn lfd).
 Proof using hszparams.
   move=> hin hzerolp hlfd s1 _ [ptr [hrsp <- enough_stk hvalid]].
   pose H := istack_zeroization_lprogP_aux.
-  have := H lp lp' fn lfd ptr cs hin hzerolp hlfd enough_stk s1 s1
+  have := H lp lp' fn lfd ptr cs lstk hin hzerolp hlfd enough_stk s1 s1
             (And3 erefl hvalid hrsp).
   apply: xrutt_facts.xrutt_weaken => // o1 o2 [hscs hvm hmatch]; exists ptr; split => //.
 Qed.

@@ -6,6 +6,7 @@ Require Import
   expr
   fexpr
   fexpr_sem
+  label
   linear
   linear_sem
   linear_facts
@@ -38,8 +39,8 @@ Context
 #[local]
 Lemma find_instr_skip p fn P Q :
   is_linear_of p fn (P ++ Q) ->
-  forall scs m vm cs n,
-  find_instr p (Lstate scs m vm cs fn (size P + n)) = oseq.onth Q n.
+  forall scs m vm cs lstk n,
+  find_instr p (Lstate scs m vm cs lstk fn (size P + n)) = oseq.onth Q n.
 Proof. by eauto using find_instr_skip'. Qed.
 
 End FIXME.
@@ -79,7 +80,7 @@ Proof.
   by rewrite truncate_word_u /= hm' /=.
 Qed.
 
-Context (lp : lprog) (fn : funname) (cs : seq pointer).
+Context (lp : lprog) (fn : funname) (cs : seq pointer) (lstk : seq (remote_label * nat)).
 Context (ws_align : wsize) (ws : wsize) (stk_max : Z).
 Context (lt_0_stk_max : (0 < stk_max)%Z).
 Context (halign : is_align stk_max ws).
@@ -157,7 +158,7 @@ Lemma sz_initP (s1 : estate) :
   valid_between (emem s1) top stk_max ->
   s1.(evm).[rspi] = Vword ptr ->
   exists s2,
-    lsem_n lp (endpc lp fn) (of_estate s1 cs fn (size pre)) (of_estate s2 cs fn (size pre + size (sz_init rspi ws_align stk_max))) /\
+    lsem_n lp (endpc lp fn) (of_estate s1 cs lstk fn (size pre)) (of_estate s2 cs lstk fn (size pre + size (sz_init rspi ws_align stk_max))) /\
     state_rel_loop sz_init_vars s1 s2 stk_max top.
 Proof using lt_0_stk_max halign hbody rsp_nin.
   move=> hvalid hrsp.
@@ -246,8 +247,8 @@ Lemma loop_bodyP vars s1 s2 n :
   state_rel_loop vars s1 s2 n top ->
   (0 < n)%Z ->
   exists s3,
-    [/\ lsem_n lp (endpc lp fn) (of_estate s2 cs fn (size pre + 1))
-                (of_estate s3 cs fn (size pre + 4))
+    [/\ lsem_n lp (endpc lp fn) (of_estate s2 cs lstk fn (size pre + 1))
+                (of_estate s3 cs lstk fn (size pre + 4))
       & state_rel_loop vars s1 s3 (n - wsize_size ws) top].
 Proof using halign le_ws_ws_align hstack hsmall hbody rsp_nin.
   Local Opaque wsize_size.
@@ -354,8 +355,8 @@ Lemma loopP vars s1 s2 n :
   state_rel_loop vars s1 s2 n top ->
   (0 < n)%Z ->
   exists s3,
-    [/\ lsem_n lp (endpc lp fn) (of_estate s2 cs fn (size pre + 1))
-                (of_estate s3 cs fn (size pre + 5))
+    [/\ lsem_n lp (endpc lp fn) (of_estate s2 cs lstk fn (size pre + 1))
+                (of_estate s3 cs lstk fn (size pre + 5))
       & state_rel_loop vars s1 s3 0 top].
 Proof using halign le_ws_ws_align hstack hsmall hbody rsp_nin hlabel.
   Local Opaque wsize_size.
@@ -415,8 +416,8 @@ Lemma sz_loopP vars s1 s2 n :
   (0 < n)%Z ->
   exists s3,
     [/\ lsem_n lp (endpc lp fn)
-          (of_estate s2 cs fn (size pre))
-          (of_estate s3 cs fn (size pre + size (sz_loop rspi lbl ws)))
+          (of_estate s2 cs lstk fn (size pre))
+          (of_estate s3 cs lstk fn (size pre + size (sz_loop rspi lbl ws)))
       & state_rel_loop vars s1 s3 0 top].
 Proof using halign le_ws_ws_align hstack hsmall hbody rsp_nin hlabel.
   move=> hsubset hsr hlt.
@@ -444,8 +445,8 @@ Lemma restore_spP vars (s1 s2 : estate) :
   state_rel_unrolled vars s1 s2 0 top ->
   exists s3,
     lsem_n lp (endpc lp fn)
-      (of_estate s2 cs fn (size pre))
-      (of_estate s3 cs fn (size pre + size (restore_sp rspi))) /\
+      (of_estate s2 cs lstk fn (size pre))
+      (of_estate s3 cs lstk fn (size pre + size (restore_sp rspi))) /\
     state_rel_unrolled vars s1 s3 0 ptr.
 Proof using hbody rsp_nin.
   move=> hsr.
@@ -478,8 +479,8 @@ Lemma unrolled_bodyP vars s1 s2 n :
   (Z.of_nat n < stk_max / wsize_size ws)%Z ->
   exists s3,
     [/\ lsem_n lp (endpc lp fn)
-           (of_estate s2 cs fn (size pre + n))
-           (of_estate s3 cs fn (size pre + n.+1))
+           (of_estate s2 cs lstk fn (size pre + n))
+           (of_estate s3 cs lstk fn (size pre + n.+1))
       & state_rel_unrolled vars s1 s3 (stk_max - Z.of_nat n.+1 * wsize_size ws) top].
 Proof using halign le_ws_ws_align hstack hsmall hbody.
 Local Opaque wsize_size Z.of_nat.
@@ -569,8 +570,8 @@ Lemma sz_unrolledP vars s1 s2 :
   state_rel_unrolled vars s1 s2 stk_max top ->
   exists s3,
     [/\ lsem_n lp (endpc lp fn)
-          (of_estate s2 cs fn (size pre))
-          (of_estate s3 cs fn (size pre + size (sz_unrolled rspi ws stk_max)))
+          (of_estate s2 cs lstk fn (size pre))
+          (of_estate s3 cs lstk fn (size pre + size (sz_unrolled rspi ws stk_max)))
       & state_rel_unrolled vars s1 s3 0 top].
 Proof using lt_0_stk_max halign le_ws_ws_align hstack hsmall hbody.
   move=> hsr.
@@ -619,8 +620,8 @@ Lemma stack_zero_loopP (s1 : estate) :
   (evm s1).[rspi] = Vword ptr ->
   exists s2,
     [/\ lsem_n lp (endpc lp fn)
-          (of_estate s1 cs fn (size pre))
-          (of_estate s2 cs fn (size pre + size (stack_zero_loop rspi lbl ws_align ws stk_max)))
+          (of_estate s1 cs lstk fn (size pre))
+          (of_estate s2 cs lstk fn (size pre + size (stack_zero_loop rspi lbl ws_align ws stk_max)))
       & state_rel_unrolled stack_zero_loop_vars s1 s2 0 ptr].
 Proof using lt_0_stk_max halign le_ws_ws_align hstack hsmall hbody rsp_nin hlabel.
   move=> hvalid hrsp.
@@ -678,8 +679,8 @@ Lemma stack_zero_unrolledP (s1 : estate) :
   (evm s1).[rspi] = Vword ptr ->
   exists s2,
     [/\ lsem_n lp (endpc lp fn)
-          (of_estate s1 cs fn (size pre))
-          (of_estate s2 cs fn (size pre + size (stack_zero_unrolled rspi ws_align ws stk_max)))
+          (of_estate s1 cs lstk fn (size pre))
+          (of_estate s2 cs lstk fn (size pre + size (stack_zero_unrolled rspi ws_align ws stk_max)))
       & state_rel_unrolled stack_zero_unrolled_vars s1 s2 0 ptr].
 Proof using lt_0_stk_max halign le_ws_ws_align hstack hsmall hbody rsp_nin.
   move=> hvalid hrsp.
@@ -740,7 +741,7 @@ Proof.
     /negP hlabel hbody ls ptr hfn hpc hstack hrsp top hvalid.
   have [s2 [hsem hsr]]: [elaborate
     exists s2,
-      lsem_n lp (endpc lp fn) ls (of_estate s2 (lhwcs ls) fn (size lc + size cmd))
+      lsem_n lp (endpc lp fn) ls (of_estate s2 (lhwcs ls) (lloops ls) fn (size lc + size cmd))
       /\ state_rel_unrolled
           rspn ws_align ws stk_max ptr vars (to_estate ls) s2 0 ptr].
   + move: hcmd; rewrite /stack_zeroization_cmd.
@@ -748,13 +749,13 @@ Proof.
     case: szs => //.
     + move=> [??]; subst cmd vars.
       rewrite -(cats0 (stack_zero_loop _ _ _ _ _)) in hbody.
-      have := stack_zero_loopP (lhwcs ls)
+      have := stack_zero_loopP (lhwcs ls) (lloops ls)
           lt_0_stk_max halign le_ws_ws_align hstack ws_small hbody rsp_nin
           hlabel (s1 := to_estate _) hvalid hrsp.
       by rewrite -hfn -hpc of_estate_to_estate.
     move=> [??]; subst cmd vars.
     rewrite -(cats0 (stack_zero_unrolled _ _ _ _)) in hbody.
-    have := stack_zero_unrolledP (lhwcs ls)
+    have := stack_zero_unrolledP (lhwcs ls) (lloops ls)
         lt_0_stk_max halign le_ws_ws_align hstack ws_small hbody rsp_nin
         (s1 := to_estate _) hvalid hrsp.
     by rewrite -hfn -hpc of_estate_to_estate.

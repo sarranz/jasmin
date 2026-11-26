@@ -27,6 +27,7 @@ Require Import
   inline
   insert_renaming
   linearization
+  loop_depth
   lowering
   load_constants_in_cond
   makeReferenceArguments
@@ -467,9 +468,24 @@ Definition check_hwcs_usage (p: sprog) : cexec unit :=
                  (pp_s "hardware call stack not available on this architecture")))
          ) (p_funcs p).
 
+(* When the architecture has no hardware loops, no function may have a
+   positive static loop-nesting depth: this is what lets the linearization
+   proof assume hardware loops exist whenever a [Cfor (FIrepeat _)] is
+   compiled. Mirrors [check_hwcs_usage] exactly. *)
+Definition check_loop_usage (p: sprog) : cexec unit :=
+  if ad_loop_depth is Some _ then ok tt
+  else
+    allM (λ '(fn, fd),
+            assert
+              (fd.(f_extra).(sf_max_loop_depth) <=? 0)%Z
+              (pp_at_fn fn (merge_varmaps.E.gen_error true None
+                 (pp_s "hardware loops not available on this architecture")))
+         ) (p_funcs p).
+
 Definition compiler_back_end entries (pd: sprog) :=
   Let _ := check_export entries pd in
   Let _ := check_hwcs_usage pd in
+  Let _ := check_loop_usage pd in
   (* linearisation                     *)
   Let _ := merge_varmaps.check pd var_tmps in
   Let pl := linear_prog liparams pd in
@@ -516,9 +532,22 @@ Definition check_hwcs_depth entries (up : uprog) (xp: asm_prog) : cexec unit :=
           else Error (pp_at_fn fn (merge_varmaps.E.gen_error true None (pp_s "unknown export function")))
        ) entries.
 
+(* The static (source) loop-nesting depth of every entry point must fit in
+   what is left of the hardware loop stack once the compiled code takes
+   over: this is the compile-time counterpart of [enough_loop_space]. *)
+Definition check_loop_depth entries (up : uprog) (xp: asm_prog) : cexec unit :=
+  allM (λ fn,
+          if get_fundef xp.(asm_funcs) fn is Some xfd then
+            assert
+              (asm_fd_max_loop_depth xfd <=? Z.of_nat (loop_depth up fn))%Z
+              (pp_at_fn fn (merge_varmaps.E.gen_error true None (pp_s "hardware loop stack depth problem")))
+          else Error (pp_at_fn fn (merge_varmaps.E.gen_error true None (pp_s "unknown export function")))
+       ) entries.
+
 Definition compile_prog_to_asm entries (p: uprog): cexec asm_prog :=
   Let xp := compiler_front_end entries p >>= compiler_back_end_to_asm entries in
   Let _ := check_hwcs_depth entries p xp in
+  Let _ := check_loop_depth entries p xp in
   ok xp.
 
 End COMPILER.

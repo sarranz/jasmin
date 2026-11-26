@@ -27,6 +27,7 @@ Import ssrring.
 Import psem it_sems_one_varmap compiler_util label low_memory.
 Require Import seq_extra psem_facts.
 Require Import fexpr fexpr_sem fexpr_facts.
+Require Import loop_depth.
 Require Export linearization linear_sem linear_facts core_logics relational_logic.
 Import Memory.
 
@@ -177,7 +178,14 @@ Section CAT.
   #[ local ]
   Lemma cat_for : forall fi c, Pc c -> Pr (Cfor fi c).
   Proof.
-  by move=> ?? _ ???? /=; case: linearize_for => [?|//]; case: linear_c.
+  move=> fi c Hc ii fn lbl tail /=.
+  case: linearize_for => [[x|z]|//].
+  + rewrite Hc (Hc _ _ [:: _; _]); case: linear_c => lbl1 lc1.
+    by rewrite /= -!catA.
+  case: (z <=? 0)%Z => /=.
+  + by [].
+  rewrite Hc (Hc _ _ [:: _]); case: linear_c => lbl1 lc1.
+  by rewrite /= cats1 cat_rcons.
   Qed.
 
   #[ local ]
@@ -235,11 +243,12 @@ Definition valid_labels (fn: funname) (lo hi: label) (i: linstr) : bool :=
   | Ligoto _
   | Lret
   | Lret_hwcallstack
-  | Lrepeat_loop _ _
     => true
   | Llabel _ lbl
   | LstoreLabel _ lbl
   | Lcond _ lbl
+  | Lloop_begin _ lbl
+  | Lloop_end lbl
     => (lo <=? lbl) && (lbl <? hi)
   | Lgoto (fn', lbl) | Lcall _ (fn', lbl) =>
     if fn' == fn then (lo <=? lbl) && (lbl <? hi) else lbl == 1
@@ -261,7 +270,7 @@ Lemma valid_le_min min2 fn min1 max lc :
   valid fn min2 max lc ->
   valid fn min1 max lc.
 Proof.
-  move => /Pos_leb_trans h; apply: sub_all; rewrite /valid_labels => -[_/=] [] // => [ _ [fn' lbl] | k lbl | [ fn' lbl ] | _ lbl | _ lbl ].
+  move => /Pos_leb_trans h; apply: sub_all; rewrite /valid_labels => -[_/=] [] // => [ _ [fn' lbl] | k lbl | [ fn' lbl ] | _ lbl | _ lbl | _ lbl | lbl ].
   1,3: case: ifP => // _.
   all: by case/andP => /h ->.
 Qed.
@@ -271,7 +280,7 @@ Lemma valid_le_max max1 fn max2 min lc :
   valid fn min max1 lc ->
   valid fn min max2 lc.
 Proof.
-  move => /Pos_lt_leb_trans h; apply: sub_all; rewrite /valid_labels => -[_/=] [] // => [ _ [fn' lbl] | k lbl | [ fn' lbl ] | _ lbl | _ lbl ].
+  move => /Pos_lt_leb_trans h; apply: sub_all; rewrite /valid_labels => -[_/=] [] // => [ _ [fn' lbl] | k lbl | [ fn' lbl ] | _ lbl | _ lbl | _ lbl | lbl ].
   1,3: case: ifP => // _.
   all: by case/andP => -> /h.
 Qed.
@@ -357,7 +366,7 @@ Let sf_correct f (op : word Uptr -> word Uptr -> word Uptr) :=
            & vm'.[rspi] = ts' ].
 
 Let sf_correct1 f (op : word Uptr -> word Uptr -> word Uptr) :=
- forall P Q lp sp_rsp tmp fn s ii ts sz cs,
+ forall P Q lp sp_rsp tmp fn s ii ts sz cs lstk,
     let: rspi := vid sp_rsp in
     let: lcmd := map (li_of_fopn_args ii) (f rspi tmp sz) in
     let: ts' := Vword (op ts (wrepr Uptr sz)) in
@@ -366,13 +375,14 @@ Let sf_correct1 f (op : word Uptr -> word Uptr -> word Uptr) :=
     -> (if tmp is Some x then (v_var rspi) <> (v_var x) /\ convertible (vtype x) (aword Uptr) else True)
     -> get_var true (evm s) rspi = ok (Vword ts)
     -> exists vm',
-     let: ls := of_estate s cs fn (size P) in
+     let: ls := of_estate s cs lstk fn (size P) in
      let: ls' :=
        {|
          lscs := lscs ls;
          lmem := lmem ls;
          lvm := vm';
          lhwcs := lhwcs ls;
+         lloops := lloops ls;
          lfn := fn;
          lpc := size P + size lcmd;
        |}
@@ -851,8 +861,21 @@ Section VALIDITY.
   #[ local ]
   Lemma valid_labels_for fi c : Pc c -> Pr (Cfor fi c).
   Proof.
-  move=> hc ii fn lbl /=; case: linearize_for => [cnt|?]; last exact: default.
-  by case: linear_c (hc fn lbl) => lbl' c' [].
+  move=> hc ii fn lbl /=; case: linearize_for => [[x|z]|_]; last exact: default.
+  + rewrite linear_c_nil.
+    case: linear_c (hc fn (next_lbl (next_lbl lbl))); rewrite /next_lbl => lblc lc [Lc Vc] /=; split; first lia.
+    have lbl_lt_lblc : (lbl <? lblc)%positive by apply/Pos.ltb_lt; lia.
+    have lblp1_lt_lblc : (lbl + 1 <? lblc)%positive by apply/Pos.ltb_lt; lia.
+    have lbl_le_lblp1 : (lbl <=? lbl + 1)%positive by apply/Pos.leb_le; lia.
+    rewrite /= valid_cat /= /valid_labels /= Pos.leb_refl lbl_le_lblp1 lblp1_lt_lblc lbl_lt_lblc /= andbT.
+    apply: valid_le_min _ Vc; apply/Pos.leb_le; lia.
+  case: (z <=? 0)%Z => /=.
+  + exact: default.
+  rewrite linear_c_nil.
+  case: linear_c (hc fn (next_lbl lbl)); rewrite /next_lbl => lblc lc [Lc Vc] /=; split; first lia.
+  have lbl_lt_lblc : (lbl <? lblc)%positive by apply/Pos.ltb_lt; lia.
+  rewrite /= valid_cat /= /valid_labels /= Pos.leb_refl lbl_lt_lblc /= andbT.
+  apply: valid_le_min _ Vc; apply/Pos.leb_le; lia.
   Qed.
 
   #[ local ]
@@ -1011,8 +1034,16 @@ Section NUMBER_OF_LABELS.
   Lemma nb_labels_for (fi : for_iteration) (c : cmd) : Pc c → Pr (Cfor fi c).
   Proof.
   move=> hc ii fn lbl /=.
-  case: linearize_for => [cnt|?]; last by apply Z.le_refl.
-  case: linear_c (hc fn lbl) => lbl' c' /= hc'; lia.
+  case: linearize_for => [[x|z]|?]; last by apply Z.le_refl.
+  + rewrite linear_c_nil.
+    case: linear_c (hc fn (next_lbl (next_lbl lbl))); rewrite /next_lbl => lblc lc Lc /=.
+    rewrite label_in_lcmd_cat /= cats0.
+    lia.
+  case: (z <=? 0)%Z => /=; first by apply Z.le_refl.
+  rewrite linear_c_nil.
+  case: linear_c (hc fn (next_lbl lbl)); rewrite /next_lbl => lblc lc Lc /=.
+  rewrite label_in_lcmd_cat /= cats0.
+  lia.
   Qed.
 
   Lemma label_in_lcmd_add_align ii al lc :
@@ -1873,6 +1904,156 @@ Section PROOF.
       (Z.of_nat (size cs) + sf_max_call_depth fd.(f_extra) <= Z.of_nat n)%Z
     else True.
 
+  (* [lstk] is the loop stack: unlike [cs]/[hwcs_bound] above, entering a
+     loop's own body pushes one more entry for the whole duration of that
+     body's own correctness proof, so different positions of the same
+     command tree carry different [lstk] simultaneously -- the bound is
+     therefore stated directly on a [cmd] (or a singleton [instr]), not
+     tied to a function the way [hwcs_bound] is. *)
+  (* Besides the numeric bound (when the architecture has hardware loops),
+     [loops_bound] also carries the fact that the architecture actually HAS
+     hardware loops whenever [c] uses one: this is what lets [Hfor] (below)
+     derive [isSome hwloop_size] at the point it needs to invoke [hround].
+     Unlike [hwcs_present] (a section [Hypothesis], discharged once
+     externally for the whole program), this conjunct is established once,
+     at the root, wherever [loops_bound_fn] itself is supplied (currently an
+     external parameter of [linear_exportcallP]/[linear_exportcall_mixP],
+     same as [hwcs_bound0]/[hwcs_present]; discharged for real by
+     [it_compiler_proof.v]'s [check_loop_usage]/[loop_present], the loop
+     analog of [check_hwcs_usage]/[hwcs_present]) and then propagated for
+     free through every monotonicity lemma below. *)
+  Definition loops_bound (lstk : seq (remote_label * nat)) (c : cmd) :=
+    (0 < Z.of_nat (ldepth_c (callee_loop_depth p) c) -> isSome hwloop_size)%Z /\
+    (if hwloop_size is Some n then
+      (Z.of_nat (size lstk) + Z.of_nat (ldepth_c (callee_loop_depth p) c) <= Z.of_nat n)%Z
+    else True).
+
+  Definition loops_bound_i (lstk : seq (remote_label * nat)) (i : instr) :=
+    loops_bound lstk [:: i].
+
+  (* Per-function version, mirroring [hwcs_bound]: the loop-stack bound a
+     function is entered with (at a call, or at the top-level export
+     call). *)
+  Definition loops_bound_fn fn (lstk : seq (remote_label * nat)) :=
+    forall fd, get_fundef p.(p_funcs) fn = Some fd ->
+    loops_bound lstk fd.(f_body).
+
+  (* Monotonicity facts: a sub-command's bound follows from the bound of the
+     enclosing command/instruction, via [loop_depth.v]'s own monotonicity
+     lemmas on [ldepth_c]/[ldepth_i]. *)
+  Lemma loops_bound_cons_hd lstk i c :
+    loops_bound lstk (i :: c) -> loops_bound_i lstk i.
+  Proof.
+    rewrite /loops_bound_i /loops_bound !ldepth_c_cons /= maxn0.
+    move=> [hSome hb]; split.
+    + move=> hpos; apply: hSome.
+      have hle := leq_maxl (ldepth_i (callee_loop_depth p) i) (ldepth_c (callee_loop_depth p) c).
+      move/leP: hle => hle; lia.
+    move: hb; case: hwloop_size => // n hb.
+    have hle := leq_maxl (ldepth_i (callee_loop_depth p) i) (ldepth_c (callee_loop_depth p) c).
+    move/leP: hle => hle.
+    lia.
+  Qed.
+
+  Lemma loops_bound_cons_tl lstk i c :
+    loops_bound lstk (i :: c) -> loops_bound lstk c.
+  Proof.
+    rewrite /loops_bound ldepth_c_cons.
+    move=> [hSome hb]; split.
+    + move=> hpos; apply: hSome.
+      have hle := leq_maxr (ldepth_i (callee_loop_depth p) i) (ldepth_c (callee_loop_depth p) c).
+      move/leP: hle => hle; lia.
+    move: hb; case: hwloop_size => // n hb.
+    have hle := leq_maxr (ldepth_i (callee_loop_depth p) i) (ldepth_c (callee_loop_depth p) c).
+    move/leP: hle => hle.
+    lia.
+  Qed.
+
+  Lemma loops_bound_if_l lstk ii e c1 c2 :
+    loops_bound_i lstk (MkI ii (Cif e c1 c2)) -> loops_bound lstk c1.
+  Proof.
+    rewrite /loops_bound_i /loops_bound ldepth_c_cons maxn0.
+    move=> [hSome hb]; split.
+    + move=> hpos; apply: hSome.
+      have hle := ldepth_c_if_l ii (callee_loop_depth p) e c1 c2.
+      move/leP: hle => hle; lia.
+    move: hb; case: hwloop_size => // n hb.
+    have hle := ldepth_c_if_l ii (callee_loop_depth p) e c1 c2.
+    move/leP: hle => hle.
+    lia.
+  Qed.
+
+  Lemma loops_bound_if_r lstk ii e c1 c2 :
+    loops_bound_i lstk (MkI ii (Cif e c1 c2)) -> loops_bound lstk c2.
+  Proof.
+    rewrite /loops_bound_i /loops_bound ldepth_c_cons maxn0.
+    move=> [hSome hb]; split.
+    + move=> hpos; apply: hSome.
+      have hle := ldepth_c_if_r ii (callee_loop_depth p) e c1 c2.
+      move/leP: hle => hle; lia.
+    move: hb; case: hwloop_size => // n hb.
+    have hle := ldepth_c_if_r ii (callee_loop_depth p) e c1 c2.
+    move/leP: hle => hle.
+    lia.
+  Qed.
+
+  Lemma loops_bound_while_l lstk ii al c1 e info c2 :
+    loops_bound_i lstk (MkI ii (Cwhile al c1 e info c2)) -> loops_bound lstk c1.
+  Proof.
+    rewrite /loops_bound_i /loops_bound ldepth_c_cons maxn0.
+    move=> [hSome hb]; split.
+    + move=> hpos; apply: hSome.
+      have hle := ldepth_c_while_l ii (callee_loop_depth p) al c1 e info c2.
+      move/leP: hle => hle; lia.
+    move: hb; case: hwloop_size => // n hb.
+    have hle := ldepth_c_while_l ii (callee_loop_depth p) al c1 e info c2.
+    move/leP: hle => hle.
+    lia.
+  Qed.
+
+  Lemma loops_bound_while_r lstk ii al c1 e info c2 :
+    loops_bound_i lstk (MkI ii (Cwhile al c1 e info c2)) -> loops_bound lstk c2.
+  Proof.
+    rewrite /loops_bound_i /loops_bound ldepth_c_cons maxn0.
+    move=> [hSome hb]; split.
+    + move=> hpos; apply: hSome.
+      have hle := ldepth_c_while_r ii (callee_loop_depth p) al c1 e info c2.
+      move/leP: hle => hle; lia.
+    move: hb; case: hwloop_size => // n hb.
+    have hle := ldepth_c_while_r ii (callee_loop_depth p) al c1 e info c2.
+    move/leP: hle => hle.
+    lia.
+  Qed.
+
+  (* Unlike [Cif]/[Cwhile], [Ccall] contributes the callee's OWN declared
+     loop depth directly (no sub-command of the caller to descend into). *)
+  Lemma loops_bound_i_call lstk ii xs f es :
+    loops_bound_i lstk (MkI ii (Ccall xs f es)) =
+    ((0 < Z.of_nat (callee_loop_depth p f) -> isSome hwloop_size)%Z /\
+     if hwloop_size is Some n then
+       (Z.of_nat (size lstk) + Z.of_nat (callee_loop_depth p f) <= Z.of_nat n)%Z
+     else True).
+  Proof. by rewrite /loops_bound_i /loops_bound ldepth_c_cons maxn0. Qed.
+
+  (* [Cfor (FIrepeat _) c] contributes [1 + ldepth_c c] (one level for the
+     hardware loop itself, on top of [c]'s own depth): pushing one loop-stack
+     entry to enter the body therefore preserves the bound. *)
+  Lemma loops_bound_for lstk ii cnt c entry :
+    loops_bound_i lstk (MkI ii (Cfor (FIrepeat cnt) c)) ->
+    loops_bound (entry :: lstk) c.
+  Proof.
+    rewrite /loops_bound_i /loops_bound.
+    have hrw : ldepth_c (callee_loop_depth p) [:: MkI ii (Cfor (FIrepeat cnt) c)]
+               = (ldepth_c (callee_loop_depth p) c).+1.
+    + by rewrite ldepth_c_cons maxn0 (ldepth_c_for_repeat ii (callee_loop_depth p)).
+    rewrite hrw.
+    move=> [hSome hb]; split.
+    + by move=> _; apply: hSome; lia.
+    move: hb; case: hwloop_size => // n hb.
+    have -> : size (entry :: lstk) = (size lstk).+1 by [].
+    lia.
+  Qed.
+
   (* The memory that is both not valid in the source and not in the stack
       is unmodified. This is needed to prove the pass zeroing the stack. *)
   Definition target_mem_unchanged m m' :=
@@ -2318,12 +2499,597 @@ Proof.
   by move=> ls' _ [<- hfn' hpc']; apply eqit_Ret.
 Qed.
 
+Lemma pre_i_for_loop c0 :
+  Pc c0 →
+  ∀ ii lbl stlbl lblc0 lc0 P0 rest ls1,
+  pre_c c0 stlbl lblc0 P0 lc0 (MkLI ii (Lloop_end lbl) :: rest) →
+  (forall ls', lfn ls' = fn -> eval_jump p' (fn, lbl) ls' = ok (setcpc ls' fn (size P0))) →
+  lfn ls1 = fn → lpc ls1 = size P0 →
+  mix_ilsteps p' (pc_between_c fn P0 (lc0 ++ [:: MkLI ii (Lloop_end lbl)])) ls1 ≈
+    ITree.iter (fun ls' =>
+      (ls2 <- mix_ilsteps p' (pc_between_c fn P0 lc0) (setcpc ls' fn (size P0)) ;;
+      match eval_instr p' (MkLI ii (Lloop_end lbl)) ls2 with
+      | Ok ls3 => Ret (if lpc ls3 == size P0 then inl ls3 else inr ls3)
+      | Error e0 => Exception.throw e0
+      end)%itree) ls1.
+Proof.
+move=> ihc0 ii lbl stlbl lblc0 lc0 P0 rest ls1 pc0 hjump hfn1 hpc1.
+have [_ _ _ Clin] := pc0.
+have hclin : is_linear_of fn ((P0 ++ lc0) ++ [:: MkLI ii (Lloop_end lbl)] ++ rest).
++ by move: Clin; rewrite -!catA.
+have ihc0' := fun ls hfn hpc =>
+  ihc0 stlbl lblc0 lc0 P0 (MkLI ii (Lloop_end lbl) :: rest) ls pc0 hfn hpc.
+move: ls1 hfn1 hpc1; ginit; gcofix SELF => ls1 hfn1 hpc1.
+rewrite (mix_ilsteps_split_c p' (P':=P0) (Q':=lc0)) //=; last by simpl_size; lia.
+rewrite unfold_iter bind_bind.
+guclo eqit_clo_bind.
+econstructor.
++ have -> : setcpc ls1 fn (size P0) = ls1 by rewrite -hfn1 -hpc1; case: (ls1).
+  apply: ihc0' hfn1 hpc1.
+move=> ls2 _ [<- hfn2 hpc2].
+rewrite /pc_between_c /=.
+have hlpc2 : lpc ls2 = size (P0 ++ lc0) by rewrite size_cat; lia.
+have hrange :
+  size P0 <= size (P0 ++ lc0) < size P0 + size (lc0 ++ [:: MkLI ii (Lloop_end lbl)]).
++ by simpl_size; lia.
+have hQpos : 0 < size (MkLI ii (Lloop_end lbl) :: rest) by [].
+rewrite (step_mix_ilsteps_eq_itree
+           (P:=P0++lc0) (Q:=MkLI ii (Lloop_end lbl) :: rest)
+           (pcs:=size P0) (pce:=size P0+size (lc0 ++ [:: MkLI ii (Lloop_end lbl)]))
+           hclin hfn2 hlpc2 hrange hQpos) /=.
+rewrite /eval_instr /=.
+case Epop: (loops_pop (lloops ls2)) => [[[l k] rest0]|err] /=; last first.
++ rewrite bind_throw; apply gpaco2_mon with bot2 bot2 => //.
+  gfinal; right; rewrite -/(eqit eq true true); reflexivity.
+have hll : lloops ls2 = (l, k) :: rest0.
++ move: Epop; rewrite /loops_pop; t_xrbindP => _.
+  by rewrite /runcons; case: (lloops ls2) => //= x xs [-> ->].
+case: eqP => [heql|hne] /=; last first.
++ rewrite bind_throw; apply gpaco2_mon with bot2 bot2 => //.
+  gfinal; right; rewrite -/(eqit eq true true); reflexivity.
+clear Epop hll heql.
+case: k => [|k'] /=.
++ have hb : (lpc (lnext_pc (lset_loops ls2 rest0)) == size P0) = false.
+  * apply/negbTE/eqP; rewrite /lnext_pc /= hpc2; simpl_size; lia.
+  rewrite hb bind_ret_l mix_ilsteps_b0; first last.
+  * by rewrite /lnext_pc /= hpc2; simpl_size; lia.
+  * by rewrite /lnext_pc /=.
+  by setoid_rewrite tau_euttge; gstep; constructor.
+rewrite hfn2 (hjump (lset_loops ls2 ((l, k') :: rest0))); last by rewrite /lset_loops /=.
+rewrite /=.
+have hb : (size P0 == size P0) = true by rewrite eqxx.
+rewrite hb bind_ret_l.
+gstep; constructor; gfinal; left.
+apply: SELF; by rewrite /setcpc /=.
+Qed.
+
+Lemma pre_i_for_loop_post c0 :
+  Pc c0 →
+  ∀ ii lbl stlbl lblc0 lc0 P0 rest ls1 P li,
+  pre_c c0 stlbl lblc0 P0 lc0 (MkLI ii (Lloop_end lbl) :: rest) →
+  (forall ls', lfn ls' = fn -> eval_jump p' (fn, lbl) ls' = ok (setcpc ls' fn (size P0))) →
+  lfn ls1 = fn → lpc ls1 = size P0 →
+  size P0 + size lc0 + 1 = size P + size li ->
+  eutt (post P li)
+    (ITree.iter (fun ls' =>
+      (ls2 <- mix_ilsteps p' (pc_between_c fn P0 lc0) (setcpc ls' fn (size P0)) ;;
+      match eval_instr p' (MkLI ii (Lloop_end lbl)) ls2 with
+      | Ok ls3 => Ret (if lpc ls3 == size P0 then inl ls3 else inr ls3)
+      | Error e0 => Exception.throw e0
+      end)%itree) ls1)
+    (ITree.iter (fun ls' =>
+      (ls2 <- mix_ilsteps p' (pc_between_c fn P0 lc0) (setcpc ls' fn (size P0)) ;;
+      match eval_instr p' (MkLI ii (Lloop_end lbl)) ls2 with
+      | Ok ls3 => Ret (if lpc ls3 == size P0 then inl ls3 else inr ls3)
+      | Error e0 => Exception.throw e0
+      end)%itree) ls1).
+Proof.
+move=> ihc0 ii lbl stlbl lblc0 lc0 P0 rest ls1 P li pc0 hjump hfn1 hpc1 hsz.
+apply: (eutt_iter' (fun a b : lstate => [/\ a = b, lfn a = fn & lpc a = size P0])) => [j1 j2 [<- hfnj hpcj]|]; last by [].
+have [_ _ _ Clin] := pc0.
+have hclin : is_linear_of fn ((P0 ++ lc0) ++ [:: MkLI ii (Lloop_end lbl)] ++ rest).
++ by move: Clin; rewrite -!catA.
+have hij := ihc0 stlbl lblc0 lc0 P0 (MkLI ii (Lloop_end lbl) :: rest) j1 pc0 hfnj hpcj.
+have -> : setcpc j1 fn (size P0) = j1 by rewrite -hfnj -hpcj; case: (j1).
+apply eqit_bind' with (post P0 lc0); first exact: hij.
+move=> a b [<- ha hb] {hij}.
+have hrange : size P0 <= size (P0 ++ lc0) < size P0 + size (lc0 ++ [:: MkLI ii (Lloop_end lbl)]).
++ by simpl_size; lia.
+have hQpos : 0 < size (MkLI ii (Lloop_end lbl) :: rest) by [].
+rewrite /eval_instr /=.
+case Epop: (loops_pop (lloops a)) => [[[l k] rest0]|err] /=; last first.
++ apply eqit_Vis => -[].
+have hll : lloops a = (l, k) :: rest0.
++ move: Epop; rewrite /loops_pop; t_xrbindP => _.
+  by rewrite /runcons; case: (lloops a) => //= x xs [-> ->].
+case: eqP => [heql|hne] /=; last first.
++ apply eqit_Vis => -[].
+clear Epop hll heql.
+case: k => [|k'] /=.
++ have hbb : (lpc (lnext_pc (lset_loops a rest0)) == size P0) = false.
+  * apply/negbTE/eqP; rewrite /lnext_pc /= hb; simpl_size; lia.
+  rewrite hbb.
+  apply eqit_Ret; constructor; split=> //.
+  + by rewrite /lnext_pc /lset_loops /= hb -addn1.
+rewrite ha (hjump (lset_loops a ((l, k') :: rest0))); last by rewrite /lset_loops /=.
+rewrite /=.
+have hbb : (size P0 == size P0) = true by rewrite eqxx.
+rewrite hbb.
+apply eqit_Ret; constructor; split=> //.
+Qed.
+
+Lemma pre_i_for_aux fi c0 :
+  Pc c0 →
+  ∀ ii lbl lbli li P Q ls,
+  pre_i (MkI ii (Cfor fi c0)) lbl lbli P li Q →
+  lfn ls = fn → lpc ls = size P →
+  match linearize_for ii fi with
+  | Ok (inr z) =>
+      if (z <=? 0)%Z then True
+      else
+        exists lblc0 lc0 P0 Q0,
+          [/\ pre_c c0 (next_lbl lbl) lblc0 P0 lc0 Q0
+            & mix_ilsteps p' (pc_between_c fn P li) ls ≈
+              ls1 <- match eval_instr p' (MkLI ii (Lloop_begin (inr z) lbl)) ls with
+                     | Ok ls' => Ret ls' | Error e0 => Exception.throw e0 end ;;
+              ITree.iter (fun ls' =>
+                (ls2 <- mix_ilsteps p' (pc_between_c fn P0 lc0) (setcpc ls' fn (size P0)) ;;
+                match eval_instr p' (MkLI ii (Lloop_end lbl)) ls2 with
+                | Ok ls3 => Ret (if lpc ls3 == size P0 then inl ls3 else inr ls3)
+                | Error e0 => Exception.throw e0
+                end)%itree) ls1]
+  | Ok (inl x) =>
+      exists lblc0 lc0 P0 Q0,
+        [/\ pre_c c0 (next_lbl (next_lbl lbl)) lblc0 P0 lc0 Q0
+          & mix_ilsteps p' (pc_between_c fn P li) ls ≈
+            match (Let v := sem_fexpr (lvm ls) (fis_zero x) in to_bool v) with
+            | Ok b =>
+                if b then Ret (setcpc ls fn (size P + size li))
+                else
+                  (ls1 <- match eval_instr p' (MkLI ii (Lloop_begin (inl x) lbl)) (lnext_pc ls) with
+                         | Ok ls' => Ret ls' | Error e0 => Exception.throw e0 end ;;
+                  ls4 <- ITree.iter (fun ls' =>
+                    (ls2 <- mix_ilsteps p' (pc_between_c fn P0 lc0) (setcpc ls' fn (size P0)) ;;
+                    match eval_instr p' (MkLI ii (Lloop_end lbl)) ls2 with
+                    | Ok ls3 => Ret (if lpc ls3 == size P0 then inl ls3 else inr ls3)
+                    | Error e0 => Exception.throw e0
+                    end)%itree) ls1 ;;
+                  Ret (setcpc ls4 fn (size P + size li)))%itree
+            | Error e0 => Exception.throw e0
+            end]
+  | Error _ => True
+  end.
+Proof.
+move=> ihc0 ii lbl lbli li P Q ls [hchecked hlin hD hC] hfn hpc.
+move: hchecked => /checked_iE [] fd hget hcheck.
+move: hcheck; rewrite /check_i /=; t_xrbindP => cnt hcnt hcheckc.
+have hcheckc' : checked_c fn c0 by rewrite /checked_c hget hcheckc.
+simpl in hlin.
+case: cnt hcnt hcheckc => [x|z] hcnt hcheckc; move: hlin; rewrite hcnt /=.
+move=> hlin.
+rewrite linear_c_nil in hlin.
+case heqc0: (linear_c fn c0 (next_lbl (next_lbl lbl)) [::]) hlin => [lblc0 lc0] /= [hlbli hli].
+set P0 := P ++ [:: MkLI ii (Lcond (fis_zero x) (next_lbl lbl)); MkLI ii (Lloop_begin (inl x) lbl); MkLI ii (Lilabel lbl)].
+set Q0 := [:: MkLI ii (Lloop_end lbl); MkLI ii (Lilabel (next_lbl lbl))] ++ Q.
+have hvc := valid_c fn c0 (next_lbl (next_lbl lbl)).
+rewrite heqc0 in hvc.
+case: hvc => [hle0 hvalid0].
+have hCC : is_linear_of fn (P0 ++ lc0 ++ Q0).
++ move: hC; rewrite -hli /P0 /Q0 /= -!catA //.
+have hDD : disjoint_labels (next_lbl (next_lbl lbl)) lblc0 P0.
++ rewrite /P0; apply: disjoint_labels_cat.
+  + apply: (disjoint_labels_w _ _ hD); rewrite /next_lbl; lia.
+  + move=> lbl' hrange /=; rewrite /is_label /=.
+    rewrite orbF; apply/negP => /eqP ?; subst lbl'; move: hrange; rewrite /next_lbl; lia.
+have pre0 : pre_c c0 (next_lbl (next_lbl lbl)) lblc0 P0 lc0 Q0 by [].
+exists lblc0, lc0, P0, Q0; split; first exact: pre0.
+subst li.
+rewrite (step_mix_ilsteps hC hfn hpc) /=; first last.
++ by simpl_size; lia.
++ by simpl_size; lia.
+rewrite /eval_instr /=.
+case: (Let v := Let x0 := get_var true (lvm ls) x in sem_sop2 (Oeq (Op_w Uptr)) x0 (Vword (wrepr Uptr 0)) in to_bool v) => [b|e0] /=; last by reflexivity.
+case: b => /=.
++ have hnP0 : ~~ has (is_label (next_lbl lbl)) P0.
+  + rewrite /P0 has_cat negb_or; apply/andP; split.
+    + apply: (hD (next_lbl lbl)).
+      move: hle0; rewrite /next_lbl => hle0; rewrite /next_lbl; lia.
+    + rewrite /= /is_label /= orbF; apply/negP => /eqP HH; move: HH; rewrite /next_lbl; lia.
+  rewrite hfn (eval_jumpE hCC) (find_label_cat_hd _ hnP0).
+  rewrite find_label_cat_hd; last first.
+  + apply: (valid_has_not_label hvalid0); left; rewrite /next_lbl; lia.
+  rewrite find_labelE /= find_labelE /is_label /= eqxx /=.
+  rewrite mix_ilsteps_b0; first apply eqit_Ret.
+  + rewrite /setcpc; f_equal; simpl_size; lia.
+  + by [].
+  + by rewrite /setcpc /=; simpl_size; lia.
+have hCC1 : is_linear_of fn ((P ++ [:: MkLI ii (Lcond (fis_zero x) (next_lbl lbl))]) ++
+              (MkLI ii (Lloop_begin (inl x) lbl) :: MkLI ii (Lilabel lbl) :: lc0 ++ Q0)).
++ move: hCC; rewrite /P0 -!catA //.
+have hlfn3 : lfn (lnext_pc ls) = fn by rewrite /lnext_pc /=.
+have hlpc3 : lpc (lnext_pc ls) = size (P ++ [:: MkLI ii (Lcond (fis_zero x) (next_lbl lbl))]).
++ by rewrite /lnext_pc /= hpc size_cat addn1.
+rewrite (step_mix_ilsteps hCC1 hlfn3 hlpc3) /=; first last.
++ by simpl_size; lia.
++ by simpl_size; lia.
+rewrite /eval_instr /=.
+case hev: (Let n := o2r ErrSemUndef hwloop_size
+       in (assert (size (lloops ls) < n) ErrLoop >>
+           Let z := Let p0 := Let x := get_var true (lvm ls) x in to_pointer x
+                    in ok (wunsigned p0)
+           in (assert (0 <? z)%Z ErrLoop >>
+               Let ls0 := loops_push (lloops ls) (lfn ls, lbl, Z.to_nat (z - 1))
+               in ok (lnext_pc (lset_loops (lnext_pc ls) ls0)))))
+  => [ls2|e0] /=; last by rewrite bind_throw; reflexivity.
+move: hev; t_xrbindP => n hn hlt z wp vx hgetx htop hwz hzpos ls0' hpush hls2eq.
+rewrite bind_ret_l.
+have hlfn2 : lfn ls2 = fn.
++ by rewrite -hls2eq /lnext_pc /lset_loops.
+have hlpc2 : lpc ls2 = size P + 2.
++ rewrite -hls2eq /lnext_pc /lset_loops /=.
+  simpl_size; lia.
+have hlpc2' : lpc ls2 = size (P ++ [:: MkLI ii (Lcond (fis_zero x) (next_lbl lbl)); MkLI ii (Lloop_begin (inl x) lbl)]).
++ by rewrite hlpc2; simpl_size; lia.
+have hCC2 : is_linear_of fn
+  ((P ++ [:: MkLI ii (Lcond (fis_zero x) (next_lbl lbl)); MkLI ii (Lloop_begin (inl x) lbl)]) ++
+   (MkLI ii (Lilabel lbl) :: lc0 ++ Q0)).
++ move: hCC; rewrite /P0 -!catA //.
+rewrite (step_mix_ilsteps hCC2 hlfn2 hlpc2') /=; first last.
++ by simpl_size; lia.
++ by simpl_size; lia.
+rewrite /eval_instr /=.
+have hnP0 : ~~ has (is_label lbl)
+    (P ++ [:: MkLI ii (Lcond (fis_zero x) (next_lbl lbl)); MkLI ii (Lloop_begin (inl x) lbl)]).
++ rewrite has_cat negb_or; apply/andP; split.
+  + apply: (hD lbl).
+    move: hle0; rewrite -hlbli /next_lbl => hle0; rewrite /next_lbl; lia.
+  + by [].
+have hjump : forall ls', lfn ls' = fn -> eval_jump p' (fn, lbl) ls' = ok (setcpc ls' fn (size P0)).
++ move=> ls' hfn'.
+  rewrite (eval_jumpE hCC2) (find_label_cat_hd _ hnP0).
+  rewrite find_labelE /is_label /= eqxx /=.
+  rewrite /P0; f_equal; f_equal; simpl_size; lia.
+have hloop_post : forall a : lstate, lfn a = fn ->
+  eutt (post P0 (lc0 ++ [:: MkLI ii (Lloop_end lbl)]))
+    (ITree.iter (fun ls' =>
+       (ls2'' <- mix_ilsteps p' (pc_between_c fn P0 lc0) (setcpc ls' fn (size P0)) ;;
+        match eval_instr p' (MkLI ii (Lloop_end lbl)) ls2'' with
+        | ok _ ls3 => Ret (if lpc ls3 == size P0 then inl ls3 else inr ls3)
+        | Error e0 => Exception.throw e0
+        end)%itree) a)
+    (ITree.iter (fun ls' =>
+       (ls2'' <- mix_ilsteps p' (pc_between_c fn P0 lc0) (setcpc ls' fn (size P0)) ;;
+        match eval_instr p' (MkLI ii (Lloop_end lbl)) ls2'' with
+        | ok _ ls3 => Ret (if lpc ls3 == size P0 then inl ls3 else inr ls3)
+        | Error e0 => Exception.throw e0
+        end)%itree) a).
++ move=> a ha.
+  apply: (eutt_iter' (fun (x y:lstate) => x = y)) => // j1 j2 <- {j2}.
+  have hbody0 := ihc0 (next_lbl (next_lbl lbl)) lblc0 lc0 P0 Q0 (setcpc j1 fn (size P0)) pre0 erefl erefl.
+  apply eqit_bind' with (post P0 lc0); first exact hbody0.
+  move=> ls2'' ls2''' [<- hlfn2'' hlpc2''].
+  rewrite /eval_instr /=.
+  case: loops_pop => [[[l k] rest]|err] /=; last first.
+  + apply eqit_Vis => -[].
+  case: eqP => [heql|hne] /=; last first.
+  + apply eqit_Vis => -[].
+  case: k => [|k'] /=.
+  + case: eqP => [heq|_].
+    + exfalso; move: heq; rewrite hlpc2''; simpl_size; lia.
+    apply eqit_Ret; constructor; split=>//.
+    + by rewrite /lnext_pc /lset_loops /= hlpc2''; simpl_size; lia.
+  rewrite hlfn2'' (hjump (lset_loops ls2'' ((l,k')::rest)) hlfn2'') /= eqxx /=.
+  by apply eqit_Ret; constructor.
+rewrite (mix_ilsteps_split p' (pcs':=size P0) (pce':=size P0 + size (lc0 ++ [:: MkLI ii (Lloop_end lbl)]))); first last.
++ by simpl_size; lia.
++ by simpl_size; lia.
+have hlfn2b : lfn (lnext_pc ls2) = fn by rewrite /lnext_pc /=.
+have hlpc2b : lpc (lnext_pc ls2) = size P0.
++ rewrite /lnext_pc /= hlpc2' /P0; simpl_size; lia.
+have hpfl := pre_i_for_loop ihc0 pre0 hjump hlfn2b hlpc2b.
+rewrite hpfl.
+have hloop_post2 : forall a b : lstate, setcpc a fn (size P0) = setcpc b fn (size P0) ->
+  eutt (post P0 (lc0 ++ [:: MkLI ii (Lloop_end lbl)]))
+    (ITree.iter (fun ls' =>
+       (ls2'' <- mix_ilsteps p' (pc_between_c fn P0 lc0) (setcpc ls' fn (size P0)) ;;
+        match eval_instr p' (MkLI ii (Lloop_end lbl)) ls2'' with
+        | ok _ ls3 => Ret (if lpc ls3 == size P0 then inl ls3 else inr ls3)
+        | Error e0 => Exception.throw e0
+        end)%itree) a)
+    (ITree.iter (fun ls' =>
+       (ls2'' <- mix_ilsteps p' (pc_between_c fn P0 lc0) (setcpc ls' fn (size P0)) ;;
+        match eval_instr p' (MkLI ii (Lloop_end lbl)) ls2'' with
+        | ok _ ls3 => Ret (if lpc ls3 == size P0 then inl ls3 else inr ls3)
+        | Error e0 => Exception.throw e0
+        end)%itree) b).
++ move=> a b hab.
+  apply: (eutt_iter' (fun a' b' : lstate => setcpc a' fn (size P0) = setcpc b' fn (size P0))) => [j1 j2 hj|//].
+  rewrite hj.
+  have hbody0 := ihc0 (next_lbl (next_lbl lbl)) lblc0 lc0 P0 Q0 (setcpc j2 fn (size P0)) pre0 erefl erefl.
+  apply eqit_bind' with (post P0 lc0); first exact hbody0.
+  move=> ls2'' ls2''' [<- hlfn2'' hlpc2''].
+  rewrite /eval_instr /=.
+  case: loops_pop => [[[l k] rest]|err] /=; last first.
+  + apply eqit_Vis => -[].
+  case: eqP => [heql|hne] /=; last first.
+  + apply eqit_Vis => -[].
+  case: k => [|k'] /=.
+  + case: eqP => [heq|_].
+    + exfalso; move: heq; rewrite hlpc2''; simpl_size; lia.
+    apply eqit_Ret; constructor; split=>//.
+    by rewrite /lnext_pc /lset_loops /= hlpc2''; simpl_size; lia.
+  rewrite hlfn2'' (hjump (lset_loops ls2'' ((l,k')::rest)) hlfn2'') /= eqxx /=.
+  by apply eqit_Ret; constructor.
+have heqsc : setcpc (lnext_pc ls2) fn (size P0) = setcpc ls2 fn (size P0) by rewrite /lnext_pc /setcpc /=.
+apply eqit_bind' with (post P0 (lc0 ++ [:: MkLI ii (Lloop_end lbl)])).
++ exact: (hloop_post2 _ _ heqsc).
+move=> ls3 ls4 [<- hlfn3' hlpc3'].
+have hCC3 : is_linear_of fn ((P0 ++ lc0 ++ [:: MkLI ii (Lloop_end lbl)]) ++ (MkLI ii (Lilabel (next_lbl lbl)) :: Q)).
++ move: hCC; rewrite /Q0 -!catA //.
+have hlpc3'' : lpc ls3 = size (P0 ++ lc0 ++ [:: MkLI ii (Lloop_end lbl)]).
++ by rewrite hlpc3'; simpl_size; lia.
+rewrite (step_mix_ilsteps hCC3 hlfn3' hlpc3''); first last.
++ by simpl_size; lia.
++ by simpl_size; lia.
+rewrite /eval_instr /=.
+rewrite mix_ilsteps_b0; last first.
++ by rewrite /lnext_pc /= hlpc3'; simpl_size; lia.
++ by rewrite /lnext_pc hlfn3'.
+apply eqit_Ret.
+rewrite /lnext_pc /setcpc /=; f_equal.
+clear hcheckc hC hCC1 hCC2 hCC hDD hvalid0.
+exact hlfn3'.
+rewrite hlpc3' /P0; simpl_size; lia.
+move=> hlin.
+case hz0: (z <=? 0)%Z; move: hlin; rewrite hz0 /=.
+by [].
+move=> hlin.
+rewrite linear_c_nil in hlin.
+case heqc0: (linear_c fn c0 (next_lbl lbl) [::]) hlin => [lblc0 lc0] /= [hlbli hli].
+set P0 := P ++ [:: MkLI ii (Lloop_begin (inr z) lbl); MkLI ii (Lilabel lbl)].
+have hvc := valid_c fn c0 (next_lbl lbl).
+rewrite heqc0 in hvc.
+case: hvc => [hle0 hvalid0].
+have hCC : is_linear_of fn (P0 ++ lc0 ++ ([:: MkLI ii (Lloop_end lbl)] ++ Q)).
++ move: hC; rewrite -hli /P0 /= -!catA //.
+have hDD : disjoint_labels (next_lbl lbl) lblc0 P0.
++ rewrite /P0; apply: disjoint_labels_cat.
+  + apply: (disjoint_labels_w _ _ hD); rewrite /next_lbl; lia.
+  + move=> lbl' hrange /=; rewrite /is_label /=.
+    rewrite orbF; apply/negP => /eqP ?; subst lbl'; move: hrange; rewrite /next_lbl; lia.
+have pre0 : pre_c c0 (next_lbl lbl) lblc0 P0 lc0 ([:: MkLI ii (Lloop_end lbl)] ++ Q) by [].
+exists lblc0, lc0, P0, ([:: MkLI ii (Lloop_end lbl)] ++ Q); split; first exact: pre0.
+subst li.
+rewrite (step_mix_ilsteps hC hfn hpc) /=; first last.
++ by simpl_size; lia.
++ by simpl_size; lia.
+rewrite /eval_instr /=.
+case hev: (Let n := o2r ErrSemUndef hwloop_size
+       in (assert (size (lloops ls) < n) ErrLoop >>
+           (assert (0 <? z)%Z ErrLoop >>
+            Let ls0 := loops_push (lloops ls) (lfn ls, lbl, Z.to_nat (z - 1))
+            in ok (lnext_pc (lset_loops ls ls0)))))
+  => [ls2|e0] /=; last by rewrite bind_throw; reflexivity.
+rewrite bind_ret_l.
+move: hev; t_xrbindP => n hn hlt hzpos ls0' hpush hls2eq.
+have hlfn2 : lfn ls2 = fn by rewrite -hls2eq /lnext_pc /lset_loops.
+have hlpc2 : lpc ls2 = size P + 1.
++ have hlpc2 : lpc ls2 = size P + 1.
+  + by rewrite -hls2eq /lnext_pc /lset_loops /= hpc; simpl_size; lia.
+  exact: hlpc2.
+have hlfn2b : lfn (lnext_pc ls2) = fn by rewrite /lnext_pc /=.
+have hlpc2b : lpc (lnext_pc ls2) = size P0.
++ by rewrite /lnext_pc /= hlpc2 /P0; simpl_size; lia.
+have hnP0 : ~~ has (is_label lbl) (P ++ [:: MkLI ii (Lloop_begin (inr z) lbl)]).
++ rewrite has_cat negb_or; apply/andP; split.
+  + apply: (hD lbl).
+    move: hle0; rewrite -hlbli /next_lbl => hle0; rewrite /next_lbl; lia.
+  + by [].
+have hCC2 : is_linear_of fn ((P ++ [:: MkLI ii (Lloop_begin (inr z) lbl)]) ++ (MkLI ii (Lilabel lbl) :: lc0 ++ [:: MkLI ii (Lloop_end lbl)] ++ Q)).
++ move: hCC; rewrite /P0 -!catA //.
+have hjump : forall ls', lfn ls' = fn -> eval_jump p' (fn, lbl) ls' = ok (setcpc ls' fn (size P0)).
++ move=> ls' hfn'.
+  rewrite (eval_jumpE hCC2) (find_label_cat_hd _ hnP0).
+  rewrite find_labelE /is_label /= eqxx /=.
+  rewrite /P0; f_equal; f_equal; simpl_size; lia.
+have hloop_post2 : forall a b : lstate, setcpc a fn (size P0) = setcpc b fn (size P0) ->
+  eutt (post P0 (lc0 ++ [:: MkLI ii (Lloop_end lbl)]))
+    (ITree.iter (fun ls' =>
+       (ls2'' <- mix_ilsteps p' (pc_between_c fn P0 lc0) (setcpc ls' fn (size P0)) ;;
+        match eval_instr p' (MkLI ii (Lloop_end lbl)) ls2'' with
+        | ok _ ls3 => Ret (if lpc ls3 == size P0 then inl ls3 else inr ls3)
+        | Error e0 => Exception.throw e0
+        end)%itree) a)
+    (ITree.iter (fun ls' =>
+       (ls2'' <- mix_ilsteps p' (pc_between_c fn P0 lc0) (setcpc ls' fn (size P0)) ;;
+        match eval_instr p' (MkLI ii (Lloop_end lbl)) ls2'' with
+        | ok _ ls3 => Ret (if lpc ls3 == size P0 then inl ls3 else inr ls3)
+        | Error e0 => Exception.throw e0
+        end)%itree) b).
++ move=> a b hab.
+  apply: (eutt_iter' (fun a' b' : lstate => setcpc a' fn (size P0) = setcpc b' fn (size P0))) => [j1 j2 hj|//].
+  rewrite hj.
+  have hbody0 := ihc0 (next_lbl lbl) lblc0 lc0 P0 ([:: MkLI ii (Lloop_end lbl)] ++ Q) (setcpc j2 fn (size P0)) pre0 erefl erefl.
+  apply eqit_bind' with (post P0 lc0); first exact hbody0.
+  move=> ls2'' ls2''' [<- hlfn2'' hlpc2''].
+  rewrite /eval_instr /=.
+  case: loops_pop => [[[l k] rest]|err] /=; last first.
+  + apply eqit_Vis => -[].
+  case: eqP => [heql|hne] /=; last first.
+  + apply eqit_Vis => -[].
+  case: k => [|k'] /=.
+  + case: eqP => [heq|_].
+    + exfalso; move: heq; rewrite hlpc2''; simpl_size; lia.
+    apply eqit_Ret; constructor; split=>//.
+    by rewrite /lnext_pc /lset_loops /= hlpc2''; simpl_size; lia.
+  rewrite hlfn2'' (hjump (lset_loops ls2'' ((l,k')::rest)) hlfn2'') /= eqxx /=.
+  by apply eqit_Ret; constructor.
+have hCC3 : is_linear_of fn ((P ++ [:: MkLI ii (Lloop_begin (inr z) lbl)]) ++ (MkLI ii (Lilabel lbl) :: lc0 ++ [:: MkLI ii (Lloop_end lbl)] ++ Q)).
++ move: hCC; rewrite /P0 -!catA //.
+have hlpc2' : lpc ls2 = size (P ++ [:: MkLI ii (Lloop_begin (inr z) lbl)]).
++ by rewrite hlpc2; simpl_size; lia.
+rewrite (step_mix_ilsteps hCC3 hlfn2 hlpc2'); first last.
++ by simpl_size; lia.
++ by simpl_size; lia.
+rewrite /eval_instr /=.
+rewrite (mix_ilsteps_split p' (pcs':=size P0) (pce':=size P0 + size (lc0 ++ [:: MkLI ii (Lloop_end lbl)]))); first last.
++ by simpl_size; lia.
++ by simpl_size; lia.
+rewrite -(bind_ret_r (ITree.iter (fun ls' =>
+   (ls0 <- mix_ilsteps p' (pc_between_c fn P0 lc0) (setcpc ls' fn (size P0)) ;;
+    match eval_instr p' (MkLI ii (Lloop_end lbl)) ls0 with
+    | ok _ ls3 => Ret (if lpc ls3 == size P0 then inl ls3 else inr ls3)
+    | Error e0 => Exception.throw e0
+    end)%itree) ls2)).
+apply eqit_bind' with (post P0 (lc0 ++ [:: MkLI ii (Lloop_end lbl)])).
++ have hpfl := pre_i_for_loop ihc0 pre0 hjump hlfn2b hlpc2b.
+  rewrite hpfl.
+  have heqsc : setcpc (lnext_pc ls2) fn (size P0) = setcpc ls2 fn (size P0) by rewrite /lnext_pc /setcpc /=.
+  exact: (hloop_post2 _ _ heqsc).
+move=> ls3 ls4 [<- hlfn3' hlpc3'].
+rewrite mix_ilsteps_b0; first by apply eqit_Ret.
++ by [].
+by rewrite hlpc3' /P0; simpl_size; lia.
+Qed.
+
 Lemma linear_c_end_for fi c0 : Pc c0 -> Pi_r (Cfor fi c0).
 Proof.
-move=> hc0 ii lbl lbli li P Q ls [hchecked _ _ _] _ _.
-move: hchecked => /checked_iE [] fd hget; rewrite /check_i /=.
-case: fi hget => [//|e] hget.
-exact: ACC_ADMIT_PROOF. (* TODO_ACC: no semantics for repeat loops. *)
+move=> hc0 ii lbl lbli li P Q ls pre hfn hpc.
+have hpfa := pre_i_for_aux hc0 pre hfn hpc.
+case: pre => hchecked hlin hD hC.
+move: hchecked => /checked_iE [] fd hget hcheck.
+move: hcheck; rewrite /check_i /=; t_xrbindP => cnt hcnt hcheckc.
+rewrite hcnt in hpfa.
+case: cnt hcnt hpfa => [x|z] hcnt hpfa.
+- (* register count: pre_i_for_aux's [inl x] branch *)
+  case: hpfa => lblc0 [lc0 [P0 [Q0 [pre0 heq]]]].
+  rewrite heq.
+  case: (Let v := sem_fexpr (lvm ls) (fis_zero x) in to_bool v) => [b|e0] /=;
+    last first.
+  + apply eqit_Vis => -[].
+  case: b => /=.
+  + apply eqit_Ret; constructor; split=>//; rewrite /setcpc /=.
+  case: (eval_instr p' {| li_ii := ii; li_i := Lloop_begin (inl x) lbl |}
+           (lnext_pc ls)) => [ls'|e0] /=.
+  + rewrite bind_ret_l.
+    apply eqit_bind' with eq.
+    + apply eutt_iter' with eq => // j1 j2 <-.
+      have hbody0 := hc0 (next_lbl (next_lbl lbl)) lblc0 lc0 P0 Q0
+                       (setcpc j1 fn (size P0)) pre0 erefl erefl.
+      apply eqit_bind' with (post P0 lc0); first exact hbody0.
+      move=> ls2 ls2' [<- hlfn2 hlpc2].
+      rewrite /eval_instr /=.
+      case: loops_pop => [[[l k] rest]|err] /=; last by apply eqit_Vis => -[].
+      case: eqP => [heql|hne] /=; last by apply eqit_Vis => -[].
+      case: k => [|k'] /=.
+      + by case: eqP => _ /=; apply eqit_Ret; constructor.
+      case: eval_jump => [ls3|e1] /=; last by apply eqit_Vis => -[].
+      by case: eqP => _ /=; apply eqit_Ret; constructor.
+    move=> ls4 ls4' <-.
+    apply eqit_Ret; constructor; split=>//; rewrite /setcpc /=.
+  rewrite bind_throw.
+  apply eqit_Vis => -[].
+- (* immediate count: pre_i_for_aux's [inr z] branch *)
+  move: hpfa.
+  case: ifP => hz0.
+  + (* z <= 0: the compiler emits nothing, li = [::] *)
+    move=> _.
+    have hli : li = [::].
+    + simpl in hlin; rewrite hcnt hz0 /= in hlin.
+      case: hlin => _ <-.
+      reflexivity.
+    rewrite hli.
+    exact: (linear_c_end_dfl hfn hpc).
+  (* z > 0: pre_i_for_aux only gives us a [pre_c]+equation for opaque
+     [P0]/[Q0], not enough to pin their sizes against [P]/[li] (its own
+     existential type says nothing about that). So we redo the same
+     administrative unfolding of [hlin]/[hcnt] that its own proof does,
+     to get our own concrete [P0]/[lc0]/[hjump], and finish with the two
+     already-proved general lemmas [pre_i_for_loop]/[pre_i_for_loop_post]
+     instead of reproving the coinductive loop step. *)
+  move=> _.
+  simpl in hlin.
+  rewrite hcnt hz0 /= in hlin.
+  rewrite linear_c_nil in hlin.
+  case heqc0: (linear_c fn c0 (next_lbl lbl) [::]) hlin
+    => [lblc0 lc0] /= [hlbli hli].
+  set P0 := P ++ [:: MkLI ii (Lloop_begin (inr z) lbl); MkLI ii (Lilabel lbl)].
+  have hvc := valid_c fn c0 (next_lbl lbl).
+  rewrite heqc0 in hvc.
+  case: hvc => [hle0 hvalid0].
+  have hCC : is_linear_of fn (P0 ++ lc0 ++ ([:: MkLI ii (Lloop_end lbl)] ++ Q)).
+  + move: hC; rewrite -hli /P0 /= -!catA //.
+  have hDD : disjoint_labels (next_lbl lbl) lblc0 P0.
+  + rewrite /P0; apply: disjoint_labels_cat.
+    + apply: (disjoint_labels_w _ _ hD); rewrite /next_lbl; lia.
+    + move=> lbl' hrange /=; rewrite /is_label /=.
+      rewrite orbF; apply/negP => /eqP ?; subst lbl'; move: hrange.
+      rewrite /next_lbl; lia.
+  have hcheckc0 : checked_c fn c0 by rewrite /checked_c hget hcheckc.
+  have pre0 : pre_c c0 (next_lbl lbl) lblc0 P0 lc0 ([:: MkLI ii (Lloop_end lbl)] ++ Q).
+  + by [].
+  subst li.
+  have hsize : size P0 + size lc0 + 1 =
+      size P + size ([:: MkLI ii (Lloop_begin (inr z) lbl);
+                          MkLI ii (Lilabel lbl)] ++ lc0 ++
+                      [:: MkLI ii (Lloop_end lbl)]).
+  + rewrite /P0.
+    simpl_size; lia.
+  rewrite (step_mix_ilsteps hC hfn hpc) /=; first last.
+  + by simpl_size; lia.
+  + by simpl_size; lia.
+  rewrite /eval_instr /=.
+  case hev: (Let n := o2r ErrSemUndef hwloop_size
+         in (assert (size (lloops ls) < n) ErrLoop >>
+             (assert (0 <? z)%Z ErrLoop >>
+              Let ls0 := loops_push (lloops ls) (lfn ls, lbl, Z.to_nat (z - 1))
+              in ok (lnext_pc (lset_loops ls ls0)))))
+    => [ls2|e0] /=; last first.
+  + apply eqit_Vis => -[].
+  move: hev; t_xrbindP => n hn hlt hzpos ls0' hpush hls2eq.
+  have hlfn2 : lfn ls2 = fn by rewrite -hls2eq /lnext_pc /lset_loops.
+  have hlpc2 : lpc ls2 = size P + 1.
+  + by rewrite -hls2eq /lnext_pc /lset_loops /= hpc; simpl_size; lia.
+  have hlfn2b : lfn (lnext_pc ls2) = fn by rewrite /lnext_pc /=.
+  have hlpc2b : lpc (lnext_pc ls2) = size P0.
+  + by rewrite /lnext_pc /= hlpc2 /P0; simpl_size; lia.
+  have hCC3 : is_linear_of fn ((P ++ [:: MkLI ii (Lloop_begin (inr z) lbl)]) ++
+                (MkLI ii (Lilabel lbl) :: lc0 ++ [:: MkLI ii (Lloop_end lbl)] ++ Q)).
+  + move: hCC; rewrite /P0 -!catA //.
+  have hlpc2' : lpc ls2 = size (P ++ [:: MkLI ii (Lloop_begin (inr z) lbl)]).
+  + by rewrite hlpc2; simpl_size; lia.
+  rewrite (step_mix_ilsteps hCC3 hlfn2 hlpc2'); first last.
+  + by simpl_size; lia.
+  + by simpl_size; lia.
+  rewrite /eval_instr /=.
+  have hnP0 : ~~ has (is_label lbl) (P ++ [:: MkLI ii (Lloop_begin (inr z) lbl)]).
+  + rewrite has_cat negb_or; apply/andP; split.
+    + apply: (hD lbl).
+      move: hle0; rewrite -hlbli /next_lbl => hle0; rewrite /next_lbl; lia.
+    + by [].
+  have hjump : forall ls', lfn ls' = fn ->
+      eval_jump p' (fn, lbl) ls' = ok (setcpc ls' fn (size P0)).
+  + move=> ls' hfn'.
+    rewrite (eval_jumpE hCC3) (find_label_cat_hd _ hnP0).
+    rewrite find_labelE /is_label /= eqxx /=.
+    rewrite /P0; f_equal; f_equal; simpl_size; lia.
+  have hpfl := pre_i_for_loop hc0 pre0 hjump hlfn2b hlpc2b.
+  rewrite (mix_ilsteps_split p' (pcs':=size P0)
+             (pce':=size P0 + size (lc0 ++ [:: MkLI ii (Lloop_end lbl)])));
+    first last.
+  + by rewrite /P0; simpl_size; lia.
+  + by simpl_size; lia.
+  apply eqit_bind' with (post P0 (lc0 ++ [:: MkLI ii (Lloop_end lbl)])).
+  + rewrite hpfl.
+    have hsize2 : size P0 + size lc0 + 1 =
+        size P0 + size (lc0 ++ [:: MkLI ii (Lloop_end lbl)]).
+    + by simpl_size; lia.
+    exact: (pre_i_for_loop_post hc0 pre0 hjump hlfn2b hlpc2b hsize2).
+  move=> ls3 ls4 [<- hlfn3' hlpc3'].
+  have hpce : lpc ls3 = size P + (size (lc0 ++ [:: MkLI ii (Lloop_end lbl)])).+2.
+  + by rewrite hlpc3'; simpl_size; lia.
+  rewrite (mix_ilsteps_b0 p' (size P) hlfn3' hpce).
+  apply eqit_Ret; split=>//.
 Qed.
 
 Lemma mix_ilsteps_add_align P ii al lc Q ls :
@@ -2677,7 +3443,7 @@ Lemma pre_i_call xs f es ii lbl lbli li P Q ls :
       li = before ++ [:: licall, lilabel & after] /\
       mix_ilsteps p' (pc_between_c fn P li) ls ≈
        ls1 <- match sem_fopns_args (to_estate ls) before_ops with
-         | ok _ s' => Ret (of_estate s' (lhwcs ls) fn (size P + size before))
+         | ok _ s' => Ret (of_estate s' (lhwcs ls) (lloops ls) fn (size P + size before))
          | Error err => Exception.throw err
          end;;
        match eval_instr p' licall ls1 with
@@ -2685,7 +3451,7 @@ Lemma pre_i_call xs f es ii lbl lbli li P Q ls :
          (ls3 <- trigger_inl1 (mix_to_small_steps.Call f ls2);;
          if check_call ls1 ls3 then
            match sem_fopns_args (to_estate ls3) after_ops with
-           | ok _ s' => Ret (of_estate s' (lhwcs ls3) fn (size P + size li))
+           | ok _ s' => Ret (of_estate s' (lhwcs ls3) (lloops ls3) fn (size P + size li))
            | Error err => Exception.throw err
            end
          else Exception.throw ErrSemUndef)%itree
@@ -2822,6 +3588,50 @@ Proof.
   apply pre_i_while_aux; apply linear_c_end.
 Qed.
 
+Lemma pre_i_for fi c0 :
+  ∀ ii lbl lbli li P Q ls,
+  pre_i (MkI ii (Cfor fi c0)) lbl lbli P li Q →
+  lfn ls = fn → lpc ls = size P →
+  match linearize_for ii fi with
+  | Ok (inr z) =>
+      if (z <=? 0)%Z then True
+      else
+        exists lblc0 lc0 P0 Q0,
+          [/\ pre_c c0 (next_lbl lbl) lblc0 P0 lc0 Q0
+            & mix_ilsteps p' (pc_between_c fn P li) ls ≈
+              ls1 <- match eval_instr p' (MkLI ii (Lloop_begin (inr z) lbl)) ls with
+                     | Ok ls' => Ret ls' | Error e0 => Exception.throw e0 end ;;
+              ITree.iter (fun ls' =>
+                (ls2 <- mix_ilsteps p' (pc_between_c fn P0 lc0) (setcpc ls' fn (size P0)) ;;
+                match eval_instr p' (MkLI ii (Lloop_end lbl)) ls2 with
+                | Ok ls3 => Ret (if lpc ls3 == size P0 then inl ls3 else inr ls3)
+                | Error e0 => Exception.throw e0
+                end)%itree) ls1]
+  | Ok (inl x) =>
+      exists lblc0 lc0 P0 Q0,
+        [/\ pre_c c0 (next_lbl (next_lbl lbl)) lblc0 P0 lc0 Q0
+          & mix_ilsteps p' (pc_between_c fn P li) ls ≈
+            match (Let v := sem_fexpr (lvm ls) (fis_zero x) in to_bool v) with
+            | Ok b =>
+                if b then Ret (setcpc ls fn (size P + size li))
+                else
+                  (ls1 <- match eval_instr p' (MkLI ii (Lloop_begin (inl x) lbl)) (lnext_pc ls) with
+                         | Ok ls' => Ret ls' | Error e0 => Exception.throw e0 end ;;
+                  ls4 <- ITree.iter (fun ls' =>
+                    (ls2 <- mix_ilsteps p' (pc_between_c fn P0 lc0) (setcpc ls' fn (size P0)) ;;
+                    match eval_instr p' (MkLI ii (Lloop_end lbl)) ls2 with
+                    | Ok ls3 => Ret (if lpc ls3 == size P0 then inl ls3 else inr ls3)
+                    | Error e0 => Exception.throw e0
+                    end)%itree) ls1 ;;
+                  Ret (setcpc ls4 fn (size P + size li)))%itree
+            | Error e0 => Exception.throw e0
+            end]
+  | Error _ => True
+  end.
+Proof.
+  apply pre_i_for_aux; apply linear_c_end.
+Qed.
+
 End ILSTEPS_END.
 
 
@@ -2884,6 +3694,7 @@ End ILSTEPS_END.
       , source_mem_split s1 (top_stack (emem s1))
       , max_bound fn1 (top_stack (emem s1))
       , hwcs_bound fn1 (lhwcs ls1)
+      , loops_bound_fn fn1 (lloops ls1)
       & exists body ra lret sp callee_saved,
           [/\ is_linear_of fn1 body
             , is_ra_of fn1 ra
@@ -2919,7 +3730,7 @@ End ILSTEPS_END.
          , preserved_metadata s1 m1 m2
          , match_mem_gen (top_stack m0) s2 m2
          , target_mem_unchanged m1 m2
-         & lhwcs ls2 = hwcs_after_ra ra (lhwcs ls1)].
+         & lhwcs ls2 = hwcs_after_ra ra (lhwcs ls1) /\ lloops ls2 = lloops ls1].
 
   Notation CallE := (mix_to_small_steps.CallE funname lstate).
 
@@ -2952,7 +3763,7 @@ End ILSTEPS_END.
   Context (cs0 : seq pointer).
   Hypothesis hwcs_bound0 : hwcs_bound fn cs0.
 
-  Definition inv_c (P : lcmd) (s : estate) (ls : lstate) :=
+  Definition inv_c (lstk : seq (remote_label * nat)) (P : lcmd) (s : estate) (ls : lstate) :=
     let sp := top_stack (emem s) in
     [/\ match_mem_gen (top_stack m0) s (lmem ls)
       , escs s = lscs ls
@@ -2962,18 +3773,20 @@ End ILSTEPS_END.
       , (evm s).[vrsp] = Vword sp
       , source_mem_split s sp
       , max_bound_sub fn sp
-      & lhwcs ls = cs0].
+      , lhwcs ls = cs0
+      & lloops ls = lstk].
 
-  Definition inv_ir (P : lcmd) (s : estate) (ls : lstate) :=
+  Definition inv_ir (lstk : seq (remote_label * nat)) (P : lcmd) (s : estate) (ls : lstate) :=
     let sp := top_stack (emem s) in
     [/\ match_mem_gen (top_stack m0) s (lmem ls)
       , escs s = lscs ls
       , evm s <=1 lvm ls
       , lpc ls = size P
       , lfn ls = fn
-      & (evm s).[vrsp] = Vword sp].
+      , (evm s).[vrsp] = Vword sp
+      & lloops ls = lstk].
 
-  Definition post_ir (P : lcmd) (s1 : estate) (ls1 : lstate) (ks2 : Sv.t * estate) (ls2 : lstate) :=
+  Definition post_ir (lstk : seq (remote_label * nat)) (P : lcmd) (s1 : estate) (ls1 : lstate) (ks2 : Sv.t * estate) (ls2 : lstate) :=
     [/\ match_mem_gen (top_stack m0) ks2.2 (lmem ls2)
       , escs ks2.2 = lscs ls2
       , evm ks2.2 <=1 lvm ls2
@@ -2983,10 +3796,10 @@ End ILSTEPS_END.
       , validw (emem s1) =3 validw (emem ks2.2)
       , preserved_metadata s1 (lmem ls1) (lmem ls2)
       , target_mem_unchanged (lmem ls1) (lmem ls2)
-      & lhwcs ls2 = cs0].
+      & lhwcs ls2 = cs0 /\ lloops ls2 = lstk].
 
-  Definition post_c (P : lcmd) (ks1 : Sv.t * estate) (ls1 : lstate) (ks2 : Sv.t * estate) (ls2 : lstate) :=
-    [/\ inv_c P ks2.2 ls2
+  Definition post_c (lstk : seq (remote_label * nat)) (P : lcmd) (ks1 : Sv.t * estate) (ls1 : lstate) (ks2 : Sv.t * estate) (ls2 : lstate) :=
+    [/\ inv_c lstk P ks2.2 ls2
       , (disjoint ks1.1 (magic_variables p) -> disjoint ks2.1 (magic_variables p))
       , Sv.Subset ks1.1 ks2.1
       , lvm ls1 =[\ ks2.1 ] lvm ls2
@@ -2995,32 +3808,38 @@ End ILSTEPS_END.
       , preserved_metadata ks1.2 (lmem ls1) (lmem ls2)
       & target_mem_unchanged (lmem ls1) (lmem ls2)].
 
-  Definition post_i P (s1 : estate) (ls1 : lstate) (ks2 : Sv.t * estate) (ls2 : lstate) :=
-    post_c P (Sv.empty, s1) ls1 ks2 ls2.
+  Definition post_i (lstk : seq (remote_label * nat)) P (s1 : estate) (ls1 : lstate) (ks2 : Sv.t * estate) (ls2 : lstate) :=
+    post_c lstk P (Sv.empty, s1) ls1 ks2 ls2.
 
-  Let Pi (i:instr) :=  ∀ lbl lbli P li Q,
+  Let Pi (i:instr) := ∀ lstk,
+    loops_bound_i lstk i ->
+    ∀ lbl lbli P li Q,
     pre_i fn i lbl lbli P li Q →
     wkequiv_io
-      (inv_c P)
+      (inv_c lstk P)
       (isem_i var_tmps (sem_F := sem_funK_rec_check var_tmps) p i)
       (mix_ilsteps p' (pc_between_c fn P li))
-      (post_i (P ++ li)).
+      (post_i lstk (P ++ li)).
 
-  Let Pi_r (i:instr_r) := ∀ ii lbl lbli P li Q,
+  Let Pi_r (i:instr_r) := ∀ ii lstk,
+    loops_bound_i lstk (MkI ii i) ->
+    ∀ lbl lbli P li Q,
     pre_i fn (MkI ii i) lbl lbli P li Q →
     wkequiv_io
-      (inv_c P)
+      (inv_c lstk P)
       (isem_ir var_tmps (sem_F := sem_funK_rec_check var_tmps) p i)
       (mix_ilsteps p' (pc_between_c fn P li))
-      (post_ir (P ++ li)).
+      (post_ir lstk (P ++ li)).
 
-  Let Pc (c:cmd) := ∀ lbl lblc P lc Q,
+  Let Pc (c:cmd) := ∀ lstk,
+    loops_bound lstk c ->
+    ∀ lbl lblc P lc Q,
     pre_c fn c lbl lblc P lc Q →
     wkequiv_io
-      (fun ks ls => inv_c P ks.2 ls)
+      (fun ks ls => inv_c lstk P ks.2 ls)
       (isem_cmd_ (isem_i var_tmps (sem_F := sem_funK_rec_check var_tmps)) p c)
       (mix_ilsteps p' (pc_between_c fn P lc))
-      (post_c (P ++ lc)).
+      (post_c lstk (P ++ lc)).
 
   Lemma RSP_in_magic :
     Sv.In vrsp (magic_variables p).
@@ -3028,15 +3847,15 @@ End ILSTEPS_END.
 
   Lemma HMkI : ∀ (i : instr_r) (ii : instr_info), Pi_r i → Pi (MkI ii i).
   Proof.
-    move => i ii hir lbl lbli P li Q hpre s1 ls1 hinv1.
-    have h := hir ii _ _ _ _ _ hpre _ _ hinv1.
+    move => i ii hir lstk hlb lbl lbli P li Q hpre s1 ls1 hinv1.
+    have h := hir ii lstk hlb _ _ _ _ _ hpre _ _ hinv1.
     rewrite -(bind_ret_r (mix_ilsteps p' (pc_between_c fn P li) ls1)).
     apply (xrutt_facts.xrutt_bind h).
     move=> ks2 ls2 hinv2; apply xrutt_bind_iresult_left; t_xrbindP.
     move=> /and3P [/stack_stableP hstable /value_eqb_eq hrsp' hdisj].
     apply xrutt.xrutt_Ret.
-    case: hinv1 => hmm1 hscs1 hu1 hpc1 hfn1 hrsp hsource hbound hhwcs1.
-    case: hinv2 => hmm2 hscs2 hu2 hpc2 hfn2 hex hvalid hpres htarg hhwcs2.
+    case: hinv1 => hmm1 hscs1 hu1 hpc1 hfn1 hrsp hsource hbound hhwcs1 hloops1.
+    case: hinv2 => hmm2 hscs2 hu2 hpc2 hfn2 hex hvalid hpres htarg [hhwcs2 hloops2].
     split => //=; last by apply SvP.MP.subset_empty.
     have heq := ss_top_stack hstable.
     rewrite /inv_c -{-1}heq.
@@ -3044,27 +3863,27 @@ End ILSTEPS_END.
     move=> pr; rewrite -hvalid; apply hsource.
   Qed.
 
-  Lemma inv_c_lfn P s ls : inv_c P s ls -> lfn ls = fn.
+  Lemma inv_c_lfn lstk P s ls : inv_c lstk P s ls -> lfn ls = fn.
   Proof. by case => _ _ _ _ ->. Qed.
 
-  Lemma inv_c_lpc P s ls : inv_c P s ls -> lpc ls = size P.
+  Lemma inv_c_lpc lstk P s ls : inv_c lstk P s ls -> lpc ls = size P.
   Proof. by case. Qed.
 
   Lemma Hnil : Pc [::].
   Proof.
-    move=> lbl lblc P lc Q [/= _ [? <-]] D C ks1 ls1 hinv.
+    move=> lstk hlb lbl lblc P lc Q [/= _ [? <-]] D C ks1 ls1 hinv.
     rewrite cats0 mix_ilsteps_0; last first.
     + rewrite /pc_between_c /pc_between /= (inv_c_lfn hinv) eqxx.
       rewrite (inv_c_lpc hinv); simpl_size; lia.
     by apply xrutt.xrutt_Ret; split.
   Qed.
 
-  Lemma post_c_inv_c P ks1 ls1 ks2 ls2 : post_c P ks1 ls1 ks2 ls2 → inv_c P ks2.2 ls2.
+  Lemma post_c_inv_c lstk P ks1 ls1 ks2 ls2 : post_c lstk P ks1 ls1 ks2 ls2 → inv_c lstk P ks2.2 ls2.
   Proof. by case. Qed.
 
-  Lemma post_c_trans P1 ks2 ls2 P2 ks1 ls1 ks3 ls3 :
-    post_c P1 ks1 ls1 ks2 ls2 -> post_c P2 ks2 ls2 ks3 ls3 ->
-    post_c P2 ks1 ls1 ks3 ls3.
+  Lemma post_c_trans lstk P1 ks2 ls2 P2 ks1 ls1 ks3 ls3 :
+    post_c lstk P1 ks1 ls1 ks2 ls2 -> post_c lstk P2 ks2 ls2 ks3 ls3 ->
+    post_c lstk P2 ks1 ls1 ks3 ls3.
   Proof.
     move=> [] hinv1 hdisj1 hsub1 hex1 hval1 hstable1 hpres1 htarget1.
     move=> [] hinv2 hdisj2 hsub2 hex2 hval2 hstable2 hpres2 htarget2.
@@ -3081,9 +3900,9 @@ End ILSTEPS_END.
     by rewrite (htarget2 pr hnv hnpr).
   Qed.
 
-  Lemma post_i_c P ks1 ls1 ks2 ls2:
-    post_i P ks1.2 ls1 ks2 ls2 ->
-    post_c P ks1 ls1 (Sv.union ks1.1 ks2.1, ks2.2) ls2.
+  Lemma post_i_c lstk P ks1 ls1 ks2 ls2:
+    post_i lstk P ks1.2 ls1 ks2 ls2 ->
+    post_c lstk P ks1 ls1 (Sv.union ks1.1 ks2.1, ks2.2) ls2.
   Proof.
     move=> [] hinv1 hdisj1 hsub1 hex1 hval1 hstable1 hpres1 htarget1.
     split => //=.
@@ -3094,13 +3913,13 @@ End ILSTEPS_END.
 
   Lemma Hcons : ∀ (i : instr) (c : cmd), Pi i → Pc c → Pc (i :: c).
   Proof.
-    move=> i c hi hc lbl lblc P lc Q hpre ks1 ls1 hinv.
+    move=> i c hi hc lstk hlb lbl lblc P lc Q hpre ks1 ls1 hinv.
     have := pre_c_cons hpre (inv_c_lfn hinv) (inv_c_lpc hinv).
     move=> [lbli] [lblc'] [li] [lc'] [? hlc hprei hprec ->].
     rewrite /=.
-    apply (xrutt_facts.xrutt_bind (hi _ _ _ _ _ hprei _ _ hinv)).
+    apply (xrutt_facts.xrutt_bind (hi lstk (loops_bound_cons_hd hlb) _ _ _ _ _ hprei _ _ hinv)).
     move=> ks2 ls2 /post_i_c hinv2.
-    have := hc _ _ _ _ _ hprec _ _ (post_c_inv_c hinv2).
+    have := hc lstk (loops_bound_cons_tl hlb) _ _ _ _ _ hprec _ _ (post_c_inv_c hinv2).
     apply xrutt_facts.xrutt_weaken => //.
     move=> ks3 s3; rewrite hlc catA.
     apply: post_c_trans hinv2.
@@ -3135,13 +3954,13 @@ End ILSTEPS_END.
 
   Lemma Hassgn : ∀ (x : lval) (tg : assgn_tag) (ty : atype) (e : pexpr), Pi_r (Cassgn x tg ty e).
   Proof using linear_ok hliparams enough_space.
-    move=> x tg ty e ii lbl lbli P li Q [] /checked_iE[] fd ok_fd /=.
+    move=> x tg ty e ii lstk hlb lbl lbli P li Q [] /checked_iE[] fd ok_fd /=.
     case: classify_cassgn (classify_cassgnP x ty e) => [ // | ws rd rs | ws rd rs ofs | ws rd rs ofs ] [] ??; subst.
     1, 2: move => tyrd ok_ws.
     3: move => ok_ws [] vi.
     2, 3: case => ws' [] ws''.
     all: move => -> _ [] <-{lbli} <-{li} D C s1 ls1.
-    all: case => M1 SC1 X1 hpc hfn hsp1 S1 MAX1 HW1.
+    all: case => M1 SC1 X1 hpc hfn hsp1 S1 MAX1 HW1 HL1.
     all: rewrite (step_mix_ilsteps C) // /=; last by simpl_size; lia.
     all: rewrite -(bind_ret_r (iresult _)); apply xrutt_bind_iresult_left => /= ks2.
     all: rewrite /sem_assgn /=; t_xrbindP.
@@ -3238,7 +4057,7 @@ End ILSTEPS_END.
     rewrite wunsigned_sub.
     - have /= := MAX1 _ ok_fd.
       move: (checked_prog ok_fd) => /=; rewrite /check_fd.
-      t_xrbindP=> _ _ _ _ /and4P [_ _ _ /ZleP /= ?] _ _ _.
+      t_xrbindP=> _ _ _ _ /and4P [_ _ _ /ZleP /= ?] _ _ _ _ _.
       by lia.
     have /= := wunsigned_range sp0; lia.
   Qed.
@@ -3271,9 +4090,9 @@ End ILSTEPS_END.
 
   Lemma Hopn : ∀ (xs : lvals) (t : assgn_tag) (o : sopn) (es : pexprs), Pi_r (Copn xs t o es).
   Proof using linear_ok enough_space.
-    move=> xs tag o es ii lbl lbli P li Q [/checked_iE [fd ok_fd] /=].
+    move=> xs tag o es ii lstk hlb lbl lbli P li Q [/checked_iE [fd ok_fd] /=].
     t_xrbindP => /check_rexprsP [] qs -> chk_es /check_lexprsP[] ds -> chk_xs [??]; subst lbl li.
-    move=> D C s1 ls1 [M1 SC1 X1 hpc hfn hsp1 S1 MAX1 HW1].
+    move=> D C s1 ls1 [M1 SC1 X1 hpc hfn hsp1 S1 MAX1 HW1 HL1].
     rewrite (step_mix_ilsteps C) //; last by simpl_size; lia.
     rewrite -(bind_ret_r (iresult _)); apply xrutt_bind_iresult_left => /= ks2.
     rewrite /sem_sopn p_globs_nil; t_xrbindP => s2 vxs ves hes hex ok_s2 ?; subst ks2.
@@ -3297,7 +4116,7 @@ End ILSTEPS_END.
     have h: (wunsigned sp0 - max0 <= wunsigned (top_stack (emem s1)))%Z.
     + have /= := MAX1 _ ok_fd.
       move: (checked_prog ok_fd) => /=; rewrite /check_fd.
-      t_xrbindP=> _ _ _ _ /and4P [_ _ _ /ZleP /= ?] _ _ _.
+      t_xrbindP=> _ _ _ _ /and4P [_ _ _ /ZleP /= ?] _ _ _ _ _.
       by lia.
     rewrite wunsigned_sub; first by lia.
     move: (top_stack (emem s1)) h => sp.
@@ -3380,8 +4199,8 @@ End ILSTEPS_END.
 
   Lemma Hsyscall : ∀ (xs : lvals) (o : syscall_t) (es : pexprs), Pi_r (Csyscall xs o es).
   Proof using hliparams linear_ok enough_space hwcs_bound0.
-    move=> xs o es ii lbl lbli P li Q [/checked_iE [fd ok_fd] /= _] [??]; subst lbli li.
-    move=> D C s1 ls1 [M1 SC1 X1 hpc hfn hsp1 S1 MAX1 HW1].
+    move=> xs o es ii lstk hlb lbl lbli P li Q [/checked_iE [fd ok_fd] /= _] [??]; subst lbli li.
+    move=> D C s1 ls1 [M1 SC1 X1 hpc hfn hsp1 S1 MAX1 HW1 HL1].
     rewrite (step_mix_ilsteps C) //; last by simpl_size; lia.
     rewrite -(bind_ret_r (iresult _)); apply xrutt_bind_iresult_left => /= ks2.
     rewrite /sem_syscall p_globs_nil; t_xrbindP => s2 ves hes.
@@ -3399,7 +4218,7 @@ End ILSTEPS_END.
       case hn: hwcs_size => [n|] //.
       have hd : (0 < sf_max_call_depth (f_extra fd))%Z.
       + move: (checked_prog ok_fd) => /=; rewrite /check_fd.
-        t_xrbindP => _ _ _ _ _ /ZltP hd _ _ _.
+        t_xrbindP => _ _ _ _ _ /ZltP hd _ _ _ _ _.
         exact: hd.
       have hB := hwcs_bound0 ok_fd.
       rewrite hn -HW1 in hB.
@@ -3429,7 +4248,7 @@ End ILSTEPS_END.
       have h: (wunsigned sp0 - max0 <= wunsigned (top_stack (emem s1)))%Z.
       + have /= := MAX1 _ ok_fd.
         move: (checked_prog ok_fd) => /=; rewrite /check_fd.
-        t_xrbindP=> _ _ _ _ /and4P [_ _ _ /ZleP /= ?] _ _ _.
+        t_xrbindP=> _ _ _ _ /and4P [_ _ _ /ZleP /= ?] _ _ _ _ _.
         by lia.
       rewrite wunsigned_sub; first by lia.
       move: (top_stack (emem s1)) h => sp.
@@ -3441,71 +4260,732 @@ End ILSTEPS_END.
   Qed.
 
   Lemma Hassert : ∀ a : assertion, Pi_r (Cassert a).
-  Proof. by move => > [/checked_iE[]]. Qed.
+  Proof. by move => a ii lstk _ lbl lbli P li Q [/checked_iE[]]. Qed.
 
-  Lemma sem_fexpr_bool P s1 ls1 ii e (b:bool) :
-    inv_c P s1 ls1 ->
+  Lemma sem_fexpr_bool lstk P s1 ls1 ii e (b:bool) :
+    inv_c lstk P s1 ls1 ->
     check_fexpr ii e = ok tt ->
     sem_pexpr true (p_globs p) s1 e = ok (Vbool b) ->
     sem_fexpr (lvm ls1) (to_fexpr e) = ok (Vbool b).
   Proof using linear_ok.
-    rewrite p_globs_nil => -[M _ U _ _ _ _ _ _] /check_fexprP [] f ok_f ok_e.
+    rewrite p_globs_nil => -[M _ U _ _ _ _ _ _ _] /check_fexprP [] f ok_f ok_e.
     rewrite /to_fexpr ok_f.
     have [ ? /(match_mem_gen_sem_pexpr M) + /value_uinclE ?]:= sem_pexpr_uincl U ok_e; subst.
     apply: fexpr_of_pexprP ok_f.
   Qed.
 
-  Lemma post_c_post_ir P s1 ls1 ks2 ls2 :
-    post_c P (Sv.empty, s1) ls1 ks2 ls2 ->
-    post_ir P s1 ls1 ks2 ls2.
+  Lemma post_c_post_ir lstk P s1 ls1 ks2 ls2 :
+    post_c lstk P (Sv.empty, s1) ls1 ks2 ls2 ->
+    post_ir lstk P s1 ls1 ks2 ls2.
   Proof. case => -[] *; split => //. Qed.
 
-  Lemma inv_c_setpc P1 P2 ks1 ls1 pc:
-    inv_c P2 ks1 ls1 ->
+  Lemma inv_c_setpc lstk P1 P2 ks1 ls1 pc:
+    inv_c lstk P2 ks1 ls1 ->
     size P1 = pc ->
-    inv_c P1 ks1 (setcpc ls1 fn pc).
+    inv_c lstk P1 ks1 (setcpc ls1 fn pc).
   Proof. by case => *; split => //. Qed.
 
-  Lemma post_c_setpc P1 P2 ks1 ls1 ks2 ls2 pc:
-    post_c P2 ks1 ls1 ks2 ls2 ->
+  Lemma post_c_setpc lstk P1 P2 ks1 ls1 ks2 ls2 pc:
+    post_c lstk P2 ks1 ls1 ks2 ls2 ->
     size P1 = pc ->
-    post_c P1 ks1 ls1 ks2 (setcpc ls2 fn pc).
+    post_c lstk P1 ks1 ls1 ks2 (setcpc ls2 fn pc).
   Proof. case => hinv *; split => //; by apply: (inv_c_setpc hinv). Qed.
 
   Lemma Hif : ∀ (e : pexpr) (c1 c2 : cmd), Pc c1 → Pc c2 → Pi_r (Cif e c1 c2).
   Proof using linear_ok.
-    move => e c1 c2 ih1 ih2 ii lbl lbli P li Q hpre s1 ls1 hinv.
+    move => e c1 c2 ih1 ih2 ii lstk hlb lbl lbli P li Q hpre s1 ls1 hinv.
     have := pre_i_if hpre (inv_c_lfn hinv) (inv_c_lpc hinv).
     move=> [lbl1] [lblc1] [lc1] [P1] [Q1] [lbl2] [lblc2] [lc2] [P2] [Q2] [chk_e hpre1 hpre2 ->].
     apply xrutt_bind_iresult_left => b /sem_cond_sem_pexpr hb.
     rewrite (sem_fexpr_bool hinv chk_e hb) /=; rewrite -(bind_ret_r (isem_cmd_ _ _ _ _)) => {hb}; case: b.
-    + have {}ih1:= ih1 _ _ _ _ _ hpre1 (Sv.empty, s1) (setcpc ls1 fn (size P1)) (inv_c_setpc hinv erefl).
+    + have {}ih1:= ih1 lstk (loops_bound_if_l hlb) _ _ _ _ _ hpre1 (Sv.empty, s1) (setcpc ls1 fn (size P1)) (inv_c_setpc hinv erefl).
       apply (xrutt_facts.xrutt_bind ih1) => ks2 ls2 hpost.
       by apply/xrutt.xrutt_Ret/post_c_post_ir/(post_c_setpc hpost); rewrite size_cat.
-    have {}ih2:= ih2 _ _ _ _ _ hpre2 (Sv.empty, s1) (setcpc ls1 fn (size P2)) (inv_c_setpc hinv erefl).
+    have {}ih2:= ih2 lstk (loops_bound_if_r hlb) _ _ _ _ _ hpre2 (Sv.empty, s1) (setcpc ls1 fn (size P2)) (inv_c_setpc hinv erefl).
     apply (xrutt_facts.xrutt_bind ih2) => ks2 ls2 hpost.
     by apply/xrutt.xrutt_Ret/post_c_post_ir/(post_c_setpc hpost); rewrite size_cat.
   Qed.
 
   Lemma Hfor fi c : Pc c -> Pi_r (Cfor fi c).
-  Proof.
-  case: fi => [???? | cnt]; first by move=> _ > [/checked_iE[]].
-  exact: ACC_ADMIT_PROOF. (* TODO_ACC: no semantics for repeat loops. *)
+  Proof using E E0 Pc Pi Pi_r asm_op cs0 ep fn hwcs_i linear_ok liparams m0
+    max0 ovm_i p p' rE0 sip sp0 spp syscall_state var_tmp var_tmp2 var_tmps vgd
+    vrsp vrspg vrspi wE.
+  case: fi => [???? | cnt]; first by move=> _ ii lstk _ lbl lbli P li Q [/checked_iE[]].
+  move=> hc ii lstk hlb lbl lbli P li Q hpre s1 ls1 hinv.
+  have hpfor := pre_i_for hpre (inv_c_lfn hinv) (inv_c_lpc hinv).
+  have [hchecked hlin hD hC] := hpre.
+  have [fd hgetfd hcheckfd] := checked_iE hchecked.
+  move: hcheckfd; rewrite /check_i /=; t_xrbindP => r hr _.
+  have hLF : linearize_for ii (FIrepeat cnt) = ok r by rewrite /linearize_for.
+  rewrite hLF in hpfor.
+  rewrite /=.
+  (* Pops one loop-stack entry off [inv_c]/[post_c]: [lnext_pc]/[lset_loops]
+     only ever touch the [lpc]/[lloops] fields of an [lstate], so every other
+     component of the record transfers unchanged; verified interactively
+     (rocq-mcp, `split => //` alone closes every field except [lpc]). *)
+  have hpop : forall lstk0 (entry : remote_label * nat) P0 s ls,
+    inv_c (entry :: lstk0) P0 s ls ->
+    inv_c lstk0 (P0 ++ [:: MkLI ii (Lloop_end lbl)]) s (lnext_pc (lset_loops ls lstk0)).
+  + move=> lstk0 entry P0 s ls [] hmm hscs hu hpc hfn' hrsp hsrc hmax hhwcs hlloops.
+    split => //.
+    by rewrite /lnext_pc /lset_loops /= hpc size_cat addn1.
+  have hpop_post : forall lstk0 (entry : remote_label * nat) P0 ks1 ls1' ks2 ls2,
+    post_c (entry :: lstk0) P0 ks1 ls1' ks2 ls2 ->
+    post_c lstk0 (P0 ++ [:: MkLI ii (Lloop_end lbl)]) ks1 ls1' ks2
+      (lnext_pc (lset_loops ls2 lstk0)).
+  + move=> lstk0 entry P0 ks1 ls1' ks2 ls2 [] hinv2 hdisj hsub hex hvalid hstable hpres htarget.
+    split=>//.
+    exact: (hpop _ _ _ _ _ hinv2).
+  (* Generic transitivity of [post_c] across TWO DIFFERENT [lstk] parameters
+     (unlike [post_c_trans], which keeps [lstk] fixed): the first hypothesis's
+     own [inv_c] component (tied to [lstka]) is never actually used below (the
+     conclusion's [inv_c] comes entirely from the second hypothesis, tied to
+     [lstkb]), so nothing forces the two [lstk]s to agree. Needed here because
+     [hround]'s inductive step transitions the loop stack from
+     [(fn,lbl,k.+1)::lstk] (round just run) through [(fn,lbl,k)::lstk] (after
+     the jump) down to the bare outer [lstk] (via [ihk], which pops the rest
+     of the way on its own, mirroring how [hround] is designed to be called
+     once at the top with the full round count). Verified interactively
+     (rocq-mcp): identical proof body to [post_c_trans], just re-generalised. *)
+  have post_c_trans2 : forall lstka lstkb Pa ksb lsb Pb ksa lsa ksc lsc,
+      post_c lstka Pa ksa lsa ksb lsb -> post_c lstkb Pb ksb lsb ksc lsc ->
+      post_c lstkb Pb ksa lsa ksc lsc.
+  + move=> lstka lstkb Pa ksb lsb Pb ksa lsa ksc lsc.
+    move=> [] _ hdisj1 hsub1 hex1 hval1 hstable1 hpres1 htarget1.
+    move=> [] hinv2' hdisj2 hsub2 hex2 hval2 hstable2 hpres2 htarget2.
+    split=>//.
+    + by move=>/hdisj1.
+    + by apply: SvD.F.Subset_trans hsub1 hsub2.
+    + by apply: eq_exT hex2; apply: eq_exI hex1.
+    + by move=>???; rewrite hval1 hval2.
+    + by apply: stack_stable_trans hstable1 hstable2.
+    + etransitivity; first exact: hpres1.
+      by apply: preserved_metadataE hpres2.
+    move=> pr hnv hnpr.
+    rewrite (htarget1 pr hnv hnpr).
+    by rewrite (htarget2 pr hnv hnpr).
+  (* Per-round induction: relates the source's [isem_for_loop_kill] (a plain
+     [foldr], threading the accumulated write-set) against the target's
+     [ITree.iter] over one loop iteration (as already exposed unconditionally
+     by [pre_i_for]/[pre_i_for_aux], Stage 5), for a loop stack whose top
+     entry's counter [k] equals [(size ws).-1]. [semI] is [c]'s own body
+     semantics generalised as a bare parameter (not written as [isem_i
+     var_tmps] here): the latter, elaborated outside of [Pc]'s own
+     [wkequiv_io]/[EPreRel]/[EPostRel] context, silently resolves its
+     [sem_FunK] instance to the *wrong*, default one ([sem_funK_rec] instead
+     of [Pc]'s own [sem_funK_rec_check]), a genuine, confirmed elaboration
+     trap independent of the [apply:]/[xrutt_bind] one already known from
+     Stage 7c -- generalising and letting [hcgen]'s call site unify [semI]
+     from [hc] itself sidesteps it. [X] generalises the accumulated write-set
+     that [isem_for_loop_kill] threads into [post_c]'s own first component:
+     [isem_for_loop_round] always folds each round's own write-set into
+     WHATEVER accumulator it is started with via [Sv.union], so the SAME
+     [hround] statement re-applied by [ihk] on the remaining rounds must
+     start from [Sv.union X ks2.1] (the accumulator carried over from THIS
+     round), not bare [Sv.empty] as in an earlier, less general version of
+     this statement -- fixing that mismatch (confirmed necessary: the goal's
+     own source term, after peeling one round via [xrutt_facts.xrutt_bind],
+     is literally [isem_for_loop_kill semI p c ws' (Sv.union X ks2.1,
+     ks2.2)], not [... (Sv.empty, ks2.2)]) is what makes the inductive step
+     go through at all. The base case ([k = 0], one round left) is fully
+     verified interactively (rocq-mcp): combine [hcgen] for the body via
+     plain [xrutt_facts.xrutt_bind] (this file's own [Hcons]-style idiom),
+     unfold the target's single loop round via [unfold_iter]/[bind_bind],
+     then unfold [Lloop_end] via [loops_pop]/[runcons] using the known
+     [lloops = ((fn,lbl),0)::lstk] from [hcgen]'s own postcondition (so the
+     pop is a concrete computation, never actually erroring); the resulting
+     jump-vs-fall-through guard [(lpc ls2).+1 == size P0] is decided by
+     [case: eqP]: the [true] branch is a genuine arithmetic contradiction
+     ([size P0 + size lc0 + 1] cannot equal [size P0]), and the [false]
+     branch closes via [hpop_post] then [post_i_c] (re-anchoring the
+     Sv.empty-anchored [hpop_post] fact at the caller's own [(X, sA)]).
+     The inductive step ([k = k'.+1], more rounds remain), ALSO fully
+     verified interactively (rocq-mcp): combine [hcgen] for the first round
+     exactly as the base case does; then, on [eval_instr] for [Lloop_end]
+     with [lloops = ((fn,lbl),k'.+1)::lstk], [loops_pop] again succeeds
+     concretely and the counter branch is [k'.+1], so [eval_instr] calls
+     [eval_jump p' (fn,lbl) (lset_loops ls2 ((l,k')::lstk))]; this is
+     resolved via the [hjump] hypothesis (supplied by every caller of
+     [hround], mirroring how [pre_i_for_loop] itself takes [hjump] as a
+     parameter), landing at [setcpc _ (size P0)] -- confirmed via
+     [xrutt.xrutt_add_Tau_r] discharging the resulting [Tau] on the target
+     side (the SAME [ITree.iter] unfolding that the base case's [inr] exit
+     avoids needing). [ihk] is then applied to [ws']/[Sv.union X
+     ks2.1]/[ks2.2]/[setcpc (lset_loops ls2 ((fn,lbl,k)::lstk)) fn (size
+     P0)] (the freshly re-anchored accumulator, per the [X]-generalisation
+     above), and the two [post_c] facts (round 1, re-anchored at the
+     caller's own [(X, sA)] via [post_i_c]; and [ihk]'s own, which already
+     targets the bare outer [lstk]) are chained via [post_c_trans2] (NOT
+     [post_c_trans]: the two facts have DIFFERENT [lstk] parameters,
+     [(fn,lbl,k)::lstk] and [lstk] respectively). Two rocq-mcp/ssreflect
+     pitfalls hit and resolved while proving this: (1) [xrutt_facts.
+     xrutt_weaken] (needed to re-anchor [ihk]'s own conclusion at [(X,sA)
+     lsA] instead of its native [(Sv.union X ks2.1, ks2.2) ls3]) only
+     infers its own event-relation metavariables when its LAST premise (the
+     xrutt fact being weakened) is ALREADY a hypothesis in context -- bare
+     [apply xrutt_facts.xrutt_weaken] fails needing "an instance for the
+     variables EE1, EE2, REv, RAns, RR" even though they are fully
+     determined once that hypothesis is supplied; the fix, mirroring this
+     file's own (pre-existing) [Hcons]/[linear_funP] uses of this lemma, is
+     [have := hcont. apply xrutt_facts.xrutt_weaken => //.] (bare, no args)
+     rather than [apply (xrutt_facts.xrutt_weaken ... hcont)]. (2) SSReflect's
+     colon-form [exact: (lemma _ _ .. hyp1 hyp2)] can spuriously fail with
+     "Cannot apply lemma" on a term that [rocq_query]'s own [Check] accepts
+     and correctly types (confirmed: the exact same term, same state,
+     [Check] succeeds and [exact] fails) -- plain Coq [exact (...)] (no
+     colon) works where [exact:] does not; this is DIFFERENT from, and in
+     addition to, this file's other documented [apply]-vs-[apply:] itree
+     performance pitfall. *)
+  have hround : forall (semI : sprog -> instr -> estate -> itree (recCallK +' E) (Sv.t * estate)),
+      (forall lstk0, loops_bound lstk0 c ->
+         forall lbl0 lblc0 P0 lc0 Q0, pre_c fn c lbl0 lblc0 P0 lc0 Q0 ->
+         wkequiv_io (fun ks ls => inv_c lstk0 P0 ks.2 ls) (isem_cmd_ semI p c)
+           (mix_ilsteps p' (pc_between_c fn P0 lc0)) (post_c lstk0 (P0 ++ lc0))) ->
+      forall (n : nat), hwloop_size = Some n ->
+      forall (k : nat) (ws : seq Z) (L lblc0 : label) (P0 lc0 : lcmd) (Q0 : seq linstr),
+        size ws = k.+1 ->
+        loops_bound (((fn, lbl), k) :: lstk) c ->
+        pre_c fn c L lblc0 P0 lc0 (MkLI ii (Lloop_end lbl) :: Q0) ->
+        (forall lsX, lfn lsX = fn -> eval_jump p' (fn, lbl) lsX = ok (setcpc lsX fn (size P0))) ->
+        forall (X : Sv.t) (sA : estate) (lsA : lstate),
+          inv_c (((fn, lbl), k) :: lstk) P0 sA lsA ->
+          xrutt.xrutt (errcutoff (is_error (FIso_suml recCallK (Err:=ErrEvent))))
+            nocutoff EPreRel EPostRel
+            (post_c lstk (P0 ++ lc0 ++ [:: MkLI ii (Lloop_end lbl)]) (X, sA) lsA)
+            (isem_for_loop_kill semI p c ws (X, sA))
+            (ITree.iter (fun ls' =>
+               ITree.bind (mix_ilsteps p' (pc_between_c fn P0 lc0) (setcpc ls' fn (size P0)))
+                 (fun ls2 =>
+                    match eval_instr p' (MkLI ii (Lloop_end lbl)) ls2 with
+                    | Ok ls3 => Ret (if lpc ls3 == size P0 then inl ls3 else inr ls3)
+                    | Error e0 => Exception.throw e0
+                    end)) lsA).
+  + move=> semI hcgen n hn.
+    elim => [|k ihk] ws L lblc0 P0 lc0 Q0 hsize hlbnd hprec hjump X sA lsA hinvA.
+    - case: ws hsize => [|w [|w' ws']] // _.
+      rewrite {1}/isem_for_loop_kill {1}/isem_for_loop_round /=.
+      have hround0 := hcgen _ hlbnd _ _ _ _ _ hprec (Sv.empty, sA) lsA hinvA.
+      rewrite unfold_iter bind_bind.
+      have -> : setcpc lsA fn (size P0) = lsA.
+      * move: hinvA => [] _ _ _ hpcA hfnA _ _ _ _ _.
+        by rewrite -hfnA -hpcA; case: (lsA).
+      apply (xrutt_facts.xrutt_bind hround0).
+      move=> ks2 ls2 hpost2.
+      have hinv2 := post_c_inv_c hpost2.
+      case: (hinv2) => hmm2 hscs2 hu2 hpc2 hfn2 hrsp2 hsrc2 hmax2 hhwcs2 hlloops2.
+      rewrite /eval_instr /= hlloops2 /loops_pop hn /= /runcons /= hfn2 eqxx /= bind_ret_l.
+      have hpp := hpop_post _ _ _ _ _ _ _ hpost2.
+      case: eqP => [heq|hne].
+      * exfalso; move: heq; rewrite hpc2 size_cat -addnS => /eqP.
+        by rewrite -{2}[size P0]addn0 eqn_add2l.
+      apply xrutt.xrutt_Ret; rewrite catA.
+      exact: (post_i_c (ks1 := (X, sA)) hpp).
+    - case: ws hsize => [|w ws'] // [hsize'].
+      rewrite {1}/isem_for_loop_kill {1}/isem_for_loop_round /=.
+      have hround0 := hcgen _ hlbnd _ _ _ _ _ hprec (Sv.empty, sA) lsA hinvA.
+      rewrite unfold_iter bind_bind.
+      have -> : setcpc lsA fn (size P0) = lsA.
+      * move: hinvA => [] _ _ _ hpcA hfnA _ _ _ _ _.
+        by rewrite -hfnA -hpcA; case: (lsA).
+      apply (xrutt_facts.xrutt_bind hround0).
+      move=> ks2 ls2 hpost2.
+      have hinv2 := post_c_inv_c hpost2.
+      case: (hinv2) => hmm2 hscs2 hu2 hpc2 hfn2 hrsp2 hsrc2 hmax2 hhwcs2 hlloops2.
+      have hfn3 : lfn (lset_loops ls2 ((fn, lbl, k) :: lstk)) = fn.
+      * by rewrite /lset_loops /= hfn2.
+      rewrite {1}/eval_instr /= hlloops2 {1}/loops_pop hn /= hfn2 eqxx /=.
+      rewrite (hjump _ hfn3) /= eqxx /= bind_ret_l.
+      apply xrutt.xrutt_add_Tau_r.
+      have hinv3 : inv_c ((fn, lbl, k) :: lstk) P0 ks2.2
+          (setcpc (lset_loops ls2 ((fn, lbl, k) :: lstk)) fn (size P0)).
+      * split=>//.
+      have hcont := ihk ws' L lblc0 P0 lc0 Q0 hsize' hlbnd hprec hjump
+          (Sv.union X ks2.1) ks2.2
+          (setcpc (lset_loops ls2 ((fn, lbl, k) :: lstk)) fn (size P0)) hinv3.
+      have hpost2X := post_i_c (ks1 := (X, sA)) hpost2.
+      have hpost2j : post_c ((fn, lbl, k) :: lstk) P0 (X, sA) lsA (Sv.union X ks2.1, ks2.2)
+          (setcpc (lset_loops ls2 ((fn, lbl, k) :: lstk)) fn (size P0)).
+      * case: hpost2X => _ hdisj hsub hex hvalid hstable hpres htarget.
+        split=>//.
+      have := hcont.
+      apply xrutt_facts.xrutt_weaken => //.
+      move=> ks4 ls4 hpost4.
+      exact (post_c_trans2 _ _ _ _ _ _ _ _ _ _ hpost2j hpost4).
+  case: r hr hLF hpfor => [x|z] hr hLF hpfor; last first.
+  + move: hpfor; case: ifP => hzle hpfor.
+    + have hli : li = [::] /\ lbli = lbl.
+      + move: hlin; rewrite /linear_i /= hr hzle => -[<- <-]; split=>//.
+      case: hli => hlinil hlibl; subst li lbli.
+      rewrite cats0.
+      have hcntz : sem_pexpr_int true (p_globs p) s1 cnt = ok z.
+      + clear hlb hpre hlin hC hD hchecked hround post_c_trans2 hpop_post hpop hinv hLF.
+        move: hr; rewrite /repeat_call_count.
+        case: cnt => //=.
+        + move=> z0 [<-]. by rewrite /sem_pexpr_int /=.
+        + move=> g; rewrite /assert; case: ifP => _ //.
+        move=> s p0; case: s => // -[] // ws; case: p0 => // x; case: eqP => // ->; discriminate.
+      rewrite /isem_fi /sem_fi hcntz /=.
+      rewrite (ziota_neg 0 (proj1 (Z.leb_le _ _) hzle)) bind_ret_l /isem_for_loop_kill /=.
+      have -> : mix_ilsteps p' (pc_between_c fn P [::]) ls1 ≅ Ret ls1.
+      + apply: mix_ilsteps_0. rewrite /pc_between_c /= addn0 /pc_between.
+        case: (lfn ls1 == fn) => //.
+        apply/negP => /andP[h1 h2].
+        by move: h2; rewrite ltnNge h1.
+      apply xrutt.xrutt_Ret.
+      case: hinv => hmm hscs hu hpc hfn hrsp hsrc hmax hhwcs hlloops.
+      split=>//=.
+    move: hlin; rewrite /linear_i /= hr hzle linear_c_nil.
+    case heqc0: (linear_c fn c (next_lbl lbl) [::]) => [lblc0 lc0] /= [hlbli hli].
+    subst li lbli.
+    set P0 := P ++ [:: MkLI ii (Lloop_begin (inr z) lbl); MkLI ii (Llabel InternalLabel lbl)].
+    have [fd0 hgetfd0 hcheckfd0] := checked_iE hchecked.
+    move: hcheckfd0; rewrite /check_i /=; t_xrbindP => r' hr' hcheckc0.
+    have hvc := valid_c fn c (next_lbl lbl).
+    rewrite heqc0 in hvc.
+    case: hvc => [hle0 hvalid0].
+    have hCC : is_linear_of fn (P0 ++ lc0 ++ ([:: MkLI ii (Lloop_end lbl)] ++ Q)).
+    + have -> : P0 ++ lc0 ++ ([:: MkLI ii (Lloop_end lbl)] ++ Q)
+          = P ++ ([:: MkLI ii (Lloop_begin (inr z) lbl); MkLI ii (Llabel InternalLabel lbl)]
+              ++ (lc0 ++ [:: MkLI ii (Lloop_end lbl)])) ++ Q.
+      + by rewrite /P0 !catA.
+      exact: hC.
+    have hDD : disjoint_labels (next_lbl lbl) lblc0 P0.
+    + rewrite /P0; apply: disjoint_labels_cat.
+      + apply: (disjoint_labels_w _ _ hD); rewrite /next_lbl; lia.
+      + move=> lbl' hrange /=; rewrite /is_label /=.
+        rewrite orbF; apply/negP => /eqP ?; subst lbl'; move: hrange; rewrite /next_lbl; lia.
+    have pre0 : pre_c fn c (next_lbl lbl) lblc0 P0 lc0 ([:: MkLI ii (Lloop_end lbl)] ++ Q).
+    + split.
+      + by rewrite /checked_c hgetfd0 hcheckc0.
+      + exact: heqc0.
+      + exact: hDD.
+      exact: hCC.
+    have hnP0 : ~~ has (is_label lbl) P.
+    + have hrange : (lbl <= lbl < lblc0)%positive.
+      + move: hle0; rewrite /next_lbl; lia.
+      exact: (hD lbl hrange).
+    have hjump : forall lsX, lfn lsX = fn -> eval_jump p' (fn, lbl) lsX = ok (setcpc lsX fn (size P0)).
+    + move=> lsX hfnX.
+      rewrite (eval_jumpE hCC) /P0 -catA (find_label_cat_hd _ hnP0).
+      rewrite find_labelE /is_label /= find_labelE /is_label /= eqxx /=.
+      f_equal; rewrite /setcpc; f_equal; simpl_size; lia.
+    case: hinv => hmm hscs hu hpc hfn0 hrsp hsrc hmax hhwcs hlloops.
+    rewrite (step_mix_ilsteps hC hfn0 hpc) /=; first last.
+    + by simpl_size; lia.
+    + by simpl_size; lia.
+    rewrite /eval_instr /=.
+    (* [hlb]'s new "the architecture must actually have hardware loops"
+       conjunct (see [loops_bound]'s own comment) fires unconditionally
+       here: this instruction's own local depth, [(ldepth_c c).+1], is
+       always positive, regardless of [lstk]/[c]. *)
+    have hSomeL : isSome hwloop_size.
+    + move: hlb; rewrite /loops_bound_i /loops_bound ldepth_c_cons maxn0
+        (ldepth_c_for_repeat ii (callee_loop_depth p) cnt c) => -[hSome0 _].
+      by apply: hSome0; lia.
+    have [n hn] : exists n, hwloop_size = Some n.
+    + by case: hwloop_size hSomeL => [n _|] //; exists n.
+    have hlbnd0 : loops_bound (((fn, lbl), Z.to_nat (z - 1)) :: lstk) c.
+    + move: hlb; rewrite /loops_bound_i /loops_bound ldepth_c_cons maxn0
+        (ldepth_c_for_repeat ii (callee_loop_depth p) cnt c) Nat2Z.inj_succ.
+      have -> : size (((fn, lbl), Z.to_nat (z - 1)) :: lstk) = (size lstk).+1 by [].
+      rewrite Nat2Z.inj_succ hn /= => -[_ hlb0].
+      split; first by move=> _.
+      lia.
+    rewrite hn /=.
+    have -> : (size (lloops ls1) < n) = true.
+    + move: hlb; rewrite /loops_bound_i /loops_bound ldepth_c_cons maxn0
+        (ldepth_c_for_repeat ii (callee_loop_depth p) cnt c) Nat2Z.inj_succ
+        hn hlloops /= => -[_ hlb0].
+      apply/ltP; lia.
+    have h0z : (0 <? z)%Z = true.
+    + by move: hzle; rewrite (Z.leb_antisym 0 z); case: (0 <? z)%Z.
+    rewrite /= h0z /=.
+    (* [loops_push] re-checks the same depth bound internally (its own
+       [o2r ErrSemUndef hwloop_size]/[assert] pair, redundant with the one
+       [eval_instr] already performed above); unfold it and redischarge
+       that inner copy the same way. *)
+    rewrite /loops_push hn /=.
+    have -> : (size (lloops ls1) < n) = true.
+    + move: hlb; rewrite /loops_bound_i /loops_bound ldepth_c_cons maxn0
+        (ldepth_c_for_repeat ii (callee_loop_depth p) cnt c) Nat2Z.inj_succ
+        hn hlloops /= => -[_ hlb0].
+      apply/ltP; lia.
+    rewrite /=.
+    (* State reached after evaluating only [Lloop_begin] (one [lnext_pc]):
+       [lpc ls2 = size P + 1], i.e. pointing AT [Llabel], not past it.
+       [hpfor]'s own equation seeds its [ITree.iter] with [setcpc _ (size
+       P0)] directly, so we never need to justify [ls2]'s own pc past this
+       point; but [hround]/[hjump] both need the concrete two-instruction
+       shape of [P0] regardless, so we still step through [Llabel]
+       explicitly here to reach a state literally at [size P0]. *)
+    set ls2 := lnext_pc (lset_loops ls1 ((lfn ls1, lbl, Z.to_nat (z - 1)) :: lloops ls1)).
+    have hlfn2 : lfn ls2 = fn.
+    + by rewrite /ls2 /lnext_pc /lset_loops /=.
+    have hlpc2 : lpc ls2 = size P + 1.
+    + by rewrite /ls2 /lnext_pc /lset_loops /= hpc; simpl_size; lia.
+    have hCC2 : is_linear_of fn ((P ++ [:: MkLI ii (Lloop_begin (inr z) lbl)]) ++
+        (MkLI ii (Llabel InternalLabel lbl) :: lc0 ++ [:: MkLI ii (Lloop_end lbl)] ++ Q)).
+    + move: hCC; rewrite /P0 -!catA //.
+    have hlpc2' : lpc ls2 = size (P ++ [:: MkLI ii (Lloop_begin (inr z) lbl)]).
+    + by rewrite hlpc2; simpl_size; lia.
+    rewrite (step_mix_ilsteps hCC2 hlfn2 hlpc2'); first last.
+    + by simpl_size; lia.
+    + by simpl_size; lia.
+    rewrite /eval_instr /=.
+    have hlfn2b : lfn (lnext_pc ls2) = fn.
+    + by rewrite /lnext_pc /=.
+    have hlpc2b : lpc (lnext_pc ls2) = size P0.
+    + by rewrite /lnext_pc /lset_loops /= hpc /P0; simpl_size; lia.
+    have hinv0 : inv_c (((fn, lbl), Z.to_nat (z - 1)) :: lstk) P0 s1 (lnext_pc ls2).
+    + split=>//=; try by rewrite /ls2 /lnext_pc /lset_loops /=.
+      by rewrite /ls2 /lnext_pc /lset_loops /= hfn0 hlloops.
+    have hsize : size (ziota 0 z) = (Z.to_nat (z - 1)).+1.
+    + rewrite size_ziota; lia.
+    have := hround (isem_i var_tmps) hc n hn (Z.to_nat (z - 1)) (ziota 0 z) (next_lbl lbl) lblc0
+        P0 lc0 Q hsize hlbnd0 pre0 hjump Sv.empty s1 _ hinv0.
+    move=> hstep.
+    have hcntz : sem_pexpr_int true (p_globs p) s1 cnt = ok z.
+    + clear hlb hpre hLF hchecked hr'.
+      move: hr; rewrite /repeat_call_count.
+      case: cnt => //=.
+      + move=> z0 [<-]. by rewrite /sem_pexpr_int /=.
+      + move=> g; rewrite /assert; case: ifP => _ //.
+      move=> s p0; case: s => // -[] // ws; case: p0 => // xv; case: eqP => // ->; discriminate.
+    rewrite /isem_fi /sem_fi hcntz /= bind_ret_l.
+    (* Split the whole-block [mix_ilsteps] at [size P0] (the state we're
+       already at), then rewrite its first component into [hpfl]'s
+       [ITree.iter] shape ([pre_i_for_loop], the same general per-round
+       target-only lemma [Hwhile]-style proofs use, instantiated at the
+       ILSTEPS_END section's own [Pc] via [linear_c_end] -- a DIFFERENT,
+       weaker predicate than this section's [hc]/[Pc c], hence the explicit
+       [@linear_c_end fn c] rather than [hc]), so [hstep] (from [hround])
+       can be chained in via [xrutt_bind] (source side turned into a
+       trivial bind-with-Ret via [bind_ret_r] first, since [isem_for_loop_kill]
+       itself is not already bind-shaped). *)
+    rewrite (mix_ilsteps_split p' (pcs':=size P0)
+               (pce':=size P0 + size (lc0 ++ [:: MkLI ii (Lloop_end lbl)])));
+      first last.
+    + by simpl_size; lia.
+    + by simpl_size; lia.
+    have hpfl := pre_i_for_loop (@linear_c_end fn c) pre0 hjump hlfn2b hlpc2b.
+    rewrite hpfl.
+    rewrite -(bind_ret_r (isem_for_loop_kill (isem_i var_tmps) p c (ziota 0 z) (Sv.empty, s1))).
+    apply (xrutt_facts.xrutt_bind hstep).
+    move=> ks2 ls3 hpost2.
+    case: hpost2 => hinv3 hdisj3 hsub3 hval3 hvw3 hstable3 hpres3 htarget3.
+    case: (hinv3) => hmm3 hscs3 hu3 hpc3 hfn3 hrsp3 hsrc3 hmax3 hhwcs3 hlloops3.
+    have hpce3 : lpc ls3 = size P + (size (lc0 ++ [:: MkLI ii (Lloop_end lbl)])).+2.
+    + by rewrite hpc3 /P0; simpl_size; lia.
+    rewrite (mix_ilsteps_b0 p' (size P) hfn3 hpce3).
+    apply xrutt.xrutt_Ret.
+    split=>//=.
+    by rewrite hpce3; simpl_size; lia.
+  (* register count (`inl x`) case. [repeat_call_count]'s [inl]-producing
+     arms are exactly the bare [Pvar x0] one (now, after the fix above,
+     guaranteed word-typed) and the [Papp1 (Oint_of_word Unsigned Uptr)
+     (Pvar x1)] cast-form one. Unlike the [inr z] branch above (whose two
+     [repeat_call_count] sub-cases, [Pconst]/[Papp1], both just feed the
+     SAME follow-up, [hcntz]), these two sub-cases need genuinely
+     DIFFERENT follow-up proofs (one vacuous, one real), so the split is
+     done directly against [hr], not folded into a single [have] as
+     [hcntz] does. *)
+  have hcase : (exists x0, cnt = Pvar x0 /\ vtype (gv x0) = aword Uptr /\ gv x0 = x)
+             \/ (exists ws x1, cnt = Papp1 (Oint_of_word Unsigned ws) (Pvar x1) /\ ws = Uptr /\ gv x1 = x).
+  + clear hlb hpre hlin hC hD hchecked hround post_c_trans2 hpop_post hpop hinv hLF.
+    move: hr; rewrite /repeat_call_count.
+    case: cnt => //=.
+    + move=> x0; rewrite /assert; case: ifP => hvt // [hgv].
+      move/eqP: hvt => hty.
+      left; exists x0; split; first done; split; first exact hty; exact hgv.
+    move=> s p0; case: s => // -[] // ws; case: p0 => // x1; case: eqP => // heq [hgv].
+    rewrite heq.
+    right; exists Uptr, x1; split; first done; split; first done; exact hgv.
+  case: hcase => [[x0 [hcnteq [hty hgv]]] | [ws [x1 [hcnteq [hws hgv]]]]].
+  + (* bare [Pvar x0]: after the [repeat_call_count] fix above, [x0]'s type
+       is guaranteed to be a WORD type, so the SOURCE semantics here
+       ([isem_fi]/[sem_fi]/[sem_pexpr_int]/[to_int]) can only ever fail:
+       [to_int] only succeeds on [Vint]/[Vundef cint _], but a word-typed
+       variable's value (read via [get_gvar]) is always [Vword _] or an
+       undef WORD value -- confirmed via [type_of_get_gvar_sub]
+       (psem_core.v) composed with [subctypeE]/[type_of_valI] (type.v/
+       values.v), mirroring this same file's own [check_bool_sem_fexpr]
+       (~line 2235) use of the identical [type_of_get_var]/[subctypeE]/
+       [type_of_valI] idiom for the analogous [cbool] case. This makes the
+       sub-case's [xrutt] obligation vacuous: the source throws
+       unconditionally, closed via [xrutt.xrutt_CutL] on the thrown error,
+       the same idiom already used elsewhere in this file (e.g.
+       [linear_exportcall_mixP], ~line 6784) and in [it_merge_varmaps_proof.v]
+       (~line 833) for other unconditionally-thrown-error sub-cases.
+       NOT independently re-verified via rocq-mcp: this file's interactive
+       sessions stopped resolving positions/theorems partway through this
+       stage's work (a tool-side indexing failure, not a source problem --
+       see the final report) and did not recover despite repeated retries,
+       long timeouts, and force_restart; this proof is built from direct
+       reading of the cited lemmas' statements and this file's own already-
+       compiling precedents only. *)
+    rewrite hcnteq /isem_fi /sem_fi /sem_pexpr_int /=.
+    case hgvx: (get_gvar true (p_globs p) (evm s1) x0) => [v|e] /=.
+    + have := type_of_get_gvar_sub hgvx; rewrite hty /= => /subctypeE [sz [htv _]].
+      have -> : to_int v = Error ErrType by case: (type_of_valI htv) => [-> | [w ->]].
+      rewrite /= bind_throw.
+      apply xrutt.xrutt_CutL.
+      by rewrite /core_logics.errcutoff /is_error /subevent /resum /fromErr mid12.
+    rewrite /= bind_throw.
+    apply xrutt.xrutt_CutL.
+    by rewrite /core_logics.errcutoff /is_error /subevent /resum /fromErr mid12.
+  (* cast-form [Papp1 (Oint_of_word Unsigned Uptr) (Pvar x1)]. Splits on
+     whether [sem_pexpr_int]/[cnt] succeeds at all (vacuous via
+     [xrutt.xrutt_CutL] if not, same idiom as the bare [Pvar] case above),
+     then on [is_lvar x1] (vacuous if global: [p_globs p = [::]] here, so
+     [get_global] always fails), then bridges the SOURCE value to the
+     TARGET's own register read via [sem_pexpr_uincl] applied to the WHOLE
+     [cnt] expression at once (its result type is [aint], so [value_uincl]
+     collapses to plain equality, no [word_uincl]/subword reasoning
+     needed) -- this simultaneously proves [get_var true (lvm ls1) x]
+     succeeds with a word value [vraw]/[w] AND that re-evaluating [cnt]
+     with [lvm ls1] in place of [evm s1] gives the SAME [z]. [hguard]
+     computes [sem_fexpr (lvm ls1) (fis_zero x)] from the very same
+     [hvraw]/[hw], giving [ok (w == 0)%R].
+
+     [hpfor]'s own existential (built from [pre_i_for]) is NOT used from
+     here on: its [P0]/[lc0]/[Q0] witnesses are opaque (existentially
+     packaged by an [Qed]'d, hence kernel-opaque, proof), so no fact
+     available at this call site can identify them with anything concrete
+     -- in particular [hjump]/[hround] below need [size P0] to be a KNOWN
+     number, which is unrecoverable from [hpfor]'s statement alone. Instead
+     [hlin] is unfolded directly for this ([inl x], cast-form) branch,
+     exactly mirroring how the immediate [z > 0] branch above (which
+     likewise never touches [hpfor]) builds its own [P0]/[pre0]/[hCC]; the
+     concrete shape matches [pre_i_for_aux]'s own internal proof (read
+     directly from source, ~line 2670) verbatim: [P0 := P ++ [Lcond;
+     Lloop_begin; Llabel]], tail [Lloop_end lbl :: Llabel (next_lbl lbl)
+     :: Q]. The guard is then decided by [case hb0: (w == 0%R)]: [w == 0]
+     (so [z <= 0], in fact [z = 0] since [z = wunsigned w >= 0]) closes via
+     [find_label]/[mix_ilsteps_b0]/[ziota_neg]/[isem_for_loop_kill]/
+     [xrutt.xrutt_Ret], mirroring [pre_i_for_aux]'s own [b = true] bullet;
+     [w <> 0] (the real, non-empty loop) steps through [Lloop_begin] then
+     [Llabel] via two [step_mix_ilsteps] calls (mirroring the immediate
+     [z > 0] branch, with [z := wunsigned w] throughout, bridged via
+     [wunsigned_inj]/[wunsigned0] to get [0 < z] from [w <> 0]), then
+     applies [hround]/[pre_i_for_loop]/[mix_ilsteps_split]/[xrutt_bind]
+     exactly as the immediate branch does, closing via a final
+     [step_mix_ilsteps] through the trailing [Llabel (next_lbl lbl)] and
+     [mix_ilsteps_b0]. Fully proved, no admit; verified interactively via
+     rocq-mcp step by step (see the final report for the exact trace) and
+     via a fresh session confirming [Hfor]'s own [Qed.] with
+     [proof_finished: true]. *)
+  case hcntz: (sem_pexpr_int true (p_globs p) s1 cnt) => [z|e0].
+  + rewrite /isem_fi /sem_fi hcntz /=.
+    rewrite bind_ret_l.
+    have hcntz' : sem_pexpr true (p_globs p) s1 cnt = ok (Vint z).
+    + move: hcntz; rewrite /sem_pexpr_int; t_xrbindP => v hv hti.
+      by move: hv; rewrite (to_intI hti).
+    case: hinv => hmm hscs hu hpc hfn0 hrsp hsrc hmax hhwcs hlloops.
+    have [v2 hv2 huv2] := sem_pexpr_uincl hu hcntz'.
+    have hv2z : v2 = Vint z := value_uinclE huv2.
+    subst v2.
+    rewrite hcnteq hws /= in hv2.
+    move: hv2.
+    rewrite /get_gvar /=.
+    case: ifP => his_lvar.
+    + move=> hv2.
+      move: hv2; rewrite hgv; t_xrbindP => vraw hvraw hsop.
+      move: hsop; rewrite /sem_sop1 /=; t_xrbindP => w hw hz.
+      have hguard : sem_fexpr (lvm ls1) (fis_zero x) = ok (Vbool (w == 0)%R).
+      + rewrite /fis_zero /=.
+        rewrite hvraw /= /sem_sop2 /= hw /= truncate_word_u wrepr0 /=.
+        by [].
+      have [fd0 hgetfd0 hcheckfd0] := checked_iE hchecked.
+      move: hcheckfd0; rewrite /check_i /=; t_xrbindP => r0 hr0 hcheckc0.
+      have hcheckcc : checked_c fn c by rewrite /checked_c hgetfd0 hcheckc0.
+      move: hlin; rewrite /linear_i /= hr /= linear_c_nil.
+      case heqc0: (linear_c fn c (next_lbl (next_lbl lbl)) [::]) => [lblc0 lc0] /= [hlbli hli].
+      rewrite -hli.
+      set P0 := P ++ [:: MkLI ii (Lcond (fis_zero x) (next_lbl lbl));
+          MkLI ii (Lloop_begin (inl x) lbl); MkLI ii (Llabel InternalLabel lbl)].
+      have hvc := valid_c fn c (next_lbl (next_lbl lbl)).
+      rewrite heqc0 in hvc.
+      case: hvc => [hle0 hvalid0].
+      have hCC : is_linear_of fn (P0 ++ lc0 ++ ([:: MkLI ii (Lloop_end lbl);
+          MkLI ii (Llabel InternalLabel (next_lbl lbl))] ++ Q)).
+      + move: hC; rewrite /P0 -hli /= -!catA //.
+      have hDD : disjoint_labels (next_lbl (next_lbl lbl)) lblc0 P0.
+      + rewrite /P0; apply: disjoint_labels_cat.
+        + apply: (disjoint_labels_w _ _ hD); rewrite /next_lbl; lia.
+        + move=> lbl' hrange /=; rewrite /is_label /=.
+          rewrite orbF; apply/negP => /eqP ?; subst lbl'; move: hrange; rewrite /next_lbl; lia.
+      have pre0 : pre_c fn c (next_lbl (next_lbl lbl)) lblc0 P0 lc0
+          ([:: MkLI ii (Lloop_end lbl); MkLI ii (Llabel InternalLabel (next_lbl lbl))] ++ Q).
+      + split; [exact: hcheckcc | exact: heqc0 | exact: hDD | exact: hCC].
+      rewrite -hli in hC.
+      rewrite (step_mix_ilsteps hC hfn0 hpc) /=; first last.
+      + by simpl_size; lia.
+      + by simpl_size; lia.
+      rewrite /eval_instr /=.
+      rewrite hvraw /= /sem_sop2 /= hw /= truncate_word_u wrepr0 /=.
+      case hb0: (w == 0%R) => /=.
+      + have hnP0 : ~~ has (is_label (next_lbl lbl)) P0.
+        + rewrite /P0 has_cat negb_or; apply/andP; split.
+          + apply: (hD (next_lbl lbl)).
+            move: hle0; rewrite /next_lbl => hle0; rewrite /next_lbl; lia.
+          + rewrite /= /is_label /= orbF; apply/negP => /eqP HH; move: HH; rewrite /next_lbl; lia.
+        rewrite hfn0 (eval_jumpE hCC) (find_label_cat_hd _ hnP0).
+        rewrite find_label_cat_hd; last first.
+        + apply: (valid_has_not_label hvalid0); left; rewrite /next_lbl; lia.
+        rewrite find_labelE /= find_labelE /is_label /= eqxx /=.
+        have hlpcE : lpc (setcpc ls1 fn (size P0 + (size lc0 + 1)).+1)
+            = size P + (size (lc0 ++ [:: MkLI ii (Lloop_end lbl);
+                 MkLI ii (Llabel InternalLabel (next_lbl lbl))])).+3.
+        + rewrite /setcpc /= /P0; simpl_size; lia.
+        rewrite (mix_ilsteps_b0 p' (size P) erefl hlpcE).
+        have hz0 : (z <= 0)%Z.
+        + move/eqP: hb0 => hb0eq; move: hz; rewrite hb0eq wunsigned0 => <-. lia.
+        rewrite (ziota_neg 0 hz0) /= /isem_for_loop_kill /=.
+        apply xrutt.xrutt_Ret.
+        split=>//=.
+        by rewrite size_cat.
+      (* Step through [Lloop_begin] itself, from [lnext_pc ls1] (the state
+         right after the [Lcond] guard's fall-through). This step was
+         missing in an earlier draft: the code below (discharging
+         [loops_push]'s internal checks via [hvraw]/[hw]) only makes sense
+         once this step's [rewrite /eval_instr /=] has exposed them. *)
+      have hlfn1 : lfn (lnext_pc ls1) = fn.
+      + by rewrite /lnext_pc /=.
+      have hlpc1 : lpc (lnext_pc ls1) = size (P ++ [:: MkLI ii (Lcond (fis_zero x) (next_lbl lbl))]).
+      + by rewrite /lnext_pc /= hpc; simpl_size; lia.
+      have hCC1 : is_linear_of fn ((P ++ [:: MkLI ii (Lcond (fis_zero x) (next_lbl lbl))]) ++
+          (MkLI ii (Lloop_begin (inl x) lbl) :: MkLI ii (Llabel InternalLabel lbl) :: lc0 ++
+           [:: MkLI ii (Lloop_end lbl); MkLI ii (Llabel InternalLabel (next_lbl lbl))] ++ Q)).
+      + move: hCC; rewrite /P0 -!catA //.
+      rewrite (step_mix_ilsteps hCC1 hlfn1 hlpc1) /=; first last.
+      + by simpl_size; lia.
+      + by simpl_size; lia.
+      rewrite /eval_instr /=.
+      have hSomeL : isSome hwloop_size.
+      + move: hlb; rewrite /loops_bound_i /loops_bound ldepth_c_cons maxn0
+          (ldepth_c_for_repeat ii (callee_loop_depth p) cnt c) => -[hSome0 _].
+        by apply: hSome0; lia.
+      have [n hn] : exists n, hwloop_size = Some n.
+      + by case: hwloop_size hSomeL => [n _|] //; exists n.
+      have hlbnd0 : loops_bound (((fn, lbl), Z.to_nat (z - 1)) :: lstk) c.
+      + move: hlb; rewrite /loops_bound_i /loops_bound ldepth_c_cons maxn0
+          (ldepth_c_for_repeat ii (callee_loop_depth p) cnt c) Nat2Z.inj_succ.
+        have -> : size (((fn, lbl), Z.to_nat (z - 1)) :: lstk) = (size lstk).+1 by [].
+        rewrite Nat2Z.inj_succ hn /= => -[_ hlb0].
+        split; first by move=> _.
+        lia.
+      rewrite hvraw /= hw /= hn /=.
+      have -> : (size (lloops ls1) < n) = true.
+      + move: hlb; rewrite /loops_bound_i /loops_bound ldepth_c_cons maxn0
+          (ldepth_c_for_repeat ii (callee_loop_depth p) cnt c) Nat2Z.inj_succ
+          hn hlloops /= => -[_ hlb0].
+        apply/ltP; lia.
+      have h0z : (0 <? z)%Z = true.
+      + apply/Z.ltb_lt.
+        move: hz => <-.
+        have hwr := wunsigned_range w.
+        have hwne : w <> 0%R.
+        + by apply/eqP; rewrite hb0.
+        have hzne : wunsigned w <> 0%Z.
+        + move=> heq0.
+          apply hwne.
+          apply: wunsigned_inj.
+          by rewrite heq0 wunsigned0.
+        lia.
+      rewrite hz h0z /=.
+      rewrite /loops_push hn /=.
+      have -> : (size (lloops ls1) < n) = true.
+      + move: hlb; rewrite /loops_bound_i /loops_bound ldepth_c_cons maxn0
+          (ldepth_c_for_repeat ii (callee_loop_depth p) cnt c) Nat2Z.inj_succ
+          hn hlloops /= => -[_ hlb0].
+        apply/ltP; lia.
+      rewrite /=.
+      set ls2 := lnext_pc (lset_loops (lnext_pc ls1) ((lfn ls1, lbl, Z.to_nat (z - 1)) :: lloops ls1)).
+      have hlfn2 : lfn ls2 = fn.
+      + by rewrite /ls2 /lnext_pc /lset_loops /=.
+      have hlpc2 : lpc ls2 = size P + 2.
+      + by rewrite /ls2 /lnext_pc /lset_loops /= hpc; simpl_size; lia.
+      have hlpc2' : lpc ls2 = size (P ++ [:: MkLI ii (Lcond (fis_zero x) (next_lbl lbl));
+          MkLI ii (Lloop_begin (inl x) lbl)]).
+      + by rewrite hlpc2; simpl_size; lia.
+      have hCC2 : is_linear_of fn ((P ++ [:: MkLI ii (Lcond (fis_zero x) (next_lbl lbl));
+          MkLI ii (Lloop_begin (inl x) lbl)]) ++
+          (MkLI ii (Llabel InternalLabel lbl) :: lc0 ++ [:: MkLI ii (Lloop_end lbl);
+          MkLI ii (Llabel InternalLabel (next_lbl lbl))] ++ Q)).
+      + move: hCC; rewrite /P0 -!catA //.
+      rewrite (step_mix_ilsteps hCC2 hlfn2 hlpc2') /=; first last.
+      + by simpl_size; lia.
+      + by simpl_size; lia.
+      rewrite /eval_instr /=.
+      have hnP0 : ~~ has (is_label lbl)
+          (P ++ [:: MkLI ii (Lcond (fis_zero x) (next_lbl lbl)); MkLI ii (Lloop_begin (inl x) lbl)]).
+      + rewrite has_cat negb_or; apply/andP; split.
+        + apply: (hD lbl).
+          move: hle0; rewrite -hlbli /next_lbl => hle0; rewrite /next_lbl; lia.
+        + by [].
+      have hjump : forall lsX, lfn lsX = fn -> eval_jump p' (fn, lbl) lsX = ok (setcpc lsX fn (size P0)).
+      + move=> lsX hfnX.
+        rewrite (eval_jumpE hCC2) (find_label_cat_hd _ hnP0).
+        rewrite find_labelE /is_label /= eqxx /=.
+        rewrite /P0; f_equal; f_equal; simpl_size; lia.
+      have hlfn2b : lfn (lnext_pc ls2) = fn.
+      + by rewrite /lnext_pc /=.
+      have hlpc2b : lpc (lnext_pc ls2) = size P0.
+      + by rewrite /lnext_pc /lset_loops /= hpc /P0; simpl_size; lia.
+      have hinv0 : inv_c (((fn, lbl), Z.to_nat (z - 1)) :: lstk) P0 s1 (lnext_pc ls2).
+      + split=>//=; try by rewrite /ls2 /lnext_pc /lset_loops /=.
+        by rewrite /ls2 /lnext_pc /lset_loops /= hfn0 hlloops.
+      have hsize : size (ziota 0 z) = (Z.to_nat (z - 1)).+1.
+      + rewrite size_ziota; lia.
+      have := hround (isem_i var_tmps) hc n hn (Z.to_nat (z - 1)) (ziota 0 z) (next_lbl (next_lbl lbl)) lblc0
+          P0 lc0 ([:: MkLI ii (Llabel InternalLabel (next_lbl lbl))] ++ Q) hsize hlbnd0 pre0 hjump Sv.empty s1 _ hinv0.
+      move=> hstep.
+      rewrite (mix_ilsteps_split p' (pcs':=size P0)
+                 (pce':=size P0 + size (lc0 ++ [:: MkLI ii (Lloop_end lbl)])));
+        first last.
+      + by simpl_size; lia.
+      + by simpl_size; lia.
+      have hpfl := pre_i_for_loop (@linear_c_end fn c) pre0 hjump hlfn2b hlpc2b.
+      rewrite hpfl.
+      rewrite -(bind_ret_r (isem_for_loop_kill (isem_i var_tmps) p c (ziota 0 z) (Sv.empty, s1))).
+      apply (xrutt_facts.xrutt_bind hstep).
+      move=> ks2 ls3 hpost2.
+      case: hpost2 => hinv3 hdisj3 hsub3 hval3 hvw3 hstable3 hpres3 htarget3.
+      case: (hinv3) => hmm3 hscs3 hu3 hpc3 hfn3 hrsp3 hsrc3 hmax3 hhwcs3 hlloops3.
+      have hCC3 : is_linear_of fn ((P0 ++ lc0 ++ [:: MkLI ii (Lloop_end lbl)]) ++
+          (MkLI ii (Llabel InternalLabel (next_lbl lbl)) :: Q)).
+      + move: hCC; rewrite -!catA //.
+      rewrite (step_mix_ilsteps hCC3 hfn3 hpc3); first last.
+      + by simpl_size; lia.
+      + by simpl_size; lia.
+      rewrite /eval_instr /=.
+      rewrite mix_ilsteps_b0; last first.
+      + by rewrite /lnext_pc /= hpc3 /P0; simpl_size; lia.
+      + by rewrite /lnext_pc hfn3.
+      apply xrutt.xrutt_Ret.
+      split=>//=.
+      by rewrite hpc3 /P0; simpl_size; lia.
+    move=> habs; move: habs; rewrite p_globs_nil /=; done.
+  rewrite /isem_fi /sem_fi hcntz /= bind_throw.
+  apply xrutt.xrutt_CutL.
+  by rewrite /core_logics.errcutoff /is_error /subevent /resum /fromErr mid12.
+  Unshelve.
+  all: exact: spp.
   Qed.
 
   Lemma Hwhile : ∀ (a : expr.align) (c : cmd) (e : pexpr) (info : instr_info) (c' : cmd),
       Pc c → Pc c' → Pi_r (Cwhile a c e info c').
   Proof using linear_ok.
-    move=> al c1 e iiw c2 ih1 ih2 ii lbl lbli P li Q hpre s1 ls1 hinv.
+    move=> al c1 e iiw c2 ih1 ih2 ii lstk hlb lbl lbli P li Q hpre s1 ls1 hinv.
     have := pre_i_while hpre (inv_c_lfn hinv) (inv_c_lpc hinv).
     move=> [lbl1] [lblc1] [lc1] [P1] [Q1] [lbl2] [lblc2] [lc2] [P2] [Q2] [chk_e hpre1 hpre2 ->] {hpre}.
     rewrite /= /isem_while_loop.
-    pose inv_w ks2 ls2 := exists P, post_c P (Sv.empty, s1) ls1 ks2 ls2.
+    pose inv_w ks2 ls2 := exists P, post_c lstk P (Sv.empty, s1) ls1 ks2 ls2.
     have : inv_w (Sv.empty, s1) ls1 by exists P; split.
     move: (Sv.empty, s1) {-2}ls1 => ks1' ls1'.
     apply: xrutt_facts.xrutt_iter => {}ks1' {}ls1' [P' hpost1].
     rewrite /isem_while_round.
-    have {}ih1:= ih1 _ _ _ _ _ hpre1 ks1' (setcpc ls1' fn (size P1)) (post_c_inv_c (post_c_setpc hpost1 erefl)).
+    have {}ih1:= ih1 lstk (loops_bound_while_l hlb) _ _ _ _ _ hpre1 ks1' (setcpc ls1' fn (size P1)) (post_c_inv_c (post_c_setpc hpost1 erefl)).
     apply (xrutt_facts.xrutt_bind ih1) => ks2 ls2 hpost2.
     apply xrutt_bind_iresult_left => b /sem_cond_sem_pexpr he.
     have [-> {}hpre2 {he}] :
@@ -3514,7 +4994,7 @@ End ILSTEPS_END.
       | None => Let v := sem_fexpr (lvm ls2) (to_fexpr e) in to_bool v
       end = ok b
       /\ (b -> pre_c fn c2 lbl2 lblc2 P2 lc2 Q2).
-    + case: is_boolP he chk_e hpre2 => [be | {}e].
+    + clear hlb; case: is_boolP he chk_e hpre2 => [be | {}e].
       + by move=> [->] _ h; split => // hb; apply h; rewrite hb.
       move=> hb /(_ erefl) chk_e hpre2; split; last by move=> _; apply hpre2.
       by rewrite (sem_fexpr_bool (post_c_inv_c hpost2) chk_e hb).
@@ -3522,7 +5002,7 @@ End ILSTEPS_END.
     case: b hpre2 => hpre2; last first.
     + apply/xrutt.xrutt_Ret;constructor.
       by apply/post_c_post_ir /(post_c_setpc hpost2'); rewrite size_cat.
-    have {}ih2:= ih2 _ _ _ _ _ (hpre2 erefl) ks2 (setcpc ls2 fn (size P2)) (post_c_inv_c (post_c_setpc hpost2 erefl)).
+    have {}ih2:= ih2 lstk (loops_bound_while_r hlb) _ _ _ _ _ (hpre2 erefl) ks2 (setcpc ls2 fn (size P2)) (post_c_inv_c (post_c_setpc hpost2 erefl)).
     apply (xrutt_facts.xrutt_bind ih2) => ks3 ls3 hpost3.
     apply/xrutt.xrutt_Ret;constructor.
     exists (P2 ++ lc2); apply: post_c_trans hpost2' hpost3.
@@ -3635,7 +5115,7 @@ End ILSTEPS_END.
 
   Lemma Hcall : ∀ (xs : lvals) (f : funname) (es : pexprs), Pi_r (Ccall xs f es).
   Proof using hliparams linear_ok sp0_le enough_space hwcs_present hwcs_bound0.
-    move=> xs f es ii lbl lbli P li Q hpre s1 ls1 hinv.
+    move=> xs f es ii lstk hlb lbl lbli P li Q hpre s1 ls1 hinv.
     have := pre_i_call hpre (inv_c_lfn hinv) (inv_c_lpc hinv).
     move=> [fd] [fd'] [/negbTE fn'_neq_fn ok_fd ok_fd' ok_ra ok_align /ZleP ok_max /ZleP ok_depth D].
     set rastack_before := is_RAstack_None_call _.
@@ -3656,7 +5136,7 @@ End ILSTEPS_END.
     have f_not_export : ~~ fn_is_export p' f.
     - by rewrite /fn_is_export ok_lfd' /lfd' /= (negbTE ok_ra).
     move: (checked_prog ok_fd') => /=; rewrite /check_fd /frame_size.
-    t_xrbindP => chk_body ok_to_save _ _ ok_stk_sz /ZltP ok_depth_fd' ok_ret_addr ok_save_stack _.
+    t_xrbindP => chk_body ok_to_save _ _ ok_stk_sz /ZltP ok_depth_fd' /ZleP ok_loop_nonneg /ZleP ok_loop_bound ok_ret_addr ok_save_stack _.
     have lbl_valid : (fn, lbl) \in (label_in_lprog p').
     - apply: (label_in_lfundef _ C).
       rewrite /label_in_lcmd /=.
@@ -3669,7 +5149,7 @@ End ILSTEPS_END.
     rewrite /is_init_state_ok /initialize_funcall /= ok_fd' /=.
     move=> [] /map_errP; t_xrbindP => z /map_errP; t_xrbindP.
     move=> /andP [sp_aligned T] m /map_errP ok_m _ _ {z}.
-    case: hinv => M SC1 X hpc hfn hsp S MAX HWCS.
+    case: hinv => M SC1 X hpc hfn hsp S MAX HWCS HLOOP.
     (* FIXME : the test corresponding to ok_save_stack seems to be not used in the proof.
                can we remove it ? *)
     move: ok_stk_sz sp_aligned {ok_save_stack}.
@@ -3708,13 +5188,14 @@ End ILSTEPS_END.
     set o := Some ((fn, lbl), P', (size P + size before).+1).
     set s := (top_stack (emem s1) - wrepr Uptr sz)%R.
     have [m' [vm' [cs' [hmatch hvm'_rsp heq_vm' hvalue_of hwcsF hcs_restore hpres_m1_m' U h2]]]] : exists m' vm' cs',
-      let ls := of_estate (with_vm (to_estate ls1) vm2_b) (lhwcs ls1) fn (size P + size before) in
+      let ls := of_estate (with_vm (to_estate ls1) vm2_b) (lhwcs ls1) (lloops ls1) fn (size P + size before) in
       let ls' :=
         {|
           lscs := lscs ls1;
           lmem := m';
           lvm := vm';
           lhwcs := cs';
+          lloops := lloops ls1;
           lfn := f;
           lpc := 1;
         |}
@@ -3730,7 +5211,7 @@ End ILSTEPS_END.
         & eval_instr p' licall ls = ok ls'
       ].
     + rewrite /eval_instr /= /ra /get_label_after_pc /setpc /=.
-      set ls1_ := (of_estate _ _ _ _).
+      set ls1_ := (of_estate _ _ _ _ _).
       have -> /= : find_instr p' (lnext_pc ls1_) = Some {| li_ii := ii; li_i := linear.Llabel ExternalLabel lbl |}.
       + rewrite /lnext_pc; assert (h := find_instr_skip C).
         have h1 := h ls1_ (size before + 1) erefl.
@@ -3867,6 +5348,17 @@ End ILSTEPS_END.
     + by exists fd' => //=; rewrite (negbTE ok_ra).
     have is_saved_of :  is_callee_saved_of f [::].
     + by exists fd' => //=; rewrite (negbTE ok_ra).
+    have hloopsF : loops_bound_fn f (lloops ls1).
+    + move=> fd2; rewrite ok_fd' => -[<-] {fd2}.
+      rewrite HLOOP.
+      move: hlb; rewrite (loops_bound_i_call lstk ii xs f es) /callee_loop_depth ok_fd' /loops_bound.
+      move=> [hSome0 hb0]; split.
+      + move=> hpos; apply: hSome0.
+        have := Z2Nat.id _ ok_loop_nonneg.
+        lia.
+      move: hb0; case: hwloop_size => // n hb0.
+      have := Z2Nat.id _ ok_loop_nonneg.
+      lia.
     apply xrutt.xrutt_Vis.
     + split => //.
       + move=> fd''; rewrite ok_fd' => -[?]; subst fd''.
@@ -3887,7 +5379,7 @@ End ILSTEPS_END.
       by rewrite (negbTE ok_ra).
     move=> ks2 ls2; rewrite /EPostRel /= /postF => hpost.
     have /= := hpost _ _ _ _ _ C' hraof hvalue_of sp_call is_saved_of.
-    move=> [hscs' hvalid hsub_vm' heq_vm [hfn2 hpc2] hstable hpres hmatch' U' hhwcs2 {hpost}].
+    move=> [hscs' hvalid hsub_vm' heq_vm [hfn2 hpc2] hstable hpres hmatch' U' [hhwcs2 hloops2] {hpost}].
     rewrite /check_call /= hfn2 hpc2 !eqxx /=.
     set ts := top_stack (M := Memory.M) s1.
     have vm2'_rsp:
@@ -3954,7 +5446,9 @@ End ILSTEPS_END.
       by case: sf_return_address => [ | r ? | [ r | ] ??? | ?] /=; SvD.fsetdec.
     + by etransitivity; eauto.
     + by etransitivity; [exact: U | exact: U'].
-    by rewrite hhwcs2 hcs_restore HWCS.
+    split.
+    + by rewrite hhwcs2 hcs_restore HWCS.
+    + by rewrite hloops2 HLOOP.
   Qed.
 
   Lemma linear_cP c : Pc c.
@@ -4380,7 +5874,7 @@ Qed.
       case: e1 t1 e2 t2 => [ [fn1 fs1] | e1] t1 [ [fn2 fs2] | e2] t2 //=.
       by case: mfun1 => // ?; case: mfun1.
     move: R1 R2 d1 d2 hpreF.
-    move=> _ _ [fn s1] [_ t1] [<-] /= => hscs M hfn S MAX HWB.
+    move=> _ _ [fn s1] [_ t1] [<-] /= => hscs M hfn S MAX HWB HLB.
     move=> [body] [ra] [lret] [sp] [callee_saved] []hlin hisra X hvalofra hcaller hpc hissp hiscalleesaved wf_to_save ok_m0.
     rewrite /isem_fun_body.
     case ok_fd : get_fundef => [fd | ] /=; last first.
@@ -4398,7 +5892,7 @@ Qed.
     move: heq; rewrite /initialize_funcall; t_xrbindP => /andP [] rsp_aligned valid_rsp m1' /map_errP ok_m1' ?; subst s'.
     have A := alloc_stackP ok_m1'.
     move: (checked_prog ok_fd); rewrite /check_fd /=.
-    t_xrbindP => chk_body ok_to_save _ _ ok_stk_sz _ ok_ret_addr ok_save_stack _.
+    t_xrbindP => chk_body ok_to_save _ _ ok_stk_sz _ _ _ ok_ret_addr ok_save_stack _.
     case/and4P: ok_stk_sz => /lezP stk_sz_pos /lezP stk_extra_sz_pos /ltzP frame_noof /lezP stk_frame_le_max.
     have ? : fd' = (linear_fd fn fd).2.
     - have := get_fundef_p' ok_fd.
@@ -4410,7 +5904,7 @@ Qed.
     rewrite /saved_stack_vm.
     rewrite /finalize_funcall /ra_valid /saved_stack_valid => {ra}.
 
-    have ih := @linear_cP fn (lhwcs t1) HWB (f_body fd).
+    have ih := @linear_cP fn (lhwcs t1) HWB (f_body fd) (lloops t1) (HLB fd ok_fd).
     case EQ: sf_return_address ok_to_save ok_callee_saved ok_save_stack ok_ret_addr X ok_lret ih ok_sp
       =>
       /= [ | ra ? | ra_call ra_return rastack ? | tmp ]
@@ -4440,7 +5934,7 @@ Qed.
           rewrite top_stack_after_aligned_alloc.
           2: exact: is_align8.
           by rewrite stk_sz_0 stk_extra_sz_0 -addE add_0.
-        have /ih{}ih : inv_c fn (lhwcs t1) [::] ks1.2 t1.
+        have /ih{}ih : inv_c fn (lhwcs t1) (lloops t1) [::] ks1.2 t1.
         + split => //=.
           + by apply: mm_alloc hle M ok_m1'.
           + apply: vm_uincl_kill_vars_set_incl X => //.
@@ -4461,7 +5955,7 @@ Qed.
           rewrite /frame_size EQ /= stk_sz_0 stk_extra_sz_0 /= -addE add_0.
           move=> [_ [-> ?]]; lia.
         apply: (xrutt_facts.xrutt_bind ih).
-        move=> ks2 ls2 [] [] M2 SC2 X2 hpc2 hfn2 RSP2 S2 Max_sub2 Hwcs2 hdisj2 hsub2 K2 hvalid hstable H2 U2.
+        move=> ks2 ls2 [] [] M2 SC2 X2 hpc2 hfn2 RSP2 S2 Max_sub2 Hwcs2 Hloops2 hdisj2 hsub2 K2 hvalid hstable H2 U2.
         rewrite mix_ilsteps_0; last first.
         + rewrite /handle_call_cond /in_fn /endpc.
           by rewrite if_arg hfn2 hpc2 eqxx ok_fd' /= eqxx; case: ifP.
@@ -4533,7 +6027,7 @@ Qed.
         set ls1 := (setpc _ _).
         have hle: (wunsigned (top_stack (emem s1)) <= wunsigned (top_stack m0))%Z.
         + by have := ok_m0; rewrite EQ /= => <-; apply Z.le_refl.
-        have /ih{}ih : inv_c fn (lhwcs t1) P ks1'.2 ls1.
+        have /ih{}ih : inv_c fn (lhwcs t1) (lloops t1) P ks1'.2 ls1.
         + split => //=.
           + by apply: mm_alloc hle M ok_m1'.
           + apply: (vm_uincl_after_alloc_stack X EQ _ hgetrsp ok_m1').
@@ -4568,7 +6062,7 @@ Qed.
           have hrange2 := [elaborate wunsigned_range (top_stack (emem s1))].
           by lia.
         apply: (xrutt_facts.xrutt_bind ih).
-        move=> ks2 ls2 [] [] M2 SC2 X2 hpc2 hfn2 RSP2 S2 Max_sub2 Hwcs2 hdisj2 hsub2 K2 hvalid hstable H2 U2.
+        move=> ks2 ls2 [] [] M2 SC2 X2 hpc2 hfn2 RSP2 S2 Max_sub2 Hwcs2 Hloops2 hdisj2 hsub2 K2 hvalid hstable H2 U2.
         apply xrutt_bind_iresult_left; t_xrbindP => _ + <- /=.
         move=> /andP [] /Sv_memP saved_stack_not_written _.
         apply xrutt_bind_iresult_left; t_xrbindP =>  /stack_stableP SS.
@@ -4742,7 +6236,7 @@ Qed.
         rewrite -hfn (sem_fopns_args_mix_ilsteps ok_body') // -/vrspi -/to_save; last first.
         + by rewrite /cmd_push_to_save /push_to_save size_map.
         rewrite hsem_push bind_ret_l.
-        set ls2 := (of_estate (with_mem _ _) _ _ _) => {hsem_push}.
+        set ls2 := (of_estate (with_mem _ _) _ _ _ _) => {hsem_push}.
         rewrite hfn (mix_ilsteps_split_handle_call_cond (P:=P) (lc:=lbody) _ ok_body); last by simpl_size; lia.
         have /ih{}ih : pre_c fn (f_body fd) 1 lbl P lbody Q.
         + split => //.
@@ -4751,7 +6245,7 @@ Qed.
         have vm2'_get_rsp : get_var true vm2' vrsp = ok (Vword top).
         + rewrite -(get_var_eq_ex _ _ hvm2') //.
           by move=> /Sv.singleton_spec h; apply hneq_vtmp2_vrsp; rewrite h.
-        have /ih{}ih : inv_c fn (lhwcs t1) P (Sv.empty, s2).2 ls2.
+        have /ih{}ih : inv_c fn (lhwcs t1) (lloops t1) P (Sv.empty, s2).2 ls2.
         + split => //.
           + by apply: mm_alloc hle M3' ok_m1'.
           + apply: (vm_uincl_after_alloc_stack X EQ _ _ ok_m1').
@@ -4790,7 +6284,7 @@ Qed.
           have hrange2 := [elaborate wunsigned_range (top_stack (emem s1))].
           by lia.
         apply (xrutt_facts.xrutt_bind ih).
-        move=> ks4 ls4 [] [] M4 SC4 X4 hpc4 hfn4 RSP4 S4 Max_sub4 Hwcs4 hdisj4 hsub4 K4 hvalid hstable H4 U4.
+        move=> ks4 ls4 [] [] M4 SC4 X4 hpc4 hfn4 RSP4 S4 Max_sub4 Hwcs4 Hloops4 hdisj4 hsub4 K4 hvalid hstable H4 U4.
         apply xrutt_bind_iresult_left; t_xrbindP => _ _ <- /=.
         apply xrutt_bind_iresult_left; t_xrbindP =>  /stack_stableP SS.
         rewrite (mix_ilsteps_split_handle_call_cond (P:=P ++ lbody) (lc:=Q) _ ok_body); last by simpl_size; lia.
@@ -4984,7 +6478,7 @@ Qed.
       have hrsp: (set_RSP p m1' (kill_vars (ra_undef fd var_tmps) s1)).[vrsp] = Vword (top_stack m1').
       + by rewrite Vm.setP_eq vm_truncate_val_eq.
 
-      have /ih{}ih : inv_c fn (lhwcs t1) [::P] ks1.2 t1.
+      have /ih{}ih : inv_c fn (lhwcs t1) (lloops t1) [::P] ks1.2 t1.
       + split => //.
         + have hle: (wunsigned (top_stack (emem s1)) <= wunsigned (top_stack m0))%Z.
           + by have := MAX _ ok_fd; rewrite EQ /=; lia.
@@ -5017,7 +6511,7 @@ Qed.
         by lia.
       rewrite (mix_ilsteps_split_handle_call_cond (P:=[::P]) (lc:=lbody) _ ok_body); last by simpl_size; lia.
       apply (xrutt_facts.xrutt_bind ih).
-      move=> ks2 ls2 [] [] M2 SC2 X2 hpc2 hfn2 RSP2 S2 Max_sub2 Hwcs2 hdisj2 hsub2 K2 hvalid hstable H2 U2.
+      move=> ks2 ls2 [] [] M2 SC2 X2 hpc2 hfn2 RSP2 S2 Max_sub2 Hwcs2 Hloops2 hdisj2 hsub2 K2 hvalid hstable H2 U2.
       apply xrutt_bind_iresult_left; t_xrbindP => _ + <- /=.
       move=> /and3P [] free_ra _ _.
       apply xrutt_bind_iresult_left; t_xrbindP =>  /stack_stableP SS.
@@ -5123,7 +6617,7 @@ Qed.
       have [mi [hsemi hreadi Mi Hi Ui]] :
         exists mi, [/\
           mix_ilsteps p' (pc_between_c fn [:: P1] P2) t1 ≈
-            Ret (of_estate (with_mem (to_estate t1) mi) (lhwcs t1) fn (size (P1 :: P2))),
+            Ret (of_estate (with_mem (to_estate t1) mi) (lhwcs t1) (lloops t1) fn (size (P1 :: P2))),
           read mi Aligned rsp Uptr = ok retptr,
           match_mem_gen (top_stack m0) s1 mi,
           preserved_metadata s1 (lmem t1) mi &
@@ -5198,8 +6692,8 @@ Qed.
           by case: (ra_call) => [?|] /=; rewrite orbF; apply/eqP; lia.
       set s1' := {| escs := _ |}.
       set ks1 := (Sv.empty, s1').
-      set t1' := (of_estate _ _ _ _).
-      have /ih{}ih : inv_c fn (lhwcs t1) (P1::P2) ks1.2 t1'.
+      set t1' := (of_estate _ _ _ _ _).
+      have /ih{}ih : inv_c fn (lhwcs t1) (lloops t1) (P1::P2) ks1.2 t1'.
       + split => //.
         + have hle: (wunsigned (top_stack (emem s1)) <= wunsigned (top_stack m0))%Z.
           + by have := MAX _ ok_fd; rewrite EQ /=; lia.
@@ -5232,7 +6726,7 @@ Qed.
         by lia.
       rewrite (mix_ilsteps_split_handle_call_cond (P:=P1::P2) (lc:=lbody) _ ok_body); last by simpl_size;lia.
       apply (xrutt_facts.xrutt_bind ih).
-      move=> ks2 ls2 [] [] M2 SC2 X2 hpc2 hfn2 RSP2 S2 Max_sub2 Hwcs2 hdisj2 hsub2 K2 hvalid hstable H2 U2.
+      move=> ks2 ls2 [] [] M2 SC2 X2 hpc2 hfn2 RSP2 S2 Max_sub2 Hwcs2 Hloops2 hdisj2 hsub2 K2 hvalid hstable H2 U2.
       apply xrutt_bind_iresult_left; t_xrbindP => _ + <- /=.
       move=> /and3P [] free_ra _ _.
       apply xrutt_bind_iresult_left; t_xrbindP =>  /stack_stableP SS.
@@ -5247,7 +6741,7 @@ Qed.
       have [vmf hsemf eq_vmf]:
         exists2 vmf,
           (mix_ilsteps p' (pc_between_c fn (P1 :: P2 ++ lbody) Q) ls2) ≈
-            Ret (of_estate (with_vm (to_estate ls2) vmf) (lhwcs ls2) caller pc.+1) &
+            Ret (of_estate (with_vm (to_estate ls2) vmf) (lhwcs ls2) (lloops ls2) caller pc.+1) &
           (lvm ls2).[vrsp <- Vword (sp_alloc_ra rsp (fd.(f_extra).(sf_return_address)))]
             =[\ sv_of_option ra_return] vmf.
       + have ok_rsp2: (lvm ls2).[vrsp] = Vword rsp.
@@ -5408,7 +6902,7 @@ Qed.
       set ks1 := (Sv.empty, s1').
       have hrsp: (set_RSP p m1' (kill_vars (ra_undef fd var_tmps) s1)).[vrsp] = Vword (top_stack m1').
       + by rewrite Vm.setP_eq vm_truncate_val_eq.
-      have /ih{}ih : inv_c fn (lhwcs t1) [::P] ks1.2 t1.
+      have /ih{}ih : inv_c fn (lhwcs t1) (lloops t1) [::P] ks1.2 t1.
       + split => //.
         + have hle: (wunsigned (top_stack (emem s1)) <= wunsigned (top_stack m0))%Z.
           + by have := MAX _ ok_fd; rewrite EQ /=; lia.
@@ -5441,7 +6935,7 @@ Qed.
         by lia.
       rewrite (mix_ilsteps_split_handle_call_cond (P:=[::P]) (lc:=lbody) _ ok_body); last by simpl_size; lia.
       apply (xrutt_facts.xrutt_bind ih).
-      move=> ks2 ls2 [] [] M2 SC2 X2 hpc2 hfn2 RSP2 S2 Max_sub2 Hwcs2 hdisj2 hsub2 K2 hvalid hstable H2 U2.
+      move=> ks2 ls2 [] [] M2 SC2 X2 hpc2 hfn2 RSP2 S2 Max_sub2 Hwcs2 Hloops2 hdisj2 hsub2 K2 hvalid hstable H2 U2.
       apply xrutt_bind_iresult_left; t_xrbindP => _ + <- /=.
       move=> _.
       apply xrutt_bind_iresult_left; t_xrbindP =>  /stack_stableP SS.
@@ -5555,11 +7049,11 @@ Qed.
     forall fn fd, get_fundef (p_funcs p) fn = Some fd ->
     is_RAhwstack (sf_return_address (f_extra fd)) -> isSome hwcs_size.
 
-  Lemma linear_exportcall_mixP gd fn cs :
+  Lemma linear_exportcall_mixP gd fn cs lstk (hlstk : loops_bound_fn fn lstk) :
     wkequiv_io
       (lin_pre gd fn cs)
       (isem_exportcall_check var_tmps p gd fn)
-      (mix_ilsem_exportcall p' fn cs)
+      (mix_ilsem_exportcall p' fn cs lstk)
       (lin_post fn).
   Proof using hliparams var_tmps_not_magic linear_ok callee_saved_not_arr hwcs_present.
     move=> s ls; rewrite /lin_pre /lin_post.
@@ -5583,7 +7077,7 @@ Qed.
     set max0 := fd.(f_extra).(sf_stk_max).
     have enough_space : (0 <= max0 <= wunsigned sp0)%Z.
     + have := checked_prog ok_fd.
-      rewrite /check_fd; t_xrbindP=> _ _ _ _ ok_stk_sz _ _ _.
+      rewrite /check_fd; t_xrbindP=> _ _ _ _ ok_stk_sz _ _ _ _ _.
       case/and4P: ok_stk_sz => /ZleP stk_sz_pos /ZleP stk_extra_sz_pos /ZltP frame_noof /ZleP stk_frame_le_max.
       rewrite /max0 /sp0; split.
       + by have := frame_size_bound stk_sz_pos stk_extra_sz_pos; lia.
@@ -5606,7 +7100,7 @@ Qed.
       by lia.
     have sp0_top : (wunsigned sp0 <= wunsigned (top_stack (emem s)))%Z.
     + have := checked_prog ok_fd.
-      rewrite /check_fd; t_xrbindP=> _ _ _ _ ok_stk_sz _ _ _.
+      rewrite /check_fd; t_xrbindP=> _ _ _ _ ok_stk_sz _ _ _ _ _.
       case/and4P: ok_stk_sz => /ZleP stk_sz_pos /ZleP stk_extra_sz_pos /ZltP frame_noof /ZleP stk_frame_le_max.
       rewrite /sp0 /align_top_stack /align_top.
       have hass := alloc_stackP ok_m1.
@@ -5628,7 +7122,7 @@ Qed.
     + by rewrite /is_sp_for_call; exists fd => //; rewrite Export.
     have ? : is_callee_saved_of fn [seq i.1 | i <- sf_to_save (f_extra fd)].
     + by rewrite /is_callee_saved_of; exists fd => //; rewrite Export.
-    have hpreF : preF s sp0 max0 fn fn s (ls_export_initial (escs ls) (emem ls) (evm ls) cs fn).
+    have hpreF : preF s sp0 max0 fn fn s (ls_export_initial (escs ls) (emem ls) (evm ls) cs lstk fn).
     + split => //.
       + by move=> pr ->.
       + move=> fd'; rewrite ok_fd => -[?]; subst fd'.
@@ -5638,7 +7132,7 @@ Qed.
         rewrite /align_top_stack /align_top -(alloc_stack_top_stack ok_m1).
         have /= habove := (alloc_stackP ok_m1).(ass_above_limit).
         have := checked_prog ok_fd.
-        rewrite /check_fd; t_xrbindP => _ _ _ _ ok_stk_sz _ _ _.
+        rewrite /check_fd; t_xrbindP => _ _ _ _ ok_stk_sz _ _ _ _ _.
         case/and4P: ok_stk_sz => /= /ZleP stk_sz_pos /ZleP stk_extra_sz_pos /ZltP frame_noof /ZleP stk_frame_le_max.
         rewrite wunsigned_add; first by lia.
         have := [elaborate (wunsigned_range (top_stack m1))].
@@ -5661,7 +7155,7 @@ Qed.
      hpost
         (lfd_body (linear_fd fn fd).2) RAnone None (top_stack (emem s))
         [seq i.1 | i <- sf_to_save (f_extra fd)]].
-    move=> SC2 hvalid2 K2 X2 hpc2 hstable2 hpres2 M2 U2 hhwcs2.
+    move=> SC2 hvalid2 K2 X2 hpc2 hstable2 hpres2 M2 U2 [hhwcs2 hloops2].
     apply xrutt_bind_iresult_left; t_xrbindP => /Sv.subset_spec ok_callee_saved.
     have -> /=: (all (λ x : var, value_eqb ls.[x] (lvm ls2).[x]) (Sv.elements callee_saved)).
     + have : (evm ls) =[callee_saved] (lvm ls2).
@@ -5676,11 +7170,15 @@ Qed.
     have hhwcs : lhwcs ls2 == cs.
     + by apply/eqP.
     rewrite hhwcs /= bind_ret_l.
-    rewrite bind_ret_l; apply xrutt.xrutt_Ret; split => //.
+    have hloops : lloops ls2 == lstk.
+    + by apply/eqP.
+    rewrite hloops /= bind_ret_l.
+    rewrite bind_ret_l.
+    apply xrutt.xrutt_Ret; split => //.
     + have := K2 vrsp; rewrite Vm.setP_eq /= cmp_le_refl /sp_alloc_ra /= => ?.
       by apply get_word_uincl_eq => //=; rewrite lp_rspE.
     + by move: M2; rewrite /match_mem -(ss_top_stack hstable2).
-    have vm2_vmo : (evm ks2.2) <=[ (sv_of_list v_var (f_res fd)) ] (lvm ls2).
+    have vm2_vmo : (evm ks2.2) <=[ (sv_of_list v_var (f_res fd)) ] (evm (to_estate ls2)).
     - move => r r_in_result.
       have r_not_saved : ¬ Sv.In r (sv_of_list id (map fst fd.(f_extra).(sf_to_save))).
       + apply/Sv_memP.
@@ -5693,23 +7191,24 @@ Qed.
       rewrite /killed_by_exit Sv_mem_add /=.
       case: eqP => [ | _]; last by move /Sv_memP: r_not_saved => /negbTE ->.
       have := checked_prog ok_fd.
-      rewrite /check_fd; t_xrbindP => _ _ _ _ _ _ heq _ _.
-      rewrite Export in heq.
-      move=> r_eq; case/sv_of_listP: r_in_result => hmem.
-      by rewrite r_eq (negbTE heq) in hmem.
+      rewrite /check_fd; t_xrbindP => _ _ _ _ _ + _ _ /= heq.
+      move=> _ _ _ hr; rewrite hr in r_in_result; move: heq; rewrite Export /=.
+      move=> hnotin.
+      move/sv_of_listP: r_in_result => hin.
+      by rewrite hin in hnotin.
     move=> res; apply: (get_var_is_uincl_on vm2_vmo).
     by move=> x hx; apply/Sv_memP/sv_of_listP/in_map; exists x.
   Qed.
 
-  Lemma linear_exportcallP gd fn cs :
+  Lemma linear_exportcallP gd fn cs lstk (hlstk : loops_bound_fn fn lstk) :
     wkequiv_io
       (lin_pre gd fn cs)
       (isem_exportcall_check var_tmps p gd fn)
-      (ilsem_exportcall p' fn cs)
+      (ilsem_exportcall p' fn cs lstk)
       (lin_post fn).
   Proof using hliparams var_tmps_not_magic linear_ok callee_saved_not_arr hwcs_present.
-  have wlin := [elaborate linear_exportcall_mixP] gd fn cs.
-  have wmix := [elaborate mix_ilsem_exportcall_ilsem_exportcall p' fn cs].
+  have wlin := [elaborate linear_exportcall_mixP] gd fn cs lstk hlstk.
+  have wmix := [elaborate mix_ilsem_exportcall_ilsem_exportcall p' fn cs lstk].
   apply: (wkequiv_io_trans
     (rE23 := EqRels)
     (P23 := eq) (Q23 := fun _ _ => eq)

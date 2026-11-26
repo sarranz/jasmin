@@ -1475,6 +1475,7 @@ Record stk_alloc_oracle_t :=
   ; sao_extra_size: Z
   ; sao_max_size : Z
   ; sao_max_call_depth : Z
+  ; sao_max_loop_depth : Z
   ; sao_params : seq (option param_info)  (* Allocation of pointer params *)
   ; sao_return : seq (option nat)         (* Where to find the param input region *)
   ; sao_slots : seq (var * wsize * Z)
@@ -2076,6 +2077,7 @@ Definition alloc_fd P p_extra mglob (local_alloc: funname -> stk_alloc_oracle_t)
         sf_stk_extra_sz := sao.(sao_extra_size);
         sf_stk_max := sao.(sao_max_size);
         sf_max_call_depth := sao.(sao_max_call_depth);
+        sf_max_loop_depth := sao.(sao_max_loop_depth);
         sf_to_save := sao.(sao_to_save);
         sf_save_stack := sao.(sao_rsp);
         sf_return_address := sao.(sao_return_address);

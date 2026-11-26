@@ -154,7 +154,7 @@ module RiscVTarget: AsmTarget
     | POPPC ->
         assert false
 
-    | REPEATLOOP _ -> assert false
+    | BEGINLOOP _ | ENDLOOP _ -> assert false
     | CALL_HWCS _ | RET_HWCS -> assert false
 
     | SysCall op ->

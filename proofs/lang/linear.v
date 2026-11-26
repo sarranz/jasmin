@@ -17,7 +17,7 @@ Variant lcall_kind :=
   | InReg of var_i
   | OnHWCallStack.
 
-Inductive linstr_r :=
+Variant linstr_r :=
   | Lopn   : lexprs -> sopn -> rexprs -> linstr_r
   | Lsyscall : syscall_t -> linstr_r
   | Lcall    : lcall_kind -> remote_label -> linstr_r
@@ -32,7 +32,15 @@ Inductive linstr_r :=
   | Ligoto : rexpr -> linstr_r (* Absolute indirect jump *)
   | LstoreLabel : var -> label -> linstr_r
   | Lcond  : fexpr -> label -> linstr_r
-  | Lrepeat_loop : (var_i + Z) -> seq (gen_linstr linstr_r) -> linstr_r
+  | Lloop_begin : (var_i + Z) -> label -> linstr_r
+     (* Hardware loop entry: the count (register or immediate) and the
+        label of the loop, identifying its first body instruction (an
+        ordinary [Llabel InternalLabel lbl] follows immediately); the
+        body is closed by [Lloop_end lbl]. *)
+  | Lloop_end : label -> linstr_r
+     (* Last instruction of the body of the loop identified by the
+        label: jump back to it if iterations remain, otherwise pop the
+        loop and fall through. *)
 .
 
 Notation linstr := (gen_linstr linstr_r).
@@ -62,6 +70,7 @@ Record lfundef := LFundef {
  lfd_callee_saved: seq var; (* A list of variables that must be initialized before calling this function *)
  lfd_stk_max : Z; (* max amount of stack memory used by this function (and all functions called by this one *)
  lfd_max_call_depth : Z; (* static call-graph depth, checked against the hardware call stack *)
+ lfd_max_loop_depth : Z; (* static hardware-loop nesting depth, checked against the loop stack *)
  lfd_frame_size : Z; (* needed for stack zeroization *)
  lfd_align_args : seq wsize;
 }.

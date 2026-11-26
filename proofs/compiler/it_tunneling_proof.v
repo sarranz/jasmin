@@ -61,15 +61,17 @@ Definition path_to0 fn endpc l l' :=
 Lemma to_estate_eq_eval_jump s1 s2 l :
   to_estate s1 = to_estate s2 ->
   lhwcs s1 = lhwcs s2 ->
+  lloops s1 = lloops s2 ->
   eval_jump p l s1 = eval_jump p l s2.
 Proof.
   case: l => /= fn l; case: get_fundef => //= fd.
   case: find_label => //= l'.
-  by rewrite -(of_estate_to_estate s1) -(of_estate_to_estate s2) /to_estate /of_estate /= => -[-> -> ->] ->.
+  by rewrite -(of_estate_to_estate s1) -(of_estate_to_estate s2) /to_estate /of_estate /= => -[-> -> ->] -> ->.
 Qed.
 
 Lemma eval_jump_to_estate l s1 s2 :
-  eval_jump p l s1 = ok s2 -> to_estate s1 = to_estate s2 /\ lhwcs s1 = lhwcs s2.
+  eval_jump p l s1 = ok s2 ->
+  to_estate s1 = to_estate s2 /\ lhwcs s1 = lhwcs s2 /\ lloops s1 = lloops s2.
 Proof.
   case: l => /= fn l; case: get_fundef => //= fd.
   by t_xrbindP => l' _ <-; rewrite -(of_estate_to_estate s1).
@@ -82,13 +84,13 @@ Lemma path_to_trans l2 l1 l3 fn endpc :
 Proof.
   move=> h12 h23 s1 s2 hj1.
   have [n1 [s3 hsem1 hj2]] := h12 s1 s2 hj1.
-  have [he hh] := eval_jump_to_estate hj1.
-  rewrite (to_estate_eq_eval_jump (fn, l2) he hh) in hj2.
+  have [he [hh hl]] := eval_jump_to_estate hj1.
+  rewrite (to_estate_eq_eval_jump (fn, l2) he hh hl) in hj2.
   have [n2 [s4 hsem2 hj3]] := h23 s2 s3 hj2.
   exists (n1 + n2.+1); exists s4.
   + by rewrite -addSn lsem_body_n_add hsem1.
   rewrite -hj3.
-  by apply/to_estate_eq_eval_jump/hh/he.
+  by apply/to_estate_eq_eval_jump/hl/hh/he.
 Qed.
 
 Lemma path_to0_trans l2 l1 l3 fn endpc :
@@ -392,6 +394,13 @@ Proof using pp'.
   case: (li_i i) => //.
   1: move=> [|?|] r; rewrite ?fn_is_exportE //.
   5: case: (hwcs_pop (lhwcs s)) => [[p0 cs]|e] //=; repeat (apply bind_eq => // ?); rewrite eval_jumpE.
+  9: move=> l; case: loops_pop => // -[[l0 k] rest] /=.
+  9: case: k => [|k'] //=.
+  9: rewrite get_fundefE; case: get_fundef => //= fd; f_equal.
+  9: rewrite /find_label size_map.
+  9: have -> // : find (is_label l) (tunnel_lcmd (lfn s) (lfd_body fd)) =
+               find (is_label l) (lfd_body fd).
+  9: by rewrite seq.find_map; apply eq_find => -[ii []] // [] > /=; case: ifP.
   all: by move=> >; try done; repeat (apply bind_eq => // ?); rewrite eval_jumpE.
 Qed.
 
@@ -472,8 +481,8 @@ Proof using pp'.
   rewrite /= in hsem; rewrite hsem /=; reflexivity.
 Qed.
 
-Lemma tunnel_funcs fn cs s :
-  eqit eq true true (ilsem_exportcall p fn cs s) (ilsem_exportcall p' fn cs s).
+Lemma tunnel_funcs fn cs lstk s :
+  eqit eq true true (ilsem_exportcall p fn cs lstk s) (ilsem_exportcall p' fn cs lstk s).
 Proof using pp'.
   symmetry.
   rewrite /ilsem_exportcall /endpc.

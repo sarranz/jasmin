@@ -707,6 +707,7 @@ Record stk_fun_extra := MkSFun {
   sf_stk_extra_sz   : Z;
   sf_stk_max        : Z;
   sf_max_call_depth : Z;
+  sf_max_loop_depth : Z;
   sf_to_save        : seq (var * Z);
   sf_save_stack     : saved_stack;
   sf_return_address : return_address_location;

@@ -6,7 +6,7 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype.
 From Coq Require Import ZArith Utf8.
 Import Relations.
 
-Require Import expr fexpr compiler_util label constant_prop.
+Require Import expr fexpr compiler_util label constant_prop loop_depth.
 Require Export linear linear_util.
 Import word_ssrZ.
 
@@ -394,14 +394,31 @@ Definition repeat_call_count
   (ii : instr_info) (e : pexpr) : cexec (var_i + Z) :=
   match e with
   | Pconst z => ok (inr z)
-  | Pvar x => ok (inl (gv x))
-  | Papp1 (Oint_of_word _ Uptr) (Pvar x) => ok (inl (gv x))
+  | Pvar x =>
+    Let _ := assert (vtype (gv x) == aword Uptr) (E.ii_error ii "invalid repeat loop count") in
+    ok (inl (gv x))
+  | Papp1 (Oint_of_word Unsigned ws) (Pvar x) =>
+    (* [Uptr] cannot be used directly as a match pattern here: it is a
+       [PointerData] record projection, not a constructor, so writing it in
+       pattern position would silently bind a fresh variable of that name
+       instead of requiring the matched word size to be the pointer size.
+       Check it explicitly instead. *)
+    Let _ := assert (ws == Uptr) (E.ii_error ii "invalid repeat loop count") in
+    ok (inl (gv x))
   | _ => Error (E.ii_error ii "invalid repeat loop count")
   end.
 
 Definition linearize_for ii (fi : for_iteration) : cexec (var_i + Z) :=
   if fi is FIrepeat e then repeat_call_count ii e
   else Error (E.ii_error ii "for loop found in linear").
+
+(* Guard condition for a register-count repeat loop: true exactly when the
+   count register holds zero, used to jump over the whole loop.
+   Named [fis_zero], not [is_zero], to avoid colliding with the unrelated
+   [is_zero : wsize -> pexpr -> bool] in lang/expr.v used throughout the
+   architecture *_params.v files. *)
+Definition fis_zero (x : var_i) : fexpr :=
+  Fapp2 (Oeq (Op_w Uptr)) (Fvar x) (fconst Uptr 0).
 
 Section PROG.
 
@@ -424,6 +441,14 @@ Definition frame_size (e: stk_fun_extra) : Z :=
     (sf_stk_sz e + sf_stk_extra_sz e)%Z
   else
     stack_frame_allocation_size e.
+
+(* Static hardware-loop nesting depth of a callee, as recorded by the
+   stack-allocation oracle; used to check, once per function, that its own
+   body does not exceed its declared [sf_max_loop_depth]. *)
+Definition callee_loop_depth (g : funname) : nat :=
+  if get_fundef (p_funcs p) g is Some fd then
+    Z.to_nat (sf_max_loop_depth (f_extra fd))
+  else 0.
 
 (* Return a linear command that pushes variables to the stack.
  * The linear command `lp_push_to_save ii to_save` pushes each
@@ -669,6 +694,10 @@ Definition check_fd (fn: funname) (fd:sfundef) :=
                   (E.error "bad stack size") in
   Let _ := assert (0 <? sf_max_call_depth e)%Z
                   (E.error "bad call depth") in
+  Let _ := assert (0 <=? sf_max_loop_depth e)%Z
+                  (E.error "bad loop depth") in
+  Let _ := assert (Z.of_nat (ldepth_c callee_loop_depth fd.(f_body)) <=? sf_max_loop_depth e)%Z
+                  (E.error "loop nesting depth problem") in
   Let _ := assert match sf_return_address e with
                   | RAnone => ~~ (var_tmp2 \in map v_var fd.(f_res))
                   | RAreg ra tmp => convertible (vtype ra) (aword Uptr) && ov_type_ptr tmp
@@ -837,11 +866,26 @@ Fixpoint linear_i (i:instr) (lbl:label) (lc:lcmd) :=
           )
     else (lbl, lc )
   | Cfor fi c =>
-      if linearize_for ii fi is Ok count then
-        let: (lbl', c') := linear_c linear_i c lbl [::] in
-        (lbl', MkLI ii (Lrepeat_loop count c') :: lc)
-      else
-        (lbl, lc) (* absurd *)
+      match linearize_for ii fi with
+      | Ok (inr z) =>
+          if (z <=? 0)%Z then (lbl, lc) (* the loop never runs: emit nothing *)
+          else
+            let L := lbl in
+            let lbl := next_lbl L in
+            MkLI ii (Lloop_begin (inr z) L) >;
+            MkLI ii (Llabel L) >; linear_c linear_i c lbl
+                                 (MkLI ii (Lloop_end L) :: lc)
+      | Ok (inl x) =>
+          (* Guard the loop with a jump over it when the register is zero. *)
+          let L := lbl in
+          let Lskip := next_lbl L in
+          let lbl := next_lbl Lskip in
+          MkLI ii (Lcond (fis_zero x) Lskip) >;
+          MkLI ii (Lloop_begin (inl x) L) >;
+          MkLI ii (Llabel L) >; linear_c linear_i c lbl
+                               (MkLI ii (Lloop_end L) :: MkLI ii (Llabel Lskip) :: lc)
+      | Error _ => (lbl, lc) (* absurd *)
+      end
   end.
 
 Definition linear_body (fi: fun_info) (e: stk_fun_extra) (body: cmd) : label * lcmd :=
@@ -923,6 +967,7 @@ Definition linear_fd (fd: sfundef) :=
     ; lfd_callee_saved := if is_export then map fst e.(sf_to_save) else [::]
     ; lfd_stk_max := sf_stk_max e
     ; lfd_max_call_depth := sf_max_call_depth e
+    ; lfd_max_loop_depth := sf_max_loop_depth e
     ; lfd_frame_size := frame_size e
     ; lfd_align_args := sf_align_args e
     |}).

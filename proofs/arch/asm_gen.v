@@ -154,6 +154,9 @@ Record asm_gen_params :=
       (* Assemble an expression into an architecture-specific condition. *)
     agp_is_valid_address : reg_address -> bool;
       (* Checks whether the addressing mode is supported on the given arch. *)
+    agp_loop_imm_ok : Z -> bool;
+      (* Immediate iteration counts the architecture can encode as a
+         [BEGINLOOP]/LOOPI immediate. *)
   }.
 
 Context
@@ -161,6 +164,7 @@ Context
 
 Notation assemble_cond := (agp_assemble_cond agparams).
 Notation is_valid_address := (agp_is_valid_address agparams).
+Notation loop_imm_ok := (agp_loop_imm_ok agparams).
 
 (* -------------------------------------------------------------------- *)
 (* Compilation of fexprs *)
@@ -562,7 +566,7 @@ Definition assemble_declassify rip ii d es :=
 Definition is_not_app1 e : bool :=
   if e is Rexpr (Fapp1 _ _) then false else true.
 
-Fixpoint assemble_i_r (rip : var) (ii : instr_info) (ir : linstr_r) : cexec (seq asm_i) :=
+Definition assemble_i_r (rip : var) (ii : instr_info) (ir : linstr_r) : cexec (seq asm_i) :=
   let mk i := {| asmi_i := i ; asmi_ii := ii |} in
   match ir with
   | Lopn ds op es =>
@@ -611,17 +615,34 @@ Fixpoint assemble_i_r (rip : var) (ii : instr_info) (ir : linstr_r) : cexec (seq
   | Lcall OnHWCallStack l =>
       ok [:: mk (CALL_HWCS l) ]
 
-  | Lrepeat_loop cnt c =>
+  | Lloop_begin cnt lbl =>
+      Let _ :=
+        assert (isSome ad_loop_depth)
+               (E.error ii (pp_s "hardware loops are not supported on this architecture"))
+      in
       Let cnt' :=
         match cnt with
         | inl x =>
             if to_reg x is Some r then ok (inl r)
             else Error (E.verror true "Not a register" ii x)
-        | inr z => ok (inr z)
+        | inr z =>
+            Let _ :=
+              assert (loop_imm_ok z)
+                     (E.error ii (pp_nobox
+                       [:: pp_s "immediate loop count "; pp_z z;
+                           pp_s " is out of range for this architecture" ]))
+            in
+            ok (inr z)
         end : cexec (reg_t + Z)
       in
-      Let c' := conc_mapM (fun i => assemble_i_r rip (li_ii i) (li_i i)) c in
-      ok [:: mk (REPEATLOOP cnt' c') ]
+      ok [:: mk (BEGINLOOP cnt' lbl) ]
+
+  | Lloop_end lbl =>
+      Let _ :=
+        assert (isSome ad_loop_depth)
+               (E.error ii (pp_s "hardware loops are not supported on this architecture"))
+      in
+      ok [:: mk (ENDLOOP lbl) ]
 
   | Lret =>
       ok [:: mk POPPC ]
@@ -667,6 +688,7 @@ Definition assemble_fd (rip rsp : var) (fd : lfundef) :=
      ; asm_fd_export := lfd_export fd
      ; asm_fd_total_stack := lfd_total_stack fd
      ; asm_fd_max_call_depth := lfd_max_call_depth fd
+     ; asm_fd_max_loop_depth := lfd_max_loop_depth fd
      ; asm_fd_align_args := lfd_align_args fd
     |} in
 

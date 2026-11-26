@@ -299,10 +299,15 @@ Section AGPARAMS.
     | _, _, _ => false
     end.
 
+  (* LOOPI's immediate is a 10-bit unsigned count, and a zero count is a
+     hardware fault, so the encodable range is [1, 1023]. *)
+  Definition loop_imm_ok (z : Z) : bool := (0 <? z) && (z <? 1024).
+
   Definition agparams : asm_gen_params :=
     {|
       agp_assemble_cond := assemble_cond;
       agp_is_valid_address := is_valid_address;
+      agp_loop_imm_ok := loop_imm_ok;
     |}.
 
 End AGPARAMS.

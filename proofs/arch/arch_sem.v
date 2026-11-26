@@ -94,7 +94,12 @@ Context {syscall_state : Type} {sc_sem : syscall_sem syscall_state} `{asm_d : as
 
 (* [asm_hwcs] is the hardware call stack (top of the stack first), see
    [ad_hwcs_size]. It is only used by [CALL_HWCS], [RET_HWCS] and [SysCall];
-   it stays empty on architectures without a hardware call stack. *)
+   it stays empty on architectures without a hardware call stack.
+   [asm_loops] is the hardware loop stack (innermost loop first), see
+   [ad_loop_depth]. An entry [((fn, lbl), k)] is a loop of function [fn]
+   whose body starts after [LABEL _ lbl] and has [k] iterations left after
+   the current one. It is only used by [BEGINLOOP] and [ENDLOOP]; it stays
+   empty on architectures without hardware loops. *)
 Record asmmem : Type := AsmMem {
   asm_rip  : pointer;
   asm_scs : syscall_state_t;
@@ -104,6 +109,7 @@ Record asmmem : Type := AsmMem {
   asm_xreg : xregmap;
   asm_flag : rflagmap;
   asm_hwcs : seq pointer;
+  asm_loops : seq (remote_label * nat);
 }.
 
 Record asm_state := AsmState {
@@ -146,7 +152,8 @@ Class asm_syscall_sem := {
       [/\ forall r, r \in callee_saved -> preserved_register r s1 s2
         , s1.(asm_rip) = s2.(asm_rip)
         , stack_stable s1.(asm_mem) s2.(asm_mem)
-        & s1.(asm_hwcs) = s2.(asm_hwcs)
+        , s1.(asm_hwcs) = s2.(asm_hwcs)
+        & s1.(asm_loops) = s2.(asm_loops)
       ];
 }.
 
@@ -298,6 +305,7 @@ Definition mem_write_rflag (s : asmmem) (f:rflag_t) (b:option bool) :=
      asm_xreg := s.(asm_xreg);
      asm_flag := RflagMap.set s.(asm_flag) f (o2rflagv b);
      asm_hwcs := s.(asm_hwcs);
+     asm_loops := s.(asm_loops);
    |}.
 
 (* -------------------------------------------------------------------- *)
@@ -311,6 +319,7 @@ Definition mem_write_mem al (l : pointer) sz (w : word sz) (s : asmmem) :=
      asm_xreg := s.(asm_xreg);
      asm_flag := s.(asm_flag);
      asm_hwcs := s.(asm_hwcs);
+     asm_loops := s.(asm_loops);
   |}.
 
 (* -------------------------------------------------------------------- *)
@@ -335,6 +344,7 @@ Definition mem_write_reg (f: msb_flag) (r: reg_t) sz (w: word sz) (m: asmmem) :=
     asm_xreg := m.(asm_xreg);
     asm_flag := m.(asm_flag);
     asm_hwcs := m.(asm_hwcs);
+    asm_loops := m.(asm_loops);
   |}.
 
 (* -------------------------------------------------------------------- *)
@@ -348,6 +358,7 @@ Definition mem_write_regx (f: msb_flag) (r: regx_t) sz (w: word sz) (m: asmmem) 
     asm_xreg := m.(asm_xreg);
     asm_flag := m.(asm_flag);
     asm_hwcs := m.(asm_hwcs);
+    asm_loops := m.(asm_loops);
   |}.
 
 (* -------------------------------------------------------------------- *)
@@ -361,6 +372,7 @@ Definition mem_write_xreg (f: msb_flag) (r: xreg_t) sz (w: word sz) (m: asmmem) 
     asm_xreg := XRegMap.set m.(asm_xreg) r (word_extend f (m.(asm_xreg) r) w);
     asm_flag := m.(asm_flag);
     asm_hwcs := m.(asm_hwcs);
+    asm_loops := m.(asm_loops);
   |}.
 
 (* -------------------------------------------------------------------- *)
@@ -374,6 +386,21 @@ Definition mem_write_hwcs (cs : seq pointer) (m : asmmem) :=
     asm_xreg := m.(asm_xreg);
     asm_flag := m.(asm_flag);
     asm_hwcs := cs;
+    asm_loops := m.(asm_loops);
+  |}.
+
+(* -------------------------------------------------------------------- *)
+Definition mem_write_loops (ls : seq (remote_label * nat)) (m : asmmem) :=
+  {|
+    asm_mem  := m.(asm_mem);
+    asm_scs  := m.(asm_scs);
+    asm_reg  := m.(asm_reg);
+    asm_regx := m.(asm_regx);
+    asm_rip  := m.(asm_rip);
+    asm_xreg := m.(asm_xreg);
+    asm_flag := m.(asm_flag);
+    asm_hwcs := m.(asm_hwcs);
+    asm_loops := ls;
   |}.
 
 (* -------------------------------------------------------------------- *)
@@ -474,6 +501,45 @@ Definition check_HWCS_free (m : asmmem) : exec unit :=
   else ok tt.
 
 (* -------------------------------------------------------------------- *)
+(* Hardware loop stack (see [ad_loop_depth]). The count is read once, at
+   entry; overflow, a zero count, and an [ENDLOOP] that does not match the
+   top entry are hardware faults. Syscalls preserve the loop stack (see
+   [eval_syscall_preserves]); unlike the call stack, they need no free
+   entry. *)
+
+Definition st_write_loops (ls : seq (remote_label * nat)) (s : asm_state) :=
+  {| asm_m := mem_write_loops ls s.(asm_m)
+   ; asm_f := s.(asm_f)
+   ; asm_c := s.(asm_c)
+   ; asm_ip := s.(asm_ip) |}.
+
+Definition eval_loop_count (s : asmmem) (cnt : reg_t + Z) : Z :=
+  match cnt with
+  | inl r => wunsigned (s.(asm_reg) r)
+  | inr z => z
+  end.
+
+Definition eval_BEGINLOOP (cnt : reg_t + Z) (lbl : label) (s : asm_state) : exec asm_state :=
+  Let n := o2r ErrSemUndef ad_loop_depth in
+  Let _ := assert (size s.(asm_loops) < n) ErrLoop in
+  let z := eval_loop_count s cnt in
+  Let _ := assert (0 <? z)%Z ErrLoop in
+  let e := ((s.(asm_f), lbl), Z.to_nat (z - 1)) in
+  ok (st_write_ip s.(asm_ip).+1 (st_write_loops (e :: s.(asm_loops)) s)).
+
+Definition eval_ENDLOOP (lbl : label) (s : asm_state) : exec asm_state :=
+  Let _ := assert (isSome ad_loop_depth) ErrSemUndef in
+  Let: (e, rest) := runcons s.(asm_loops) ErrLoop in
+  let: (l, k) := e in
+  Let _ := assert (l == (s.(asm_f), lbl)) ErrLoop in
+  if k is k'.+1 then
+    (* Jump to the instruction immediately following the loop label. *)
+    Let ip := find_label lbl s.(asm_c) in
+    ok (st_write_ip ip.+1 (st_write_loops ((l, k') :: rest) s))
+  else
+    ok (st_write_ip s.(asm_ip).+1 (st_write_loops rest s)).
+
+(* -------------------------------------------------------------------- *)
 Section PROG.
 
 
@@ -531,7 +597,8 @@ Definition eval_instr (i : asm_i_r) (s: asm_state) : exec asm_state :=
     Let: (s', dst) := eval_POP_HWCS s in
     Let lbl := o2r ErrSemUndef (decode_label labels dst) in
     eval_JMP p lbl s'
-  | REPEATLOOP _ _ => Error ErrSemUndef
+  | BEGINLOOP cnt lbl => eval_BEGINLOOP cnt lbl s
+  | ENDLOOP lbl => eval_ENDLOOP lbl s
   | AsmOp o args =>
     Let m := eval_op o args s.(asm_m) in
     ok (st_update_next m s)
@@ -589,6 +656,10 @@ Lemma mem_write_hwcs_invariant cs (s: asmmem) :
   mem_write_hwcs cs s ≡ s.
 Proof. by []. Qed.
 
+Lemma mem_write_loops_invariant ls (s: asmmem) :
+  mem_write_loops ls s ≡ s.
+Proof. by []. Qed.
+
 Lemma mem_write_mem_invariant al a sz (w: word sz) (s s': asmmem) :
   mem_write_mem al a w s = ok s' → s ≡ s'.
 Proof. by rewrite /mem_write_mem; t_xrbindP => ? /Memory.write_mem_stable ? <-. Qed.
@@ -626,7 +697,7 @@ Lemma eval_instr_invariant (i: asm_i_r) (s s': asm_state) :
   eval_instr i s = ok s' →
   s ≡ s'.
 Proof.
-  case: i => [ | ? ? | ? ? | ? | ? | ? ? | ? ? | ? | | ? | | ? ? | ? ? | ? | ?? | ?] /=.
+  case: i => [ | ? ? | ? ? | ? | ? | ? ? | ? ? | ? | | ? | | ? ? | ? | ? ? | ? | ?? | ?] /=.
   1, 2: by move => /ok_inj <-.
   - by case: encode_label => // ? /ok_inj <-.
   - exact: eval_JMP_invariant.
@@ -644,10 +715,15 @@ Proof.
   - rewrite /eval_POP_HWCS; t_xrbindP => ? _.
     case: (asm_hwcs _) => // ? ? [<-].
     by case: decode_label => // ? /eval_JMP_invariant <-.
-  - by [].
+  - rewrite /eval_BEGINLOOP; t_xrbindP => n hn hb1 hb2 <-.
+    by rewrite /= mem_write_loops_invariant.
+  - rewrite /eval_ENDLOOP; t_xrbindP => hb1 [[l k] rest] hrc hb2.
+    move: hb2; t_xrbindP => hb3; case: k hrc => [|k'] hrc hb2.
+    + by move: hb2 => [<-]; rewrite /= mem_write_loops_invariant.
+    by move: hb2; t_xrbindP => ip _ <-; rewrite /= mem_write_loops_invariant.
   - by rewrite /eval_op /exec_instr_op; t_xrbindP => ? ? ? /mem_write_vals_invariant -> <-.
   - t_xrbindP => _ m hm <-.
-    have /= [_ hrip hss _] := eval_syscall_preserves hm.
+    have /= [_ hrip hss _ _] := eval_syscall_preserves hm.
     by split.
   - by move=> [<-].
   by move=> _ [<-].
@@ -763,6 +839,9 @@ Definition iasmsem_exportcall (p : asm_prog) (fn : funname) (m : asmmem) :=
   (* The export function must leave the hardware call stack as it found it:
      the caller's return address must be on top when the function returns. *)
   _ <- iresult (assert (m'.(asm_hwcs) == m.(asm_hwcs)) ErrSemUndef);;
+  (* Likewise for the hardware loop stack: no loop begun before the call may
+     still be open when the function returns. *)
+  _ <- iresult (assert (m'.(asm_loops) == m.(asm_loops)) ErrSemUndef);;
   Ret m'.
 
 End ITREE.

@@ -203,6 +203,13 @@ Lemma write_i_while aa c1 e ei c2 :
   Sv.Equal (write_i (Cwhile aa c1 e ei c2)) (Sv.union (write_c c1) (write_c c2)).
 Proof. etransitivity; last exact: (write_i_if e c1 c2). reflexivity. Qed.
 
+Lemma write_i_for e c :
+  Sv.Equal (write_i (Cfor (FIrepeat e) c)) (write_c c).
+Proof.
+  rewrite /write_i /write_i_rec /write_fi_rec -/write_c_rec write_c_recE.
+  clear; SvD.fsetdec.
+Qed.
+
 End WRITE.
 
 Notation check_instr := (check_i p var_tmps wrf).
@@ -232,6 +239,25 @@ Proof.
   exists D4. rewrite hc /= he' /= hc' /=; split => //; last by eauto.
   + by move: hsub; clear; SvD.fsetdec.
   by move /Sv.subset_spec: hle => ->.
+Qed.
+
+Lemma check_instr_r_CforP sz ii e c D D' :
+  check_instr_r sz ii D (Cfor (FIrepeat e) c) = ok D' →
+  [/\ check_e ii D' e = ok tt,
+      ∃ D'', check_cmd sz D' c = ok D'' ∧ Sv.Subset D'' D' &
+      Sv.Subset D D'].
+Proof using LC asm_op ep id_tmp id_tmp2 ovm_i p sip spp syscall_state var_tmp
+  var_tmp2 var_tmps vgd vrsp wmap.
+  rewrite /check_instr_r -/check_instr /=.
+  elim: loop_counter D => // n ih D /=; t_xrbindP => hfe D'' hc.
+  case: (equivP idP (Sv.subset_spec _ _)) => sub.
+  - move=> [<-]; split.
+    + exact: hfe.
+    + by exists D''.
+    by clear; SvD.fsetdec.
+  move=> /ih{ih} [hfe' [D3 [hc' sub']] hle]; split => //.
+  + by exists D3.
+  by SvD.fsetdec.
 Qed.
 
 Lemma check_instrP sz ii i D D' :
@@ -591,6 +617,37 @@ Qed.
 Lemma SvSubset_and s1 s2 s : Sv.Subset (Sv.union s1 s2) s -> Sv.Subset s1 s /\ Sv.Subset s2 s.
 Proof. move=> h; split; clear -h; SvD.fsetdec. Qed.
 
+(* One persistent (“repeat”) hardware loop unrolled over its concrete round
+   list [ws]: each round runs [c] afresh (write set reset to [Sv.empty] on
+   the one-varmap side, matching [isem_for_loop_kill]'s own threading) and
+   the accumulated write set [K0] is extended round after round, mirroring
+   [sem_one_varmap.Efor_sov_nil]/[Efor_sov_cons]. *)
+Lemma wequiv_isem_for_loop_kill (c : cmd) (hc : Pc c) (D D'' : Sv.t) :
+  Sv.Subset (write_c c) W ->
+  check_cmd sz D c = ok D'' ->
+  Sv.Subset D'' D ->
+  forall (ws : seq Z) (K0 : Sv.t),
+    wkequiv_io (merged_vmap_inv D)
+      (isem_for_loop (it_sems_core.isem_i_body (sem_F:=sem_F1)) p global_data None c ws)
+      (fun t1 => it_sems_one_varmap.isem_for_loop_kill
+                    (it_sems_one_varmap.isem_i var_tmps (sem_F:=sem_F2)) p c ws (K0, t1))
+      (fun s1 t1 s2 kt2 =>
+         [/\ merged_vmap_inv D s2 kt2.2
+           , evm t1 =[\ write_c c] evm kt2.2
+           & Sv.Subset kt2.1 (Sv.union K0 (write_c c))]).
+Proof.
+  move=> hsub hcc hDD'; elim => [ | w ws ihw] K0 s1 t1 hinv1 /=.
+  + apply xrutt.xrutt_Ret; split => //.
+    by clear; SvD.fsetdec.
+  rewrite /isem_for_round /isem_for_loop_round /= bind_ret_l.
+  apply: (xrutt_facts.xrutt_bind (hc _ _ hsub hcc s1 (Sv.empty, t1) hinv1)).
+  move=> s2 kt2 [hinv2 hex2 hsub2].
+  have := ihw (Sv.union K0 kt2.1) s2 kt2.2 (subset_merged_vmap_inv hDD' hinv2).
+  apply xrutt_facts.xrutt_weaken => // s3 kt3 [hinv3 hex3 hsub3]; split => //.
+  + by apply eq_exT with (evm kt2.2).
+  move: hsub2 hsub3; clear; SvD.fsetdec.
+Qed.
+
 Lemma merge_varmaps_cmdP c : Pc c.
 Proof using ok_p hcall mvp_not_written.
   apply (cmd_rect (Pr:=Pi_r) (Pi:=Pi) (Pc:=Pc)) => // {c}.
@@ -710,11 +767,22 @@ Proof using ok_p hcall mvp_not_written.
     + by rewrite write_i_if; apply: eq_exI hex'; clear; SvD.fsetdec.
     by rewrite write_i_if; move: hsub'; clear; SvD.fsetdec.
   (* for *)
-  + move=> a c e iiw c' hc hc' ii I O hinv1.
-    move: hc' ii; case: a => [x d lo hi | e0] hc' ii.
-    + move: ii; rewrite /check_instr_r /=.
-      by [].
-    exact: ACC_ADMIT_PROOF. (* TODO_ACC: no semantics for repeat loops. *)
+  + move=> fi c hc ii I O.
+    case: fi => [x d lo hi | e].
+    + by move=> _; rewrite /check_instr_r /=.
+    move=> hsub /check_instr_r_CforP [check_e_O [D'' [check_c_O hD'']] hIO] s1 t1 hinv1 /=.
+    have hsub_c : Sv.Subset (write_c c) W.
+    + by move: hsub; rewrite write_i_for.
+    have hinv1' : merged_vmap_inv O s1 t1 := subset_merged_vmap_inv hIO hinv1.
+    apply xrutt_facts.xrutt_bind with eq.
+    + apply xrutt_iresult => v1; rewrite /sem_fi /sem_pexpr_int /=; t_xrbindP => z v hv hz <-.
+      have [v' hv' hincl] := check_eP check_e_O (mvi_match hinv1') hv.
+      exists (ziota 0 z) => //.
+      rewrite /sem_fi /sem_pexpr_int /= hv' /=.
+      by move: hincl; rewrite (to_intI hz) => /value_uinclE ->.
+    move=> rn rn' <-.
+    have := @wequiv_isem_for_loop_kill c hc O D'' hsub_c check_c_O hD'' rn Sv.empty s1 t1 hinv1'.
+    apply xrutt_facts.xrutt_weaken => // s2 kt2 [hinv2 hex2 hsub2]; split => //.
   (* while *)
   + move=> a c e iiw c' hc hc' ii I O.
   rewrite {1}write_i_while; t_xrbindP => hsub /check_instr_r_CwhileP [D1 [leID1 hchc hche _ hchc']].

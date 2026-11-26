@@ -217,7 +217,7 @@ Arguments map_errP {_ _ _ _ _ _}.
 Definition assertion_label := string.
 
 Variant error :=
- | ErrOob | ErrAddrUndef | ErrAddrInvalid | ErrStack | ErrHWCallStack | ErrType
+ | ErrOob | ErrAddrUndef | ErrAddrInvalid | ErrStack | ErrHWCallStack | ErrLoop | ErrType
  | ErrArith | ErrSemUndef
  | ErrAssert of assertion_label.
 

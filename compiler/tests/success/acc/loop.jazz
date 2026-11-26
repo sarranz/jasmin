@@ -86,7 +86,7 @@ fn if_only_at_end(reg u32 x) -> reg u32 {
     return x;
 }
 
-// nested loops where inner loop is last: body ends with REPEATLOOP -> nop inserted
+// nested loops where inner loop is last: body ends with ENDLOOP -> nop inserted
 // (ACC forbids two loops sharing their last instruction address)
 export
 fn nested_inner_last(reg u32 x) -> reg u32 {
@@ -98,7 +98,7 @@ fn nested_inner_last(reg u32 x) -> reg u32 {
     return x;
 }
 
-// nested loops with an instruction after the inner loop: no nop from REPEATLOOP
+// nested loops with an instruction after the inner loop: no nop from ENDLOOP
 export
 fn nested_inner_not_last(reg u32 x) -> reg u32 {
     repeat 4 {
@@ -123,7 +123,7 @@ fn triple_nested(reg u32 x) -> reg u32 {
     return x;
 }
 
-// two sequential inner loops where the second (last) is at the end -> nop from REPEATLOOP
+// two sequential inner loops where the second (last) is at the end -> nop from ENDLOOP
 export
 fn two_inner_second_last(reg u32 x) -> reg u32 {
     repeat 4 {
@@ -133,7 +133,7 @@ fn two_inner_second_last(reg u32 x) -> reg u32 {
     return x;
 }
 
-// two sequential inner loops with a tail instruction -> no nop from REPEATLOOP
+// two sequential inner loops with a tail instruction -> no nop from ENDLOOP
 export
 fn two_inner_with_tail(reg u32 x) -> reg u32 {
     repeat 4 {
@@ -157,7 +157,9 @@ fn reg_count_cond_at_end(reg u32 x, reg u32 n) -> reg u32 {
     return x;
 }
 
-// while inside repeat: loop body ends with a backward Jcc -> no nop from LABEL/REPEATLOOP
+// while inside repeat: loop body ends with a backward Jcc (the while's own
+// condition test) -> nop inserted (a conditional branch cannot be the
+// loop's last instruction, same as any other control-flow instruction)
 export
 fn while_in_repeat(reg u32 x, reg u32 y) -> reg u32 {
     repeat 4 {
@@ -169,7 +171,7 @@ fn while_in_repeat(reg u32 x, reg u32 y) -> reg u32 {
 }
 
 // nested loops where inner body has a conditional: inner ends with LABEL -> nop in inner;
-// outer ends with REPEATLOOP -> nop in outer
+// outer ends with ENDLOOP -> nop in outer
 export
 fn nested_with_cond(reg u32 x) -> reg u32 {
     repeat 3 {

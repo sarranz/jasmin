@@ -376,6 +376,7 @@ Definition armv8a_agparams : asm_gen_params :=
   {|
     agp_assemble_cond := assemble_cond;
     agp_is_valid_address := is_valid_address;
+    agp_loop_imm_ok := fun _ => false;
   |}.
 
 (* ------------------------------------------------------------------------ *)

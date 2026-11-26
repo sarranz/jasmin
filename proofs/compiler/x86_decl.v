@@ -304,6 +304,7 @@ Instance x86_decl : arch_decl register register_ext xmm_register rflag condt :=
   ; reg_size_neq_xreg_size := refl_equal
   ; ad_rsp := RSP
   ; ad_hwcs_size := None
+  ; ad_loop_depth := None
   ; ad_fcp := x86_fcp
   ; caimm_cond := empty
   ; caimm_cond_eqC := eqTC_empty

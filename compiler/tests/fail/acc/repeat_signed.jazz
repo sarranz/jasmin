@@ -1,0 +1,7 @@
+// repeat_call_count only accepts an *unsigned* Oint_of_word cast of a
+// register; a signed cast must be rejected with "invalid repeat loop count".
+export
+fn repeat_signed(reg u32 x) -> reg u32 {
+    repeat (sint)x { x += 1; }
+    return x;
+}

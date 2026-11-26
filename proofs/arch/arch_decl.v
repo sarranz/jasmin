@@ -70,6 +70,9 @@ Class arch_decl (reg regx xreg rflag cond : Type) :=
       (* Number of entries of the hardware call stack, for architectures that
          save return addresses in a dedicated bounded stack (ACC); [None] when
          there is no such stack. *)
+  ; ad_loop_depth : option nat
+      (* Number of entries of the hardware loop stack (ACC: [Some 8]); [None]
+         when the architecture has no hardware loops. *)
   ; ad_fcp : FlagCombinationParams
   ; caimm_cond : Type  (* architecture-specific immediate conditions *)
   ; caimm_cond_eqC : eqTypeC caimm_cond
@@ -622,7 +625,7 @@ Definition instr_desc (o:asm_op_msb_t) : instr_desc_t :=
 Record gen_asm_i (A : Type) : Type :=
   MkAI { asmi_ii : instr_info; asmi_i : A; }.
 
-Inductive asm_i_r : Type :=
+Variant asm_i_r : Type :=
   | ALIGN
   | LABEL of label_kind & label
   | STORELABEL of reg_t & label (* Store the address of a local label *)
@@ -638,7 +641,15 @@ Inductive asm_i_r : Type :=
     (* Direct jump; return address pushed to the hardware call stack *)
   | RET_HWCS
     (* Pop a destination from the hardware call stack and jump there *)
-  | REPEATLOOP of (reg_t + Z) & seq (gen_asm_i asm_i_r)
+  | BEGINLOOP of (reg_t + Z) & label
+    (* Hardware loop entry. The count is read once, from a register (as an
+       unsigned word) or an immediate. The label identifies the loop and its
+       first body instruction (an ordinary [LABEL InternalLabel lbl] follows
+       immediately); the body is closed by [ENDLOOP lbl]. *)
+  | ENDLOOP of label
+    (* Last instruction of the body of the loop identified by the label:
+       jump back to it if iterations remain, otherwise pop the loop and
+       fall through. *)
   (* Instructions exposed at source-level *)
   | AsmOp  of asm_op_t' & asm_args
   | SysCall of syscall_t
@@ -682,6 +693,7 @@ Record asm_fundef := XFundef
   ; asm_fd_export: bool
   ; asm_fd_total_stack: Z
   ; asm_fd_max_call_depth: Z
+  ; asm_fd_max_loop_depth: Z
   ; asm_fd_align_args : seq wsize
   }.
 

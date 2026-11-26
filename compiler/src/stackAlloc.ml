@@ -70,7 +70,7 @@ let pp_sao fmt sao =
     | RAnone -> Z.add max_size (Z.of_int (size_of_ws sao.sao_align - 1))
     | _ -> max_size
   in
-  Format.fprintf fmt "alignment = %s@;size = %a; ioff = %a; extra size = %a@;max size = %a; total size = %a@;max call depth = %a@;params =@;<2 2>@[<v>%a@]@;return = @[<hov>%a@]@;slots =@;<2 2>@[<v>%a@]@;alloc= @;<2 2>@[<v>%a@]@;saved register = @[<hov>%a@]@;saved stack = %a@;return address = %a"
+  Format.fprintf fmt "alignment = %s@;size = %a; ioff = %a; extra size = %a@;max size = %a; total size = %a@;max call depth = %a@;max loop depth = %a@;params =@;<2 2>@[<v>%a@]@;return = @[<hov>%a@]@;slots =@;<2 2>@[<v>%a@]@;alloc= @;<2 2>@[<v>%a@]@;saved register = @[<hov>%a@]@;saved stack = %a@;return address = %a"
     (string_of_ws sao.sao_align)
     Z.pp_print (Conv.z_of_cz sao.sao_size)
     Z.pp_print (Conv.z_of_cz sao.sao_ioff)
@@ -78,6 +78,7 @@ let pp_sao fmt sao =
     Z.pp_print max_size
     Z.pp_print total_size
     Z.pp_print (Conv.z_of_cz sao.sao_max_call_depth)
+    Z.pp_print (Conv.z_of_cz sao.sao_max_loop_depth)
     (pp_list "@;" pp_param_info) sao.sao_params
     (pp_list "@;" pp_return) sao.sao_return
     (pp_list "@;" pp_slot) sao.sao_slots
@@ -161,6 +162,7 @@ let memory_analysis pp_sr pp_err ~debug callee_saved_strategy up =
         sao_extra_size = Z0;
         sao_max_size = Z0;
         sao_max_call_depth = Z0;
+        sao_max_loop_depth = Z0;
         sao_params = List.map (Option.map conv_pi) sao.sao_params;
         sao_return = List.map (Option.map Conv.nat_of_int) sao.sao_return;
         sao_slots  = do_slots sao.sao_slots;
@@ -321,6 +323,25 @@ let memory_analysis pp_sr pp_err ~debug callee_saved_strategy up =
     in
     let max_call_depth = Z.succ max_call_depth in
 
+    (* The loop nesting depth of a function is a one-shot syntactic
+       recursion over its own body (not a fold over the transitive
+       [sao_calls] closure like [max_call_depth]): a [repeat] loop nests
+       one level deeper than its enclosing body, an ordinary [for] loop
+       does not add depth, and a call contributes the callee's
+       already-computed [sao_max_loop_depth] (callees are processed
+       before their callers, see [get_sao]). Mirrors [Acc_check.check_loops]. *)
+    let rec loop_depth_c c = List.fold_left (fun acc i -> Z.max acc (loop_depth_i i)) Z.zero c
+    and loop_depth_i i =
+      match i.i_desc with
+      | Cfor (FIrepeat _, c) -> Z.succ (loop_depth_c c)
+      | Cfor (FIrange _, c) -> loop_depth_c c
+      | Cif (_, c1, c2) | Cwhile (_, c1, _, _, c2) ->
+        Z.max (loop_depth_c c1) (loop_depth_c c2)
+      | Ccall (_, fn, _) -> Conv.z_of_cz (get_sao fn).Stack_alloc.sao_max_loop_depth
+      | Cassgn _ | Copn _ | Csyscall _ | Cassert _ -> Z.zero
+    in
+    let max_loop_depth = loop_depth_c fd.f_body in
+
     let csao =
       Stack_alloc.{ csao with
         sao_align = align;
@@ -328,6 +349,7 @@ let memory_analysis pp_sr pp_err ~debug callee_saved_strategy up =
         sao_extra_size = Conv.cz_of_int extra_size;
         sao_max_size = Conv.cz_of_z max_size;
         sao_max_call_depth = Conv.cz_of_z max_call_depth;
+        sao_max_loop_depth = Conv.cz_of_z max_loop_depth;
       } in
     Hf.replace atbl fn csao
   in
@@ -469,7 +491,21 @@ let memory_analysis pp_sr pp_err ~debug callee_saved_strategy up =
       | _, _ -> max_size
     in
     let max_call_depth = Z.succ max_call_depth in
-    let saved_stack = 
+
+    (* See the comment on the same recursion in [fix_subroutine_csao]. *)
+    let rec loop_depth_c c = List.fold_left (fun acc i -> Z.max acc (loop_depth_i i)) Z.zero c
+    and loop_depth_i i =
+      match i.i_desc with
+      | Cfor (FIrepeat _, c) -> Z.succ (loop_depth_c c)
+      | Cfor (FIrange _, c) -> loop_depth_c c
+      | Cif (_, c1, c2) | Cwhile (_, c1, _, _, c2) ->
+        Z.max (loop_depth_c c1) (loop_depth_c c2)
+      | Ccall (_, fn, _) -> Conv.z_of_cz (get_sao fn).Stack_alloc.sao_max_loop_depth
+      | Cassgn _ | Copn _ | Csyscall _ | Cassert _ -> Z.zero
+    in
+    let max_loop_depth = loop_depth_c fd.f_body in
+
+    let saved_stack =
       if has_stack then
         match no_room_for_rsp with
         | false -> Expr.SavedStackReg (Conv.cvar_of_var Arch.rip)
@@ -494,7 +530,8 @@ let memory_analysis pp_sr pp_err ~debug callee_saved_strategy up =
         sao_extra_size = Conv.cz_of_int extra_size;
         sao_max_size = Conv.cz_of_z max_size;
         sao_max_call_depth = Conv.cz_of_z max_call_depth;
-        sao_to_save = convert_to_save to_save; 
+        sao_max_loop_depth = Conv.cz_of_z max_loop_depth;
+        sao_to_save = convert_to_save to_save;
         sao_rsp  = saved_stack;
         sao_return_address = RAnone
       } in

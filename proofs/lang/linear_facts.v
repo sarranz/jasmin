@@ -204,7 +204,12 @@ Opaque eval_jump.
     case: b.
     + by move=> /eval_jump_mem_eq <-.
     by move=> [<-] /=.
-  by [].
+  + by move=> cnt lbl; t_xrbindP=> n hn hb1 z hz hb2 ls hls <- /=.
+  move=> l; case: loops_pop => // -[[l0 k] rest] /=.
+  t_xrbindP=> hbl.
+  case: k => [|k'] /=.
+  + by move=> [<-] /=.
+  by move=> /eval_jump_mem_eq <-.
 Transparent eval_jump.
 Qed.
 
@@ -453,7 +458,7 @@ Lemma sem_fopns_args_mix_ilsteps fn P Q ii lc pcs pce ls :
   pce = size P + size lc ->
   mix_ilsteps lp (pc_between fn pcs pce) ls ≈
     match sem_fopns_args (to_estate ls) lc with
-    | Ok s' => Ret (of_estate s' (lhwcs ls) fn pce)
+    | Ok s' => Ret (of_estate s' (lhwcs ls) (lloops ls) fn pce)
     | Error err => Exception.throw err
     end.
 Proof.

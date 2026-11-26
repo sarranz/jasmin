@@ -26,7 +26,7 @@ let pp_label_kind fmt = function
   | InternalLabel -> ()
   | ExternalLabel -> F.fprintf fmt "#returnaddress "
 
-let rec pp_instr pd msfsize asmOp fmt i =
+let pp_instr pd msfsize asmOp fmt i =
   match i.li_i with
   | Lopn (lvs, op, es) ->
     F.fprintf fmt "@[%a@] = %a%a@[(%a)@]"
@@ -50,14 +50,13 @@ let rec pp_instr pd msfsize asmOp fmt i =
   | Ligoto e -> F.fprintf fmt "IGoto %a" pp_rexpr e
   | LstoreLabel (x, lbl) -> F.fprintf fmt "%a = Label %a" pp_var x pp_label lbl
   | Lcond (e, lbl) -> F.fprintf fmt "If %a goto %a" pp_fexpr e pp_label lbl
-  | Lrepeat_loop (cnt, c) ->
+  | Lloop_begin (cnt, lbl) ->
     let pp_cnt fmt = function
       | Datatypes.Coq_inl v -> pp_var_i fmt v
       | Datatypes.Coq_inr z -> Z.pp_print fmt (Conv.z_of_cz z)
     in
-    F.fprintf fmt "@[<v>repeat %a {@   @[<v>%a@]@ }@]" pp_cnt cnt (pp_code pd msfsize asmOp) c
-
-and pp_code pd msfsize asmOp = pp_list ";@ " (pp_instr pd msfsize asmOp)
+    F.fprintf fmt "repeat_begin %a %a" pp_cnt cnt pp_label lbl
+  | Lloop_end lbl -> F.fprintf fmt "repeat_end %a" pp_label lbl
 
 let pp_param fmt x =
   let y = Conv.var_of_cvar x.E.v_var in

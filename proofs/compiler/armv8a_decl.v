@@ -315,6 +315,7 @@ Instance armv8a_decl : arch_decl register register_ext xregister rflag condt :=
   ; reg_size_neq_xreg_size := refl_equal
   ; ad_rsp := RSP
   ; ad_hwcs_size := None
+  ; ad_loop_depth := None
   ; ad_fcp := arm_fcp
   ; caimm_cond := armv8a_caimm_cond
   ; caimm_cond_eqC := eqTC_armv8a_caimm_cond
