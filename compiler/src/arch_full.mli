@@ -38,6 +38,10 @@ module type Core_arch = sig
 
   val not_saved_stack : var list
 
+  (* Registers that the register allocator must never pick on its own; they
+     can only be obtained through forced (implicit) allocation. *)
+  val non_allocatable_regs : reg list
+
   val pp_asm : Format.formatter -> (reg, regx, xreg, rflag, cond, asm_op) Arch_decl.asm_prog -> unit
 
   val callstyle : reg callstyle

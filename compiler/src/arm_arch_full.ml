@@ -54,6 +54,7 @@ module Arm (Lowering_params : Arm_input) : Arch_full.Core_arch
      Here we assume it's just a variable register. *)
 
   let not_saved_stack = (Arm_params.arm_liparams atoI).lip_not_saved_stack
+  let non_allocatable_regs = []
 
   let pp_asm = Pp_arm_m4.print_prog
 

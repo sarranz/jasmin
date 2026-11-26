@@ -36,6 +36,10 @@ module type Core_arch = sig
 
   val not_saved_stack : var list
 
+  (* Registers that the register allocator must never pick on its own; they
+     can only be obtained through forced (implicit) allocation. *)
+  val non_allocatable_regs : reg list
+
   val pp_asm : Format.formatter -> (reg, regx, xreg, rflag, cond, asm_op) Arch_decl.asm_prog -> unit
 
   val callstyle : reg callstyle
@@ -164,7 +168,7 @@ module Arch_from_Core_arch (A : Core_arch) :
   let allocatable =
     let good_order = mk_allocatable (Arch_decl.registers arch_decl) callee_save_reg in
     (* be sure that rsp is not used *)
-    List.filter (fun r -> r <> rsp) good_order
+    List.filter (fun r -> r <> rsp && not (List.mem r non_allocatable_regs)) good_order
 
   let extra_allocatable =
     mk_allocatable (Arch_decl.registerxs arch_decl) callee_save_regx

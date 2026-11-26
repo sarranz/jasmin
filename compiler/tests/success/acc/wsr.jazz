@@ -15,15 +15,18 @@ fn wsr_acch(reg u256 x) -> reg u256 {
     return x;
 }
 
-// KMAC_CFG, KMAC_MSG and KMAC_PARTIAL_WRITE are write-only; KMAC_DIG is
-// read-only.
+// KMAC: the configuration write starts a computation, message writes thread
+// KMAC_MSG and produce KMAC_DIG, digest reads thread KMAC_DIG.
 export
-fn wsr_kmac(reg u256 cfg msg, reg u32 pw) -> reg u256 {
-    reg u256 kcfg kmsg kdig x;
+fn wsr_kmac(reg u256 cfg msg0 msg1, reg u32 pw) -> reg u256 {
+    reg u256 kcfg kmsg kdig x y;
     reg u32 kpw;
-    kcfg = #BN_KMAC_CFGW(cfg);
-    kmsg = #BN_KMAC_MSGW(msg);
-    kpw = #KMAC_PARTIAL_WRITEW(pw); // csrrw x0, kmac_partial_write, pw
-    x = #BN_KMAC_DIGR(kdig, kcfg, kmsg, kpw);
+    kcfg, kmsg, kdig = #BN_KMAC_CFGW(cfg);
+    kpw = #KMAC_PARTIAL_WRITEW(pw);
+    kmsg, kdig = #BN_KMAC_MSGW(kcfg, kmsg, kpw, msg0);
+    kmsg, kdig = #BN_KMAC_MSGW(kcfg, kmsg, kpw, msg1);
+    x, kdig = #BN_KMAC_DIGR(kdig);
+    y, kdig = #BN_KMAC_DIGR(kdig);
+    ?{}, x = #BN_XOR(x, y);
     return x;
 }

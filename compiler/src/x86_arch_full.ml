@@ -35,6 +35,7 @@ module X86_core = struct
   let aparams = X86_params.x86_params atoI
 
   let not_saved_stack = (X86_params.x86_liparams atoI).lip_not_saved_stack
+  let non_allocatable_regs = []
 
   let pp_asm = Pp_x86.print_prog
 

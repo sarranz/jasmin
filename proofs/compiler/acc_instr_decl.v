@@ -2311,21 +2311,78 @@ Definition desc_BN_WSR op xr is_read : instr_desc_t :=
     id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
   |}.
 
-(* [BN_KMAC_DIGR] reads the KMAC digest. In hardware the digest depends on what
-   was previously written to [KMAC_CFG], [KMAC_MSG] and [KMAC_PARTIAL_WRITE],
-   so these registers are implicit inputs: otherwise writes to them would be
-   removed as dead code.
-   The semantics only returns the current value of [KMAC_DIG]; the KMAC
-   computation itself is not modeled. *)
+(* KMAC interface.
+   The hardware computes the digest from the configuration, the sequence of
+   message writes and the partial write register. To keep every write alive
+   (not removed as dead code), the KMAC state is threaded through the
+   instructions:
+   - [BN_KMAC_CFGW] writes [KMAC_CFG] and starts a new computation: it also
+     (re)defines [KMAC_MSG] and [KMAC_DIG], which gives the first message write
+     an initialized [KMAC_MSG].
+   - [BN_KMAC_MSGW] reads [KMAC_CFG], the previous [KMAC_MSG] and
+     [KMAC_PARTIAL_WRITE], and returns the new [KMAC_MSG] (for follow-up
+     message writes) and [KMAC_DIG] (for digest reads).
+   - [BN_KMAC_DIGR] reads [KMAC_DIG] and returns it again, since reading the
+     digest advances the hardware state (e.g. squeezing more output):
+     consecutive reads form a chain.
+   The KMAC computation itself is not modeled: digest values (and the message
+   register after a configuration write) are [ACC_ADMIT] placeholders. *)
+
+Definition desc_BN_KMAC_CFGW : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := [:: lword256 ];
+    id_in := [:: EXa 0 ];
+    id_tout := [:: lword256; lword256; lword256 ];
+    id_out := [:: Xreg KMAC_CFG; Xreg KMAC_MSG; Xreg KMAC_DIG ];
+    id_semi := fun cfg =>
+      ok (:: cfg
+           , ACC_ADMIT "BN_KMAC_CFGW msg"
+           & ACC_ADMIT "BN_KMAC_CFGW digest" );
+    id_nargs := 1;
+    id_args_kinds := ak_xreg;
+    id_str_jas := pp_s (acc_op_to_string BN_KMAC_CFGW);
+    id_pp_asm := pp_acc_op BN_KMAC_CFGW;
+    id_valid := true;
+    id_safe := [::];
+    id_doit := DOIT; (* TODO_ACC: check *)
+    id_eq_size := refl_equal;
+    id_check_dest := refl_equal;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+  |}.
+
+Definition desc_BN_KMAC_MSGW : instr_desc_t :=
+  {|
+    id_msb_flag := MSB_MERGE;
+    id_tin := [:: lword256; lword256; lword32; lword256 ];
+    id_in := [:: Xreg KMAC_CFG; Xreg KMAC_MSG; R KMAC_PARTIAL_WRITE; EXa 0 ];
+    id_tout := [:: lword256; lword256 ];
+    id_out := [:: Xreg KMAC_MSG; Xreg KMAC_DIG ];
+    id_semi := fun _ _ _ msg => ok (msg, ACC_ADMIT "BN_KMAC_MSGW digest");
+    id_nargs := 1;
+    id_args_kinds := ak_xreg;
+    id_str_jas := pp_s (acc_op_to_string BN_KMAC_MSGW);
+    id_pp_asm := pp_acc_op BN_KMAC_MSGW;
+    id_valid := true;
+    id_safe := [::];
+    id_doit := DOIT; (* TODO_ACC: check *)
+    id_eq_size := refl_equal;
+    id_check_dest := refl_equal;
+    id_safe_wf := refl_equal;
+    id_semi_errty := fun _ => sem_lprod_ok_error _ _;
+    id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
+  |}.
+
 Definition desc_BN_KMAC_DIGR : instr_desc_t :=
   {|
     id_msb_flag := MSB_MERGE;
-    id_tin := [:: lword256; lword256; lword256; lword32 ];
-    id_in :=
-      [:: Xreg KMAC_DIG; Xreg KMAC_CFG; Xreg KMAC_MSG; R KMAC_PARTIAL_WRITE ];
-    id_tout := [:: lword256 ];
-    id_out := [:: EXa 0 ];
-    id_semi := fun dig _ _ _ => ok dig;
+    id_tin := [:: lword256 ];
+    id_in := [:: Xreg KMAC_DIG ];
+    id_tout := [:: lword256; lword256 ];
+    id_out := [:: EXa 0; Xreg KMAC_DIG ];
+    id_semi := fun dig => ok (dig, ACC_ADMIT "BN_KMAC_DIGR next digest");
     id_nargs := 1;
     id_args_kinds := ak_xreg;
     id_str_jas := pp_s (acc_op_to_string BN_KMAC_DIGR);
@@ -2334,7 +2391,7 @@ Definition desc_BN_KMAC_DIGR : instr_desc_t :=
     id_safe := [::];
     id_doit := DOIT; (* TODO_ACC: check *)
     id_eq_size := refl_equal;
-    id_check_dest := check_dest_unop_lword;
+    id_check_dest := refl_equal;
     id_safe_wf := refl_equal;
     id_semi_errty := fun _ => sem_lprod_ok_error _ _;
     id_semi_safe := fun _ => sem_lprod_ok_safe _ _;
@@ -2655,8 +2712,8 @@ Definition desc_acc_op (op : acc_op) : instr_desc_t :=
   | BN_ACCHR => desc_BN_WSR BN_ACCHR ACCH true
   | BN_ACCHW => desc_BN_WSR BN_ACCHW ACCH false
   | BN_KMAC_DIGR => desc_BN_KMAC_DIGR
-  | BN_KMAC_CFGW => desc_BN_WSR BN_KMAC_CFGW KMAC_CFG false
-  | BN_KMAC_MSGW => desc_BN_WSR BN_KMAC_MSGW KMAC_MSG false
+  | BN_KMAC_CFGW => desc_BN_KMAC_CFGW
+  | BN_KMAC_MSGW => desc_BN_KMAC_MSGW
   | MOD0W => desc_MOD_word32W MOD0W 0
   | MOD0Wzero => desc_MOD_word32Wzero MOD0Wzero 0
   | MOD1W => desc_MOD_word32W MOD1W 32

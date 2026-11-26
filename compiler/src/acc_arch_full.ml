@@ -64,6 +64,13 @@ module ACC (Input : ACC_input) :
   include Input
 
   let not_saved_stack = (Acc_params.liparams atoI).lip_not_saved_stack
+
+  (* [KMAC_PARTIAL_WRITE] is modeled as a 32-bit register so that it can be the
+     implicit argument of [KMAC_PARTIAL_WRITEW] and [BN_KMAC_MSGW], but it is not
+     a general purpose register: variables are only placed in it through forced
+     (implicit) allocation. In particular, compiler-introduced temporaries (e.g.
+     the one used to allocate large stack frames around calls) must not use it. *)
+  let non_allocatable_regs = [ KMAC_PARTIAL_WRITE ]
   let pp_asm = Pp_acc.print_prog
 
   let callstyle = Arch_full.OnHWStack

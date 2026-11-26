@@ -55,6 +55,7 @@ module Riscv (Lowering_params : Riscv_input) : Arch_full.Core_arch
   include Lowering_params
 
   let not_saved_stack = (Riscv_params.riscv_liparams atoI).lip_not_saved_stack
+  let non_allocatable_regs = []
 
   let pp_asm = Pp_riscv.print_prog
 

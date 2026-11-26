@@ -47,6 +47,7 @@ module Armv8a (Lowering_params : Armv8a_input) = struct
   let is_ct_asm_extra (_o : extra_op) = true
 
   let not_saved_stack = []
+  let non_allocatable_regs = []
 
   let pp_asm = Pp_arm_v8a.print_prog
 
